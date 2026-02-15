@@ -3,4 +3,18 @@
     <string name="app_name">Music URL Handler</string>
     <string name="publisher_id">astrolabs</string>
     <string name="publisher_name">Astro Labs</string>
+
+    <string name="app_tagline">Turn any Spotify track URL into a YouTube Music search in seconds.</string>
+    <string name="spotify_link_label">Spotify track URL</string>
+    <string name="spotify_link_placeholder">https://open.spotify.com/track/…</string>
+    <string name="resolve_button">Resolve Track</string>
+    <string name="clear_button">Clear</string>
+    <string name="loading_text">Reading public Spotify metadata…</string>
+    <string name="result_title">Ready to open</string>
+    <string name="open_button">Open in YouTube Music</string>
+    <string name="built_by">Built by Astro Labs</string>
+
+    <string name="error_invalid_url">Enter a valid Spotify track URL.</string>
+    <string name="error_network">Could not reach Spotify right now. Check your connection and try again.</string>
+    <string name="error_metadata_unavailable">Track metadata is unavailable for this link.</string>
 </resources>
