@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.musicurlhandler"
+    namespace = "com.astrolabs.musicurlhandler"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.musicurlhandler"
+        applicationId = "com.astrolabs.musicurlhandler"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

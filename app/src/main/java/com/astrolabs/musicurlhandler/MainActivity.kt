@@ -1,4 +1,4 @@
-package com.example.musicurlhandler
+package com.astrolabs.musicurlhandler
 
 import android.content.Intent
 import android.net.Uri
@@ -23,7 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.musicurlhandler.ui.theme.MusicURLHandlerTheme
+import com.astrolabs.musicurlhandler.ui.theme.MusicURLHandlerTheme
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException

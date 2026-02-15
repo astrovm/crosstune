@@ -1,4 +1,4 @@
-package com.example.musicurlhandler.ui.theme
+package com.astrolabs.musicurlhandler.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

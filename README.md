@@ -23,7 +23,7 @@ Android app that accepts Spotify track links and opens the equivalent search in 
 ```text
 .
 ├── app
-│   ├── src/main/java/com/example/musicurlhandler
+│   ├── src/main/java/com/astrolabs/musicurlhandler
 │   │   ├── MainActivity.kt
 │   │   └── ui/theme/*
 │   ├── src/main/AndroidManifest.xml

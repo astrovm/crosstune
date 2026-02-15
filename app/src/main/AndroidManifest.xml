@@ -13,6 +13,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MusicURLHandler">
 
+        <meta-data
+            android:name="com.astrolabs.musicurlhandler.publisher.id"
+            android:value="@string/publisher_id" />
+        <meta-data
+            android:name="com.astrolabs.musicurlhandler.publisher.name"
+            android:value="@string/publisher_name" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

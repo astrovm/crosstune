@@ -11,8 +11,8 @@ Primary flow:
 
 ## Project Layout
 
-- `app/src/main/java/com/example/musicurlhandler/MainActivity.kt`: main app flow and UI entry point.
-- `app/src/main/java/com/example/musicurlhandler/ui/theme/*`: Compose theme setup.
+- `app/src/main/java/com/astrolabs/musicurlhandler/MainActivity.kt`: main app flow and UI entry point.
+- `app/src/main/java/com/astrolabs/musicurlhandler/ui/theme/*`: Compose theme setup.
 - `app/src/main/res_clean/*`: active app resources used by Gradle build.
 - `app/src/main/res/*`: extracted/reference resources; not used by current build source set.
 
@@ -31,7 +31,7 @@ For local CLI builds, `local.properties` may be required:
 
 ## Development Rules
 
-- Keep package name and application ID as `com.example.musicurlhandler` unless explicitly requested.
+- Keep package name and application ID as `com.astrolabs.musicurlhandler` unless explicitly requested.
 - Preserve deep-link behavior for `https://open.spotify.com/track/*`.
 - Keep UI in Compose (do not migrate to XML views unless requested).
 - Use `res_clean` for active resources unless the Gradle source set is changed intentionally.

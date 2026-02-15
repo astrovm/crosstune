@@ -1,4 +1,4 @@
-package com.example.musicurlhandler.ui.theme
+package com.astrolabs.musicurlhandler.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
