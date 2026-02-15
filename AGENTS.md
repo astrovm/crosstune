@@ -6,14 +6,12 @@ This repository contains an Android app (`Music URL Handler`) that converts Spot
 
 Primary flow:
 1. Accept Spotify track URL (deep link or pasted URL).
-2. Resolve track metadata from Spotify API.
+2. Resolve track metadata from public Spotify track page metadata (no Spotify API token).
 3. Open YouTube Music search for track + artist.
 
 ## Project Layout
 
 - `app/src/main/java/com/example/musicurlhandler/MainActivity.kt`: main app flow and UI entry point.
-- `app/src/main/java/com/example/musicurlhandler/network/SpotifyService.kt`: Retrofit API interface.
-- `app/src/main/java/com/example/musicurlhandler/model/TrackResponse.kt`: API response models.
 - `app/src/main/java/com/example/musicurlhandler/ui/theme/*`: Compose theme setup.
 - `app/src/main/res_clean/*`: active app resources used by Gradle build.
 - `app/src/main/res/*`: extracted/reference resources; not used by current build source set.
@@ -39,11 +37,10 @@ For local CLI builds, `local.properties` may be required:
 - Use `res_clean` for active resources unless the Gradle source set is changed intentionally.
 - Do not commit local machine files (`local.properties`, IDE caches, build outputs).
 
-## Security Notes
+## Reliability Notes
 
-- `MainActivity.kt` currently contains Spotify client credentials from reconstructed code.
-- Do not add new hardcoded secrets.
-- Prefer moving credentialed token exchange to a backend service for production changes.
+- Metadata parsing depends on Spotify page meta tags (`og:description`, `og:title`).
+- If parsing fails after Spotify markup changes, update parsing logic in `MainActivity.kt`.
 
 ## Change Checklist
 

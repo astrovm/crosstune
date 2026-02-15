@@ -3,7 +3,6 @@ package com.example.musicurlhandler
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,24 +20,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.musicurlhandler.model.TrackResponse
-import com.example.musicurlhandler.network.SpotifyService
 import com.example.musicurlhandler.ui.theme.MusicURLHandlerTheme
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
+
+    private val client = OkHttpClient()
+    private val ogDescriptionRegex = Regex("""<meta property=\"og:description\" content=\"([^\"]+)\"""")
+    private val ogTitleRegex = Regex("""<meta property=\"og:title\" content=\"([^\"]+)\"""")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,59 +75,40 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun fetchSpotifyTrack(trackId: String) {
-        val credentials = "27cd528dad064d1cb4e31c8d103f9689:20116ca336244f2984a7eacb74c09f99"
-        val auth = "Basic " + Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
-
-        val client = OkHttpClient()
-        val requestBody = "grant_type=client_credentials"
-            .toRequestBody("application/x-www-form-urlencoded".toMediaType())
-
-        val tokenRequest = Request.Builder()
-            .url("https://accounts.spotify.com/api/token")
-            .post(requestBody)
-            .addHeader("Authorization", auth)
+        val request = Request.Builder()
+            .url("https://open.spotify.com/track/$trackId")
+            .get()
             .build()
 
-        client.newCall(tokenRequest).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                println("Error: ${e.message}")
                 e.printStackTrace()
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                 try {
-                    val responseBody = response.body?.string() ?: return
-                    val accessToken = JSONObject(responseBody).getString("access_token")
+                    val html = response.body?.string() ?: return
+                    val metadata = extractTrackAndArtist(html)
 
-                    val service = Retrofit.Builder()
-                        .baseUrl("https://api.spotify.com/")
-                        .addConverterFactory(GsonConverterFactory.create())
-                        .build()
-                        .create(SpotifyService::class.java)
+                    if (metadata != null) {
+                        val (trackName, artistName) = metadata
+                        println("Track: $trackName by $artistName")
+                        runOnUiThread {
+                            openYouTubeMusic(trackName, artistName)
+                        }
+                        return
+                    }
 
-                    service.getTrack("Bearer $accessToken", trackId)
-                        .enqueue(object : Callback<TrackResponse> {
-                            override fun onResponse(
-                                call: Call<TrackResponse>,
-                                response: Response<TrackResponse>
-                            ) {
-                                if (!response.isSuccessful) {
-                                    println("Error: ${response.code()} - ${response.message()}")
-                                    return
-                                }
+                    val trackTitle = extractTrackTitle(html)
+                    if (trackTitle != null) {
+                        runOnUiThread {
+                            openYouTubeMusic(trackTitle, "")
+                        }
+                        return
+                    }
 
-                                val track = response.body() ?: return
-                                val artistName = track.artists.joinToString(", ") { it.name }
-                                println("Track: ${track.name} by $artistName")
-                                runOnUiThread {
-                                    openYouTubeMusic(track.name, artistName)
-                                }
-                            }
-
-                            override fun onFailure(call: Call<TrackResponse>, t: Throwable) {
-                                println("Error: ${t.message}")
-                                t.printStackTrace()
-                            }
-                        })
+                    println("Error: Could not parse public Spotify metadata")
                 } catch (e: Exception) {
                     e.printStackTrace()
                 } finally {
@@ -143,9 +118,32 @@ class MainActivity : ComponentActivity() {
         })
     }
 
+    private fun extractTrackAndArtist(html: String): Pair<String, String>? {
+        val description = ogDescriptionRegex.find(html)?.groupValues?.getOrNull(1) ?: return null
+        val parts = description.split(" · ")
+        if (parts.size < 2) return null
+
+        val artistName = parts[0].trim()
+        val trackName = parts[1].trim()
+
+        if (artistName.isBlank() || trackName.isBlank()) return null
+        return trackName to artistName
+    }
+
+    private fun extractTrackTitle(html: String): String? {
+        return ogTitleRegex.find(html)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
     private fun openYouTubeMusic(trackName: String, artistName: String) {
-        val query = Uri.encode("$trackName $artistName")
-        val targetUri = Uri.parse("https://music.youtube.com/search?q=$query")
+        val query = listOf(trackName, artistName)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+
+        val targetUri = Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")
 
         try {
             startActivity(Intent(Intent.ACTION_VIEW, targetUri))
