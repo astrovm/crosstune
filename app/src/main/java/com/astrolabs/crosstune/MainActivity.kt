@@ -45,7 +45,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import com.astrolabs.musicurlhandler.ui.theme.MusicURLHandlerTheme
+import com.astrolabs.musicurlhandler.ui.theme.CrosstuneTheme
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
@@ -64,8 +64,8 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
 
         setContent {
-            MusicURLHandlerTheme {
-                MusicUrlHandlerScreen(
+            CrosstuneTheme {
+                CrosstuneScreen(
                     state = uiState,
                     onUrlChange = { text ->
                         uiState = uiState.copy(spotifyUrl = text, errorMessage = null)
@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MusicUrlHandlerScreen(
+private fun CrosstuneScreen(
     state: UiState,
     onUrlChange: (String) -> Unit,
     onResolveClick: () -> Unit,
@@ -429,9 +429,9 @@ private data class UiState(
 
 @Preview(showBackground = true)
 @Composable
-private fun MusicUrlHandlerScreenPreview() {
-    MusicURLHandlerTheme {
-        MusicUrlHandlerScreen(
+private fun CrosstuneScreenPreview() {
+    CrosstuneTheme {
+        CrosstuneScreen(
             state = UiState(
                 spotifyUrl = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
                 resolvedTrackName = "Cut To The Feeling",

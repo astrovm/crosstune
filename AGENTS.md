@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository contains an Android app (`Music URL Handler`) that converts Spotify track links into YouTube Music searches.
+This repository contains an Android app (`Crosstune`) that converts Spotify track links into YouTube Music searches.
 
 Primary flow:
 1. Accept Spotify track URL (deep link or pasted URL).

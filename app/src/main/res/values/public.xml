@@ -268,7 +268,7 @@
     <public type="style" name="TextAppearance.Compat.Notification.Line2" id="0x7f0a0005" />
     <public type="style" name="TextAppearance.Compat.Notification.Time" id="0x7f0a0006" />
     <public type="style" name="TextAppearance.Compat.Notification.Title" id="0x7f0a0007" />
-    <public type="style" name="Theme.MusicURLHandler" id="0x7f0a0008" />
+    <public type="style" name="Theme.Crosstune" id="0x7f0a0008" />
     <public type="style" name="Widget.Compat.NotificationActionContainer" id="0x7f0a0009" />
     <public type="style" name="Widget.Compat.NotificationActionText" id="0x7f0a000a" />
     <public type="xml" name="backup_rules" id="0x7f0c0000" />

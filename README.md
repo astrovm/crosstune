@@ -1,4 +1,4 @@
-# Music URL Handler
+# Crosstune
 
 Android app that accepts Spotify track links and opens the equivalent search in YouTube Music.
 

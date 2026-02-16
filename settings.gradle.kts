@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MusicURLHandler"
+rootProject.name = "Crosstune"
 include(":app")
