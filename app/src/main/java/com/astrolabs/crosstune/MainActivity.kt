@@ -1,4 +1,4 @@
-package com.astrolabs.musicurlhandler
+package com.astrolabs.crosstune
 
 import android.content.Intent
 import android.net.Uri
@@ -45,7 +45,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import com.astrolabs.musicurlhandler.ui.theme.CrosstuneTheme
+import com.astrolabs.crosstune.ui.theme.CrosstuneTheme
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException

@@ -1,4 +1,4 @@
-package com.astrolabs.musicurlhandler.ui.theme
+package com.astrolabs.crosstune.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -14,10 +14,10 @@
         android:theme="@style/Theme.Crosstune">
 
         <meta-data
-            android:name="com.astrolabs.musicurlhandler.publisher.id"
+            android:name="com.astrolabs.crosstune.publisher.id"
             android:value="@string/publisher_id" />
         <meta-data
-            android:name="com.astrolabs.musicurlhandler.publisher.name"
+            android:name="com.astrolabs.crosstune.publisher.name"
             android:value="@string/publisher_name" />
 
         <activity
