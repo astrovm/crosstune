@@ -13,6 +13,7 @@
     <string name="result_title">Ready to open</string>
     <string name="open_button">Open</string>
     <string name="open_with_label">Open with</string>
+    <string name="default_open_with_label">Default opening target</string>
     <string name="target_youtube_music">YouTube Music</string>
     <string name="target_youtube">YouTube</string>
     <string name="open_in_youtube_music">Open in YouTube Music</string>

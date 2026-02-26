@@ -71,12 +71,14 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PREFERENCES_NAME = "crosstune_preferences"
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
+        private const val KEY_DEFAULT_TARGET = "default_target"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         uiState = uiState.copy(
+            selectedTarget = loadPreferredTarget(),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false)
         )
         handleIntent(intent)
@@ -96,9 +98,7 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     onOpenClick = ::openFromState,
-                    onTargetChange = { target ->
-                        uiState = uiState.copy(selectedTarget = target)
-                    },
+                    onTargetChange = ::setSelectedTarget,
                     onCopySearchClick = ::copySearchFromState,
                     onShareSearchClick = ::shareSearchFromState,
                     onOpenLinkSettingsClick = ::openAppLinkSettings,
@@ -409,6 +409,16 @@ class MainActivity : ComponentActivity() {
         preferences.edit().putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true).apply()
     }
 
+    private fun loadPreferredTarget(): SearchTarget {
+        val savedValue = preferences.getString(KEY_DEFAULT_TARGET, null)
+        return SearchTarget.entries.firstOrNull { it.name == savedValue } ?: SearchTarget.YOUTUBE_MUSIC
+    }
+
+    private fun setSelectedTarget(target: SearchTarget) {
+        uiState = uiState.copy(selectedTarget = target)
+        preferences.edit().putString(KEY_DEFAULT_TARGET, target.name).apply()
+    }
+
     private fun openPrimaryTarget(trackName: String, artistName: String) {
         val query = buildSearchQuery(trackName, artistName)
         val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
@@ -591,6 +601,13 @@ private fun CrosstuneScreen(
                             }
                         }
 
+                        SearchTargetSelector(
+                            selectedTarget = state.selectedTarget,
+                            label = stringResource(R.string.default_open_with_label),
+                            onTargetChange = onTargetChange,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+
                         if (state.isLoading) {
                             LinearProgressIndicator(
                                 modifier = Modifier
@@ -658,52 +675,6 @@ private fun CrosstuneScreen(
                                         )
                                     }
 
-                                    Text(
-                                        text = stringResource(R.string.open_with_label),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 12.dp)
-                                    )
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        if (state.selectedTarget == SearchTarget.YOUTUBE_MUSIC) {
-                                            Button(
-                                                onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text(stringResource(R.string.target_youtube_music))
-                                            }
-                                        } else {
-                                            OutlinedButton(
-                                                onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text(stringResource(R.string.target_youtube_music))
-                                            }
-                                        }
-
-                                        if (state.selectedTarget == SearchTarget.YOUTUBE) {
-                                            Button(
-                                                onClick = { onTargetChange(SearchTarget.YOUTUBE) },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text(stringResource(R.string.target_youtube))
-                                            }
-                                        } else {
-                                            OutlinedButton(
-                                                onClick = { onTargetChange(SearchTarget.YOUTUBE) },
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text(stringResource(R.string.target_youtube))
-                                            }
-                                        }
-                                    }
-
                                     Button(
                                         onClick = onOpenClick,
                                         modifier = Modifier
@@ -747,6 +718,60 @@ private fun CrosstuneScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTargetSelector(
+    selectedTarget: SearchTarget,
+    label: String,
+    onTargetChange: (SearchTarget) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (selectedTarget == SearchTarget.YOUTUBE_MUSIC) {
+                Button(
+                    onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.target_youtube_music))
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.target_youtube_music))
+                }
+            }
+
+            if (selectedTarget == SearchTarget.YOUTUBE) {
+                Button(
+                    onClick = { onTargetChange(SearchTarget.YOUTUBE) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.target_youtube))
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onTargetChange(SearchTarget.YOUTUBE) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.target_youtube))
                 }
             }
         }
