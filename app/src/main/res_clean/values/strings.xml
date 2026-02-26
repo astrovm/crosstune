@@ -25,7 +25,8 @@
     <string name="link_settings_helper_body">If Spotify links open in browser, set Crosstune as the default supported-links handler in app settings.</string>
     <string name="open_link_settings_button">Open Link Settings</string>
     <string name="dismiss_button">Dismiss</string>
-    <string name="built_by">Built by astrovm</string>
+    <string name="made_by">Made by @astrovm</string>
+    <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
 
     <string name="error_invalid_url">Enter a valid Spotify track URL.</string>
     <string name="error_network">Could not reach Spotify right now. Check your connection and try again.</string>

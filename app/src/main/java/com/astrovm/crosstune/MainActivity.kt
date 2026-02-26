@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -462,6 +463,8 @@ private fun CrosstuneScreen(
             MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
         )
     )
+    val uriHandler = LocalUriHandler.current
+    val githubUrl = stringResource(R.string.github_repo_url)
 
     Scaffold(
         modifier = Modifier
@@ -735,12 +738,16 @@ private fun CrosstuneScreen(
                     }
                 }
 
-                Text(
-                    text = stringResource(R.string.built_by),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
+                TextButton(
+                    onClick = { uriHandler.openUri(githubUrl) },
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.made_by),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
