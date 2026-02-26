@@ -29,6 +29,16 @@ If your system default Java is too new for this Gradle/Kotlin setup, use JDK 21 
 For local CLI builds, `local.properties` may be required:
 - `sdk.dir=/path/to/Android/Sdk`
 
+Preferred local Android toolchain discovery (user-agnostic):
+- Treat Android SDK and Android Studio as user-home installations by default:
+  - `ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}`
+  - `ANDROID_STUDIO_HOME=${ANDROID_STUDIO_HOME:-$HOME/android-studio}`
+- Add commonly needed binaries to `PATH` when using CLI tooling (when present):
+  - `$ANDROID_SDK_ROOT/platform-tools`
+  - `$ANDROID_SDK_ROOT/cmdline-tools/latest/bin`
+  - `$ANDROID_STUDIO_HOME/jbr/bin` (for Studio-bundled Java when needed)
+- Prefer env vars and `$HOME`-relative paths in commands/docs; avoid hard-coding a specific username path.
+
 ## Development Rules
 
 - Keep package name and application ID as `com.astrolabs.crosstune` unless explicitly requested.
