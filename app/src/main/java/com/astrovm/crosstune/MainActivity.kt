@@ -1,4 +1,4 @@
-package com.astrolabs.crosstune
+package com.astrovm.crosstune
 
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -51,7 +51,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import com.astrolabs.crosstune.ui.theme.CrosstuneTheme
+import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException

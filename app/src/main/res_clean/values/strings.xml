@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Crosstune</string>
-    <string name="publisher_id">astrolabs</string>
-    <string name="publisher_name">Astro Labs</string>
+    <string name="publisher_id">astrovm</string>
+    <string name="publisher_name">astrovm</string>
 
     <string name="app_tagline">Turn any Spotify track URL into a YouTube Music search in seconds.</string>
     <string name="spotify_link_label">Spotify track URL</string>
@@ -25,7 +25,7 @@
     <string name="link_settings_helper_body">If Spotify links open in browser, set Crosstune as the default supported-links handler in app settings.</string>
     <string name="open_link_settings_button">Open Link Settings</string>
     <string name="dismiss_button">Dismiss</string>
-    <string name="built_by">Built by Astro Labs</string>
+    <string name="built_by">Built by astrovm</string>
 
     <string name="error_invalid_url">Enter a valid Spotify track URL.</string>
     <string name="error_network">Could not reach Spotify right now. Check your connection and try again.</string>

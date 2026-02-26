@@ -1,4 +1,4 @@
-package com.astrolabs.crosstune.ui.theme
+package com.astrovm.crosstune.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

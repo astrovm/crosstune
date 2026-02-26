@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.astrolabs.crosstune"
+    namespace = "com.astrovm.crosstune"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.astrolabs.crosstune"
+        applicationId = "com.astrovm.crosstune"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

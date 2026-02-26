@@ -1,4 +1,4 @@
-package com.astrolabs.crosstune.ui.theme
+package com.astrovm.crosstune.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
