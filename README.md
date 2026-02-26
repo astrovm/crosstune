@@ -1,75 +1,55 @@
 # Crosstune
 
-Android app that accepts Spotify track links and opens the equivalent search in YouTube Music.
+Crosstune takes a Spotify track link and opens a search for that song in YouTube Music or YouTube.
 
-## What It Does
+## What You Can Do
 
-- Handles `https://open.spotify.com/track/...` links via Android deep links.
-- Handles `https://spotify.link/...` short links via Android deep links.
-- Accepts shared text/links from other apps via Android share sheet (`ACTION_SEND`).
-- Lets you paste a Spotify track URL manually in the app UI.
-- Lets you choose search target (`YouTube Music` or `YouTube`) before opening.
-- Saves your selected target (`YouTube Music` or `YouTube`) as the default for future opens.
-- Can copy search text or share the generated search link.
-- Includes a first-run helper to open Android "supported links" app settings.
-- Reads public Spotify page metadata (no API token) to resolve track + artist.
-- Opens:
-  - `https://music.youtube.com/search?q=<track + artist>`
+- Open Spotify links directly in Crosstune.
+- Share a Spotify link to Crosstune from another app.
+- Paste a Spotify link manually.
+- Choose your default opening target: `YouTube Music` or `YouTube`.
+- Copy or share the generated search query/link.
 
-## Tech Stack
+## Supported Links
 
-- Kotlin
-- Jetpack Compose (Material 3)
-- OkHttp
-- Android Gradle Plugin `8.7.2`
-- Kotlin `2.0.21`
+- `https://open.spotify.com/track/...`
+- `https://spotify.link/...`
 
-## Project Structure
+If links keep opening in your browser, use the in-app **Open Link Settings** button and enable Crosstune for supported links.
 
-```text
-.
-├── app
-│   ├── src/main/java/com/astrovm/crosstune
-│   │   ├── MainActivity.kt
-│   │   └── ui/theme/*
-│   ├── src/main/AndroidManifest.xml
-│   └── src/main/res_clean/*
-├── build.gradle.kts
-├── settings.gradle.kts
-└── gradlew
-```
+## Install (Debug APK)
 
-## Requirements
+### Requirements
 
-- JDK 17+ (project compiles with Java 17 target)
-- Android SDK (API 34)
-- Android Studio (recommended) or CLI Gradle build
+- Android SDK
+- JDK 17+
+- Android Studio or Gradle CLI
 
-If building from CLI, ensure `local.properties` includes your SDK path:
+If building from CLI, ensure `local.properties` has your SDK path:
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
 ```
 
-## Build
+### Build
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-Output APK:
+APK output:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Run
+### Install on Device (ADB)
 
-1. Install the debug APK on a device/emulator.
-2. Open the app and paste a Spotify track URL, or open a Spotify track link directly on the device.
-3. The app resolves metadata from the public Spotify track page and opens YouTube Music search.
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
 ## Notes
 
-- This repository was reconstructed from an APK artifact.
-- Metadata extraction relies on Spotify public page HTML/meta tags and may break if Spotify changes page structure.
+- The app uses public Spotify page metadata (no Spotify API key needed).
+- If Spotify changes their page metadata format, some links may stop resolving until updated.
