@@ -5,6 +5,8 @@ Android app that accepts Spotify track links and opens the equivalent search in 
 ## What It Does
 
 - Handles `https://open.spotify.com/track/...` links via Android deep links.
+- Handles `https://spotify.link/...` short links via Android deep links.
+- Accepts shared text/links from other apps via Android share sheet (`ACTION_SEND`).
 - Lets you paste a Spotify track URL manually in the app UI.
 - Reads public Spotify page metadata (no API token) to resolve track + artist.
 - Opens:

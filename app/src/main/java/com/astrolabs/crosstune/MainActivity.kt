@@ -55,6 +55,8 @@ class MainActivity : ComponentActivity() {
     private val client = OkHttpClient()
     private val ogDescriptionRegex = Regex("""<meta property=\"og:description\" content=\"([^\"]+)\"""")
     private val ogTitleRegex = Regex("""<meta property=\"og:title\" content=\"([^\"]+)\"""")
+    private val sharedUrlRegex = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
+    private val spotifyTrackIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
 
     private var uiState by mutableStateOf(UiState())
 
@@ -86,25 +88,114 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
-        if (intent.action == Intent.ACTION_VIEW) {
-            val trackId = intent.data?.extractTrackIdFromUri()
-            if (trackId != null) {
-                uiState = uiState.copy(spotifyUrl = "https://open.spotify.com/track/$trackId")
-                resolveTrack(trackId, openWhenReady = true)
-            } else {
-                uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
+        when (intent.action) {
+            Intent.ACTION_VIEW -> {
+                val incoming = intent.dataString?.trim().orEmpty()
+                if (incoming.isBlank()) {
+                    uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
+                    return
+                }
+
+                uiState = uiState.copy(spotifyUrl = incoming, errorMessage = null)
+                resolveFromAnyInput(incoming, openWhenReady = true, canonicalizeUrl = true)
+            }
+
+            Intent.ACTION_SEND -> {
+                val sharedPayload = intent.getStringExtra(Intent.EXTRA_TEXT)
+                    ?: intent.getStringExtra(Intent.EXTRA_SUBJECT)
+                    ?: return
+
+                val incoming = extractFirstUrl(sharedPayload) ?: sharedPayload.trim()
+                if (incoming.isBlank()) {
+                    uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
+                    return
+                }
+
+                uiState = uiState.copy(spotifyUrl = incoming, errorMessage = null)
+                resolveFromAnyInput(incoming, openWhenReady = true, canonicalizeUrl = true)
             }
         }
     }
 
     private fun resolveFromInput() {
-        val trackId = extractTrackId(uiState.spotifyUrl)
-        if (trackId == null) {
+        resolveFromAnyInput(
+            input = uiState.spotifyUrl,
+            openWhenReady = false,
+            canonicalizeUrl = false
+        )
+    }
+
+    private fun resolveFromAnyInput(
+        input: String,
+        openWhenReady: Boolean,
+        canonicalizeUrl: Boolean
+    ) {
+        val normalizedInput = (extractFirstUrl(input) ?: input).trim()
+        if (normalizedInput.isBlank()) {
             uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
             return
         }
 
-        resolveTrack(trackId, openWhenReady = false)
+        val trackId = extractTrackId(normalizedInput)
+        if (trackId != null) {
+            if (canonicalizeUrl) {
+                uiState = uiState.copy(spotifyUrl = spotifyTrackUrl(trackId), errorMessage = null)
+            }
+            resolveTrack(trackId, openWhenReady)
+            return
+        }
+
+        val uri = runCatching { Uri.parse(normalizedInput) }.getOrNull()
+        if (uri != null && uri.isSpotifyShortLink()) {
+            resolveShortLinkTrackId(normalizedInput, openWhenReady)
+            return
+        }
+
+        uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
+    }
+
+    private fun resolveShortLinkTrackId(shortLink: String, openWhenReady: Boolean) {
+        uiState = uiState.copy(
+            isLoading = true,
+            errorMessage = null,
+            resolvedTrackName = null,
+            resolvedArtistName = null
+        )
+
+        val request = Request.Builder()
+            .url(shortLink)
+            .get()
+            .build()
+
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                runOnUiThread {
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        errorMessage = getString(R.string.error_network)
+                    )
+                }
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val redirectedUrl = response.request.url.toString()
+                val trackId = extractTrackId(redirectedUrl)
+                response.close()
+
+                runOnUiThread {
+                    if (trackId == null) {
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            errorMessage = getString(R.string.error_invalid_url)
+                        )
+                        return@runOnUiThread
+                    }
+
+                    uiState = uiState.copy(spotifyUrl = spotifyTrackUrl(trackId))
+                    resolveTrack(trackId, openWhenReady)
+                }
+            }
+        })
     }
 
     private fun resolveTrack(trackId: String, openWhenReady: Boolean) {
@@ -194,27 +285,52 @@ class MainActivity : ComponentActivity() {
 
     private fun extractTrackId(input: String): String? {
         val value = input.trim()
-        if (value.startsWith("spotify:track:")) {
-            return value.substringAfterLast(':').takeIf { it.isNotBlank() }
+        if (value.isBlank()) return null
+
+        if (spotifyTrackIdRegex.matches(value)) {
+            return value
+        }
+
+        if (value.startsWith("spotify:track:", ignoreCase = true)) {
+            return value.substringAfterLast(':').takeIf { spotifyTrackIdRegex.matches(it) }
         }
 
         val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return null
+        uri.getQueryParameter("uri")
+            ?.let { embeddedUri -> extractTrackId(embeddedUri) }
+            ?.let { return it }
+
         return uri.extractTrackIdFromUri()
     }
 
     private fun Uri.extractTrackIdFromUri(): String? {
-        val hostValue = host ?: return null
-        if (hostValue != "open.spotify.com") return null
+        val hostValue = host?.lowercase() ?: return null
+        val isSpotifyHost = hostValue == "spotify.com" || hostValue.endsWith(".spotify.com")
+        if (!isSpotifyHost) return null
 
         val segments = pathSegments
         val trackIndex = segments.indexOf("track")
         if (trackIndex == -1 || trackIndex + 1 >= segments.size) return null
 
-        return segments[trackIndex + 1].takeIf { it.isNotBlank() }
+        return segments[trackIndex + 1].takeIf { spotifyTrackIdRegex.matches(it) }
+    }
+
+    private fun Uri.isSpotifyShortLink(): Boolean {
+        val hostValue = host?.lowercase() ?: return false
+        return hostValue == "spotify.link" || hostValue.endsWith(".spotify.link")
     }
 
     private fun String.decodeHtml(): String {
         return Html.fromHtml(this, Html.FROM_HTML_MODE_LEGACY).toString()
+    }
+
+    private fun extractFirstUrl(text: String): String? {
+        val match = sharedUrlRegex.find(text)?.value ?: return null
+        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')
+    }
+
+    private fun spotifyTrackUrl(trackId: String): String {
+        return "https://open.spotify.com/track/$trackId"
     }
 
     private fun openFromState() {
