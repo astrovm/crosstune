@@ -8,6 +8,9 @@ Android app that accepts Spotify track links and opens the equivalent search in 
 - Handles `https://spotify.link/...` short links via Android deep links.
 - Accepts shared text/links from other apps via Android share sheet (`ACTION_SEND`).
 - Lets you paste a Spotify track URL manually in the app UI.
+- Lets you choose search target (`YouTube Music` or `YouTube`) before opening.
+- Can copy search text or share the generated search link.
+- Includes a first-run helper to open Android "supported links" app settings.
 - Reads public Spotify page metadata (no API token) to resolve track + artist.
 - Opens:
   - `https://music.youtube.com/search?q=<track + artist>`

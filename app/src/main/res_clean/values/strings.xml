@@ -11,7 +11,20 @@
     <string name="clear_button">Clear</string>
     <string name="loading_text">Reading public Spotify metadata…</string>
     <string name="result_title">Ready to open</string>
-    <string name="open_button">Open in YouTube Music</string>
+    <string name="open_button">Open</string>
+    <string name="open_with_label">Open with</string>
+    <string name="target_youtube_music">YouTube Music</string>
+    <string name="target_youtube">YouTube</string>
+    <string name="open_in_youtube_music">Open in YouTube Music</string>
+    <string name="open_in_youtube">Open in YouTube</string>
+    <string name="copy_search_button">Copy Search Text</string>
+    <string name="share_search_button">Share Search Link</string>
+    <string name="share_search_link">Share search link</string>
+    <string name="search_copied_to_clipboard">Search text copied</string>
+    <string name="link_settings_helper_title">Enable Spotify links for Crosstune</string>
+    <string name="link_settings_helper_body">If Spotify links open in browser, set Crosstune as the default supported-links handler in app settings.</string>
+    <string name="open_link_settings_button">Open Link Settings</string>
+    <string name="dismiss_button">Dismiss</string>
     <string name="built_by">Built by Astro Labs</string>
 
     <string name="error_invalid_url">Enter a valid Spotify track URL.</string>

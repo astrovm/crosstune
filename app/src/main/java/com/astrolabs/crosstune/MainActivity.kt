@@ -1,9 +1,14 @@
 package com.astrolabs.crosstune
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.text.Html
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -29,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,12 +63,21 @@ class MainActivity : ComponentActivity() {
     private val ogTitleRegex = Regex("""<meta property=\"og:title\" content=\"([^\"]+)\"""")
     private val sharedUrlRegex = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
     private val spotifyTrackIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
+    private val preferences by lazy { getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE) }
 
     private var uiState by mutableStateOf(UiState())
+    
+    companion object {
+        private const val PREFERENCES_NAME = "crosstune_preferences"
+        private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        uiState = uiState.copy(
+            showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false)
+        )
         handleIntent(intent)
 
         setContent {
@@ -74,9 +89,19 @@ class MainActivity : ComponentActivity() {
                     },
                     onResolveClick = ::resolveFromInput,
                     onClearClick = {
-                        uiState = UiState()
+                        uiState = UiState(
+                            selectedTarget = uiState.selectedTarget,
+                            showLinkSettingsHelper = uiState.showLinkSettingsHelper
+                        )
                     },
-                    onOpenClick = ::openFromState
+                    onOpenClick = ::openFromState,
+                    onTargetChange = { target ->
+                        uiState = uiState.copy(selectedTarget = target)
+                    },
+                    onCopySearchClick = ::copySearchFromState,
+                    onShareSearchClick = ::shareSearchFromState,
+                    onOpenLinkSettingsClick = ::openAppLinkSettings,
+                    onDismissLinkSettingsHelper = ::dismissLinkSettingsHelper
                 )
             }
         }
@@ -245,7 +270,7 @@ class MainActivity : ComponentActivity() {
                         )
 
                         if (openWhenReady) {
-                            openYouTubeMusic(trackName, artistName)
+                            openPrimaryTarget(trackName, artistName)
                         }
                     }
                 } catch (_: Exception) {
@@ -336,16 +361,84 @@ class MainActivity : ComponentActivity() {
     private fun openFromState() {
         val trackName = uiState.resolvedTrackName ?: return
         val artistName = uiState.resolvedArtistName ?: ""
-        openYouTubeMusic(trackName, artistName)
+        openPrimaryTarget(trackName, artistName)
     }
 
-    private fun openYouTubeMusic(trackName: String, artistName: String) {
-        val query = listOf(trackName, artistName)
+    private fun copySearchFromState() {
+        val trackName = uiState.resolvedTrackName ?: return
+        val artistName = uiState.resolvedArtistName ?: ""
+        val query = buildSearchQuery(trackName, artistName)
+        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText("Crosstune search query", query))
+        Toast.makeText(this, getString(R.string.search_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun shareSearchFromState() {
+        val trackName = uiState.resolvedTrackName ?: return
+        val artistName = uiState.resolvedArtistName ?: ""
+        val query = buildSearchQuery(trackName, artistName)
+        val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, targetUri.toString())
+        }
+        startActivity(Intent.createChooser(shareIntent, getString(R.string.share_search_link)))
+    }
+
+    private fun openAppLinkSettings() {
+        val packageUri = Uri.parse("package:$packageName")
+        val openByDefaultIntent = Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS).apply {
+            data = packageUri
+        }
+        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = packageUri
+        }
+
+        try {
+            startActivity(openByDefaultIntent)
+        } catch (_: ActivityNotFoundException) {
+            startActivity(fallbackIntent)
+        }
+
+        dismissLinkSettingsHelper()
+    }
+
+    private fun dismissLinkSettingsHelper() {
+        uiState = uiState.copy(showLinkSettingsHelper = false)
+        preferences.edit().putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true).apply()
+    }
+
+    private fun openPrimaryTarget(trackName: String, artistName: String) {
+        val query = buildSearchQuery(trackName, artistName)
+        val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
+        val preferredPackage = when (uiState.selectedTarget) {
+            SearchTarget.YOUTUBE_MUSIC -> "com.google.android.apps.youtube.music"
+            SearchTarget.YOUTUBE -> "com.google.android.youtube"
+        }
+
+        val packagedIntent = Intent(Intent.ACTION_VIEW, targetUri).apply {
+            setPackage(preferredPackage)
+        }
+
+        try {
+            startActivity(packagedIntent)
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Intent.ACTION_VIEW, targetUri))
+        }
+    }
+
+    private fun buildSearchQuery(trackName: String, artistName: String): String {
+        return listOf(trackName, artistName)
             .filter { it.isNotBlank() }
             .joinToString(" ")
+    }
 
-        val targetUri = Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")
-        startActivity(Intent(Intent.ACTION_VIEW, targetUri))
+    private fun buildTargetSearchUri(target: SearchTarget, query: String): Uri {
+        val encoded = Uri.encode(query)
+        return when (target) {
+            SearchTarget.YOUTUBE_MUSIC -> Uri.parse("https://music.youtube.com/search?q=$encoded")
+            SearchTarget.YOUTUBE -> Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+        }
     }
 }
 
@@ -355,7 +448,12 @@ private fun CrosstuneScreen(
     onUrlChange: (String) -> Unit,
     onResolveClick: () -> Unit,
     onClearClick: () -> Unit,
-    onOpenClick: () -> Unit
+    onOpenClick: () -> Unit,
+    onTargetChange: (SearchTarget) -> Unit,
+    onCopySearchClick: () -> Unit,
+    onShareSearchClick: () -> Unit,
+    onOpenLinkSettingsClick: () -> Unit,
+    onDismissLinkSettingsHelper: () -> Unit
 ) {
     val gradient = Brush.verticalGradient(
         colors = listOf(
@@ -399,6 +497,48 @@ private fun CrosstuneScreen(
                         .padding(top = 8.dp, bottom = 20.dp)
                         .widthIn(max = 520.dp)
                 )
+
+                if (state.showLinkSettingsHelper) {
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 680.dp)
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.link_settings_helper_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(R.string.link_settings_helper_body),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = onOpenLinkSettingsClick,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.open_link_settings_button))
+                                }
+                                TextButton(
+                                    onClick = onDismissLinkSettingsHelper,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(stringResource(R.string.dismiss_button))
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Card(
                     modifier = Modifier
@@ -483,6 +623,11 @@ private fun CrosstuneScreen(
 
                         val trackName = state.resolvedTrackName
                         if (!trackName.isNullOrBlank()) {
+                            val openButtonLabel = when (state.selectedTarget) {
+                                SearchTarget.YOUTUBE_MUSIC -> stringResource(R.string.open_in_youtube_music)
+                                SearchTarget.YOUTUBE -> stringResource(R.string.open_in_youtube)
+                            }
+
                             ElevatedCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -510,13 +655,79 @@ private fun CrosstuneScreen(
                                         )
                                     }
 
+                                    Text(
+                                        text = stringResource(R.string.open_with_label),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 12.dp)
+                                    )
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (state.selectedTarget == SearchTarget.YOUTUBE_MUSIC) {
+                                            Button(
+                                                onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(stringResource(R.string.target_youtube_music))
+                                            }
+                                        } else {
+                                            OutlinedButton(
+                                                onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(stringResource(R.string.target_youtube_music))
+                                            }
+                                        }
+
+                                        if (state.selectedTarget == SearchTarget.YOUTUBE) {
+                                            Button(
+                                                onClick = { onTargetChange(SearchTarget.YOUTUBE) },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(stringResource(R.string.target_youtube))
+                                            }
+                                        } else {
+                                            OutlinedButton(
+                                                onClick = { onTargetChange(SearchTarget.YOUTUBE) },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(stringResource(R.string.target_youtube))
+                                            }
+                                        }
+                                    }
+
                                     Button(
                                         onClick = onOpenClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(top = 12.dp)
                                     ) {
-                                        Text(stringResource(R.string.open_button))
+                                        Text(openButtonLabel)
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = onCopySearchClick,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(stringResource(R.string.copy_search_button))
+                                        }
+                                        OutlinedButton(
+                                            onClick = onShareSearchClick,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(stringResource(R.string.share_search_button))
+                                        }
                                     }
                                 }
                             }
@@ -540,8 +751,15 @@ private data class UiState(
     val isLoading: Boolean = false,
     val resolvedTrackName: String? = null,
     val resolvedArtistName: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val selectedTarget: SearchTarget = SearchTarget.YOUTUBE_MUSIC,
+    val showLinkSettingsHelper: Boolean = false
 )
+
+private enum class SearchTarget {
+    YOUTUBE_MUSIC,
+    YOUTUBE
+}
 
 @Preview(showBackground = true)
 @Composable
@@ -556,7 +774,12 @@ private fun CrosstuneScreenPreview() {
             onUrlChange = {},
             onResolveClick = {},
             onClearClick = {},
-            onOpenClick = {}
+            onOpenClick = {},
+            onTargetChange = {},
+            onCopySearchClick = {},
+            onShareSearchClick = {},
+            onOpenLinkSettingsClick = {},
+            onDismissLinkSettingsHelper = {}
         )
     }
 }
