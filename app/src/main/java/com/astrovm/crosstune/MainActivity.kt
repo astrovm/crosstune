@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                 try {
-                    val html = response.body?.string() ?: ""
+                    val html = response.body.string()
                     val metadata = extractTrackAndArtist(html)
                         ?: extractTrackTitle(html)?.let { it to "" }
 
