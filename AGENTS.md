@@ -39,6 +39,40 @@ Preferred local Android toolchain discovery (user-agnostic):
   - `$ANDROID_STUDIO_HOME/jbr/bin` (for Studio-bundled Java when needed)
 - Prefer env vars and `$HOME`-relative paths in commands/docs; avoid hard-coding a specific username path.
 
+## Release Process
+
+Use this flow for public releases (optimized and installable APK):
+
+1. Ensure `main` is clean and pushed:
+   - `git status --short --branch`
+   - `git push origin main`
+2. Create release tag **before** building so Git-derived app version is correct:
+   - `git tag vX.Y.Z`
+   - `git push origin refs/tags/vX.Y.Z`
+3. Build optimized release APK (minified):
+   - `JAVA_HOME=/path/to/jdk ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" ./gradlew :app:assembleRelease --rerun-tasks`
+4. Verify APK metadata:
+   - `cat app/build/outputs/apk/release/output-metadata.json`
+   - Confirm `versionName` matches release (for `v1.0.6`, expect `1.0.6`).
+5. Sign the APK (do **not** upload unsigned APK publicly):
+   - Input APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+   - Choose latest `apksigner`:
+     - `APKSIGNER="$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -n1)"`
+   - Sign:
+     - `"$APKSIGNER" sign --ks /path/to/release.keystore --ks-key-alias <alias> --ks-pass pass:<storepass> --key-pass pass:<keypass> --out app/build/outputs/apk/release/Crosstune-vX.Y.Z.apk app/build/outputs/apk/release/app-release-unsigned.apk`
+   - Verify signature:
+     - `"$APKSIGNER" verify --print-certs app/build/outputs/apk/release/Crosstune-vX.Y.Z.apk`
+6. Create GitHub release with signed APK:
+   - `gh release create vX.Y.Z app/build/outputs/apk/release/Crosstune-vX.Y.Z.apk --repo astrovm/crosstune --title "Crosstune vX.Y.Z" --notes "<changes-only notes>"`
+7. Verify published artifact is signed:
+   - `gh release download vX.Y.Z --repo astrovm/crosstune --pattern "Crosstune-vX.Y.Z.apk" --dir /tmp/crosstune-release-check`
+   - `"$APKSIGNER" verify /tmp/crosstune-release-check/Crosstune-vX.Y.Z.apk`
+
+Notes:
+- Android `versionName`/`versionCode` are Git-derived in `app/build.gradle.kts`; avoid hardcoding version values.
+- If multiple local `v*` tags point to the same commit, verify `git describe --tags --abbrev=0` resolves to the intended release tag before building.
+- For production distribution, use a dedicated release keystore (debug keystore is only for internal/testing installs).
+
 ## Development Rules
 
 - Keep package name and application ID as `com.astrovm.crosstune` unless explicitly requested.
