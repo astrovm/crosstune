@@ -289,14 +289,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun extractTrackAndArtist(html: String): Pair<String, String>? {
-        val description = ogDescriptionRegex.find(html)?.groupValues?.getOrNull(1)?.decodeHtml() ?: return null
-        val parts = description.split(" · ")
-        if (parts.size < 2) return null
+        val trackName = extractTrackTitle(html) ?: return null
+        val artistName = ogDescriptionRegex.find(html)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.decodeHtml()
+            ?.split(" · ")
+            ?.firstOrNull()
+            ?.trim()
+            .orEmpty()
 
-        val artistName = parts[0].trim()
-        val trackName = parts[1].trim()
-
-        if (trackName.isBlank()) return null
         return trackName to artistName
     }
 
