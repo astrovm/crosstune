@@ -53,3 +53,5 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - The app uses public Spotify page metadata (no Spotify API key needed).
 - If Spotify changes their page metadata format, some links may stop resolving until updated.
+- Android version metadata is derived from Git at build time:
+  `versionName` uses the latest tag (without a leading `v`) and adds `-dev.N` when commits exist after that tag, while `versionCode` uses total commit count.
