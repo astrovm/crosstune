@@ -271,7 +271,7 @@ class MainActivity : ComponentActivity() {
                         )
 
                         if (openWhenReady) {
-                            openPrimaryTarget(trackName, artistName)
+                            openPrimaryTarget(trackName, artistName, closeAfterOpen = true)
                         }
                     }
                 } catch (_: Exception) {
@@ -362,7 +362,7 @@ class MainActivity : ComponentActivity() {
     private fun openFromState() {
         val trackName = uiState.resolvedTrackName ?: return
         val artistName = uiState.resolvedArtistName ?: ""
-        openPrimaryTarget(trackName, artistName)
+        openPrimaryTarget(trackName, artistName, closeAfterOpen = false)
     }
 
     private fun copySearchFromState() {
@@ -419,7 +419,7 @@ class MainActivity : ComponentActivity() {
         preferences.edit().putString(KEY_DEFAULT_TARGET, target.name).apply()
     }
 
-    private fun openPrimaryTarget(trackName: String, artistName: String) {
+    private fun openPrimaryTarget(trackName: String, artistName: String, closeAfterOpen: Boolean) {
         val query = buildSearchQuery(trackName, artistName)
         val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
         val preferredPackage = when (uiState.selectedTarget) {
@@ -435,6 +435,10 @@ class MainActivity : ComponentActivity() {
             startActivity(packagedIntent)
         } catch (_: ActivityNotFoundException) {
             startActivity(Intent(Intent.ACTION_VIEW, targetUri))
+        }
+
+        if (closeAfterOpen) {
+            finish()
         }
     }
 
