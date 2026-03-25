@@ -2,6 +2,12 @@
 
 Crosstune takes a Spotify track link and opens a search for that song in YouTube Music or YouTube.
 
+<p align="center">
+  <img src="screenshots/Screenshot_20260325_002742_Crosstune.jpg" alt="Home screen" width="270">
+  &nbsp;&nbsp;
+  <img src="screenshots/Screenshot_20260325_002852_Crosstune.jpg" alt="Resolved track" width="270">
+</p>
+
 ## What You Can Do
 
 - Open Spotify links directly in Crosstune.
