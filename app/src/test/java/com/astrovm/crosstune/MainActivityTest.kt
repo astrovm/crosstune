@@ -7,9 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Looper
 import android.provider.Settings
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
@@ -241,7 +242,12 @@ class MainActivityTest {
         onNewIntent.isAccessible = true
         onNewIntent.invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (!activity.isFinishing && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20L)
+        }
+        assertTrue("activity should finish; requests=${fake.requestedUrls}", activity.isFinishing)
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
     }
 
