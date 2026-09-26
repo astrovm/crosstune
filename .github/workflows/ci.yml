@@ -42,10 +42,3 @@ jobs:
               for c in r.findall('counter'): print('TOTAL', c.attrib)
           PY
 
-      - name: TEMP wrapper
-        if: always()
-        run: |
-          ./gradlew --no-daemon -q wrapper --gradle-version 9.8.0 --distribution-type bin --gradle-distribution-sha256-sum "$(curl -sSL https://services.gradle.org/distributions/gradle-9.8.0-bin.zip.sha256)"
-          ./gradlew --no-daemon -q wrapper
-          git status --short
-          for f in gradle/wrapper/gradle-wrapper.jar gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties; do echo "BEGIN $f"; base64 -w0 "$f"; echo; echo "END $f"; done
