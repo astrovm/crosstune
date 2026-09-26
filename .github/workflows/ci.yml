@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -13,6 +14,8 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -27,18 +30,12 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon :app:assembleDebug
 
-      - name: TEMP uncovered lines
+      - name: Upload test and coverage reports
         if: always()
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET, glob
-          for f in glob.glob('app/build/reports/kover/*.xml'):
-              r = ET.parse(f).getroot()
-              for pkg in r.findall('package'):
-                  for sf in pkg.findall('sourcefile'):
-                      miss = [l.get('nr') for l in sf.findall('line') if int(l.get('mi')) > 0 and int(l.get('ci')) == 0]
-                      part = [l.get('nr') for l in sf.findall('line') if int(l.get('mi')) > 0 and int(l.get('ci')) > 0]
-                      if miss: print('UNCOVERED', pkg.get('name'), sf.get('name'), ' '.join(miss))
-              for c in r.findall('counter'): print('TOTAL', c.attrib)
-          PY
-
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/kover/
+          if-no-files-found: warn
