@@ -30,7 +30,7 @@ val derivedVersionName = when {
 
 android {
     namespace = "com.astrovm.crosstune"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.astrovm.crosstune"
