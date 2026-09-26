@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.text.Html
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -59,7 +60,7 @@ import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
-    private val client = OkHttpClient()
+    private val client by lazy { httpClientFactory() }
     private val ogDescriptionRegex = Regex("""<meta property=\"og:description\" content=\"([^\"]+)\"""")
     private val ogTitleRegex = Regex("""<meta property=\"og:title\" content=\"([^\"]+)\"""")
     private val sharedUrlRegex = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
@@ -72,6 +73,9 @@ class MainActivity : ComponentActivity() {
         private const val PREFERENCES_NAME = "crosstune_preferences"
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
         private const val KEY_DEFAULT_TARGET = "default_target"
+
+        @VisibleForTesting
+        internal var httpClientFactory: () -> OkHttpClient = { OkHttpClient() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -801,7 +805,7 @@ private enum class SearchTarget {
 
 @Preview(showBackground = true)
 @Composable
-private fun CrosstuneScreenPreview() {
+internal fun CrosstuneScreenPreview() {
     CrosstuneTheme {
         CrosstuneScreen(
             state = UiState(
