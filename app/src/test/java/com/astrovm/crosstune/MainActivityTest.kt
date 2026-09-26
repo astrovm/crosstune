@@ -236,9 +236,10 @@ class MainActivityTest {
     fun newIntentWhileRunningResolvesTrack() {
         respondWithTrack("Fresh", "Someone · Song · 2024")
         val activity = launch()
-        controller!!.newIntent(
-            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID"))
-        )
+        // Deliver the intent the way the framework does for a singleTop activity that is already running.
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
 
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
