@@ -19,8 +19,11 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
+fun CrosstuneTheme(content: @Composable () -> Unit) = CrosstuneTheme(isSystemInDarkTheme(), content)
+
+@Composable
 fun CrosstuneTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

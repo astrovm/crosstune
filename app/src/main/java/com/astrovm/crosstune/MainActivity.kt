@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.text.Html
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -175,8 +176,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val uri = runCatching { Uri.parse(normalizedInput) }.getOrNull()
-        if (uri != null && uri.isSpotifyShortLink()) {
+        if (Uri.parse(normalizedInput).isSpotifyShortLink()) {
             resolveShortLinkTrackId(normalizedInput, openWhenReady)
             return
         }
@@ -255,7 +255,6 @@ class MainActivity : ComponentActivity() {
                 try {
                     val html = response.body.string()
                     val metadata = extractTrackAndArtist(html)
-                        ?: extractTrackTitle(html)?.let { it to "" }
 
                     runOnUiThread {
                         if (metadata == null) {
@@ -327,7 +326,8 @@ class MainActivity : ComponentActivity() {
             return value.substringAfterLast(':').takeIf { spotifyTrackIdRegex.matches(it) }
         }
 
-        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return null
+        // Opaque URIs such as "spotify:album:..." have no query or path segments to inspect.
+        val uri = Uri.parse(value).takeIf { it.isHierarchical } ?: return null
         uri.getQueryParameter("uri")
             ?.let { embeddedUri -> extractTrackId(embeddedUri) }
             ?.let { return it }
@@ -653,10 +653,7 @@ private fun CrosstuneScreen(
 
                         val trackName = state.resolvedTrackName
                         if (!trackName.isNullOrBlank()) {
-                            val openButtonLabel = when (state.selectedTarget) {
-                                SearchTarget.YOUTUBE_MUSIC -> stringResource(R.string.open_in_youtube_music)
-                                SearchTarget.YOUTUBE -> stringResource(R.string.open_in_youtube)
-                            }
+                            val openButtonLabel = stringResource(state.selectedTarget.openButtonLabelRes)
 
                             ElevatedCard(
                                 modifier = Modifier
@@ -798,9 +795,9 @@ private data class UiState(
     val showLinkSettingsHelper: Boolean = false
 )
 
-private enum class SearchTarget {
-    YOUTUBE_MUSIC,
-    YOUTUBE
+private enum class SearchTarget(@StringRes val openButtonLabelRes: Int) {
+    YOUTUBE_MUSIC(R.string.open_in_youtube_music),
+    YOUTUBE(R.string.open_in_youtube)
 }
 
 @Preview(showBackground = true)

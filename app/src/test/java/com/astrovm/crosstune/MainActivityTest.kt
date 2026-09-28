@@ -9,6 +9,8 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -506,6 +508,271 @@ class MainActivityTest {
         val started = nextStartedActivity()
         assertEquals(Intent.ACTION_VIEW, started!!.action)
         assertEquals(string(R.string.github_repo_url), started.dataString)
+    }
+
+    @Test
+    fun acceptedTrackLinkVariantsAllResolveToCanonicalTrack() {
+        respondWithTrack("Variant", "Artist · Song")
+        launch()
+        val accepted = listOf(
+            "https://spotify.com/track/$TRACK_ID",
+            "HTTPS://OPEN.SPOTIFY.COM/track/$TRACK_ID",
+            "https://play.spotify.com/intl-es/track/$TRACK_ID/extra?si=1",
+            "SPOTIFY:TRACK:$TRACK_ID",
+            "  $TRACK_ID  ",
+            "Check this out (https://open.spotify.com/track/$TRACK_ID)!",
+            // An unusable embedded uri falls back to the track id in the path.
+            "https://open.spotify.com/track/$TRACK_ID?uri=spotify:track:short",
+            "https://open.spotify.com/track/$TRACK_ID?uri="
+        )
+        for (input in accepted) {
+            fake.requestedUrls.clear()
+            typeUrl(input)
+            click(string(R.string.resolve_button))
+            waitForText("Variant")
+            assertEquals(input, listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+            assertTextAbsent(string(R.string.error_invalid_url))
+            click(string(R.string.clear_button))
+            assertTextAbsent("Variant")
+        }
+    }
+
+    @Test
+    fun lookalikeHostsAndMalformedIdsAreRejected() {
+        launch()
+        val rejected = listOf(
+            "   ",
+            "https://notspotify.com/track/$TRACK_ID",
+            "https://spotify.com.evil.example/track/$TRACK_ID",
+            "https://open.spotify.com/track/${TRACK_ID.dropLast(1)}",
+            "https://open.spotify.com/track/${TRACK_ID}X",
+            "${TRACK_ID}X",
+            "spotify:album:$TRACK_ID",
+            "spotify:album:$TRACK_ID?uri=spotify:track:$TRACK_ID",
+            "mailto:someone@example.com",
+            "spotify:track:$TRACK_ID:extra",
+            "https://open.spotify.com/embed?uri=",
+            "https://open.spotify.com/embed?uri=spotify%3Atrack%3Ashort",
+            "https://notspotify.link/AbCdEf",
+            "spotify.link/AbCdEf"
+        )
+        for (input in rejected) {
+            typeUrl(input)
+            click(string(R.string.resolve_button))
+            composeRule.onNodeWithText(string(R.string.error_invalid_url)).assertExists(input)
+            click(string(R.string.clear_button))
+        }
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun uppercaseShortLinkHostIsFollowed() {
+        fake.handler = { request ->
+            if (request.url.host == "spotify.link") {
+                FakeSpotify.html(request, "", finalUrl = "https://open.spotify.com/track/$TRACK_ID")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Loud Link", "Artist · Song"))
+            }
+        }
+        launch()
+
+        typeUrl("HTTPS://SPOTIFY.LINK/AbCdEf")
+        click(string(R.string.resolve_button))
+        waitForText("Loud Link")
+
+        assertEquals(2, fake.requestedUrls.size)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", fake.requestedUrls.last())
+    }
+
+    @Test
+    fun blankTitleIsTreatedAsMissingMetadata() {
+        respondWithTrack("  &#32; ", "Artist · Song")
+        launch()
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.error_metadata_unavailable))
+
+        assertTextAbsent(string(R.string.result_title))
+        assertTextAbsent("Artist")
+    }
+
+    @Test
+    fun metadataIsDecodedAndTrimmedAndArtistIsFirstDescriptionPart() {
+        respondWithTrack("  Rock &amp; Roll  ", "  AC&#47;DC  ")
+        launch()
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Rock & Roll")
+        assertTextShown("AC/DC")
+
+        click(string(R.string.copy_search_button))
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        assertEquals("Rock & Roll AC/DC", clipboard.primaryClip!!.getItemAt(0).text.toString())
+    }
+
+    @Test
+    fun titleOnlyTrackOpensSearchWithoutArtist() {
+        respondWithTrack("Solo", null)
+        launch()
+        click(string(R.string.target_youtube))
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Solo")
+        click(string(R.string.open_in_youtube))
+
+        assertEquals(
+            "https://www.youtube.com/results?search_query=Solo",
+            nextStartedActivity()!!.dataString
+        )
+    }
+
+    @Test
+    fun successfulResolveAfterErrorClearsError() {
+        fake.handler = { throw IOException("offline") }
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.error_network))
+
+        // Retry without editing the input, so only the resolution itself can clear the error.
+        respondWithTrack("Recovered", "Artist · Song")
+        click(string(R.string.resolve_button))
+        waitForText("Recovered")
+        assertTextAbsent(string(R.string.error_network))
+    }
+
+    @Test
+    fun unknownStoredTargetFallsBackToYouTubeMusic() {
+        prefs().edit().putString("default_target", "SOUNDCLOUD").commit()
+        respondWithTrack("Default", "Artist · Song")
+        launch()
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Default")
+
+        assertTextShown(string(R.string.open_in_youtube_music))
+        click(string(R.string.open_in_youtube_music))
+        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
+    }
+
+    @Test
+    fun selectedTargetSurvivesRelaunch() {
+        launch()
+        click(string(R.string.target_youtube))
+        controller!!.pause().stop().destroy()
+
+        respondWithTrack("Remembered", "Artist · Song")
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Remembered")
+        assertTextShown(string(R.string.open_in_youtube))
+    }
+
+    @Test
+    fun viewIntentWithBlankDataShowsInvalidUrlError() {
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("   ")))
+        assertTextShown(string(R.string.error_invalid_url))
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun viewIntentWithNonSpotifyLinkShowsErrorAndStaysOpen() {
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com/track/$TRACK_ID")))
+        assertTextShown(string(R.string.error_invalid_url))
+        assertTextShown("https://example.com/track/$TRACK_ID")
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun viewIntentMetadataFailureKeepsActivityOpenWithCanonicalUrl() {
+        respondWithTrack(null, null)
+        val activity = launch(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID?si=tracking"))
+        )
+        waitForText(string(R.string.error_metadata_unavailable))
+
+        assertFalse(activity.isFinishing)
+        assertTextShown("https://open.spotify.com/track/$TRACK_ID")
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun sharedSubjectIsUsedWhenTextIsMissing() {
+        respondWithTrack("From Subject", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "spotify:track:$TRACK_ID")
+            }
+        )
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun sharedTextWithoutValidLinkShowsError() {
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "Look at https://example.com/song")
+            }
+        )
+        assertTextShown(string(R.string.error_invalid_url))
+        assertTextShown("https://example.com/song")
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun sharedOpaqueNonTrackUriShowsErrorInsteadOfCrashing() {
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "spotify:album:$TRACK_ID")
+            }
+        )
+        assertTextShown(string(R.string.error_invalid_url))
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun unrelatedIntentActionIsIgnored() {
+        val activity = launch(Intent(Intent.ACTION_EDIT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        assertTextAbsent(string(R.string.error_invalid_url))
+        assertTextAbsent("https://open.spotify.com/track/$TRACK_ID")
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun inputAndButtonsAreDisabledWhileLoading() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            FakeSpotify.html(request, FakeSpotify.trackPage("Done", "Artist · Song"))
+        }
+        launch()
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.clear_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(TRACK_ID).assertIsNotEnabled()
+
+        release.countDown()
+        waitForText("Done")
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsEnabled()
+        assertEquals(1, fake.requestedUrls.size)
     }
 
     private companion object {

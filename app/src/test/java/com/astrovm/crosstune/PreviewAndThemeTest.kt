@@ -1,7 +1,13 @@
 package com.astrovm.crosstune
 
+import android.content.res.Configuration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.astrovm.crosstune.ui.theme.AppTypography
@@ -74,5 +80,47 @@ class PreviewAndThemeTest {
         }
         composeRule.waitForIdle()
         assertEquals(Forest80, colors.first())
+    }
+
+    @Test
+    fun explicitThemeSwitchesPaletteWhenToggled() {
+        var dark by mutableStateOf(false)
+        val primaries = mutableListOf<Color>()
+        composeRule.setContent {
+            CrosstuneTheme(darkTheme = dark) {
+                primaries += MaterialTheme.colorScheme.primary
+            }
+        }
+        composeRule.waitForIdle()
+
+        dark = true
+        composeRule.waitForIdle()
+        dark = false
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(Forest40, Forest80, Forest40), primaries)
+    }
+
+    @Test
+    fun defaultThemeFollowsSystemDarkModeChangesAtRuntime() {
+        var night by mutableStateOf(false)
+        val primaries = mutableListOf<Color>()
+        composeRule.setContent {
+            val configuration = Configuration(LocalConfiguration.current).apply {
+                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                    if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+            }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                CrosstuneTheme {
+                    primaries += MaterialTheme.colorScheme.primary
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        night = true
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(Forest40, Forest80), primaries)
     }
 }
