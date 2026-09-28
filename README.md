@@ -55,6 +55,24 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Releasing
+
+The [Release workflow](.github/workflows/release.yml) runs the unit tests, builds a minified release APK, signs it, and publishes it to a GitHub release as `Crosstune-vX.Y.Z.apk`. You can start it either way:
+
+- Push a tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+- Or run **Actions → Release → Run workflow**, pick the branch, and enter the tag. The workflow creates the tag on that commit.
+
+It requires these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `RELEASE_KEYSTORE_BASE64` | `base64 -w0 release.keystore` |
+| `RELEASE_KEYSTORE_PASSWORD` | Keystore password |
+| `RELEASE_KEY_ALIAS` | Key alias |
+| `RELEASE_KEY_PASSWORD` | Key password |
+
+Keep the keystore backed up and never replace it: Android only installs updates signed with the same key. Releases after v1.0.6 use a new signing key, so v1.0.6 must be uninstalled once before installing a newer release.
+
 ## Notes
 
 - The app uses public Spotify page metadata (no Spotify API key needed).
