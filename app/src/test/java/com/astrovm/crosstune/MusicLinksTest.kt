@@ -177,4 +177,36 @@ class MusicLinksTest {
         assertNull(MusicLinks.serviceFor("https://example.com/music"))
         assertNull(MusicLinks.serviceFor("not a url"))
     }
+
+    @Test
+    fun linksWrappedInQuotesOrBracketsAreFound() {
+        val spotify = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl"
+        listOf("\"$spotify\"", "'$spotify'", "<$spotify>", "「$spotify」", "Listen: $spotify。")
+            .forEach { assertEquals(it, spotify, link(it)?.url) }
+    }
+
+    @Test
+    fun linksWithoutAScheme() {
+        assertEquals("https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl", link("open.spotify.com/track/11dFghVXANMlKmJXsNCbNl")?.url)
+        assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", link("www.youtube.com/watch?v=4NRXx6U8ABQ")?.url)
+        assertEquals(LinkInput.ShortLink("https://spotify.link/AbCdEf"), MusicLinks.parse("spotify.link/AbCdEf"))
+        assertNull(MusicLinks.parse("example.com/track/11dFghVXANMlKmJXsNCbNl"))
+        assertNull(MusicLinks.parse("just some words"))
+    }
+
+    @Test
+    fun appleAlbumWithAnEmptyOrBrokenSongIdStaysAnAlbum() {
+        listOf("", "abc").forEach { song ->
+            assertLink(
+                "https://music.apple.com/us/album/x/1499385848?i=$song",
+                MusicService.APPLE_MUSIC, ItemType.ALBUM, "1499385848", "https://music.apple.com/us/album/x/1499385848", "us"
+            )
+        }
+    }
+
+    @Test
+    fun lookalikeDomainsBelongToNoService() {
+        listOf("https://notdeezer.com/x", "https://evilspotify.link/x", "https://faketidal.com/x", "https://mysoundcloud.com/x")
+            .forEach { assertNull(it, MusicLinks.serviceFor(it)) }
+    }
 }

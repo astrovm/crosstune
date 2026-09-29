@@ -26,6 +26,11 @@ internal class ExactMatcher(
     private val country: String = Locale.getDefault().country,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
+    private val artistSeparator = Regex(
+        """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
+        RegexOption.IGNORE_CASE
+    )
+
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type == ItemType.PLAYLIST) return null
         return withTimeoutOrNull(TIMEOUT_MS) {
@@ -57,7 +62,9 @@ internal class ExactMatcher(
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return null
         return results.objects().firstOrNull { result ->
-            matches(metadata, result.optString(nameKey), result.optString("artistName"))
+            // Apple marks some albums in their name, e.g. "Name - Single", which the source doesn't.
+            val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
+            matches(metadata, name, result.optString("artistName"))
         }?.optString(urlKey)?.ifBlank { null }
     }
 
@@ -82,19 +89,26 @@ internal class ExactMatcher(
     private suspend fun fetchJson(url: String): JSONObject {
         val request = Request.Builder().url(url).get().build()
         return client.newCall(request).executeAsync().use { response ->
-            JSONObject(withContext(ioDispatcher) { response.body.string() })
+            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
         }
     }
 
     private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 
-    /** Requires the same name and artist so remixes, covers and deluxe editions don't win by rank. */
+    /**
+     * Requires the same name and at least one artist in common, so remixes, covers and deluxe
+     * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
+     */
     private fun matches(metadata: MusicMetadata, name: String, artist: String): Boolean {
         if (normalize(name) != normalize(metadata.title)) return false
         if (metadata.type == ItemType.ARTIST) return true
-        val wanted = normalize(metadata.artist)
-        return wanted.isEmpty() || normalize(artist).contains(wanted)
+        val wanted = artists(metadata.artist)
+        return wanted.isEmpty() || artists(artist).any(wanted::contains)
     }
+
+    /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own. */
+    private fun artists(credit: String): Set<String> =
+        credit.split(artistSeparator).map(::normalize).filter { it.isNotEmpty() }.toSet()
 
     private fun normalize(text: String): String =
         Normalizer.normalize(text, Normalizer.Form.NFD)

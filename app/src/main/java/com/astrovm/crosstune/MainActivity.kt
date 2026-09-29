@@ -49,15 +49,27 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_PASTE_FROM_CLIPBOARD = "com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
 
+        /** The unexported alias the tile and launcher shortcut use, so only they can trigger a clipboard read. */
+        const val PASTE_ALIAS = "com.astrovm.crosstune.PasteFromClipboard"
+
+        private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
+        private const val STATE_INCOMING_LINK = "incoming_link"
+
         @VisibleForTesting
-        internal var httpClientFactory: () -> OkHttpClient = { OkHttpClient() }
+        internal var httpClientFactory: () -> OkHttpClient = ::httpClient
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // After a configuration change the ViewModel already holds this intent's result or request.
-        if (savedInstanceState == null) handleIntent(intent)
+        pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
+        val incomingLink = savedInstanceState?.getString(STATE_INCOMING_LINK)
+        when {
+            savedInstanceState == null -> handleIntent(intent)
+            // After a configuration change the ViewModel already holds this intent's result or request.
+            // After Android ends the process in the background it doesn't, so look the link up again.
+            incomingLink != null && !viewModel.uiState.handlingIncomingLink -> viewModel.resolveIncoming(incomingLink)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -112,7 +124,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_PENDING_CLIPBOARD_READ, pendingClipboardRead)
+        val state = viewModel.uiState
+        if (state.handlingIncomingLink) outState.putString(STATE_INCOMING_LINK, state.linkText)
     }
 
     private fun handleIntent(intent: Intent) {
@@ -121,12 +141,13 @@ class MainActivity : ComponentActivity() {
 
         when (intent.action) {
             Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString)
-            Intent.ACTION_SEND -> viewModel.resolveIncoming(
-                intent.getStringExtra(Intent.EXTRA_TEXT)
-                    ?: intent.getStringExtra(Intent.EXTRA_SUBJECT)
-                    ?: return
-            )
-            ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = true
+            Intent.ACTION_SEND -> {
+                // Some apps share styled text, which getStringExtra would drop.
+                val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
+                    .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
+                viewModel.resolveIncoming(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return)
+            }
+            ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
         }
     }
 

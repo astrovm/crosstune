@@ -124,4 +124,13 @@ class LinkResolverTest {
             fake.requestedUrls
         )
     }
+
+    @Test
+    fun deezerRateLimitsCanBeRetried() {
+        respond("""{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}""")
+        assertEquals(AppError.RATE_LIMITED, (resolve("https://www.deezer.com/track/1") as Resolution.Failed).error)
+
+        respond("""{"title":"","artist":{"name":"Someone"}}""")
+        assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://www.deezer.com/track/1") as Resolution.Failed).error)
+    }
 }

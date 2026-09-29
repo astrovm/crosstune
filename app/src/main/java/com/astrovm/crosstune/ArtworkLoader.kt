@@ -31,7 +31,7 @@ internal class ArtworkLoader(
         val bitmap = try {
             client.newCall(request).executeAsync().use { response ->
                 if (!response.isSuccessful) return null
-                withContext(ioDispatcher) { decode(response.body.bytes()) }
+                withContext(ioDispatcher) { decode(response.body.bytesAtMost()) }
             }
         } catch (_: IOException) {
             null

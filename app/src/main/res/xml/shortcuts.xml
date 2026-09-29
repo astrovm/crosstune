@@ -8,7 +8,7 @@
         android:shortcutShortLabel="@string/shortcut_paste_short">
         <intent
             android:action="com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
-            android:targetClass="com.astrovm.crosstune.MainActivity"
+            android:targetClass="com.astrovm.crosstune.PasteFromClipboard"
             android:targetPackage="com.astrovm.crosstune" />
     </shortcut>
 </shortcuts>

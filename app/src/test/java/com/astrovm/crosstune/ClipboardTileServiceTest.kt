@@ -22,7 +22,7 @@ class ClipboardTileServiceTest {
 
     private fun assertOpensClipboardFlow(started: Intent) {
         assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, started.action)
-        assertEquals(MainActivity::class.java.name, started.component?.className)
+        assertEquals(MainActivity.PASTE_ALIAS, started.component?.className)
         assertTrue(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
     }
 

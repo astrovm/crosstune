@@ -53,16 +53,19 @@ internal class LinkResolver(
     private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {
         val (response, body) = fetch(metadataUrl(link))
         httpError(response)?.let { return@guarded Resolution.Failed(it, link) }
+        // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
+        if (link.service == MusicService.DEEZER) {
+            MetadataParsers.deezerError(JSONObject(body))?.let { return@guarded Resolution.Failed(it, link) }
+        }
         when (val metadata = parse(link, body)) {
             null -> Resolution.Failed(if (isApiNotFound(link)) AppError.NOT_FOUND else AppError.METADATA_UNAVAILABLE, link)
             else -> Resolution.Resolved(link, metadata)
         }
     }
 
-    /** API services report missing items inside a successful response. */
+    /** The iTunes Lookup API reports missing items as an empty result inside a successful response. */
     private fun isApiNotFound(link: MusicLink) =
-        link.service == MusicService.DEEZER ||
-            (link.service == MusicService.APPLE_MUSIC && link.type != ItemType.PLAYLIST)
+        link.service == MusicService.APPLE_MUSIC && link.type != ItemType.PLAYLIST
 
     private fun metadataUrl(link: MusicLink): String = when (link.service) {
         MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> oEmbed("https://www.youtube.com/oembed", link)
@@ -112,7 +115,7 @@ internal class LinkResolver(
     private suspend fun fetch(url: String): Pair<Response, String> {
         val request = Request.Builder().url(url).get().build()
         return client.newCall(request).executeAsync().use { response ->
-            response to withContext(ioDispatcher) { response.body.string() }
+            response to withContext(ioDispatcher) { response.body.stringAtMost() }
         }
     }
 
