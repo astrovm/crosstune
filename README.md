@@ -32,16 +32,16 @@ You can also paste a link into Crosstune, or share a link to it from any app.
 - **Works with 9 services**: reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp, and opens them in any of those or in Amazon Music.
 - **A different app per service**: for example, YouTube links go to YouTube Music and everything else goes to Apple Music.
 - **Ask which app to use**: choose an app every time you share a link.
-- **Open the exact song**: Apple Music and Deezer can open the song itself instead of a search.
-- **More apps and sites**: add any app or website that has a search page, like `https://example.com/search?q={query}`.
-- **Shortcuts**: paste with one tap, reopen recent links, or use the Quick Settings tile and the home screen shortcut.
+- **Open the exact match**: Apple Music and Deezer can open the song, album or artist itself instead of a search.
+- **Other apps and sites**: add any app or website that has a search page, like `https://example.com/search?q={query}`.
+- **Shortcuts**: paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.
 
 ## Supported links
 
 | Service | Works with |
 | --- | --- |
-| Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs |
-| YouTube Music | Songs |
+| Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs, track IDs |
+| YouTube Music | Songs and videos |
 | YouTube | Videos, Shorts, live, `youtu.be` |
 | Apple Music | Songs, albums, artists, playlists |
 | Deezer | Songs, albums, artists, playlists, `link.deezer.com` |
@@ -53,16 +53,16 @@ Crosstune can't read Amazon Music links, YouTube playlists or YouTube channels, 
 
 ## 🛠️ Something wrong?
 
-- **Links still open in another app or the browser?** Turn the service on in Crosstune's **Settings**. Then open Android's **Settings → Apps → Crosstune → Open by default**, tap **Add link**, and turn on that service's links.
+- **Links still open in another app or the browser?** In Crosstune's **Settings**, turn the service on under **Open links from**. Then open Android's **Settings → Apps → Crosstune → Open by default**, tap **Add link**, and turn on that service's links.
 - **A link opened in its own app instead?** Crosstune can't read some pages, like a SoundCloud feed, so it hands them to that service's app.
-- **You got a search instead of the song?** Most apps have no public way to find a song without an account, so Crosstune searches for it. For Apple Music and Deezer, turn on **Open the exact song**.
+- **You got a search instead of the song?** Most apps have no public way to find a song without an account, so Crosstune searches for it. For Apple Music and Deezer, turn on **Open the exact match**.
 
 ## Privacy
 
 - No accounts, analytics or ads.
 - History stays on your device.
-- To show a link's title, artist and cover, Crosstune only asks the service the link comes from, using its public page or public API.
-- With **Open the exact song** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
+- To show a link's title, artist and cover, Crosstune only asks the service the link comes from, using its public page or public API. Covers load from that service's image servers.
+- With **Open the exact match** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
 
 <details>
 <summary><b>Verify your download</b></summary>

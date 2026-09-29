@@ -7,7 +7,7 @@
     <string name="app_tagline">Open any music link in your favorite app.</string>
     <string name="spotify_link_label">Music link</string>
     <string name="spotify_link_placeholder">Paste a music link</string>
-    <string name="resolve_button">Look up</string>
+    <string name="resolve_button">Convert link</string>
     <string name="paste_button">Paste</string>
     <string name="clear_button">Clear</string>
     <string name="loading_text">Looking up the link…</string>
@@ -27,15 +27,15 @@
     <string name="settings_button">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_default_title">Default app</string>
-    <string name="settings_default_label">Open results in</string>
+    <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
-    <string name="settings_links_description">Tapping a link from these services opens it in Crosstune. Sharing or pasting works for all of them.</string>
+    <string name="settings_links_description">Services you turn on here open in Crosstune when you tap their links. Sharing or pasting works for all of them.</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
-    <string name="settings_custom_title">Custom destinations</string>
+    <string name="settings_custom_title">Other apps and sites</string>
     <string name="settings_custom_description">Add any app or website that has a search page.</string>
-    <string name="add_custom_destination_button">Add destination</string>
+    <string name="add_custom_destination_button">Add app or site</string>
     <string name="remove_button">Remove</string>
     <string name="add_button">Add</string>
     <string name="custom_name_label">Name</string>
@@ -76,9 +76,9 @@
 
     <string name="setting_ask_each_time">Ask which app to use</string>
     <string name="setting_ask_each_time_description">Pick an app each time you share a link.</string>
-    <string name="setting_exact_match">Open the exact song</string>
-    <string name="setting_exact_match_description">Works with Apple Music and Deezer. Other apps get a search.</string>
-    <string name="matching_text">Finding the exact song…</string>
+    <string name="setting_exact_match">Open the exact match</string>
+    <string name="setting_exact_match_description">Works with Apple Music and Deezer, for songs, albums and artists. Other apps get a search.</string>
+    <string name="matching_text">Finding the exact match…</string>
     <string name="picker_title">Open with</string>
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
@@ -93,7 +93,7 @@
     <string name="share_search_link">Share search link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_settings_helper_title">Links still open in another app?</string>
-    <string name="link_settings_helper_body">Tap Open link settings and let Crosstune handle them.</string>
+    <string name="link_settings_helper_body">Tap Open link settings and allow Crosstune to open them.</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
     <string name="made_by">Made by @astrovm</string>
