@@ -3,7 +3,10 @@ package com.astrovm.crosstune
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -30,7 +33,7 @@ class MainActivity : ComponentActivity() {
             initializer {
                 val client = httpClientFactory()
                 MainViewModel(
-                    SpotifyResolver(client),
+                    LinkResolver(client),
                     ExactMatcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
                 )
@@ -75,6 +78,7 @@ class MainActivity : ComponentActivity() {
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
                         onOpenWith = { target -> viewModel.openResult(target, finishAfterOpen = true) },
+                        onOpenOriginal = viewModel::openOriginal,
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onTargetChange = viewModel::selectTarget,
                         onAskEachTimeChange = viewModel::setAskEachTime,
@@ -122,10 +126,35 @@ class MainActivity : ComponentActivity() {
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
         val opened = tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(effect.packageName)) ||
-            tryStartActivity(Intent(Intent.ACTION_VIEW, uri))
+            openOutsideCrosstune(uri)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             effect.finishAfterOpen -> finish()
+        }
+    }
+
+    /**
+     * Opens [uri] in any app but Crosstune. Crosstune may be the default handler for music links,
+     * so a plain VIEW intent could loop straight back here.
+     */
+    private fun openOutsideCrosstune(uri: Uri): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        val (own, others) = packageManager.queryIntentActivities(intent, 0)
+            .partition { it.activityInfo.packageName == packageName }
+        if (others.isEmpty()) return false
+        val defaultPackage = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName
+        return when {
+            others.any { it.activityInfo.packageName == defaultPackage } -> tryStartActivity(intent)
+            others.size == 1 -> tryStartActivity(
+                intent.setClassName(others[0].activityInfo.packageName, others[0].activityInfo.name)
+            )
+            else -> tryStartActivity(
+                Intent.createChooser(intent, null).putExtra(
+                    Intent.EXTRA_EXCLUDE_COMPONENTS,
+                    own.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.toTypedArray()
+                )
+            )
         }
     }
 

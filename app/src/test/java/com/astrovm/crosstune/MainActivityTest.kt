@@ -113,6 +113,12 @@ class MainActivityTest {
         fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage(title, description)) }
     }
 
+    private fun browserFilter() = IntentFilter(Intent.ACTION_VIEW).apply {
+        addCategory(Intent.CATEGORY_DEFAULT)
+        addCategory(Intent.CATEGORY_BROWSABLE)
+        addDataScheme("https")
+    }
+
     private fun installActivity(component: ComponentName, filter: IntentFilter) {
         val pm = shadowOf(app.packageManager)
         pm.addActivityIfNotPresent(component)
@@ -507,10 +513,7 @@ class MainActivityTest {
         shadowOf(app).checkActivities(true)
         installActivity(
             ComponentName("com.example.browser", "com.example.browser.Browser"),
-            IntentFilter(Intent.ACTION_VIEW).apply {
-                addCategory(Intent.CATEGORY_DEFAULT)
-                addDataScheme("https")
-            }
+            browserFilter()
         )
         respondWithTrack("Fallback", "Artist · Song")
         launch()
@@ -842,8 +845,9 @@ class MainActivityTest {
         val cases = listOf(
             410 to R.string.error_not_found,
             429 to R.string.error_rate_limited,
-            503 to R.string.error_spotify_unavailable,
-            403 to R.string.error_metadata_unavailable
+            503 to R.string.error_service_unavailable,
+            403 to R.string.error_not_found,
+            400 to R.string.error_metadata_unavailable
         )
         for ((code, message) in cases) {
             fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Error", "Page"), code = code) }
@@ -1016,7 +1020,7 @@ class MainActivityTest {
         launch()
 
         resolveTyped("https://open.spotify.com/intl-es/album/$TRACK_ID")
-        assertTextShown(string(R.string.type_album))
+        assertTextShown("Album · from Spotify")
         click(string(R.string.open_in_youtube_music))
         assertEquals("https://music.youtube.com/search?q=After%20Hours%20The%20Weeknd", nextStartedActivity()!!.dataString)
 
@@ -1027,7 +1031,7 @@ class MainActivityTest {
 
         click(string(R.string.clear_button))
         resolveTyped("https://open.spotify.com/playlist/$TRACK_ID")
-        assertTextShown(string(R.string.type_playlist))
+        assertTextShown("Playlist · from Spotify")
         assertEquals(
             listOf(
                 "https://open.spotify.com/album/$TRACK_ID",
@@ -1052,7 +1056,7 @@ class MainActivityTest {
         for ((label, destination) in expected) {
             click(string(label))
             composeRule.onNode(hasText(string(label)) and isSelectable()).assertIsSelected()
-            click(string(SearchTarget.entries.first { it.labelRes == label }.openButtonLabelRes))
+            click(string(MusicService.entries.first { it.labelRes == label }.openLabelRes))
             val opened = nextStartedActivity()!!
             assertEquals(destination.first, opened.`package`)
             assertEquals(destination.second, opened.dataString)
@@ -1226,6 +1230,99 @@ class MainActivityTest {
         controller!!.windowFocusChanged(true)
 
         assertTextShown(string(R.string.error_clipboard_empty))
+    }
+
+    // endregion
+
+    // region multi-service
+
+    @Test
+    fun linkAlreadyOnTheDestinationOpensAsIsInsteadOfSearching() {
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=4NRXx6U8ABQ&list=x")
+        assertTextShown("Song · from YouTube Music")
+        // Opening the source in itself needs no separate "open original" button.
+        assertTextAbsent(string(R.string.open_in_youtube))
+
+        click(string(R.string.open_in_youtube_music))
+        val opened = nextStartedActivity()!!
+        assertEquals("com.google.android.apps.youtube.music", opened.`package`)
+        assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", opened.dataString)
+
+        click(string(R.string.share_search_button))
+        @Suppress("DEPRECATION")
+        val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", shared.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
+    @Test
+    fun resultCanStillBeOpenedInTheAppItCameFrom() {
+        respondWithTrack("Original", "Artist · Song")
+        val activity = launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_spotify))
+
+        val opened = nextStartedActivity()!!
+        assertEquals("com.spotify.music", opened.`package`)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun unreadableIncomingLinkCanBeOpenedInItsOwnApp() {
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 400) }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.deezer.com/en/track/908604612")))
+        waitForText(string(R.string.error_metadata_unavailable))
+
+        click(string(R.string.open_in_deezer))
+
+        val opened = nextStartedActivity()!!
+        assertEquals("deezer.android.app", opened.`package`)
+        assertEquals("https://www.deezer.com/track/908604612", opened.dataString)
+        waitUntil { activity.isFinishing }
+    }
+
+    @Test
+    fun fallbackNeverOpensCrosstuneItself() {
+        // Crosstune handles this Spotify link, so without its app installed a plain VIEW intent could loop back.
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        respondWithTrack("Loop", "Artist · Song")
+        launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_spotify))
+
+        val opened = nextStartedActivity()!!
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
+        assertEquals("com.example.browser", opened.component?.packageName ?: opened.`package`)
+    }
+
+    @Test
+    fun fallbackWithSeveralBrowsersShowsAChooserWithoutCrosstune() {
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        installActivity(ComponentName("com.example.other", "com.example.other.Browser"), browserFilter())
+        // Every device has the system chooser; Robolectric needs it registered once activities are checked.
+        installActivity(
+            ComponentName("android", "com.android.internal.app.ChooserActivity"),
+            IntentFilter(Intent.ACTION_CHOOSER).apply { addCategory(Intent.CATEGORY_DEFAULT) }
+        )
+        respondWithTrack("Choose", "Artist · Song")
+        launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_spotify))
+
+        val opened = nextStartedActivity()!!
+        assertEquals(Intent.ACTION_CHOOSER, opened.action)
+        @Suppress("DEPRECATION")
+        val excluded = opened.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS)!!.map { (it as ComponentName).className }
+        assertTrue(excluded.toString(), MainActivity::class.java.name in excluded)
     }
 
     // endregion

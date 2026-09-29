@@ -5,7 +5,7 @@ import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal data class HistoryEntry(val item: SpotifyItem, val metadata: SpotifyMetadata)
+internal data class HistoryEntry(val link: MusicLink, val metadata: MusicMetadata)
 
 /** Keeps the most recent resolved items, newest first, in SharedPreferences. */
 internal class HistoryStore(private val preferences: SharedPreferences) {
@@ -17,7 +17,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
-        val updated = (listOf(entry) + load().filterNot { it.item == entry.item }).take(MAX_ENTRIES)
+        val updated = (listOf(entry) + load().filterNot { it.link.url == entry.link.url }).take(MAX_ENTRIES)
         save(updated)
         return updated
     }
@@ -31,8 +31,11 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         entries.forEach { entry ->
             array.put(
                 JSONObject()
-                    .put("type", entry.item.type.name)
-                    .put("id", entry.item.id)
+                    .put("service", entry.link.service.name)
+                    .put("type", entry.link.type.name)
+                    .put("id", entry.link.id)
+                    .put("url", entry.link.url)
+                    .putOpt("region", entry.link.region)
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
             )
@@ -41,10 +44,14 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     private fun JSONObject.toEntry(): HistoryEntry? {
-        val type = SpotifyType.entries.firstOrNull { it.name == optString("type") } ?: return null
+        val type = ItemType.entries.firstOrNull { it.name == optString("type") } ?: return null
         val id = optString("id").ifEmpty { return null }
         val title = optString("title").ifEmpty { return null }
-        return HistoryEntry(SpotifyItem(type, id), SpotifyMetadata(title, optString("artist"), type))
+        // Entries saved before multi-service support only stored Spotify items.
+        val service = MusicService.fromName(optString("service", MusicService.SPOTIFY.name)) ?: return null
+        val url = optString("url").ifEmpty { "https://open.spotify.com/${type.name.lowercase()}/$id" }
+        val link = MusicLink(service, type, id, url, optString("region").ifEmpty { null })
+        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type))
     }
 
     private companion object {

@@ -1,0 +1,127 @@
+package com.astrovm.crosstune
+
+import kotlinx.coroutines.runBlocking
+import okhttp3.Request
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/** Checks each service is read from the right endpoint. Runs under Robolectric for org.json. */
+@RunWith(RobolectricTestRunner::class)
+class LinkResolverTest {
+
+    private val fake = FakeSpotify()
+    private val resolver = LinkResolver(fake.client())
+
+    private fun resolve(text: String): Resolution = runBlocking { resolver.resolve(MusicLinks.parse(text)!!) }
+
+    private fun respond(body: String, code: Int = 200) {
+        fake.handler = { request: Request -> FakeSpotify.html(request, body, code = code) }
+    }
+
+    private fun assertResolved(text: String, metadataUrl: String, expected: MusicMetadata) {
+        fake.requestedUrls.clear()
+        val resolution = resolve(text) as Resolution.Resolved
+        assertEquals(expected, resolution.metadata)
+        assertEquals(listOf(metadataUrl), fake.requestedUrls)
+    }
+
+    @Test
+    fun youtubeAndYoutubeMusicUseOEmbed() {
+        respond("""{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
+        val oEmbed = "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ"
+        assertResolved("https://music.youtube.com/watch?v=4NRXx6U8ABQ", oEmbed, MusicMetadata("Blinding Lights", "The Weeknd"))
+    }
+
+    @Test
+    fun appleMusicUsesLookupForItemsAndThePageForPlaylists() {
+        respond("""{"results":[{"trackName":"Song","artistName":"Artist"}]}""")
+        assertResolved(
+            "https://music.apple.com/ar/song/song/123",
+            "https://itunes.apple.com/lookup?id=123&country=ar",
+            MusicMetadata("Song", "Artist")
+        )
+
+        respond("""<meta property="og:title" content="Chill on Apple Music">""")
+        assertResolved(
+            "https://music.apple.com/us/playlist/chill/pl.abc",
+            "https://music.apple.com/us/playlist/chill/pl.abc",
+            MusicMetadata("Chill", "", ItemType.PLAYLIST)
+        )
+
+        respond("""{"resultCount":0,"results":[]}""")
+        assertEquals(AppError.NOT_FOUND, (resolve("https://music.apple.com/us/album/x/999") as Resolution.Failed).error)
+        respond("<html></html>")
+        assertEquals(
+            AppError.METADATA_UNAVAILABLE,
+            (resolve("https://music.apple.com/us/playlist/x/pl.abc") as Resolution.Failed).error
+        )
+    }
+
+    @Test
+    fun deezerUsesItsApiAndReportsMissingItems() {
+        respond("""{"title":"After Hours","artist":{"name":"The Weeknd"}}""")
+        assertResolved(
+            "https://www.deezer.com/en/album/137272602",
+            "https://api.deezer.com/album/137272602",
+            MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
+        )
+
+        respond("""{"error":{"type":"DataException","message":"no data","code":800}}""")
+        val failed = resolve("https://www.deezer.com/track/1") as Resolution.Failed
+        assertEquals(AppError.NOT_FOUND, failed.error)
+        assertEquals(MusicService.DEEZER, failed.link?.service)
+    }
+
+    @Test
+    fun tidalSoundCloudAndBandcampPages() {
+        respond("<title>Blinding Lights by The Weeknd on TIDAL</title>")
+        assertResolved(
+            "https://listen.tidal.com/track/134858527",
+            "https://tidal.com/track/134858527",
+            MusicMetadata("Blinding Lights", "The Weeknd")
+        )
+
+        respond("""{"title":"Blinding Lights by The Weeknd","author_name":"The Weeknd"}""")
+        assertResolved(
+            "https://soundcloud.com/theweeknd/blinding-lights",
+            "https://soundcloud.com/oembed?format=json&url=https%3A%2F%2Fsoundcloud.com%2Ftheweeknd%2Fblinding-lights",
+            MusicMetadata("Blinding Lights", "The Weeknd")
+        )
+
+        respond("""<meta property="og:title" content="Record, by Band">""")
+        assertResolved(
+            "https://band.bandcamp.com/album/record",
+            "https://band.bandcamp.com/album/record",
+            MusicMetadata("Record", "Band", ItemType.ALBUM)
+        )
+    }
+
+    @Test
+    fun unreadableJsonAndPrivateVideosFailWithTheLinkAttached() {
+        respond("<html>not json</html>")
+        val broken = resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed
+        assertEquals(AppError.METADATA_UNAVAILABLE, broken.error)
+        assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", broken.link?.url)
+
+        respond("Unauthorized", code = 401)
+        assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+    }
+
+    @Test
+    fun shortLinksFromOtherServicesFollowRedirects() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "link.deezer.com" -> FakeSpotify.html(request, "", finalUrl = "https://www.deezer.com/track/908604612?utm=x")
+                else -> FakeSpotify.html(request, """{"title":"Blinding Lights","artist":{"name":"The Weeknd"}}""")
+            }
+        }
+        val resolution = resolve("https://link.deezer.com/s/abc") as Resolution.Resolved
+        assertEquals("https://www.deezer.com/track/908604612", resolution.link.url)
+        assertEquals(
+            listOf("https://link.deezer.com/s/abc", "https://api.deezer.com/track/908604612"),
+            fake.requestedUrls
+        )
+    }
+}

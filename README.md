@@ -1,6 +1,6 @@
 # Crosstune
 
-Crosstune opens Spotify links in the music app you actually use: YouTube Music, YouTube, Apple Music, Deezer, TIDAL or SoundCloud.
+Crosstune opens music links from one service in the app you actually use. Share, paste or tap a link from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud or Bandcamp, and Crosstune opens the same song, album, artist or playlist in any of them, or in Amazon Music.
 
 <p align="center">
   <img src="screenshots/Screenshot_20260325_002742_Crosstune.jpg" alt="Home screen" width="320">
@@ -10,25 +10,35 @@ Crosstune opens Spotify links in the music app you actually use: YouTube Music, 
 
 ## What You Can Do
 
-- Open Spotify links directly in Crosstune, share them to it from another app, or paste them.
+- Share a music link to Crosstune from any app, paste it, or tap a Spotify link.
 - Open songs, albums, artists and playlists.
 - Choose a default destination, or turn on **Ask where to open shared links** to pick one for each link.
 - Turn on **Open exact matches when possible** to open Apple Music and Deezer items directly instead of a search.
-- Use the **Open copied Spotify link** Quick Settings tile or launcher shortcut to open whatever link you copied.
+- Open a result, or a link Crosstune couldn't read, in the app it came from.
+- Use the **Open copied music link** Quick Settings tile or launcher shortcut to open whatever link you copied.
 - Re-open recent links from the history list.
 - Copy the search text or share a search link.
 
 ## Supported Links
 
-- `https://open.spotify.com/track/...`, `/album/...`, `/artist/...` and `/playlist/...`, including localized `/intl-xx/...` links
-- `https://spotify.link/...`
-- `spotify:track:...` style URIs and bare track IDs (pasted or shared)
+| Service | Links | Reads details from |
+| --- | --- | --- |
+| Spotify | `open.spotify.com/{track,album,artist,playlist}/…` (including `/intl-xx/`), `spotify.link/…`, `spotify:…` URIs, bare track IDs | Public page |
+| YouTube Music | `music.youtube.com/watch?v=…` | YouTube oEmbed |
+| YouTube | `youtube.com/watch?v=…`, `youtu.be/…`, `/shorts/…`, `/live/…` | YouTube oEmbed |
+| Apple Music | `music.apple.com/{region}/{song,album,artist,playlist}/…` | iTunes Lookup API (playlists: public page) |
+| Deezer | `deezer.com/{track,album,artist,playlist}/…`, `link.deezer.com/…` | Deezer API |
+| TIDAL | `tidal.com/{track,album,artist,playlist}/…`, `listen.tidal.com/…` | Public page |
+| SoundCloud | `soundcloud.com/{artist}`, `/{artist}/{track}`, `/{artist}/sets/{set}`, `on.soundcloud.com/…` | SoundCloud oEmbed |
+| Bandcamp | `{artist}.bandcamp.com/{track,album}/…` | Public page |
+
+Amazon Music is a destination only: its links show no details without JavaScript. YouTube playlists and channels aren't supported for the same reason.
 
 If links keep opening in your browser, use the in-app **Open Link Settings** button and enable Crosstune for supported links.
 
 ## Privacy
 
-Crosstune has no accounts, analytics or ads. It reads a link's title and artist from Spotify's public web pages. With exact matches turned on, it also sends that title and artist to [Apple's iTunes Search API](https://performance-partners.apple.com/search-api) or [Deezer's API](https://developers.deezer.com/api) when you open in those apps. YouTube Music, YouTube, TIDAL and SoundCloud have no public search API that works without a key, so they always open a search. History stays on your device.
+Crosstune has no accounts, analytics or ads. It reads a link's title and artist from the service it belongs to, using the sources in the table above. With exact matches turned on, it also sends that title and artist to [Apple's iTunes Search API](https://performance-partners.apple.com/search-api) or [Deezer's API](https://developers.deezer.com/api) when you open in those apps. Other destinations have no public search API that works without a key, so they open a search. History stays on your device.
 
 ## Install
 

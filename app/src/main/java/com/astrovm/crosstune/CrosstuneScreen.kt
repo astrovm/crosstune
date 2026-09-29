@@ -54,9 +54,10 @@ internal data class ScreenActions(
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
-    val onOpenWith: (SearchTarget) -> Unit = {},
+    val onOpenWith: (MusicService) -> Unit = {},
+    val onOpenOriginal: () -> Unit = {},
     val onDismissPicker: () -> Unit = {},
-    val onTargetChange: (SearchTarget) -> Unit = {},
+    val onTargetChange: (MusicService) -> Unit = {},
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -140,7 +141,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
                             onCheckedChange = actions.onExactMatchChange
                         )
                         StatusSection(state, actions)
-                        state.result?.let { ResultCard(it, state.selectedTarget, actions) }
+                        state.result?.let { ResultCard(it, state.link, state.selectedTarget, actions) }
                     }
                 }
 
@@ -204,7 +205,7 @@ private fun LinkSettingsHelper(actions: ScreenActions) {
 private fun InputSection(state: UiState, actions: ScreenActions) {
     val busy = state.isLoading || state.isMatching
     OutlinedTextField(
-        value = state.spotifyUrl,
+        value = state.linkText,
         onValueChange = actions.onUrlChange,
         singleLine = true,
         label = { Text(stringResource(R.string.spotify_link_label)) },
@@ -234,7 +235,7 @@ private fun InputSection(state: UiState, actions: ScreenActions) {
 }
 
 @Composable
-private fun DestinationSelector(selectedTarget: SearchTarget, onTargetChange: (SearchTarget) -> Unit) {
+private fun DestinationSelector(selectedTarget: MusicService, onTargetChange: (MusicService) -> Unit) {
     Text(
         text = stringResource(R.string.default_open_with_label),
         style = MaterialTheme.typography.labelLarge,
@@ -245,7 +246,7 @@ private fun DestinationSelector(selectedTarget: SearchTarget, onTargetChange: (S
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SearchTarget.entries.forEach { target ->
+        MusicService.entries.forEach { target ->
             FilterChip(
                 selected = target == selectedTarget,
                 onClick = { onTargetChange(target) },
@@ -321,12 +322,23 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
                     Text(stringResource(R.string.retry_button))
                 }
             }
+            // A link Crosstune couldn't read can still be opened in the app it belongs to.
+            state.link?.let { link ->
+                TextButton(onClick = actions.onOpenOriginal) {
+                    Text(stringResource(link.service.openLabelRes))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ResultCard(result: SpotifyMetadata, selectedTarget: SearchTarget, actions: ScreenActions) {
+private fun ResultCard(
+    result: MusicMetadata,
+    link: MusicLink?,
+    selectedTarget: MusicService,
+    actions: ScreenActions
+) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -339,7 +351,10 @@ private fun ResultCard(result: SpotifyMetadata, selectedTarget: SearchTarget, ac
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = stringResource(result.type.labelRes),
+                text = listOfNotNull(
+                    stringResource(result.type.labelRes),
+                    link?.let { stringResource(R.string.from_service, stringResource(it.service.labelRes)) }
+                ).joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 8.dp)
@@ -363,7 +378,7 @@ private fun ResultCard(result: SpotifyMetadata, selectedTarget: SearchTarget, ac
                     .fillMaxWidth()
                     .padding(top = 12.dp)
             ) {
-                Text(stringResource(selectedTarget.openButtonLabelRes))
+                Text(stringResource(selectedTarget.openLabelRes))
             }
             Row(
                 modifier = Modifier
@@ -376,6 +391,11 @@ private fun ResultCard(result: SpotifyMetadata, selectedTarget: SearchTarget, ac
                 }
                 OutlinedButton(onClick = actions.onShareSearch, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.share_search_button))
+                }
+            }
+            if (link != null && link.service != selectedTarget) {
+                TextButton(onClick = actions.onOpenOriginal, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(link.service.openLabelRes))
                 }
             }
         }
@@ -416,7 +436,11 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                 ) {
                     Text(text = entry.metadata.title, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        text = listOf(stringResource(entry.item.type.labelRes), entry.metadata.artist)
+                        text = listOf(
+                            stringResource(entry.link.type.labelRes),
+                            entry.metadata.artist,
+                            stringResource(entry.link.service.labelRes)
+                        )
                             .filter { it.isNotBlank() }
                             .joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
@@ -429,15 +453,15 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
 }
 
 @Composable
-private fun DestinationPicker(onPick: (SearchTarget) -> Unit, onDismiss: () -> Unit) {
+private fun DestinationPicker(onPick: (MusicService) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
             Column {
-                SearchTarget.entries.forEach { target ->
+                MusicService.entries.forEach { target ->
                     TextButton(onClick = { onPick(target) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(target.openButtonLabelRes))
+                        Text(stringResource(target.openLabelRes))
                     }
                 }
             }
@@ -455,12 +479,18 @@ internal fun CrosstuneScreenPreview() {
     CrosstuneTheme(dynamicColor = false) {
         CrosstuneScreen(
             state = UiState(
-                spotifyUrl = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
-                result = SpotifyMetadata("Cut To The Feeling", "Carly Rae Jepsen"),
+                linkText = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
+                result = MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen"),
+                link = MusicLink(
+                    MusicService.SPOTIFY,
+                    ItemType.TRACK,
+                    "11dFghVXANMlKmJXsNCbNl",
+                    "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl"
+                ),
                 history = listOf(
                     HistoryEntry(
-                        SpotifyItem(SpotifyType.ALBUM, "4yP0hdKOZPNshxUOjY0cZj"),
-                        SpotifyMetadata("After Hours", "The Weeknd", SpotifyType.ALBUM)
+                        MusicLink(MusicService.DEEZER, ItemType.ALBUM, "137272602", "https://www.deezer.com/album/137272602"),
+                        MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
                     )
                 )
             ),
