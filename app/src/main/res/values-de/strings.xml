@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">Kopierten Link öffnen</string>
     <string name="shortcut_paste_long">Kopierten Musik-Link öffnen</string>
     <string name="error_clipboard_empty">Kopiere zuerst einen Musik-Link.</string>
-    <string name="copy_search_button">Suche kopieren</string>
+    <string name="copy_button">Kopieren</string>
+    <string name="copy_search_action">Suchtext kopieren</string>
     <string name="share_search_button">Teilen</string>
     <string name="share_search_link">Such-Link teilen</string>
     <string name="search_copied_to_clipboard">Suchtext kopiert</string>
+    <string name="link_copied_to_clipboard">Link kopiert</string>
     <string name="link_settings_helper_title">Neue Links erlauben</string>
     <string name="link_settings_helper_body">Tippe auf „Link-Einstellungen öffnen“, dann auf „Link hinzufügen“ und wähle alle Links aus.</string>
     <string name="blocking_apps_title">Diese Apps öffnen die Links noch</string>

@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">복사한 링크 열기</string>
     <string name="shortcut_paste_long">복사한 음악 링크 열기</string>
     <string name="error_clipboard_empty">먼저 음악 링크를 복사하세요.</string>
-    <string name="copy_search_button">검색어 복사</string>
+    <string name="copy_button">복사</string>
+    <string name="copy_search_action">검색어 복사</string>
     <string name="share_search_button">공유</string>
     <string name="share_search_link">검색 링크 공유</string>
     <string name="search_copied_to_clipboard">검색어를 복사했어요</string>
+    <string name="link_copied_to_clipboard">링크를 복사했어요</string>
     <string name="link_settings_helper_title">새 링크 허용</string>
     <string name="link_settings_helper_body">링크 설정 열기를 탭하고 링크 추가를 탭한 다음 모든 링크를 선택하세요.</string>
     <string name="blocking_apps_title">아직 링크를 여는 앱</string>

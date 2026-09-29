@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">打开已复制的链接</string>
     <string name="shortcut_paste_long">打开已复制的音乐链接</string>
     <string name="error_clipboard_empty">请先复制音乐链接。</string>
-    <string name="copy_search_button">复制搜索</string>
+    <string name="copy_button">复制</string>
+    <string name="copy_search_action">复制搜索文字</string>
     <string name="share_search_button">分享</string>
     <string name="share_search_link">分享搜索链接</string>
     <string name="search_copied_to_clipboard">已复制搜索文字</string>
+    <string name="link_copied_to_clipboard">已复制链接</string>
     <string name="link_settings_helper_title">允许打开新链接</string>
     <string name="link_settings_helper_body">点按“打开链接设置”，然后点按“添加链接”，并勾选所有链接。</string>
     <string name="blocking_apps_title">这些应用仍会打开链接</string>

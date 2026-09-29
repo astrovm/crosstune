@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">कॉपी किया लिंक खोलें</string>
     <string name="shortcut_paste_long">कॉपी किया म्यूज़िक लिंक खोलें</string>
     <string name="error_clipboard_empty">पहले कोई म्यूज़िक लिंक कॉपी करें।</string>
-    <string name="copy_search_button">सर्च कॉपी करें</string>
+    <string name="copy_button">कॉपी करें</string>
+    <string name="copy_search_action">सर्च टेक्स्ट कॉपी करें</string>
     <string name="share_search_button">शेयर करें</string>
     <string name="share_search_link">सर्च लिंक शेयर करें</string>
     <string name="search_copied_to_clipboard">सर्च टेक्स्ट कॉपी हो गया</string>
+    <string name="link_copied_to_clipboard">लिंक कॉपी हो गया</string>
     <string name="link_settings_helper_title">नए लिंक की अनुमति दें</string>
     <string name="link_settings_helper_body">“लिंक सेटिंग खोलें” पर टैप करें, फिर “लिंक जोड़ें” चुनें और सभी लिंक चुनें।</string>
     <string name="blocking_apps_title">ये ऐप्लिकेशन अब भी लिंक खोलते हैं</string>

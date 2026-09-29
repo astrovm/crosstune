@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">Ouvrir le lien copié</string>
     <string name="shortcut_paste_long">Ouvrir le lien musical copié</string>
     <string name="error_clipboard_empty">Copiez d\'abord un lien musical.</string>
-    <string name="copy_search_button">Copier la recherche</string>
+    <string name="copy_button">Copier</string>
+    <string name="copy_search_action">Copier le texte de recherche</string>
     <string name="share_search_button">Partager</string>
     <string name="share_search_link">Partager le lien de recherche</string>
     <string name="search_copied_to_clipboard">Texte de recherche copié</string>
+    <string name="link_copied_to_clipboard">Lien copié</string>
     <string name="link_settings_helper_title">Autoriser les nouveaux liens</string>
     <string name="link_settings_helper_body">Appuyez sur Ouvrir les paramètres des liens, puis sur Ajouter un lien, et cochez tous les liens.</string>
     <string name="blocking_apps_title">Ces applications ouvrent encore les liens</string>

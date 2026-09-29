@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">Buka link disalin</string>
     <string name="shortcut_paste_long">Buka link musik yang disalin</string>
     <string name="error_clipboard_empty">Salin link musik dulu.</string>
-    <string name="copy_search_button">Salin pencarian</string>
+    <string name="copy_button">Salin</string>
+    <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_button">Bagikan</string>
     <string name="share_search_link">Bagikan link pencarian</string>
     <string name="search_copied_to_clipboard">Teks pencarian disalin</string>
+    <string name="link_copied_to_clipboard">Link disalin</string>
     <string name="link_settings_helper_title">Izinkan link baru</string>
     <string name="link_settings_helper_body">Ketuk Buka setelan link, lalu Tambahkan link, dan centang semua link.</string>
     <string name="blocking_apps_title">Aplikasi ini masih membuka link</string>

@@ -82,10 +82,12 @@
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>
     <string name="shortcut_paste_long">コピーした音楽リンクを開く</string>
     <string name="error_clipboard_empty">先に音楽リンクをコピーしてください。</string>
-    <string name="copy_search_button">検索をコピー</string>
+    <string name="copy_button">コピー</string>
+    <string name="copy_search_action">検索テキストをコピー</string>
     <string name="share_search_button">共有</string>
     <string name="share_search_link">検索リンクを共有</string>
     <string name="search_copied_to_clipboard">検索テキストをコピーしました</string>
+    <string name="link_copied_to_clipboard">リンクをコピーしました</string>
     <string name="link_settings_helper_title">新しいリンクを許可</string>
     <string name="link_settings_helper_body">「リンク設定を開く」をタップし、「リンクを追加」をタップして、すべてのリンクにチェックを入れます。</string>
     <string name="blocking_apps_title">まだリンクを開くアプリ</string>

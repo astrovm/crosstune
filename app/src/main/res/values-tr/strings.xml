@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">Kopyalanan bağlantıyı aç</string>
     <string name="shortcut_paste_long">Kopyalanan müzik bağlantısını aç</string>
     <string name="error_clipboard_empty">Önce bir müzik bağlantısı kopyalayın.</string>
-    <string name="copy_search_button">Aramayı kopyala</string>
+    <string name="copy_button">Kopyala</string>
+    <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_button">Paylaş</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>
     <string name="search_copied_to_clipboard">Arama metni kopyalandı</string>
+    <string name="link_copied_to_clipboard">Bağlantı kopyalandı</string>
     <string name="link_settings_helper_title">Yeni bağlantılara izin verin</string>
     <string name="link_settings_helper_body">“Bağlantı ayarlarını aç” düğmesine, ardından “Bağlantı ekle” seçeneğine dokunun ve tüm bağlantıları işaretleyin.</string>
     <string name="blocking_apps_title">Bu uygulamalar bağlantıları hâlâ açıyor</string>

@@ -81,10 +81,12 @@
     <string name="shortcut_paste_short">Gekopieerde link openen</string>
     <string name="shortcut_paste_long">Gekopieerde muzieklink openen</string>
     <string name="error_clipboard_empty">Kopieer eerst een muzieklink.</string>
-    <string name="copy_search_button">Zoektekst kopiëren</string>
+    <string name="copy_button">Kopiëren</string>
+    <string name="copy_search_action">Zoektekst kopiëren</string>
     <string name="share_search_button">Delen</string>
     <string name="share_search_link">Zoeklink delen</string>
     <string name="search_copied_to_clipboard">Zoektekst gekopieerd</string>
+    <string name="link_copied_to_clipboard">Link gekopieerd</string>
     <string name="link_settings_helper_title">Nieuwe links toestaan</string>
     <string name="link_settings_helper_body">Tik op Linkinstellingen openen, dan op Link toevoegen, en vink alle links aan.</string>
     <string name="blocking_apps_title">Deze apps openen de links nog</string>
