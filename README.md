@@ -11,15 +11,15 @@ Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there
   <img src="screenshots/setup.png" alt="First-run setup: choosing which links Crosstune opens" width="200">
 </p>
 
-## ⬇️ Get it
+## Get it
 
 - **APK:** [Releases](https://github.com/astrovm/crosstune/releases)
 - **Auto-updates:** add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium)
 - **Needs:** Android 8.0+
 
-> ⚠️ **Coming from v1.0.6 or older?** Uninstall once first. The signing key changed.
+> **Coming from v1.0.6 or older?** Uninstall once first. The signing key changed.
 
-## 🚀 Set up (1 minute)
+## Set up (1 minute)
 
 1. Open Crosstune. Pick your links and your app.
 2. Tap **Open link settings** → **Add link** → select the links shown.
@@ -27,18 +27,16 @@ Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there
 
 Also works by pasting or sharing a link to Crosstune.
 
-## ✨ What it does
+## What it does
 
-| | |
-| --- | --- |
-| 🎵 **8 in, 9 out** | Reads Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp. Opens in any of them, or Amazon Music. |
-| 🎯 **Per-service rules** | e.g. YouTube → YouTube Music, everything else → Apple Music. |
-| 🤔 **Ask every time** | Pick an app for each link. |
-| ✅ **Exact matches** | Apple Music and Deezer open the exact item, not a search. |
-| ➕ **Custom apps** | Any search URL, like `https://example.com/search?q={query}`. |
-| ⚡ **Fast access** | One-tap paste, recent links, Quick Settings tile, launcher shortcut. |
+- **8 in, 9 out**: Reads Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp. Opens in any of them, or Amazon Music.
+- **Per-service rules**: e.g. YouTube → YouTube Music, everything else → Apple Music.
+- **Ask every time**: Pick an app for each link.
+- **Exact matches**: Apple Music and Deezer open the exact item, not a search.
+- **Custom apps**: Any search URL, like `https://example.com/search?q={query}`.
+- **Fast access**: One-tap paste, recent links, Quick Settings tile, launcher shortcut.
 
-## 🔗 Supported links
+## Supported links
 
 | Service | Works with |
 | --- | --- |
@@ -53,21 +51,21 @@ Also works by pasting or sharing a link to Crosstune.
 
 Not supported: Amazon Music links, YouTube playlists and channels. Their pages don't show song details.
 
-## 🛠️ Something wrong?
+## Something wrong?
 
 - **Links open somewhere else?** Turn the service on in Crosstune **Settings**. Then Android **Settings → Apps → Crosstune → Open by default → Add link**.
 - **Opened in the original app?** Crosstune can't convert that page (like a SoundCloud feed), so it passes it on.
 - **Got a search, not the song?** Most apps have no public lookup. Turn on **Exact matches** for Apple Music and Deezer.
 
-## 🔒 Privacy
+## Privacy
 
-- ❌ No accounts, analytics or ads.
-- 🏠 History stays on your device.
-- 🌐 To read a link's title, artist and cover, Crosstune asks only that link's service (public page or key-less API).
-- 🎯 With **Exact matches** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
+- No accounts, analytics or ads.
+- History stays on your device.
+- To read a link's title, artist and cover, Crosstune asks only that link's service (public page or key-less API).
+- With **Exact matches** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
 
 <details>
-<summary><b>🔏 Verify your download</b></summary>
+<summary><b>Verify your download</b></summary>
 
 Release APKs are signed with this certificate (SHA-256). Each release repeats it:
 
@@ -78,7 +76,7 @@ Release APKs are signed with this certificate (SHA-256). Each release repeats it
 </details>
 
 <details>
-<summary><b>👩‍💻 For developers</b></summary>
+<summary><b>For developers</b></summary>
 
 **Needs:** Android SDK, JDK 17+. From the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
 
@@ -104,7 +102,7 @@ Required secrets:
 | `RELEASE_KEY_ALIAS` | Key alias |
 | `RELEASE_KEY_PASSWORD` | Key password |
 
-> ⚠️ Back up the keystore. Never replace it. Android only installs updates signed with the same key.
+> Back up the keystore. Never replace it. Android only installs updates signed with the same key.
 
 Store metadata lives in [`fastlane/metadata/android`](fastlane/metadata/android).
 
