@@ -67,7 +67,7 @@ jobs:
 
       # The same checks as CI, which also build the minified release APK.
       - name: Test, lint and build
-        run: ./gradlew :app:ci
+        run: ./gradlew :app:ci --build-cache
 
       - name: Verify version metadata
         run: |
