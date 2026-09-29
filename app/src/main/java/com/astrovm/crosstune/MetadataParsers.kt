@@ -6,7 +6,9 @@ import org.json.JSONObject
 internal data class MusicMetadata(
     val title: String,
     val artist: String,
-    val type: ItemType = ItemType.TRACK
+    val type: ItemType = ItemType.TRACK,
+    /** Cover art, thumbnail or artist picture, when the service gives one. */
+    val artworkUrl: String? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -44,18 +46,20 @@ internal object MetadataParsers {
         } else {
             rawTitle
         }
-        return MusicMetadata(title, artist, type)
+        return MusicMetadata(title, artist, type, tags.image())
     }
 
     /** YouTube oEmbed: "Artist - Song (Official Video)" by "ArtistVEVO", or "Song" by "Artist - Topic". */
     fun youtube(json: JSONObject): MusicMetadata? {
         val rawTitle = json.optString("title").replace(videoNoiseRegex, "").trim().ifEmpty { return null }
         val author = json.optString("author_name").removeSuffix(" - Topic").removeSuffix("VEVO").trim()
+        // hqdefault is letterboxed to 4:3; mqdefault is the bare 16:9 frame, whose center is the cover on art tracks.
+        val artwork = json.optString("thumbnail_url").replace("/hqdefault.", "/mqdefault.").ifBlank { null }
         val separator = rawTitle.indexOf(" - ")
         return if (separator > 0) {
-            MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim())
+            MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim(), artworkUrl = artwork)
         } else {
-            MusicMetadata(rawTitle, author)
+            MusicMetadata(rawTitle, author, artworkUrl = artwork)
         }
     }
 
@@ -63,19 +67,23 @@ internal object MetadataParsers {
     fun appleMusic(json: JSONObject, type: ItemType): MusicMetadata? {
         val result = json.optJSONArray("results")?.optJSONObject(0) ?: return null
         val artist = result.optString("artistName")
+        // The lookup only offers small sizes, but the image server renders any size in the path.
+        val artwork = result.optString("artworkUrl100").replace("/100x100bb.", "/600x600bb.").ifBlank { null }
         return when (type) {
-            ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type)
+            ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type, artwork)
             ItemType.ALBUM -> MusicMetadata(
-                result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type
+                result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork
             )
             else -> MusicMetadata(artist, "", type)
         }.takeIf { it.title.isNotBlank() }
     }
 
     /** Apple Music playlist pages title themselves "Name on Apple Music". */
-    fun applePlaylist(html: String): MusicMetadata? =
-        openGraphTags(html)["og:title"]?.removeSuffix(" on Apple Music")?.trim()?.takeIf { it.isNotBlank() }
-            ?.let { MusicMetadata(it, "", ItemType.PLAYLIST) }
+    fun applePlaylist(html: String): MusicMetadata? {
+        val tags = openGraphTags(html)
+        val title = tags["og:title"]?.removeSuffix(" on Apple Music")?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image())
+    }
 
     /** Deezer API object; errors come back as {"error": {...}} with HTTP 200. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
@@ -86,32 +94,38 @@ internal object MetadataParsers {
         } else {
             ""
         }
-        return MusicMetadata(title, artist, type).takeIf { title.isNotBlank() }
+        // Albums have a cover and artists and playlists a picture; tracks use their album's cover.
+        val artwork = json.optString("cover_xl").ifEmpty { json.optString("picture_xl") }
+            .ifEmpty { json.optJSONObject("album")?.optString("cover_xl").orEmpty() }
+            .ifBlank { null }
+        return MusicMetadata(title, artist, type, artwork).takeIf { title.isNotBlank() }
     }
 
     /** TIDAL pages title themselves "Name by Artist on TIDAL" or "Name on TIDAL". */
     fun tidal(html: String, type: ItemType): MusicMetadata? {
         val title = titleTag(html)?.replace(tidalSuffixRegex, "")?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return splitBy(title, " by ", type)
+        return splitBy(title, " by ", type).copy(artworkUrl = openGraphTags(html).image())
     }
 
     /** SoundCloud oEmbed: tracks and sets are "Name by Artist", artists are just the name. */
     fun soundCloud(json: JSONObject, type: ItemType): MusicMetadata? {
         val title = json.optString("title").trim().ifEmpty { return null }
         val author = json.optString("author_name").trim()
-        if (type == ItemType.ARTIST) return MusicMetadata(author.ifEmpty { title }, "", type)
+        val artwork = json.optString("thumbnail_url").ifBlank { null }
+        if (type == ItemType.ARTIST) return MusicMetadata(author.ifEmpty { title }, "", type, artwork)
         val byAuthor = " by $author"
         return if (author.isNotEmpty() && title.endsWith(byAuthor)) {
-            MusicMetadata(title.removeSuffix(byAuthor), author, type)
+            MusicMetadata(title.removeSuffix(byAuthor), author, type, artwork)
         } else {
-            MusicMetadata(title, author, type)
+            MusicMetadata(title, author, type, artwork)
         }
     }
 
     /** Bandcamp pages use og:title "Name, by Artist". */
     fun bandcamp(html: String, type: ItemType): MusicMetadata? {
-        val title = openGraphTags(html)["og:title"]?.takeIf { it.isNotBlank() } ?: return null
-        return splitBy(title, ", by ", type)
+        val tags = openGraphTags(html)
+        val title = tags["og:title"]?.takeIf { it.isNotBlank() } ?: return null
+        return splitBy(title, ", by ", type).copy(artworkUrl = tags.image())
     }
 
     private fun splitBy(text: String, separator: String, type: ItemType): MusicMetadata {
@@ -122,6 +136,8 @@ internal object MetadataParsers {
             MusicMetadata(text, "", type)
         }
     }
+
+    private fun Map<String, String>.image(): String? = this["og:image"]?.takeIf { it.isNotBlank() }
 
     private fun titleTag(html: String): String? =
         titleTagRegex.find(html)?.groupValues?.get(1)?.let(::decodeEntities)?.trim()

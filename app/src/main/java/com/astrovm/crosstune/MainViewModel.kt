@@ -57,7 +57,9 @@ internal class MainViewModel(
     private val resolver: LinkResolver,
     private val matcher: ExactMatcher,
     private val preferences: SharedPreferences,
-    private val interception: LinkInterception
+    private val interception: LinkInterception,
+    /** Lives here so loaded covers survive configuration changes. */
+    val artwork: ArtworkLoader
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)

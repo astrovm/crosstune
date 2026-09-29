@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.graphics.Bitmap
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -11,6 +12,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
 import okio.ForwardingSource
 import okio.buffer
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.Collections
 
@@ -60,11 +62,25 @@ class FakeSpotify : Interceptor {
                 .build()
         }
 
-        fun trackPage(title: String?, description: String?): String = buildString {
+        fun trackPage(title: String?, description: String?, image: String? = null): String = buildString {
             append("<html><head>")
             if (title != null) append("<meta property=\"og:title\" content=\"$title\"/>")
             if (description != null) append("<meta property=\"og:description\" content=\"$description\"/>")
+            if (image != null) append("<meta property=\"og:image\" content=\"$image\"/>")
             append("</head><body></body></html>")
         }
+
+        /** A small real PNG, so decoding behaves as it would on a device. */
+        fun png(): ByteArray = ByteArrayOutputStream().also { out ->
+            Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
+        }.toByteArray()
+
+        fun image(request: Request, bytes: ByteArray, code: Int = 200): Response = Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(code)
+            .message("Status $code")
+            .body(bytes.toResponseBody("image/png".toMediaType()))
+            .build()
     }
 }

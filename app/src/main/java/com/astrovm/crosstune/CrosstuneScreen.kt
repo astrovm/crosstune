@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -36,11 +38,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -75,7 +82,8 @@ internal data class ScreenActions(
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
-    val onDismissLinkSettingsHelper: () -> Unit = {}
+    val onDismissLinkSettingsHelper: () -> Unit = {},
+    val loadArtwork: suspend (String) -> ImageBitmap? = { null }
 )
 
 /** Switches between the main screen and settings; system back returns from settings. */
@@ -383,27 +391,33 @@ private fun ResultCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = listOfNotNull(
-                    stringResource(result.type.labelRes),
-                    link?.let { stringResource(R.string.from_service, stringResource(it.service.labelRes)) }
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Text(
-                text = result.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (result.artist.isNotBlank()) {
-                Text(
-                    text = result.artist,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+            Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                result.artworkUrl?.let { url ->
+                    Artwork(url, actions.loadArtwork, modifier = Modifier.padding(end = 16.dp))
+                }
+                Column {
+                    Text(
+                        text = listOfNotNull(
+                            stringResource(result.type.labelRes),
+                            link?.let { stringResource(R.string.from_service, stringResource(it.service.labelRes)) }
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = result.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (result.artist.isNotBlank()) {
+                        Text(
+                            text = result.artist,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
             }
             Button(
                 onClick = actions.onOpen,
@@ -434,6 +448,26 @@ private fun ResultCard(
         }
     }
 }
+
+/** Square cover next to the result; nothing is shown if it can't be loaded. */
+@Composable
+private fun Artwork(url: String, load: suspend (String) -> ImageBitmap?, modifier: Modifier = Modifier) {
+    val image by produceState<ImageBitmap?>(initialValue = null, url) { value = load(url) }
+    image?.let {
+        // Decorative: the title and artist sit right beside it.
+        Image(
+            bitmap = it,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier
+                .size(88.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .testTag(ARTWORK_TAG)
+        )
+    }
+}
+
+internal const val ARTWORK_TAG = "artwork"
 
 @Composable
 private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) {
