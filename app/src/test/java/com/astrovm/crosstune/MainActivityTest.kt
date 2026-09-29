@@ -1510,7 +1510,7 @@ class MainActivityTest {
     fun firstLaunchWalksThroughSetupAndAppliesTheChoices() {
         freshInstall()
         FakeDomainVerification.install(app) {
-            mapOf("www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
+            LinkInterception.HOSTS.getValue(MusicService.YOUTUBE).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         }
         launch()
         assertTextShown(string(R.string.setup_welcome_title))
@@ -1561,12 +1561,22 @@ class MainActivityTest {
         click(string(R.string.next_button))
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_not_allowed))
+        // Android lists every service's links, so setup names the ones to select.
+        assertTextShown("open.spotify.com, spotify.link, www.spotify.link")
 
-        // Returning from Android's settings refreshes the status.
+        // Returning from Android's settings refreshes the status; short links still need allowing.
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_not_allowed))
+        assertTextShown("spotify.link, www.spotify.link")
+
+        states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY)
+            .associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_allowed))
+        assertTextAbsent("spotify.link, www.spotify.link")
     }
 
     @Test

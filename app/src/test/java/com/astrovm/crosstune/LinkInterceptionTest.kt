@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.verify.domain.DomainVerificationUserState
@@ -62,7 +63,17 @@ class LinkInterceptionTest {
     }
 
     @Test
-    fun approvedServicesFollowAndroidsPerDomainState() {
+    fun hostsMatchEachAliasInTheManifest() {
+        MusicService.entries.filter { it.canBeSource }.forEach { service ->
+            val component = ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${service.name}")
+            val declared = shadowOf(app.packageManager).getIntentFiltersForActivity(component)
+                .flatMap { filter -> (0 until filter.countDataAuthorities()).map { filter.getDataAuthority(it).host } }
+            assertEquals(service.name, declared.sorted(), LinkInterception.HOSTS[service].orEmpty().sorted())
+        }
+    }
+
+    @Test
+    fun aServiceIsAllowedOnlyOnceAllItsHostsAre() {
         var states: Map<String, Int>? = mapOf(
             "open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED,
             "spotify.link" to DomainVerificationUserState.DOMAIN_STATE_NONE,
@@ -71,22 +82,25 @@ class LinkInterceptionTest {
         )
         FakeDomainVerification.install(app) { states }
 
-        assertEquals(setOf(MusicService.SPOTIFY, MusicService.BANDCAMP), interception.approvedServices())
+        val unapproved = interception.unapprovedHosts()!!
+        assertEquals(listOf("spotify.link", "www.spotify.link"), unapproved[MusicService.SPOTIFY])
+        assertEquals(LinkInterception.HOSTS[MusicService.YOUTUBE], unapproved[MusicService.YOUTUBE])
+        assertEquals(emptyList<String>(), unapproved[MusicService.BANDCAMP])
 
         states = null
-        assertNull(interception.approvedServices())
+        assertNull(interception.unapprovedHosts())
     }
 
     @Test
     fun approvalsAreUnknownWithoutTheSystemService() {
         // Robolectric, like some trimmed-down devices, has no domain verification service.
-        assertNull(interception.approvedServices())
+        assertNull(interception.unapprovedHosts())
     }
 
     @Test
     @Config(sdk = [30])
     fun approvalsAreUnknownBeforeAndroid12() {
-        assertNull(interception.approvedServices())
+        assertNull(interception.unapprovedHosts())
     }
 
     @Test

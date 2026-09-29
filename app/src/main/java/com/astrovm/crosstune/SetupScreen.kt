@@ -211,22 +211,32 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
     Card(modifier = Modifier.fillMaxWidth()) {
         MusicService.entries.filter { it in state.intercepted }.forEachIndexed { index, source ->
             if (index > 0) HorizontalDivider()
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(source.labelRes),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                // Android 12+ reports each domain's state; older versions can't, so no status is shown.
-                state.approved?.let { approved ->
-                    val allowed = source in approved
+            // Android 12+ reports each domain's state; older versions can't, so no status is shown.
+            val unapproved = state.unapprovedHosts?.let { it[source].orEmpty() }
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stringResource(if (allowed) R.string.setup_allowed else R.string.setup_not_allowed),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (allowed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        text = stringResource(source.labelRes),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (unapproved != null) {
+                        val allowed = unapproved.isEmpty()
+                        Text(
+                            text = stringResource(if (allowed) R.string.setup_allowed else R.string.setup_not_allowed),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (allowed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                // Android lists every service's links, so name the ones still to select for this one.
+                val hosts = unapproved ?: LinkInterception.HOSTS[source].orEmpty()
+                if (hosts.isNotEmpty()) {
+                    Text(
+                        text = hosts.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
