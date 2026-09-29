@@ -11,15 +11,15 @@ Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there
   <img src="screenshots/setup.png" alt="First-run setup: choosing which links Crosstune opens" width="200">
 </p>
 
-## Get it
+## ⬇️ Get it
 
 - **APK:** [Releases](https://github.com/astrovm/crosstune/releases)
 - **Auto-updates:** add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium)
 - **Needs:** Android 8.0+
 
-> **Coming from v1.0.6 or older?** Uninstall once first. The signing key changed.
+> ⚠️ **Coming from v1.0.6 or older?** Uninstall once first. The signing key changed.
 
-## Set up (1 minute)
+## 🚀 Set up (1 minute)
 
 1. Open Crosstune. Pick your links and your app.
 2. Tap **Open link settings** → **Add link** → select the links shown.
@@ -51,7 +51,7 @@ Also works by pasting or sharing a link to Crosstune.
 
 Not supported: Amazon Music links, YouTube playlists and channels. Their pages don't show song details.
 
-## Something wrong?
+## 🛠️ Something wrong?
 
 - **Links open somewhere else?** Turn the service on in Crosstune **Settings**. Then Android **Settings → Apps → Crosstune → Open by default → Add link**.
 - **Opened in the original app?** Crosstune can't convert that page (like a SoundCloud feed), so it passes it on.
