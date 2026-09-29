@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
                     actions = ScreenActions(
                         onUrlChange = viewModel::onUrlChange,
                         onResolve = viewModel::resolveTypedInput,
+                        onPaste = { viewModel.pasteLink(clipboardText()) },
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
@@ -133,8 +134,13 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus || !pendingClipboardRead) return
         pendingClipboardRead = false
+        viewModel.resolveClipboard(clipboardText())
+    }
+
+    /** Android only lets the focused app read the clipboard, which it is here: after focus or a tap. */
+    private fun clipboardText(): String? {
         val clip = getSystemService(ClipboardManager::class.java)?.primaryClip
-        viewModel.resolveClipboard(clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString())
+        return clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
     }
 
     private fun open(effect: Effect.Open) {

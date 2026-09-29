@@ -30,6 +30,13 @@ class ArtworkLoaderTest {
     }
 
     @Test
+    fun largeCoversAreSampledDown() = runBlocking {
+        fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png(size = 1000)) }
+        // Deezer's 1000px covers only ever show at ~100dp, so half size is plenty.
+        assertEquals(500, loader.load(COVER)!!.width)
+    }
+
+    @Test
     fun failuresMeanNoImage() = runBlocking {
         fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png(), code = 404) }
         assertNull(loader.load(COVER))

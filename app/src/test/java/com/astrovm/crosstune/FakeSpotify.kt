@@ -71,8 +71,8 @@ class FakeSpotify : Interceptor {
         }
 
         /** A small real PNG, so decoding behaves as it would on a device. */
-        fun png(): ByteArray = ByteArrayOutputStream().also { out ->
-            Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
+        fun png(size: Int = 4): ByteArray = ByteArrayOutputStream().also { out ->
+            Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
         }.toByteArray()
 
         fun image(request: Request, bytes: ByteArray, code: Int = 200): Response = Response.Builder()
