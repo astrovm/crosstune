@@ -1,8 +1,8 @@
 # Crosstune
 
-**Tap any music link. It opens in *your* app.**
+**Crosstune opens music links in the music app you use.**
 
-Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there. Songs, albums, artists, playlists.
+Example: a friend sends you a Spotify link, but you use YouTube Music. Tap the link and Crosstune opens the same song in YouTube Music. It works for songs, albums, artists and playlists.
 
 <p align="center">
   <img src="screenshots/home.png" alt="A Spotify link resolved to its song, ready to open in YouTube Music" width="200">
@@ -21,20 +21,20 @@ Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there
 
 ## 🚀 Set up (1 minute)
 
-1. Open Crosstune. Pick your links and your app.
-2. Tap **Open link settings** → **Add link** → select the links shown.
-3. Done. Tap a music link anywhere.
+1. Open Crosstune. Choose which services' links it should open, and which app you listen in.
+2. Tap **Open link settings**, then **Add link**, and turn on the links Crosstune lists.
+3. Done. Now tap a music link anywhere and it opens in your app.
 
-Also works by pasting or sharing a link to Crosstune.
+You can also paste a link into Crosstune, or share a link to it from any app.
 
 ## What it does
 
-- **8 in, 9 out**: Reads Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp. Opens in any of them, or Amazon Music.
-- **Per-service rules**: e.g. YouTube → YouTube Music, everything else → Apple Music.
-- **Ask every time**: Pick an app for each link.
-- **Exact matches**: Apple Music and Deezer open the exact item, not a search.
-- **Custom apps**: Any search URL, like `https://example.com/search?q={query}`.
-- **Fast access**: One-tap paste, recent links, Quick Settings tile, launcher shortcut.
+- **Works with 9 services**: reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp, and opens them in any of those or in Amazon Music.
+- **A different app per service**: for example, YouTube links go to YouTube Music and everything else goes to Apple Music.
+- **Ask which app to use**: choose an app every time you share a link.
+- **Open the exact song**: Apple Music and Deezer can open the song itself instead of a search.
+- **Your own apps**: add any app or website that has a search page, like `https://example.com/search?q={query}`.
+- **Shortcuts**: paste with one tap, reopen recent links, or use the Quick Settings tile and the home screen shortcut.
 
 ## Supported links
 
@@ -49,20 +49,20 @@ Also works by pasting or sharing a link to Crosstune.
 | SoundCloud | Artists, tracks, sets, `on.soundcloud.com` |
 | Bandcamp | Tracks, albums |
 
-Not supported: Amazon Music links, YouTube playlists and channels. Their pages don't show song details.
+Crosstune can't read Amazon Music links, YouTube playlists or YouTube channels, because their pages don't show the song details. It can still open songs in Amazon Music.
 
 ## 🛠️ Something wrong?
 
-- **Links open somewhere else?** Turn the service on in Crosstune **Settings**. Then Android **Settings → Apps → Crosstune → Open by default → Add link**.
-- **Opened in the original app?** Crosstune can't convert that page (like a SoundCloud feed), so it passes it on.
-- **Got a search, not the song?** Most apps have no public lookup. Turn on **Exact matches** for Apple Music and Deezer.
+- **Links still open in another app or the browser?** Turn the service on in Crosstune's **Settings**. Then open Android's **Settings → Apps → Crosstune → Open by default**, tap **Add link**, and turn on that service's links.
+- **A link opened in its own app instead?** Crosstune can't read some pages, like a SoundCloud feed, so it hands them to that service's app.
+- **You got a search instead of the song?** Most apps have no public way to find a song without an account, so Crosstune searches for it. For Apple Music and Deezer, turn on **Open the exact song**.
 
 ## Privacy
 
 - No accounts, analytics or ads.
 - History stays on your device.
-- To read a link's title, artist and cover, Crosstune asks only that link's service (public page or key-less API).
-- With **Exact matches** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
+- To show a link's title, artist and cover, Crosstune only asks the service the link comes from, using its public page or public API.
+- With **Open the exact song** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
 
 <details>
 <summary><b>Verify your download</b></summary>
