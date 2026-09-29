@@ -4,8 +4,20 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Lets Crosstune find a browser or app for a link other than itself. -->
+    <!--
+        Lets Crosstune find a browser or app for a link other than itself, and see which music
+        apps are installed so setup can suggest them.
+    -->
     <queries>
+        <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="deezer.android.app" />
+        <package android:name="com.aspiro.tidal" />
+        <package android:name="com.soundcloud.android" />
+        <package android:name="com.bandcamp.android" />
+        <package android:name="com.amazon.mp3" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
@@ -50,13 +62,13 @@
         </activity>
 
         <!--
-            One alias per source service so each can be turned on or off from Crosstune's settings
-            (see LinkInterception). Third-party apps can't verify these domains, so Android asks the
+            One alias per source service so each can be turned on or off during setup or in
+            Crosstune's settings (see LinkInterception). All start disabled. Third-party apps can't verify these domains, so Android asks the
             user to allow them under "Open by default".
         -->
         <activity-alias
             android:name=".intercept.SPOTIFY"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
             android:targetActivity=".MainActivity"
             tools:ignore="AppLinkWarning">

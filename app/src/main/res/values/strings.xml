@@ -43,6 +43,22 @@
     <string name="custom_template_hint">Use {query} where the search text goes, e.g. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Enter a name and a URL containing {query}.</string>
     <string name="settings_behaviour_title">Behavior</string>
+    <string name="setup_welcome_title">Welcome to Crosstune</string>
+    <string name="setup_welcome_body">Crosstune opens music links from one service in the app you actually use. Let\'s choose which links it opens and where they go. You can change everything later in Settings.</string>
+    <string name="setup_get_started">Get started</string>
+    <string name="next_button">Next</string>
+    <string name="back_button">Back</string>
+    <string name="setup_finish">Finish</string>
+    <string name="setup_installed">Installed</string>
+    <string name="setup_sources_title">Which links should Crosstune open?</string>
+    <string name="setup_sources_body">Links from the services you pick will open in Crosstune when you tap them. You can still share or paste links from any service.</string>
+    <string name="setup_destination_title">Where do you listen?</string>
+    <string name="setup_destination_body">Crosstune sends links here. You can pick a different destination for each service later in Settings.</string>
+    <string name="setup_allow_title">Allow the links</string>
+    <string name="setup_allow_body">Android asks you to confirm which links Crosstune may open. Tap the button below, choose "Add link" under "Open by default", and select the links for these services.</string>
+    <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
+    <string name="setup_allowed">Allowed</string>
+    <string name="setup_not_allowed">Not allowed yet</string>
     <string name="target_apple_music">Apple Music</string>
     <string name="target_deezer">Deezer</string>
     <string name="target_tidal">TIDAL</string>

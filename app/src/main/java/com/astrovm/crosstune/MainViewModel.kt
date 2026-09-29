@@ -31,7 +31,15 @@ internal data class UiState(
     val exactMatch: Boolean = false,
     val showDestinationPicker: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
-    val history: List<HistoryEntry> = emptyList()
+    val history: List<HistoryEntry> = emptyList(),
+    /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
+    val setupComplete: Boolean = true,
+    val hasDefault: Boolean = true,
+    val installed: Set<MusicService> = emptySet(),
+    /** Services Android lets Crosstune open links for, or null before Android 12, which can't tell. */
+    val approved: Set<MusicService>? = null,
+    /** Set while handling a link from another app, which takes priority over setup. */
+    val handlingIncomingLink: Boolean = false
 ) {
     /** Where the current result opens: its source's rule, or the default. */
     val resultDestination: Destination
@@ -55,15 +63,33 @@ internal class MainViewModel(
     private val historyStore = HistoryStore(preferences)
     private val destinationStore = DestinationStore(preferences)
 
+    init {
+        migrateExistingInstall()
+    }
+
     var uiState by mutableStateOf(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, false),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
-            history = historyStore.load()
+            history = historyStore.load(),
+            setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
         ).withDestinations()
     )
         private set
+
+    /**
+     * Versions before first-run setup always intercepted Spotify links. People updating from one
+     * skip setup and keep that, so their links don't silently stop opening in Crosstune.
+     */
+    private fun migrateExistingInstall() {
+        if (preferences.contains(KEY_SETUP_COMPLETE)) return
+        // Recorded on a fresh install's first launch too, so data created before finishing setup
+        // (e.g. history from a link opened right away) is never mistaken for an old install.
+        val isExistingInstall = LEGACY_KEYS.any(preferences::contains)
+        if (isExistingInstall) interception.setEnabled(MusicService.SPOTIFY, true)
+        preferences.edit { putBoolean(KEY_SETUP_COMPLETE, isExistingInstall) }
+    }
 
     private val effectChannel = Channel<Effect>(Channel.BUFFERED)
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
@@ -75,8 +101,25 @@ internal class MainViewModel(
         defaultDestination = destinationStore.defaultDestination(),
         destinations = destinationStore.allDestinations(),
         rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
-        intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
+        intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet(),
+        hasDefault = destinationStore.hasDefault(),
+        installed = interception.installedServices(),
+        approved = interception.approvedServices()
     )
+
+    /** Re-reads what can change outside the app, e.g. after returning from Android's link settings. */
+    fun refreshSystemState() {
+        uiState = uiState.withDestinations()
+    }
+
+    fun completeSetup() {
+        preferences.edit {
+            putBoolean(KEY_SETUP_COMPLETE, true)
+            // Setup already walked through allowing links, so the reminder isn't needed.
+            putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true)
+        }
+        uiState = uiState.copy(setupComplete = true, showLinkSettingsHelper = false)
+    }
 
     fun onUrlChange(text: String) {
         uiState = uiState.copy(linkText = text, error = null)
@@ -91,7 +134,7 @@ internal class MainViewModel(
     /** Resolves a link from another app and opens it (or offers destinations) as soon as it is ready. */
     fun resolveIncoming(text: String?) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
-        uiState = uiState.copy(linkText = incoming)
+        uiState = uiState.copy(linkText = incoming, handlingIncomingLink = true)
         val input = MusicLinks.parse(incoming)
         if (input == null) {
             // Intercepted services' links include pages Crosstune can't convert, such as a
@@ -150,7 +193,8 @@ internal class MainViewModel(
         }
         when {
             !openWhenReady -> Unit
-            uiState.askEachTime -> uiState = uiState.copy(showDestinationPicker = true)
+            // Before setup there's no default yet, so ask.
+            uiState.askEachTime || !uiState.setupComplete -> uiState = uiState.copy(showDestinationPicker = true)
             else -> open(uiState.resultDestination, finishAfterOpen = true)
         }
     }
@@ -283,5 +327,11 @@ internal class MainViewModel(
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
+        private const val KEY_SETUP_COMPLETE = "setup_complete"
+
+        /** Preferences only an install from before first-run setup can have. */
+        private val LEGACY_KEYS = listOf(
+            KEY_LINK_SETTINGS_HELPER_DISMISSED, "default_target", "history", KEY_ASK_EACH_TIME, KEY_EXACT_MATCH
+        )
     }
 }

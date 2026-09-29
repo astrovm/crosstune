@@ -53,6 +53,12 @@ class PreviewAndThemeTest {
     }
 
     @Test
+    fun setupPreviewRendersTheWelcomeStep() {
+        composeRule.setContent { SetupScreenPreview() }
+        composeRule.onNodeWithText("Welcome to Crosstune").assertExists()
+    }
+
+    @Test
     fun lightThemeUsesLightPalette() {
         val colors = mutableListOf<Color>()
         composeRule.setContent {

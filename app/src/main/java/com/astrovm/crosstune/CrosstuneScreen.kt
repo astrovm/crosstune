@@ -67,6 +67,7 @@ internal data class ScreenActions(
     val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
     val onRemoveCustom: (Destination.Custom) -> Unit = {},
+    val onCompleteSetup: () -> Unit = {},
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -82,7 +83,10 @@ internal data class ScreenActions(
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
-    if (showSettings) {
+    // A link from another app is handled right away; setup waits for the next regular launch.
+    if (!state.setupComplete && !state.handlingIncomingLink) {
+        SetupScreen(state, actions)
+    } else if (showSettings) {
         SettingsScreen(state, actions, onBack = { showSettings = false })
     } else {
         MainScreen(state, actions, onOpenSettings = { showSettings = true })
