@@ -4,19 +4,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#FF63DAFF"
-        android:pathData="M20,38h28v-8l24,24-24,24v-8H20z" />
-    <path
-        android:fillColor="#FFFF8A65"
-        android:pathData="M88,70H60v8L36,54l24-24v8h28z" />
+    <!-- Music note -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M70,24a8,8 0,1 0,0 16a8,8 0,1 0,0 -16z" />
+        android:pathData="M31,68a9,9 0,1 0,18 0a9,9 0,1 0,-18 0z" />
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M74,24h6v28h-6z" />
+        android:pathData="M42,32h7v36h-7z" />
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M80,24l10,-3v8l-10,3z" />
+        android:pathData="M49,32c8,3 14,7 14,17c-4,-5 -8,-6 -14,-6z" />
+    <!-- Arrow: opens in your app -->
+    <path
+        android:fillColor="#FFC6FF3D"
+        android:pathData="M55,64h11v-7l12,10 -12,10v-7h-11z" />
 </vector>
