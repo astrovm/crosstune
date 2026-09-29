@@ -35,7 +35,7 @@ android {
     defaultConfig {
         applicationId = "com.astrovm.crosstune"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = commitCount
         versionName = derivedVersionName
 
@@ -45,6 +45,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -64,13 +65,6 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
-        }
-    }
-
-    sourceSets {
-        getByName("main") {
-            res.directories.clear()
-            res.directories.add("src/main/res_clean")
         }
     }
 }

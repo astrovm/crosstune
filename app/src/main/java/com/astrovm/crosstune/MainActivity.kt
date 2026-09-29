@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Html
@@ -35,6 +36,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +57,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.compose.ui.tooling.preview.Preview
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import okhttp3.OkHttpClient
@@ -176,7 +182,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (Uri.parse(normalizedInput).isSpotifyShortLink()) {
+        if (normalizedInput.toUri().isSpotifyShortLink()) {
             resolveShortLinkTrackId(normalizedInput, openWhenReady)
             return
         }
@@ -327,7 +333,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Opaque URIs such as "spotify:album:..." have no query or path segments to inspect.
-        val uri = Uri.parse(value).takeIf { it.isHierarchical } ?: return null
+        val uri = value.toUri().takeIf { it.isHierarchical } ?: return null
         uri.getQueryParameter("uri")
             ?.let { embeddedUri -> extractTrackId(embeddedUri) }
             ?.let { return it }
@@ -377,7 +383,10 @@ class MainActivity : ComponentActivity() {
         val query = buildSearchQuery(trackName, artistName)
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText("Crosstune search query", query))
-        Toast.makeText(this, getString(R.string.search_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+        // Android 13+ shows its own confirmation whenever the clipboard changes.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, getString(R.string.search_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun shareSearchFromState() {
@@ -393,17 +402,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openAppLinkSettings() {
-        val packageUri = Uri.parse("package:$packageName")
-        val openByDefaultIntent = Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS).apply {
-            data = packageUri
-        }
-        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = packageUri
-        }
-
-        try {
-            startActivity(openByDefaultIntent)
-        } catch (_: ActivityNotFoundException) {
+        val packageUri = "package:$packageName".toUri()
+        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                startActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri))
+            } catch (_: ActivityNotFoundException) {
+                startActivity(fallbackIntent)
+            }
+        } else {
             startActivity(fallbackIntent)
         }
 
@@ -412,7 +419,7 @@ class MainActivity : ComponentActivity() {
 
     private fun dismissLinkSettingsHelper() {
         uiState = uiState.copy(showLinkSettingsHelper = false)
-        preferences.edit().putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true).apply()
+        preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
     }
 
     private fun loadPreferredTarget(): SearchTarget {
@@ -422,7 +429,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setSelectedTarget(target: SearchTarget) {
         uiState = uiState.copy(selectedTarget = target)
-        preferences.edit().putString(KEY_DEFAULT_TARGET, target.name).apply()
+        preferences.edit { putString(KEY_DEFAULT_TARGET, target.name) }
     }
 
     private fun openPrimaryTarget(trackName: String, artistName: String, closeAfterOpen: Boolean) {
@@ -457,8 +464,8 @@ class MainActivity : ComponentActivity() {
     private fun buildTargetSearchUri(target: SearchTarget, query: String): Uri {
         val encoded = Uri.encode(query)
         return when (target) {
-            SearchTarget.YOUTUBE_MUSIC -> Uri.parse("https://music.youtube.com/search?q=$encoded")
-            SearchTarget.YOUTUBE -> Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+            SearchTarget.YOUTUBE_MUSIC -> "https://music.youtube.com/search?q=$encoded".toUri()
+            SearchTarget.YOUTUBE -> "https://www.youtube.com/results?search_query=$encoded".toUri()
         }
     }
 }
@@ -744,41 +751,18 @@ private fun SearchTargetSelector(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
+        SingleChoiceSegmentedButtonRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(top = 8.dp)
         ) {
-            if (selectedTarget == SearchTarget.YOUTUBE_MUSIC) {
-                Button(
-                    onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
-                    modifier = Modifier.weight(1f)
+            SearchTarget.entries.forEachIndexed { index, target ->
+                SegmentedButton(
+                    selected = target == selectedTarget,
+                    onClick = { onTargetChange(target) },
+                    shape = SegmentedButtonDefaults.itemShape(index, SearchTarget.entries.size)
                 ) {
-                    Text(stringResource(R.string.target_youtube_music))
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { onTargetChange(SearchTarget.YOUTUBE_MUSIC) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.target_youtube_music))
-                }
-            }
-
-            if (selectedTarget == SearchTarget.YOUTUBE) {
-                Button(
-                    onClick = { onTargetChange(SearchTarget.YOUTUBE) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.target_youtube))
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { onTargetChange(SearchTarget.YOUTUBE) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.target_youtube))
+                    Text(stringResource(target.labelRes))
                 }
             }
         }
@@ -795,9 +779,9 @@ private data class UiState(
     val showLinkSettingsHelper: Boolean = false
 )
 
-private enum class SearchTarget(@StringRes val openButtonLabelRes: Int) {
-    YOUTUBE_MUSIC(R.string.open_in_youtube_music),
-    YOUTUBE(R.string.open_in_youtube)
+private enum class SearchTarget(@StringRes val labelRes: Int, @StringRes val openButtonLabelRes: Int) {
+    YOUTUBE_MUSIC(R.string.target_youtube_music, R.string.open_in_youtube_music),
+    YOUTUBE(R.string.target_youtube, R.string.open_in_youtube)
 }
 
 @Preview(showBackground = true)
