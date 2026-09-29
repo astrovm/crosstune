@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared by the launcher icon and the logo beside the title, so they can't drift apart. -->
+    <color name="ic_launcher_background">#4F2BD9</color>
+</resources>

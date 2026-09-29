@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
@@ -684,6 +685,25 @@ class MainActivityTest {
             "https://music.youtube.com/search?q=Fallback%20Artist",
             started.dataString
         )
+    }
+
+    @Test
+    fun settingsShowTheAppVersion() {
+        shadowOf(app.packageManager).getInternalMutablePackageInfo(app.packageName).versionName = "v9.8.7"
+        launch()
+        assertTextAbsent("v9.8.7")
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.settings_version))
+        assertTextShown("v9.8.7")
+    }
+
+    @Test
+    fun theLogoSitsBesideTheTitleOnTheHomeScreen() {
+        launch()
+        assertTextShown(string(R.string.app_name))
+        composeRule.onNodeWithTag(LOGO_TAG).assertIsDisplayed()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithTag(LOGO_TAG).assertDoesNotExist()
     }
 
     @Test

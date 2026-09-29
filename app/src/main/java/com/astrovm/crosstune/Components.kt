@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -25,15 +27,18 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal const val ARTWORK_TAG = "artwork"
+internal const val LOGO_TAG = "logo"
 
 /** Widest the content gets on tablets and in landscape, so lines stay easy to read. */
 internal val ContentMaxWidth = 600.dp
@@ -41,6 +46,24 @@ internal val ContentMaxWidth = 600.dp
 @Composable
 internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier: Modifier = Modifier) {
     Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier)
+}
+
+/**
+ * The launcher icon, drawn from its own layers because Compose can't paint an adaptive icon. The
+ * foreground is scaled up to fill the badge: launchers crop it to a circle and leave wide margins.
+ */
+@Composable
+internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 36.dp) {
+    Box(
+        modifier = modifier
+            .testTag(LOGO_TAG)
+            .size(size)
+            .clip(RoundedCornerShape(size / 3))
+            .background(colorResource(R.color.ic_launcher_background)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(size * 1.5f))
+    }
 }
 
 /** Small heading above a group, optionally with an explanation and a trailing action. */

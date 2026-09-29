@@ -105,6 +105,7 @@
     <string name="open_app_link_settings_button">Open %1$s settings</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
+    <string name="settings_version">Version</string>
     <string name="made_by">Made by @astrovm</string>
     <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
 

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -130,6 +131,7 @@ internal fun Destination.openLabel(): String =
 @Composable
 internal fun Page(
     title: String?,
+    titleLeading: (@Composable () -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
@@ -142,7 +144,13 @@ internal fun Page(
             if (title != null) {
                 TopAppBar(
                     title = {
-                        Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (titleLeading != null) {
+                                titleLeading()
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     },
                     navigationIcon = navigationIcon,
                     actions = { actions() },
@@ -181,6 +189,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
 
     Page(
         title = stringResource(R.string.app_name),
+        titleLeading = { AppLogo() },
         actions = {
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
