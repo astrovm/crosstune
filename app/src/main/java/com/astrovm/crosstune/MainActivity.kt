@@ -4,83 +4,39 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.Html
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.annotation.StringRes
-import androidx.annotation.VisibleForTesting
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
+import androidx.activity.viewModels
+import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
-    private val client by lazy { httpClientFactory() }
-    private val ogDescriptionRegex = Regex("""<meta property=\"og:description\" content=\"([^\"]+)\"""")
-    private val ogTitleRegex = Regex("""<meta property=\"og:title\" content=\"([^\"]+)\"""")
-    private val sharedUrlRegex = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE)
-    private val spotifyTrackIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
-    private val preferences by lazy { getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE) }
+    private val viewModel: MainViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                MainViewModel(
+                    SpotifyResolver(httpClientFactory()),
+                    getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+                )
+            }
+        }
+    }
 
-    private var uiState by mutableStateOf(UiState())
-    
     companion object {
-        private const val PREFERENCES_NAME = "crosstune_preferences"
-        private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
-        private const val KEY_DEFAULT_TARGET = "default_target"
-
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = { OkHttpClient() }
     }
@@ -88,32 +44,32 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        uiState = uiState.copy(
-            selectedTarget = loadPreferredTarget(),
-            showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false)
-        )
-        handleIntent(intent)
+        // After a configuration change the ViewModel already holds this intent's result or request.
+        if (savedInstanceState == null) handleIntent(intent)
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.effects.collect { effect ->
+                    when (effect) {
+                        is Effect.OpenSearch -> openSearch(effect)
+                    }
+                }
+            }
+        }
 
         setContent {
             CrosstuneTheme {
                 CrosstuneScreen(
-                    state = uiState,
-                    onUrlChange = { text ->
-                        uiState = uiState.copy(spotifyUrl = text, errorMessage = null)
-                    },
-                    onResolveClick = ::resolveFromInput,
-                    onClearClick = {
-                        uiState = UiState(
-                            selectedTarget = uiState.selectedTarget,
-                            showLinkSettingsHelper = uiState.showLinkSettingsHelper
-                        )
-                    },
-                    onOpenClick = ::openFromState,
-                    onTargetChange = ::setSelectedTarget,
-                    onCopySearchClick = ::copySearchFromState,
-                    onShareSearchClick = ::shareSearchFromState,
+                    state = viewModel.uiState,
+                    onUrlChange = viewModel::onUrlChange,
+                    onResolveClick = viewModel::resolveTypedInput,
+                    onClearClick = viewModel::clear,
+                    onOpenClick = { viewModel.openResult() },
+                    onTargetChange = viewModel::selectTarget,
+                    onCopySearchClick = ::copySearch,
+                    onShareSearchClick = ::shareSearch,
                     onOpenLinkSettingsClick = ::openAppLinkSettings,
-                    onDismissLinkSettingsHelper = ::dismissLinkSettingsHelper
+                    onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper
                 )
             }
         }
@@ -125,262 +81,38 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
+        // Reopening from Recents replays the original link; show the app instead of opening it again.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+
         when (intent.action) {
-            Intent.ACTION_VIEW -> {
-                val incoming = intent.dataString?.trim().orEmpty()
-                if (incoming.isBlank()) {
-                    uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
-                    return
-                }
-
-                uiState = uiState.copy(spotifyUrl = incoming, errorMessage = null)
-                resolveFromAnyInput(incoming, openWhenReady = true, canonicalizeUrl = true)
-            }
-
-            Intent.ACTION_SEND -> {
-                val sharedPayload = intent.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString)
+            Intent.ACTION_SEND -> viewModel.resolveIncoming(
+                intent.getStringExtra(Intent.EXTRA_TEXT)
                     ?: intent.getStringExtra(Intent.EXTRA_SUBJECT)
                     ?: return
-
-                val incoming = extractFirstUrl(sharedPayload) ?: sharedPayload.trim()
-                if (incoming.isBlank()) {
-                    uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
-                    return
-                }
-
-                uiState = uiState.copy(spotifyUrl = incoming, errorMessage = null)
-                resolveFromAnyInput(incoming, openWhenReady = true, canonicalizeUrl = true)
-            }
+            )
         }
     }
 
-    private fun resolveFromInput() {
-        resolveFromAnyInput(
-            input = uiState.spotifyUrl,
-            openWhenReady = false,
-            canonicalizeUrl = false
-        )
-    }
-
-    private fun resolveFromAnyInput(
-        input: String,
-        openWhenReady: Boolean,
-        canonicalizeUrl: Boolean
-    ) {
-        val normalizedInput = (extractFirstUrl(input) ?: input).trim()
-        if (normalizedInput.isBlank()) {
-            uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
-            return
+    private fun openSearch(effect: Effect.OpenSearch) {
+        val uri = effect.url.toUri()
+        val opened = tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(effect.packageName)) ||
+            tryStartActivity(Intent(Intent.ACTION_VIEW, uri))
+        when {
+            !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
+            effect.finishAfterOpen -> finish()
         }
-
-        val trackId = extractTrackId(normalizedInput)
-        if (trackId != null) {
-            if (canonicalizeUrl) {
-                uiState = uiState.copy(spotifyUrl = spotifyTrackUrl(trackId), errorMessage = null)
-            }
-            resolveTrack(trackId, openWhenReady)
-            return
-        }
-
-        if (normalizedInput.toUri().isSpotifyShortLink()) {
-            resolveShortLinkTrackId(normalizedInput, openWhenReady)
-            return
-        }
-
-        uiState = uiState.copy(errorMessage = getString(R.string.error_invalid_url))
     }
 
-    private fun resolveShortLinkTrackId(shortLink: String, openWhenReady: Boolean) {
-        uiState = uiState.copy(
-            isLoading = true,
-            errorMessage = null,
-            resolvedTrackName = null,
-            resolvedArtistName = null
-        )
-
-        val request = Request.Builder()
-            .url(shortLink)
-            .get()
-            .build()
-
-        client.newCall(request).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: IOException) {
-                runOnUiThread {
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        errorMessage = getString(R.string.error_network)
-                    )
-                }
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                val redirectedUrl = response.request.url.toString()
-                val trackId = extractTrackId(redirectedUrl)
-                response.close()
-
-                runOnUiThread {
-                    if (trackId == null) {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            errorMessage = getString(R.string.error_invalid_url)
-                        )
-                        return@runOnUiThread
-                    }
-
-                    uiState = uiState.copy(spotifyUrl = spotifyTrackUrl(trackId))
-                    resolveTrack(trackId, openWhenReady)
-                }
-            }
-        })
+    private fun tryStartActivity(intent: Intent): Boolean = try {
+        startActivity(intent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
     }
 
-    private fun resolveTrack(trackId: String, openWhenReady: Boolean) {
-        uiState = uiState.copy(
-            isLoading = true,
-            errorMessage = null,
-            resolvedTrackName = null,
-            resolvedArtistName = null
-        )
-
-        val request = Request.Builder()
-            .url("https://open.spotify.com/track/$trackId")
-            .get()
-            .build()
-
-        client.newCall(request).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: IOException) {
-                runOnUiThread {
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        errorMessage = getString(R.string.error_network)
-                    )
-                }
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                try {
-                    val html = response.body.string()
-                    val metadata = extractTrackAndArtist(html)
-
-                    runOnUiThread {
-                        if (metadata == null) {
-                            uiState = uiState.copy(
-                                isLoading = false,
-                                errorMessage = getString(R.string.error_metadata_unavailable)
-                            )
-                            return@runOnUiThread
-                        }
-
-                        val (trackName, artistName) = metadata
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            resolvedTrackName = trackName,
-                            resolvedArtistName = artistName,
-                            errorMessage = null
-                        )
-
-                        if (openWhenReady) {
-                            openPrimaryTarget(trackName, artistName, closeAfterOpen = true)
-                        }
-                    }
-                } catch (_: Exception) {
-                    runOnUiThread {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            errorMessage = getString(R.string.error_metadata_unavailable)
-                        )
-                    }
-                } finally {
-                    response.close()
-                }
-            }
-        })
-    }
-
-    private fun extractTrackAndArtist(html: String): Pair<String, String>? {
-        val trackName = extractTrackTitle(html) ?: return null
-        val artistName = ogDescriptionRegex.find(html)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.decodeHtml()
-            ?.split(" · ")
-            ?.firstOrNull()
-            ?.trim()
-            .orEmpty()
-
-        return trackName to artistName
-    }
-
-    private fun extractTrackTitle(html: String): String? {
-        return ogTitleRegex.find(html)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.decodeHtml()
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    private fun extractTrackId(input: String): String? {
-        val value = input.trim()
-        if (value.isBlank()) return null
-
-        if (spotifyTrackIdRegex.matches(value)) {
-            return value
-        }
-
-        if (value.startsWith("spotify:track:", ignoreCase = true)) {
-            return value.substringAfterLast(':').takeIf { spotifyTrackIdRegex.matches(it) }
-        }
-
-        // Opaque URIs such as "spotify:album:..." have no query or path segments to inspect.
-        val uri = value.toUri().takeIf { it.isHierarchical } ?: return null
-        uri.getQueryParameter("uri")
-            ?.let { embeddedUri -> extractTrackId(embeddedUri) }
-            ?.let { return it }
-
-        return uri.extractTrackIdFromUri()
-    }
-
-    private fun Uri.extractTrackIdFromUri(): String? {
-        val hostValue = host?.lowercase() ?: return null
-        val isSpotifyHost = hostValue == "spotify.com" || hostValue.endsWith(".spotify.com")
-        if (!isSpotifyHost) return null
-
-        val segments = pathSegments
-        val trackIndex = segments.indexOf("track")
-        if (trackIndex == -1 || trackIndex + 1 >= segments.size) return null
-
-        return segments[trackIndex + 1].takeIf { spotifyTrackIdRegex.matches(it) }
-    }
-
-    private fun Uri.isSpotifyShortLink(): Boolean {
-        val hostValue = host?.lowercase() ?: return false
-        return hostValue == "spotify.link" || hostValue.endsWith(".spotify.link")
-    }
-
-    private fun String.decodeHtml(): String {
-        return Html.fromHtml(this, Html.FROM_HTML_MODE_LEGACY).toString()
-    }
-
-    private fun extractFirstUrl(text: String): String? {
-        val match = sharedUrlRegex.find(text)?.value ?: return null
-        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')
-    }
-
-    private fun spotifyTrackUrl(trackId: String): String {
-        return "https://open.spotify.com/track/$trackId"
-    }
-
-    private fun openFromState() {
-        val trackName = uiState.resolvedTrackName ?: return
-        val artistName = uiState.resolvedArtistName ?: ""
-        openPrimaryTarget(trackName, artistName, closeAfterOpen = false)
-    }
-
-    private fun copySearchFromState() {
-        val trackName = uiState.resolvedTrackName ?: return
-        val artistName = uiState.resolvedArtistName ?: ""
-        val query = buildSearchQuery(trackName, artistName)
+    private fun copySearch() {
+        val query = viewModel.searchQuery() ?: return
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText("Crosstune search query", query))
         // Android 13+ shows its own confirmation whenever the clipboard changes.
@@ -389,420 +121,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun shareSearchFromState() {
-        val trackName = uiState.resolvedTrackName ?: return
-        val artistName = uiState.resolvedArtistName ?: ""
-        val query = buildSearchQuery(trackName, artistName)
-        val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
+    private fun shareSearch() {
+        val url = viewModel.searchUrl() ?: return
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, targetUri.toString())
+            putExtra(Intent.EXTRA_TEXT, url)
         }
         startActivity(Intent.createChooser(shareIntent, getString(R.string.share_search_link)))
     }
 
     private fun openAppLinkSettings() {
         val packageUri = "package:$packageName".toUri()
-        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                startActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri))
-            } catch (_: ActivityNotFoundException) {
-                startActivity(fallbackIntent)
-            }
-        } else {
-            startActivity(fallbackIntent)
+        val openedDefaults = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            tryStartActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri))
+        if (!openedDefaults) {
+            tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri))
         }
-
-        dismissLinkSettingsHelper()
-    }
-
-    private fun dismissLinkSettingsHelper() {
-        uiState = uiState.copy(showLinkSettingsHelper = false)
-        preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
-    }
-
-    private fun loadPreferredTarget(): SearchTarget {
-        val savedValue = preferences.getString(KEY_DEFAULT_TARGET, null)
-        return SearchTarget.entries.firstOrNull { it.name == savedValue } ?: SearchTarget.YOUTUBE_MUSIC
-    }
-
-    private fun setSelectedTarget(target: SearchTarget) {
-        uiState = uiState.copy(selectedTarget = target)
-        preferences.edit { putString(KEY_DEFAULT_TARGET, target.name) }
-    }
-
-    private fun openPrimaryTarget(trackName: String, artistName: String, closeAfterOpen: Boolean) {
-        val query = buildSearchQuery(trackName, artistName)
-        val targetUri = buildTargetSearchUri(uiState.selectedTarget, query)
-        val preferredPackage = when (uiState.selectedTarget) {
-            SearchTarget.YOUTUBE_MUSIC -> "com.google.android.apps.youtube.music"
-            SearchTarget.YOUTUBE -> "com.google.android.youtube"
-        }
-
-        val packagedIntent = Intent(Intent.ACTION_VIEW, targetUri).apply {
-            setPackage(preferredPackage)
-        }
-
-        try {
-            startActivity(packagedIntent)
-        } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Intent.ACTION_VIEW, targetUri))
-        }
-
-        if (closeAfterOpen) {
-            finish()
-        }
-    }
-
-    private fun buildSearchQuery(trackName: String, artistName: String): String {
-        return listOf(trackName, artistName)
-            .filter { it.isNotBlank() }
-            .joinToString(" ")
-    }
-
-    private fun buildTargetSearchUri(target: SearchTarget, query: String): Uri {
-        val encoded = Uri.encode(query)
-        return when (target) {
-            SearchTarget.YOUTUBE_MUSIC -> "https://music.youtube.com/search?q=$encoded".toUri()
-            SearchTarget.YOUTUBE -> "https://www.youtube.com/results?search_query=$encoded".toUri()
-        }
-    }
-}
-
-@Composable
-private fun CrosstuneScreen(
-    state: UiState,
-    onUrlChange: (String) -> Unit,
-    onResolveClick: () -> Unit,
-    onClearClick: () -> Unit,
-    onOpenClick: () -> Unit,
-    onTargetChange: (SearchTarget) -> Unit,
-    onCopySearchClick: () -> Unit,
-    onShareSearchClick: () -> Unit,
-    onOpenLinkSettingsClick: () -> Unit,
-    onDismissLinkSettingsHelper: () -> Unit
-) {
-    val gradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-        )
-    )
-    val uriHandler = LocalUriHandler.current
-    val githubUrl = stringResource(R.string.github_repo_url)
-
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(gradient)
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-                .safeDrawingPadding()
-                .padding(innerPadding)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = stringResource(R.string.app_tagline),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(top = 8.dp, bottom = 20.dp)
-                        .widthIn(max = 520.dp)
-                )
-
-                if (state.showLinkSettingsHelper) {
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 680.dp)
-                            .padding(bottom = 12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = stringResource(R.string.link_settings_helper_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = stringResource(R.string.link_settings_helper_body),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Button(
-                                    onClick = onOpenLinkSettingsClick,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(stringResource(R.string.open_link_settings_button))
-                                }
-                                TextButton(
-                                    onClick = onDismissLinkSettingsHelper,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(stringResource(R.string.dismiss_button))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 680.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        OutlinedTextField(
-                            value = state.spotifyUrl,
-                            onValueChange = onUrlChange,
-                            singleLine = true,
-                            label = { Text(stringResource(R.string.spotify_link_label)) },
-                            placeholder = { Text(stringResource(R.string.spotify_link_placeholder)) },
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                keyboardType = KeyboardType.Uri,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(onDone = { onResolveClick() }),
-                            enabled = !state.isLoading,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Button(
-                                onClick = onResolveClick,
-                                enabled = !state.isLoading,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(stringResource(R.string.resolve_button))
-                            }
-
-                            OutlinedButton(
-                                onClick = onClearClick,
-                                enabled = !state.isLoading,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(stringResource(R.string.clear_button))
-                            }
-                        }
-
-                        SearchTargetSelector(
-                            selectedTarget = state.selectedTarget,
-                            label = stringResource(R.string.default_open_with_label),
-                            onTargetChange = onTargetChange,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-
-                        if (state.isLoading) {
-                            LinearProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp)
-                            )
-                            Text(
-                                text = stringResource(R.string.loading_text),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
-
-                        val error = state.errorMessage
-                        if (!error.isNullOrBlank()) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                )
-                            ) {
-                                Text(
-                                    text = error,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-
-                        val trackName = state.resolvedTrackName
-                        if (!trackName.isNullOrBlank()) {
-                            val openButtonLabel = stringResource(state.selectedTarget.openButtonLabelRes)
-
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        text = stringResource(R.string.result_title),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = trackName,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(top = 8.dp)
-                                    )
-
-                                    if (!state.resolvedArtistName.isNullOrBlank()) {
-                                        Text(
-                                            text = state.resolvedArtistName,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        )
-                                    }
-
-                                    Button(
-                                        onClick = onOpenClick,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 12.dp)
-                                    ) {
-                                        Text(openButtonLabel)
-                                    }
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 8.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = onCopySearchClick,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(stringResource(R.string.copy_search_button))
-                                        }
-                                        OutlinedButton(
-                                            onClick = onShareSearchClick,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(stringResource(R.string.share_search_button))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                TextButton(
-                    onClick = { uriHandler.openUri(githubUrl) },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.made_by),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchTargetSelector(
-    selectedTarget: SearchTarget,
-    label: String,
-    onTargetChange: (SearchTarget) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-        ) {
-            SearchTarget.entries.forEachIndexed { index, target ->
-                SegmentedButton(
-                    selected = target == selectedTarget,
-                    onClick = { onTargetChange(target) },
-                    shape = SegmentedButtonDefaults.itemShape(index, SearchTarget.entries.size)
-                ) {
-                    Text(stringResource(target.labelRes))
-                }
-            }
-        }
-    }
-}
-
-private data class UiState(
-    val spotifyUrl: String = "",
-    val isLoading: Boolean = false,
-    val resolvedTrackName: String? = null,
-    val resolvedArtistName: String? = null,
-    val errorMessage: String? = null,
-    val selectedTarget: SearchTarget = SearchTarget.YOUTUBE_MUSIC,
-    val showLinkSettingsHelper: Boolean = false
-)
-
-private enum class SearchTarget(@StringRes val labelRes: Int, @StringRes val openButtonLabelRes: Int) {
-    YOUTUBE_MUSIC(R.string.target_youtube_music, R.string.open_in_youtube_music),
-    YOUTUBE(R.string.target_youtube, R.string.open_in_youtube)
-}
-
-@Preview(showBackground = true)
-@Composable
-internal fun CrosstuneScreenPreview() {
-    CrosstuneTheme {
-        CrosstuneScreen(
-            state = UiState(
-                spotifyUrl = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
-                resolvedTrackName = "Cut To The Feeling",
-                resolvedArtistName = "Carly Rae Jepsen"
-            ),
-            onUrlChange = {},
-            onResolveClick = {},
-            onClearClick = {},
-            onOpenClick = {},
-            onTargetChange = {},
-            onCopySearchClick = {},
-            onShareSearchClick = {},
-            onOpenLinkSettingsClick = {},
-            onDismissLinkSettingsHelper = {}
-        )
+        viewModel.dismissLinkSettingsHelper()
     }
 }

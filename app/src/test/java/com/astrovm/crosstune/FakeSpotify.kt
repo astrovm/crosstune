@@ -34,13 +34,13 @@ class FakeSpotify : Interceptor {
     companion object {
         private val HTML = "text/html; charset=utf-8".toMediaType()
 
-        fun html(request: Request, body: String, finalUrl: String? = null): Response {
+        fun html(request: Request, body: String, finalUrl: String? = null, code: Int = 200): Response {
             val servedRequest = finalUrl?.let { request.newBuilder().url(it).build() } ?: request
             return Response.Builder()
                 .request(servedRequest)
                 .protocol(Protocol.HTTP_1_1)
-                .code(200)
-                .message("OK")
+                .code(code)
+                .message("Status $code")
                 .body(body.toResponseBody(HTML))
                 .build()
         }
