@@ -4,18 +4,46 @@
     <string name="publisher_id">astrovm</string>
     <string name="publisher_name">astrovm</string>
 
-    <string name="app_tagline">Turn any Spotify track URL into a YouTube Music search in seconds.</string>
-    <string name="spotify_link_label">Spotify track URL</string>
-    <string name="spotify_link_placeholder">https://open.spotify.com/track/…</string>
-    <string name="resolve_button">Resolve Track</string>
+    <string name="app_tagline">Open any Spotify song, album, artist or playlist in YouTube Music, YouTube, Apple Music and more.</string>
+    <string name="spotify_link_label">Spotify link</string>
+    <string name="spotify_link_placeholder">https://open.spotify.com/…</string>
+    <string name="resolve_button">Resolve</string>
     <string name="clear_button">Clear</string>
     <string name="loading_text">Reading public Spotify metadata…</string>
     <string name="result_title">Ready to open</string>
-    <string name="default_open_with_label">Default opening target</string>
+    <string name="default_open_with_label">Default destination</string>
     <string name="target_youtube_music">YouTube Music</string>
     <string name="target_youtube">YouTube</string>
     <string name="open_in_youtube_music">Open in YouTube Music</string>
     <string name="open_in_youtube">Open in YouTube</string>
+    <string name="target_apple_music">Apple Music</string>
+    <string name="target_deezer">Deezer</string>
+    <string name="target_tidal">TIDAL</string>
+    <string name="target_soundcloud">SoundCloud</string>
+    <string name="open_in_apple_music">Open in Apple Music</string>
+    <string name="open_in_deezer">Open in Deezer</string>
+    <string name="open_in_tidal">Open in TIDAL</string>
+    <string name="open_in_soundcloud">Open in SoundCloud</string>
+
+    <string name="type_track">Song</string>
+    <string name="type_album">Album</string>
+    <string name="type_artist">Artist</string>
+    <string name="type_playlist">Playlist</string>
+
+    <string name="setting_ask_each_time">Ask where to open shared links</string>
+    <string name="setting_ask_each_time_description">Pick a destination for each link instead of opening your default right away.</string>
+    <string name="setting_exact_match">Open exact matches when possible</string>
+    <string name="setting_exact_match_description">For Apple Music and Deezer, looks up the item with their public search APIs and opens it directly. Other destinations use a search.</string>
+    <string name="matching_text">Finding an exact match…</string>
+    <string name="picker_title">Open with</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="retry_button">Try again</string>
+    <string name="history_title">Recent</string>
+    <string name="clear_history_button">Clear history</string>
+    <string name="tile_label">Open copied Spotify link</string>
+    <string name="shortcut_paste_short">Open copied link</string>
+    <string name="shortcut_paste_long">Open copied Spotify link</string>
+    <string name="error_clipboard_empty">Copy a Spotify link first, then try again.</string>
     <string name="copy_search_button">Copy Search Text</string>
     <string name="share_search_button">Share Search Link</string>
     <string name="share_search_link">Share search link</string>
@@ -27,11 +55,11 @@
     <string name="made_by">Made by @astrovm</string>
     <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
 
-    <string name="error_invalid_url">Enter a valid Spotify track URL.</string>
+    <string name="error_invalid_url">Enter a Spotify link to a song, album, artist or playlist.</string>
     <string name="error_network">Could not reach Spotify. Check your connection and try again.</string>
-    <string name="error_not_found">Spotify couldn\'t find this track. It may have been removed, or the link may be wrong.</string>
+    <string name="error_not_found">Spotify couldn\'t find this. It may have been removed, or the link may be wrong.</string>
     <string name="error_rate_limited">Spotify is limiting requests right now. Wait a moment and try again.</string>
     <string name="error_spotify_unavailable">Spotify isn\'t responding right now. Try again in a moment.</string>
     <string name="error_no_app_to_open">No installed app can open this link.</string>
-    <string name="error_metadata_unavailable">Track metadata is unavailable for this link.</string>
+    <string name="error_metadata_unavailable">Couldn\'t read details for this link from Spotify.</string>
 </resources>

@@ -103,9 +103,17 @@ jobs:
             --key-pass env:RELEASE_KEY_PASSWORD \
             --out "$out" \
             app/build/outputs/apk/release/app-release-unsigned.apk
-          "$apksigner" verify --print-certs "$out"
+          certs="$("$apksigner" verify --print-certs "$out")"
+          echo "$certs"
           rm -f "$keystore"
+          # apksigner labels the line "Signer #1" or "V3.0 Signer" depending on the signature schemes used.
+          cert_sha256="$(sed -n 's/^.*certificate SHA-256 digest: //p' <<< "$certs" | head -n1)"
+          if [[ -z "$cert_sha256" ]]; then
+            echo "::error::Could not read the signing certificate digest"
+            exit 1
+          fi
           echo "APK=$out" >> "$GITHUB_ENV"
+          echo "CERT_SHA256=$cert_sha256" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -118,7 +126,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          args=(--repo "$GITHUB_REPOSITORY" --title "Crosstune $TAG" --generate-notes)
+          # Lets users and tools like Obtainium check the APK's signer before installing.
+          notes="Signing certificate SHA-256: \`$CERT_SHA256\`"
+          args=(--repo "$GITHUB_REPOSITORY" --title "Crosstune $TAG" --notes "$notes" --generate-notes)
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             args+=(--verify-tag)
           else

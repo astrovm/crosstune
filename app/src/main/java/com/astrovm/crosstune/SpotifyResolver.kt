@@ -10,29 +10,30 @@ import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 import java.io.IOException
 
-internal enum class AppError(@StringRes val messageRes: Int) {
+internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boolean = false) {
     INVALID_URL(R.string.error_invalid_url),
+    CLIPBOARD_EMPTY(R.string.error_clipboard_empty),
     NOT_FOUND(R.string.error_not_found),
-    RATE_LIMITED(R.string.error_rate_limited),
-    SPOTIFY_UNAVAILABLE(R.string.error_spotify_unavailable),
-    NETWORK(R.string.error_network),
-    METADATA_UNAVAILABLE(R.string.error_metadata_unavailable),
+    RATE_LIMITED(R.string.error_rate_limited, canRetry = true),
+    SPOTIFY_UNAVAILABLE(R.string.error_spotify_unavailable, canRetry = true),
+    NETWORK(R.string.error_network, canRetry = true),
+    METADATA_UNAVAILABLE(R.string.error_metadata_unavailable, canRetry = true),
     NO_APP_TO_OPEN(R.string.error_no_app_to_open)
 }
 
 internal sealed interface Resolution {
-    data class Resolved(val trackId: String, val metadata: TrackMetadata) : Resolution
+    data class Resolved(val item: SpotifyItem, val metadata: SpotifyMetadata) : Resolution
     data class Failed(val error: AppError) : Resolution
 }
 
-/** Turns a Spotify link into track metadata using Spotify's public web pages. */
+/** Turns a Spotify link into metadata using Spotify's public web pages. */
 internal class SpotifyResolver(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     suspend fun resolve(input: SpotifyInput): Resolution = try {
         when (input) {
-            is SpotifyInput.Track -> resolveTrack(input.id)
+            is SpotifyInput.Item -> resolveItem(input.item)
             is SpotifyInput.ShortLink -> resolveShortLink(input.url)
         }
     } catch (_: IOException) {
@@ -41,17 +42,17 @@ internal class SpotifyResolver(
 
     private suspend fun resolveShortLink(url: String): Resolution {
         val (response, html) = fetch(url)
-        val trackId = SpotifyLinks.trackIdFromUrl(response.request.url)
-            ?: SpotifyLinks.trackIdFromPage(html)
+        val item = SpotifyLinks.itemFromUrl(response.request.url)
+            ?: SpotifyLinks.itemFromPage(html)
             ?: return Resolution.Failed(httpError(response) ?: AppError.INVALID_URL)
-        return resolveTrack(trackId)
+        return resolveItem(item)
     }
 
-    private suspend fun resolveTrack(trackId: String): Resolution {
-        val (response, html) = fetch(SpotifyLinks.trackUrl(trackId))
+    private suspend fun resolveItem(item: SpotifyItem): Resolution {
+        val (response, html) = fetch(item.url)
         httpError(response)?.let { return Resolution.Failed(it) }
-        val metadata = SpotifyPage.parseTrack(html) ?: return Resolution.Failed(AppError.METADATA_UNAVAILABLE)
-        return Resolution.Resolved(trackId, metadata)
+        val metadata = SpotifyPage.parse(html, item.type) ?: return Resolution.Failed(AppError.METADATA_UNAVAILABLE)
+        return Resolution.Resolved(item, metadata)
     }
 
     /** Cancelling the calling coroutine cancels the HTTP call. */

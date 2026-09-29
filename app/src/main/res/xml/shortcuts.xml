@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_open_link"
+        android:shortcutId="open_copied_link"
+        android:shortcutLongLabel="@string/shortcut_paste_long"
+        android:shortcutShortLabel="@string/shortcut_paste_short">
+        <intent
+            android:action="com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
+            android:targetClass="com.astrovm.crosstune.MainActivity"
+            android:targetPackage="com.astrovm.crosstune" />
+    </shortcut>
+</shortcuts>

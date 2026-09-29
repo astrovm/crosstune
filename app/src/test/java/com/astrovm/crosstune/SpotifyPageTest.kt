@@ -12,7 +12,7 @@ class SpotifyPageTest {
             <meta content='Carly Rae Jepsen · Cut To The Feeling · Song · 2017' property='og:description'>
             <META CONTENT="Cut To The Feeling" PROPERTY="og:title" />
         """
-        assertEquals(TrackMetadata("Cut To The Feeling", "Carly Rae Jepsen"), SpotifyPage.parseTrack(html))
+        assertEquals(SpotifyMetadata("Cut To The Feeling", "Carly Rae Jepsen"), SpotifyPage.parse(html, SpotifyType.TRACK))
     }
 
     @Test
@@ -23,13 +23,13 @@ class SpotifyPageTest {
             <meta property="og:title" content="First">
             <meta property="og:title" content="Second">
         """
-        assertEquals(TrackMetadata("First", ""), SpotifyPage.parseTrack(html))
+        assertEquals(SpotifyMetadata("First", ""), SpotifyPage.parse(html, SpotifyType.TRACK))
     }
 
     @Test
     fun missingOrBlankTitleIsNotATrack() {
-        assertNull(SpotifyPage.parseTrack("<html></html>"))
-        assertNull(SpotifyPage.parseTrack("""<meta property="og:title" content="  ">"""))
+        assertNull(SpotifyPage.parse("<html></html>", SpotifyType.TRACK))
+        assertNull(SpotifyPage.parse("""<meta property="og:title" content="  ">""", SpotifyType.TRACK))
     }
 
     @Test
@@ -46,5 +46,34 @@ class SpotifyPageTest {
             "&bogus; &#1114112; &#99999999999;",
             SpotifyPage.decodeEntities("&bogus; &#1114112; &#99999999999;")
         )
+    }
+
+    @Test
+    fun albumTitleDropsTheAlbumByArtistSuffix() {
+        val html = """
+            <meta property="og:title" content="After Hours - Deluxe - Album by The Weeknd | Spotify">
+            <meta property="og:description" content="The Weeknd · album · 2020 · 14 songs">
+        """
+        assertEquals(
+            SpotifyMetadata("After Hours - Deluxe", "The Weeknd", SpotifyType.ALBUM),
+            SpotifyPage.parse(html, SpotifyType.ALBUM)
+        )
+        // Tracks keep their full title even when it looks like the album pattern.
+        assertEquals(
+            "After Hours - Deluxe - Album by The Weeknd",
+            SpotifyPage.parse(html, SpotifyType.TRACK)?.title
+        )
+        val plain = """<meta property="og:title" content="Starboy"><meta property="og:description" content="The Weeknd · album">"""
+        assertEquals("Starboy", SpotifyPage.parse(plain, SpotifyType.ALBUM)?.title)
+    }
+
+    @Test
+    fun artistsAndPlaylistsIgnoreTheirFreeTextDescription() {
+        val html = """<meta property="og:title" content="Today&#8217;s Top Hits"><meta property="og:description" content="The hottest 50 · Cover: ADÉLA">"""
+        assertEquals(
+            SpotifyMetadata("Today\u2019s Top Hits", "", SpotifyType.PLAYLIST),
+            SpotifyPage.parse(html, SpotifyType.PLAYLIST)
+        )
+        assertEquals("", SpotifyPage.parse(html, SpotifyType.ARTIST)?.artist)
     }
 }

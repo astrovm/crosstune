@@ -1,6 +1,10 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.content.ClipData
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
@@ -94,8 +98,9 @@ class MainActivityTest {
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.onAllNodesWithTextCount(text: String): Int =
         onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().size
 
+    /** Resolved titles also appear in the history list, so any matching node counts. */
     private fun assertTextShown(text: String) {
-        composeRule.onNodeWithText(text).assertExists()
+        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(text) > 0)
     }
 
     private fun assertTextAbsent(text: String) {
@@ -361,7 +366,7 @@ class MainActivityTest {
         val invalid = listOf(
             "",
             "https://example.com/track/$TRACK_ID",
-            "https://open.spotify.com/album/$TRACK_ID",
+            "https://open.spotify.com/show/$TRACK_ID",
             "https://open.spotify.com/track",
             "https://open.spotify.com/track/not-a-valid-id",
             "/track/$TRACK_ID",
@@ -493,7 +498,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.open_in_youtube))
 
         click(string(R.string.clear_button))
-        assertTextAbsent("Clear Me")
+        assertTextAbsent(string(R.string.result_title))
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
     }
 
@@ -553,11 +558,12 @@ class MainActivityTest {
             fake.requestedUrls.clear()
             typeUrl(input)
             click(string(R.string.resolve_button))
-            waitForText("Variant")
+            // "Variant" stays in the history list, so wait for the result card itself.
+            waitForText(string(R.string.result_title))
             assertEquals(input, listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
             assertTextAbsent(string(R.string.error_invalid_url))
             click(string(R.string.clear_button))
-            assertTextAbsent("Variant")
+            assertTextAbsent(string(R.string.result_title))
         }
     }
 
@@ -571,7 +577,7 @@ class MainActivityTest {
             "https://open.spotify.com/track/${TRACK_ID.dropLast(1)}",
             "https://open.spotify.com/track/${TRACK_ID}X",
             "${TRACK_ID}X",
-            "spotify:album:$TRACK_ID",
+            "spotify:episode:$TRACK_ID",
             "spotify:album:$TRACK_ID?uri=spotify:track:$TRACK_ID",
             "mailto:someone@example.com",
             "spotify:track:$TRACK_ID:extra",
@@ -670,7 +676,7 @@ class MainActivityTest {
 
     @Test
     fun unknownStoredTargetFallsBackToYouTubeMusic() {
-        prefs().edit().putString("default_target", "SOUNDCLOUD").commit()
+        prefs().edit().putString("default_target", "NAPSTER").commit()
         respondWithTrack("Default", "Artist · Song")
         launch()
 
@@ -756,11 +762,11 @@ class MainActivityTest {
     }
 
     @Test
-    fun sharedOpaqueNonTrackUriShowsErrorInsteadOfCrashing() {
+    fun sharedUnsupportedUriShowsErrorInsteadOfCrashing() {
         val activity = launch(
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "spotify:album:$TRACK_ID")
+                putExtra(Intent.EXTRA_TEXT, "spotify:show:$TRACK_ID")
             }
         )
         assertTextShown(string(R.string.error_invalid_url))
@@ -970,18 +976,256 @@ class MainActivityTest {
         val links = listOf(
             "https://open.spotify.com/track/$TRACK_ID",
             "https://open.spotify.com/intl-es/track/$TRACK_ID",
-            "https://open.spotify.com/intl-pt-BR/track/$TRACK_ID?si=1"
+            "https://open.spotify.com/intl-pt-BR/track/$TRACK_ID?si=1",
+            "https://open.spotify.com/album/$TRACK_ID",
+            "https://open.spotify.com/intl-es/artist/$TRACK_ID",
+            "https://open.spotify.com/playlist/$TRACK_ID"
         )
         for (link in links) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
             val handlers = app.packageManager.queryIntentActivities(intent, 0)
             assertTrue(link, handlers.any { it.activityInfo.name == MainActivity::class.java.name })
         }
-        val album = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/album/$TRACK_ID"))
+        val podcast = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/show/$TRACK_ID"))
             .addCategory(Intent.CATEGORY_BROWSABLE)
-        assertTrue(app.packageManager.queryIntentActivities(album, 0).none {
+        assertTrue(app.packageManager.queryIntentActivities(podcast, 0).none {
             it.activityInfo.name == MainActivity::class.java.name
         })
+    }
+
+    // endregion
+
+    // region features
+
+    private fun resolveTyped(input: String = TRACK_ID) {
+        typeUrl(input)
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.result_title))
+    }
+
+    @Test
+    fun albumsArtistsAndPlaylistsResolveAndSearchByName() {
+        fake.handler = { request ->
+            val page = when (request.url.pathSegments.first()) {
+                "album" -> FakeSpotify.trackPage("After Hours - Album by The Weeknd | Spotify", "The Weeknd · album · 2020")
+                "artist" -> FakeSpotify.trackPage("The Weeknd", "Artist · 114.9M monthly listeners.")
+                else -> FakeSpotify.trackPage("Today's Top Hits", "The hottest 50")
+            }
+            FakeSpotify.html(request, page)
+        }
+        launch()
+
+        resolveTyped("https://open.spotify.com/intl-es/album/$TRACK_ID")
+        assertTextShown(string(R.string.type_album))
+        click(string(R.string.open_in_youtube_music))
+        assertEquals("https://music.youtube.com/search?q=After%20Hours%20The%20Weeknd", nextStartedActivity()!!.dataString)
+
+        click(string(R.string.clear_button))
+        resolveTyped("spotify:artist:$TRACK_ID")
+        click(string(R.string.open_in_youtube_music))
+        assertEquals("https://music.youtube.com/search?q=The%20Weeknd", nextStartedActivity()!!.dataString)
+
+        click(string(R.string.clear_button))
+        resolveTyped("https://open.spotify.com/playlist/$TRACK_ID")
+        assertTextShown(string(R.string.type_playlist))
+        assertEquals(
+            listOf(
+                "https://open.spotify.com/album/$TRACK_ID",
+                "https://open.spotify.com/artist/$TRACK_ID",
+                "https://open.spotify.com/playlist/$TRACK_ID"
+            ),
+            fake.requestedUrls
+        )
+    }
+
+    @Test
+    fun everyDestinationBuildsItsOwnSearchUrl() {
+        respondWithTrack("Song", "Artist · Song")
+        launch()
+        resolveTyped()
+        val expected = mapOf(
+            R.string.target_apple_music to ("com.apple.android.music" to "https://music.apple.com/search?term=Song%20Artist"),
+            R.string.target_deezer to ("deezer.android.app" to "https://www.deezer.com/search/Song%20Artist"),
+            R.string.target_tidal to ("com.aspiro.tidal" to "https://listen.tidal.com/search?q=Song%20Artist"),
+            R.string.target_soundcloud to ("com.soundcloud.android" to "https://soundcloud.com/search?q=Song%20Artist")
+        )
+        for ((label, destination) in expected) {
+            click(string(label))
+            composeRule.onNode(hasText(string(label)) and isSelectable()).assertIsSelected()
+            click(string(SearchTarget.entries.first { it.labelRes == label }.openButtonLabelRes))
+            val opened = nextStartedActivity()!!
+            assertEquals(destination.first, opened.`package`)
+            assertEquals(destination.second, opened.dataString)
+        }
+    }
+
+    @Test
+    fun askEachTimeOffersDestinationsForIncomingLinks() {
+        respondWithTrack("Pick Me", "Artist · Song")
+        launch()
+        click(string(R.string.setting_ask_each_time))
+        assertTrue(prefs().getBoolean("ask_each_time", false))
+        controller!!.pause().stop().destroy()
+
+        val activity = launch(trackLink())
+        waitForText(string(R.string.picker_title))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+
+        click(string(R.string.open_in_deezer))
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals("deezer.android.app", opened.`package`)
+        // Picking a destination for one link doesn't change the default.
+        assertNull(prefs().getString("default_target", null))
+    }
+
+    @Test
+    fun dismissingTheDestinationPickerKeepsTheResult() {
+        prefs().edit().putBoolean("ask_each_time", true).commit()
+        respondWithTrack("Stay", "Artist · Song")
+        val activity = launch(trackLink())
+        waitForText(string(R.string.picker_title))
+
+        click(string(R.string.cancel_button))
+
+        assertTextAbsent(string(R.string.picker_title))
+        assertTextShown(string(R.string.result_title))
+        assertFalse(activity.isFinishing)
+        click(string(R.string.setting_ask_each_time))
+        assertFalse(prefs().getBoolean("ask_each_time", true))
+    }
+
+    @Test
+    fun exactMatchOpensDirectLinkAndFallsBackToSearch() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "itunes.apple.com" -> FakeSpotify.html(
+                    request,
+                    """{"results":[{"trackName":"Exact","artistName":"Artist","trackViewUrl":"https://music.apple.com/us/song/1"}]}"""
+                )
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("Exact", "Artist · Song"))
+            }
+        }
+        launch()
+        click(string(R.string.setting_exact_match))
+        assertTrue(prefs().getBoolean("exact_match", false))
+        resolveTyped()
+
+        click(string(R.string.target_apple_music))
+        click(string(R.string.open_in_apple_music))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+
+        click(string(R.string.target_deezer))
+        click(string(R.string.open_in_deezer))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+
+        click(string(R.string.setting_exact_match))
+        assertFalse(prefs().getBoolean("exact_match", true))
+    }
+
+    @Test
+    fun matchingStateIsShownWhileLookingUpExactMatch() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"data":[]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Slow", "Artist · Song"))
+            }
+        }
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_deezer))
+        waitForText(string(R.string.matching_text))
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+
+        release.countDown()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.matching_text))
+    }
+
+    @Test
+    fun retryIsOfferedForTemporaryFailuresOnly() {
+        fake.handler = { throw IOException("offline") }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.error_network))
+
+        respondWithTrack("Back Online", "Artist · Song")
+        click(string(R.string.retry_button))
+        // The retried request keeps the original intent's behaviour and opens the search.
+        waitUntil { activity.isFinishing }
+        controller!!.pause().stop().destroy()
+
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 404) }
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.error_not_found))
+        assertTextAbsent(string(R.string.retry_button))
+    }
+
+    @Test
+    fun historyRemembersResultsAcrossLaunchesAndCanBeCleared() {
+        fake.handler = { request ->
+            val title = if (request.url.pathSegments.last() == TRACK_ID) "First Song" else "Second Song"
+            FakeSpotify.html(request, FakeSpotify.trackPage(title, "Artist · Song"))
+        }
+        launch()
+        resolveTyped(TRACK_ID)
+        click(string(R.string.clear_button))
+        resolveTyped(OTHER_TRACK_ID)
+        controller!!.pause().stop().destroy()
+
+        launch()
+        assertTextShown(string(R.string.history_title))
+        assertTextAbsent(string(R.string.result_title))
+        fake.requestedUrls.clear()
+
+        click("First Song")
+        assertTextShown(string(R.string.result_title))
+        composeRule.onNodeWithText("https://open.spotify.com/track/$TRACK_ID").assertExists()
+        assertTrue(fake.requestedUrls.isEmpty())
+
+        click(string(R.string.clear_history_button))
+        assertTextAbsent(string(R.string.history_title))
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun clipboardShortcutResolvesCopiedLinkOnceFocused() {
+        respondWithTrack("Copied", "Artist · Song")
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "Listen https://open.spotify.com/track/$TRACK_ID"))
+
+        launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
+        controller!!.windowFocusChanged(false)
+        assertTrue(fake.requestedUrls.isEmpty())
+
+        controller!!.windowFocusChanged(true)
+        val activity = controller!!.get()
+        waitUntil { activity.isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+
+        // Focus returning later doesn't read the clipboard again.
+        controller!!.windowFocusChanged(true)
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun clipboardShortcutWithEmptyClipboardExplains() {
+        app.getSystemService(ClipboardManager::class.java).clearPrimaryClip()
+        launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
+        controller!!.windowFocusChanged(true)
+
+        assertTextShown(string(R.string.error_clipboard_empty))
     }
 
     // endregion

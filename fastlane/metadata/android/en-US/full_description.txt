@@ -1,0 +1,17 @@
+Crosstune opens Spotify links in the music app you actually use.
+
+Share or tap a Spotify link to a song, album, artist or playlist, and Crosstune reads its public details from Spotify and opens it in YouTube Music, YouTube, Apple Music, Deezer, TIDAL or SoundCloud.
+
+<b>Features</b>
+<ul>
+<li>Handles open.spotify.com links (including localized /intl-xx/ links), spotify.link short links, spotify: URIs and plain track IDs.</li>
+<li>Choose a default destination, or have Crosstune ask where to open each shared link.</li>
+<li>Optional exact matches: for Apple Music and Deezer, Crosstune can look the item up with their public search APIs and open it directly instead of a search.</li>
+<li>Quick Settings tile and launcher shortcut that open whatever Spotify link you copied.</li>
+<li>Recent history, so you can re-open or re-share a link.</li>
+<li>Copy the search text or share a search link.</li>
+<li>Material You colors on Android 12 and later.</li>
+</ul>
+
+<b>Privacy</b>
+Crosstune has no accounts, analytics or ads. It only contacts Spotify's public web pages to read a link's title and artist. With exact matches turned on, it also sends that title and artist to Apple's or Deezer's search API when you open in those apps. History stays on your device.
