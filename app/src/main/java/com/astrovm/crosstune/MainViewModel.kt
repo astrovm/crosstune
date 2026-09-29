@@ -14,13 +14,15 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 internal data class UiState(
-    val spotifyUrl: String = "",
+    val linkText: String = "",
     val isLoading: Boolean = false,
     val isMatching: Boolean = false,
-    val result: SpotifyMetadata? = null,
+    val result: MusicMetadata? = null,
+    /** The link [result] came from, or the incoming link that failed, so it can still be opened as is. */
+    val link: MusicLink? = null,
     val error: AppError? = null,
     val canRetry: Boolean = false,
-    val selectedTarget: SearchTarget = SearchTarget.YOUTUBE_MUSIC,
+    val selectedTarget: MusicService = MusicService.YOUTUBE_MUSIC,
     val askEachTime: Boolean = false,
     val exactMatch: Boolean = false,
     val showDestinationPicker: Boolean = false,
@@ -35,7 +37,7 @@ internal sealed interface Effect {
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
 internal class MainViewModel(
-    private val resolver: SpotifyResolver,
+    private val resolver: LinkResolver,
     private val matcher: ExactMatcher,
     private val preferences: SharedPreferences
 ) : ViewModel() {
@@ -44,7 +46,8 @@ internal class MainViewModel(
 
     var uiState by mutableStateOf(
         UiState(
-            selectedTarget = SearchTarget.fromName(preferences.getString(KEY_DEFAULT_TARGET, null)),
+            selectedTarget = MusicService.fromName(preferences.getString(KEY_DEFAULT_TARGET, null))
+                ?: MusicService.YOUTUBE_MUSIC,
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, false),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
@@ -57,25 +60,25 @@ internal class MainViewModel(
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
     private var job: Job? = null
-    private var lastRequest: Pair<SpotifyInput, Boolean>? = null
+    private var lastRequest: Pair<LinkInput, Boolean>? = null
 
     fun onUrlChange(text: String) {
-        uiState = uiState.copy(spotifyUrl = text, error = null)
+        uiState = uiState.copy(linkText = text, error = null)
     }
 
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
-        val input = SpotifyLinks.parse(uiState.spotifyUrl) ?: return showError(AppError.INVALID_URL)
+        val input = MusicLinks.parse(uiState.linkText) ?: return showError(AppError.INVALID_URL)
         resolve(input, openWhenReady = false)
     }
 
     /** Resolves a link from another app and opens it (or offers destinations) as soon as it is ready. */
     fun resolveIncoming(text: String?) {
-        val incoming = text?.let { SpotifyLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
-        uiState = uiState.copy(spotifyUrl = incoming)
-        val input = SpotifyLinks.parse(incoming) ?: return showError(AppError.INVALID_URL)
-        if (input is SpotifyInput.Item) {
-            uiState = uiState.copy(spotifyUrl = input.item.url)
+        val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
+        uiState = uiState.copy(linkText = incoming)
+        val input = MusicLinks.parse(incoming) ?: return showError(AppError.INVALID_URL)
+        if (input is LinkInput.Link) {
+            uiState = uiState.copy(linkText = input.link.url)
         }
         resolve(input, openWhenReady = true)
     }
@@ -91,7 +94,7 @@ internal class MainViewModel(
         resolve(input, openWhenReady)
     }
 
-    private fun resolve(input: SpotifyInput, openWhenReady: Boolean) {
+    private fun resolve(input: LinkInput, openWhenReady: Boolean) {
         lastRequest = input to openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         job?.cancel()
@@ -100,6 +103,7 @@ internal class MainViewModel(
             isMatching = false,
             error = null,
             result = null,
+            link = null,
             showDestinationPicker = false
         )
         job = viewModelScope.launch {
@@ -107,18 +111,19 @@ internal class MainViewModel(
                 is Resolution.Failed -> uiState = uiState.copy(
                     isLoading = false,
                     error = resolution.error,
-                    canRetry = resolution.error.canRetry
+                    canRetry = resolution.error.canRetry,
+                    link = resolution.link
                 )
                 is Resolution.Resolved -> onResolved(resolution, input, openWhenReady)
             }
         }
     }
 
-    private suspend fun onResolved(resolution: Resolution.Resolved, input: SpotifyInput, openWhenReady: Boolean) {
-        val history = historyStore.add(HistoryEntry(resolution.item, resolution.metadata))
-        uiState = uiState.copy(isLoading = false, result = resolution.metadata, history = history)
-        if (input is SpotifyInput.ShortLink) {
-            uiState = uiState.copy(spotifyUrl = resolution.item.url)
+    private suspend fun onResolved(resolution: Resolution.Resolved, input: LinkInput, openWhenReady: Boolean) {
+        val history = historyStore.add(HistoryEntry(resolution.link, resolution.metadata))
+        uiState = uiState.copy(isLoading = false, result = resolution.metadata, link = resolution.link, history = history)
+        if (input is LinkInput.ShortLink) {
+            uiState = uiState.copy(linkText = resolution.link.url)
         }
         when {
             !openWhenReady -> Unit
@@ -128,14 +133,19 @@ internal class MainViewModel(
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
-    fun openResult(target: SearchTarget = uiState.selectedTarget, finishAfterOpen: Boolean = false) {
+    fun openResult(target: MusicService = uiState.selectedTarget, finishAfterOpen: Boolean = false) {
         uiState = uiState.copy(showDestinationPicker = false)
         job?.cancel()
         job = viewModelScope.launch { open(target, finishAfterOpen) }
     }
 
-    private suspend fun open(target: SearchTarget, finishAfterOpen: Boolean) {
+    private suspend fun open(target: MusicService, finishAfterOpen: Boolean) {
         val metadata = uiState.result ?: return
+        // The link already belongs to the destination: open it as is instead of searching.
+        uiState.link?.takeIf { it.service == target }?.let { link ->
+            effectChannel.send(Effect.Open(link.url, target.packageName, finishAfterOpen))
+            return
+        }
         val exactUrl = if (uiState.exactMatch) {
             uiState = uiState.copy(isMatching = true)
             matcher.find(target, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -146,6 +156,14 @@ internal class MainViewModel(
         effectChannel.send(Effect.Open(url, target.packageName, finishAfterOpen))
     }
 
+    /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
+    fun openOriginal() {
+        val link = uiState.link ?: return
+        uiState = uiState.copy(showDestinationPicker = false)
+        val finishAfterOpen = lastRequest?.second == true
+        effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
+    }
+
     fun dismissDestinationPicker() {
         uiState = uiState.copy(showDestinationPicker = false)
     }
@@ -153,10 +171,11 @@ internal class MainViewModel(
     fun showHistoryEntry(entry: HistoryEntry) {
         job?.cancel()
         uiState = uiState.copy(
-            spotifyUrl = entry.item.url,
+            linkText = entry.link.url,
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
+            link = entry.link,
             error = null
         )
     }
@@ -168,22 +187,27 @@ internal class MainViewModel(
 
     fun searchQuery(): String? = uiState.result?.let(::searchQuery)
 
-    fun searchUrl(): String? = searchQuery()?.let(uiState.selectedTarget::searchUrl)
+    fun searchUrl(): String? {
+        val target = uiState.selectedTarget
+        uiState.link?.takeIf { it.service == target && uiState.result != null }?.let { return it.url }
+        return searchQuery()?.let(target::searchUrl)
+    }
 
     fun clear() {
         job?.cancel()
         lastRequest = null
         uiState = uiState.copy(
-            spotifyUrl = "",
+            linkText = "",
             isLoading = false,
             isMatching = false,
             result = null,
+            link = null,
             error = null,
             showDestinationPicker = false
         )
     }
 
-    fun selectTarget(target: SearchTarget) {
+    fun selectTarget(target: MusicService) {
         uiState = uiState.copy(selectedTarget = target)
         preferences.edit { putString(KEY_DEFAULT_TARGET, target.name) }
     }

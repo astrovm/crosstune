@@ -26,13 +26,13 @@ internal class ExactMatcher(
     private val country: String = Locale.getDefault().country,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
-    suspend fun find(target: SearchTarget, metadata: SpotifyMetadata): String? {
-        if (metadata.type == SpotifyType.PLAYLIST) return null
+    suspend fun find(target: MusicService, metadata: MusicMetadata): String? {
+        if (metadata.type == ItemType.PLAYLIST) return null
         return withTimeoutOrNull(TIMEOUT_MS) {
             try {
                 when (target) {
-                    SearchTarget.APPLE_MUSIC -> findOnAppleMusic(metadata)
-                    SearchTarget.DEEZER -> findOnDeezer(metadata)
+                    MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
+                    MusicService.DEEZER -> findOnDeezer(metadata)
                     else -> null
                 }
             } catch (_: IOException) {
@@ -43,10 +43,10 @@ internal class ExactMatcher(
         }
     }
 
-    private suspend fun findOnAppleMusic(metadata: SpotifyMetadata): String? {
+    private suspend fun findOnAppleMusic(metadata: MusicMetadata): String? {
         val (entity, nameKey, urlKey) = when (metadata.type) {
-            SpotifyType.TRACK -> Triple("song", "trackName", "trackViewUrl")
-            SpotifyType.ALBUM -> Triple("album", "collectionName", "collectionViewUrl")
+            ItemType.TRACK -> Triple("song", "trackName", "trackViewUrl")
+            ItemType.ALBUM -> Triple("album", "collectionName", "collectionViewUrl")
             else -> Triple("musicArtist", "artistName", "artistLinkUrl")
         }
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
@@ -61,10 +61,10 @@ internal class ExactMatcher(
         }?.optString(urlKey)?.ifBlank { null }
     }
 
-    private suspend fun findOnDeezer(metadata: SpotifyMetadata): String? {
+    private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
         val path = when (metadata.type) {
-            SpotifyType.TRACK -> "search/track"
-            SpotifyType.ALBUM -> "search/album"
+            ItemType.TRACK -> "search/track"
+            ItemType.ALBUM -> "search/album"
             else -> "search/artist"
         }
         val url = "https://api.deezer.com/$path".toHttpUrl().newBuilder()
@@ -89,9 +89,9 @@ internal class ExactMatcher(
     private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 
     /** Requires the same name and artist so remixes, covers and deluxe editions don't win by rank. */
-    private fun matches(metadata: SpotifyMetadata, name: String, artist: String): Boolean {
+    private fun matches(metadata: MusicMetadata, name: String, artist: String): Boolean {
         if (normalize(name) != normalize(metadata.title)) return false
-        if (metadata.type == SpotifyType.ARTIST) return true
+        if (metadata.type == ItemType.ARTIST) return true
         val wanted = normalize(metadata.artist)
         return wanted.isEmpty() || normalize(artist).contains(wanted)
     }
