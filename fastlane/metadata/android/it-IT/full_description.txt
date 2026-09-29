@@ -1,0 +1,18 @@
+Apri qualsiasi link musicale nella tua app preferita.
+
+Un amico ti manda un link di Spotify, ma tu usi YouTube Music? Toccalo e lo stesso brano si apre in YouTube Music. Funziona con brani, album, artisti e playlist.
+
+<b>Funzionalità</b>
+<ul>
+<li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud e Bandcamp e li apre in uno qualsiasi di questi servizi o in Amazon Music.</li>
+<li>Indirizza ogni servizio dove vuoi, ad esempio i link di YouTube in YouTube Music e tutto il resto in Apple Music.</li>
+<li>Chiedi quale app usare: scegli un'app ogni volta che tocchi o condividi un link.</li>
+<li>Apri il risultato esatto: Apple Music e Deezer possono aprire direttamente il brano, l'album o l'artista invece di una ricerca.</li>
+<li>Aggiungi altre app e siti con una pagina di ricerca.</li>
+<li>Incolla con un tocco, riapri i link recenti, usa il riquadro delle Impostazioni rapide o tieni premuta l'icona dell'app per aprire un link copiato.</li>
+<li>Non riesce a leggere un link? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
+<li>Colori Material You su Android 12 e versioni successive.</li>
+</ul>
+
+<b>Privacy</b>
+Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per mostrare titolo, artista e copertina di un link, Crosstune interroga solo il servizio da cui proviene il link. Con Apri il risultato esatto attivo, titolo e artista vengono inviati anche all'API di ricerca di Apple o di Deezer.
