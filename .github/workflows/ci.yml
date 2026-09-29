@@ -1,15 +1,14 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # Validate PRs before merging; merging into main does not need another CI run.
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A newer push to the same pull request makes an in-progress run pointless; runs on main always finish.
+# A newer push to the same pull request makes an in-progress run pointless; manual runs always finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
