@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -56,6 +57,8 @@ private const val STEP_ALLOW = 3
 @Composable
 internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     var step by rememberSaveable { mutableIntStateOf(STEP_WELCOME) }
+    // System back steps back like the Back button instead of leaving setup.
+    BackHandler(enabled = step > STEP_WELCOME) { step-- }
 
     Page(
         title = null,

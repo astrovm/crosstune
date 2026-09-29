@@ -54,6 +54,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -334,11 +338,12 @@ internal fun DefaultDestinationMenu(
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 destinations.forEach { destination ->
+                    val isSelected = destination == selected
                     DropdownMenuItem(
                         text = {
                             Text(
                                 destination.label(),
-                                color = if (destination == selected) {
+                                color = if (isSelected) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
@@ -348,7 +353,9 @@ internal fun DefaultDestinationMenu(
                         onClick = {
                             expanded = false
                             onSelect(destination)
-                        }
+                        },
+                        // The color alone doesn't tell TalkBack which one is chosen.
+                        modifier = Modifier.semantics { this.selected = isSelected }
                     )
                 }
             }
@@ -365,7 +372,9 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
                 text = stringResource(if (state.isLoading) R.string.loading_text else R.string.matching_text),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 10.dp)
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
     }
@@ -374,7 +383,9 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp),
+            .padding(top = 20.dp)
+            // Links from other apps fail with nothing else changing on screen, so announce it.
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer
     ) {

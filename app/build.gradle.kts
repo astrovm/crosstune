@@ -17,9 +17,9 @@ fun Project.gitOutput(vararg args: String): String? {
     }
 }
 
-val latestTagRef = gitOutput("describe", "--tags", "--abbrev=0")
+// The release workflow names its tag, since git describe may pick another tag on the same commit.
+val latestTagRef = providers.gradleProperty("releaseTag").orNull ?: gitOutput("describe", "--tags", "--abbrev=0")
 val latestTagName = latestTagRef?.removePrefix("v")
-val commitCount = gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull()?.coerceAtLeast(1) ?: 1
 val commitsSinceTag = latestTagRef?.let { gitOutput("rev-list", "--count", "$it..HEAD")?.toIntOrNull() }
 
 val derivedVersionName = when {
@@ -27,6 +27,15 @@ val derivedVersionName = when {
     commitsSinceTag == null || commitsSinceTag == 0 -> latestTagName
     else -> "$latestTagName-dev.$commitsSinceTag"
 }
+
+// From the tag, not the commit count, so a hotfix built from an older branch still installs as an update:
+// vX.Y.Z is X*1000000 + Y*10000 + Z*100, and builds after the tag add up to 99.
+val derivedVersionCode = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(latestTagName.orEmpty())
+    ?.destructured
+    ?.let { (major, minor, patch) ->
+        major.toInt() * 1_000_000 + minor.toInt() * 10_000 + patch.toInt() * 100 + (commitsSinceTag ?: 0).coerceAtMost(99)
+    }
+    ?: 1
 
 android {
     namespace = "com.astrovm.crosstune"
@@ -36,7 +45,7 @@ android {
         applicationId = "com.astrovm.crosstune"
         minSdk = 26
         targetSdk = 37
-        versionCode = commitCount
+        versionCode = derivedVersionCode
         versionName = derivedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

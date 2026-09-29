@@ -1,2 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<full-backup-content />
+<!--
+    Android 11 and older. Preferences hold listening history, which stays on the device, and
+    whether setup is done, which a restore mustn't carry over: which services' links Crosstune
+    opens is part of the system's state and is never restored.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="crosstune_preferences.xml" />
+</full-backup-content>

@@ -101,4 +101,26 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST)) })
         assertTrue(fake.requestedUrls.isEmpty())
     }
+
+    @Test
+    fun artistsAreComparedByWholeName() {
+        // Credited to just the main artist on Deezer.
+        respond("""{"data":[{"title":"Duet","artist":{"name":"Main Artist"},"link":"https://www.deezer.com/track/5"}]}""")
+        assertEquals(
+            "https://www.deezer.com/track/5",
+            runBlocking { matcher().find(MusicService.DEEZER, MusicMetadata("Duet", "Main Artist & Guest feat. Other")) }
+        )
+
+        respond("""{"data":[{"title":"Chandelier","artist":{"name":"Karaoke Asia"},"link":"https://www.deezer.com/track/6"}]}""")
+        assertNull(runBlocking { matcher().find(MusicService.DEEZER, MusicMetadata("Chandelier", "Sia")) })
+    }
+
+    @Test
+    fun appleSinglesAndEpsMatchTheirPlainAlbumName() {
+        respond("""{"results":[{"collectionName":"Hit - Single","artistName":"Artist","collectionViewUrl":"https://music.apple.com/single"}]}""")
+        assertEquals(
+            "https://music.apple.com/single",
+            runBlocking { matcher().find(MusicService.APPLE_MUSIC, MusicMetadata("Hit", "Artist", ItemType.ALBUM)) }
+        )
+    }
 }

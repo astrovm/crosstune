@@ -17,18 +17,20 @@ concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+# Three jobs, so the build's third-party code (Gradle plugins and dependencies) never runs
+# where the signing key or a token that can write to the repository is available.
 jobs:
-  release:
+  build:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
-    permissions:
-      contents: write
-    env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate tag
         env:
@@ -47,12 +49,11 @@ jobs:
               echo "::error::Tag $TAG already exists; push it to trigger a release instead"
               exit 1
             fi
-            # Tag locally before building so the Git-derived versionName matches the release.
+            # Tag locally before building so the Git-derived version matches the release.
             git tag "$TAG"
           fi
-          described="$(git describe --tags --abbrev=0)"
-          if [[ "$described" != "$TAG" ]]; then
-            echo "::error::git describe resolves to '$described', expected '$TAG'"
+          if ! git tag --points-at HEAD | grep -qxF "$TAG"; then
+            echo "::error::Tag $TAG doesn't point at the commit being built"
             exit 1
           fi
 
@@ -67,7 +68,7 @@ jobs:
 
       # The same checks as CI, which also build the minified release APK.
       - name: Test, lint and build
-        run: ./gradlew :app:ci --build-cache
+        run: ./gradlew :app:ci --build-cache -PreleaseTag="$TAG"
 
       - name: Verify version metadata
         run: |
@@ -78,7 +79,31 @@ jobs:
             exit 1
           fi
 
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
+  # Runs on a fresh runner with only the APK. The environment can require approval before the
+  # signing secrets are used; add required reviewers to it under Settings → Environments.
+  sign:
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment: release
+    permissions: {}
+    outputs:
+      cert_sha256: ${{ steps.sign.outputs.cert_sha256 }}
+    steps:
+      - name: Download unsigned APK
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unsigned
+
       - name: Sign APK
+        id: sign
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -87,43 +112,55 @@ jobs:
         run: |
           for name in RELEASE_KEYSTORE_BASE64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
             if [[ -z "${!name}" ]]; then
-              echo "::error::Missing repository secret $name"
+              echo "::error::Missing secret $name"
               exit 1
             fi
           done
           keystore="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$keystore"' EXIT
           echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
-          out="$RUNNER_TEMP/Crosstune-$TAG.apk"
+          out="Crosstune-$TAG.apk"
           "$apksigner" sign \
             --ks "$keystore" \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
             --key-pass env:RELEASE_KEY_PASSWORD \
             --out "$out" \
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            app-release-unsigned.apk
           certs="$("$apksigner" verify --print-certs "$out")"
           echo "$certs"
-          rm -f "$keystore"
           # apksigner labels the line "Signer #1" or "V3.0 Signer" depending on the signature schemes used.
           cert_sha256="$(sed -n 's/^.*certificate SHA-256 digest: //p' <<< "$certs" | head -n1)"
           if [[ -z "$cert_sha256" ]]; then
             echo "::error::Could not read the signing certificate digest"
             exit 1
           fi
-          echo "APK=$out" >> "$GITHUB_ENV"
-          echo "CERT_SHA256=$cert_sha256" >> "$GITHUB_ENV"
+          echo "cert_sha256=$cert_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifact
+      - name: Upload signed APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Crosstune-${{ env.TAG }}
-          path: ${{ env.APK }}
+          path: Crosstune-${{ env.TAG }}.apk
           if-no-files-found: error
+
+  publish:
+    needs: sign
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed APK
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Crosstune-${{ env.TAG }}
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          CERT_SHA256: ${{ needs.sign.outputs.cert_sha256 }}
         run: |
           # Lets users and tools like Obtainium check the APK's signer before installing.
           notes="Signing certificate SHA-256: \`$CERT_SHA256\`"
@@ -131,7 +168,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             args+=(--verify-tag)
           else
-            # The tag only exists locally; gh creates it on the built commit.
+            # The tag only existed in the build job; gh creates it on the built commit.
             args+=(--target "$GITHUB_SHA")
           fi
-          gh release create "$TAG" "$APK" "${args[@]}"
+          gh release create "$TAG" "Crosstune-$TAG.apk" "${args[@]}"

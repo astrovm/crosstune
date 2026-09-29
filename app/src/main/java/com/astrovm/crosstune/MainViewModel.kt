@@ -129,6 +129,7 @@ internal class MainViewModel(
 
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
+        uiState = uiState.copy(handlingIncomingLink = false)
         val input = MusicLinks.parse(uiState.linkText) ?: return showError(AppError.INVALID_URL)
         resolve(input, openWhenReady = false)
     }
@@ -236,7 +237,9 @@ internal class MainViewModel(
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
     fun openOriginal() {
         val link = uiState.link ?: return
-        uiState = uiState.copy(showDestinationPicker = false)
+        // An exact match may still be running; it must not open a second app when it finishes.
+        job?.cancel()
+        uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
         val finishAfterOpen = lastRequest?.second == true
         effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
     }
@@ -247,13 +250,17 @@ internal class MainViewModel(
 
     fun showHistoryEntry(entry: HistoryEntry) {
         job?.cancel()
+        // The entry replaces whatever was being looked up, including a link from another app.
+        lastRequest = null
         uiState = uiState.copy(
             linkText = entry.link.url,
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
             link = entry.link,
-            error = null
+            error = null,
+            canRetry = false,
+            handlingIncomingLink = false
         )
     }
 
@@ -280,7 +287,8 @@ internal class MainViewModel(
             result = null,
             link = null,
             error = null,
-            showDestinationPicker = false
+            showDestinationPicker = false,
+            handlingIncomingLink = false
         )
     }
 

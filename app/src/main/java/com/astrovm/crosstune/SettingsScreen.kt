@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
@@ -169,6 +170,7 @@ private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActio
             modifier = Modifier
                 .fillMaxWidth()
                 .toggleable(value = intercepted, role = Role.Switch) { actions.onInterceptChange(source, it) }
+                .heightIn(min = 48.dp)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

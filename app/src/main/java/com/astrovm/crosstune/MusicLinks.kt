@@ -20,7 +20,8 @@ internal sealed interface LinkInput {
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
 internal object MusicLinks {
-    private val urlRegex = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+    /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
+    private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
     private val spotifyIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
     private val youtubeIdRegex = Regex("""^[A-Za-z0-9_-]{11}$""")
     private val numericIdRegex = Regex("""^\d+$""")
@@ -46,7 +47,10 @@ internal object MusicLinks {
         val value = (extractFirstUrl(text) ?: text).trim()
         spotifyUriOrId(value)?.let { return LinkInput.Link(it) }
 
-        val url = value.toHttpUrlOrNull() ?: return null
+        // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
+        val url = value.toHttpUrlOrNull()
+            ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null }
+            ?: return null
         fromUrl(url)?.let { return LinkInput.Link(it) }
         if (!url.host.isShortLinkHost()) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
@@ -54,25 +58,26 @@ internal object MusicLinks {
     }
 
     /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
-    fun serviceFor(text: String): MusicService? {
-        val host = text.trim().toHttpUrlOrNull()?.host ?: return null
-        return when {
-            host == "spotify.com" || host.endsWith(".spotify.com") || host.endsWith("spotify.link") -> MusicService.SPOTIFY
-            host == "music.youtube.com" -> MusicService.YOUTUBE_MUSIC
-            host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") -> MusicService.YOUTUBE
-            host.endsWith("music.apple.com") -> MusicService.APPLE_MUSIC
-            host.endsWith("deezer.com") || host.endsWith("deezer.page.link") || host == "dzr.page.link" ->
-                MusicService.DEEZER
-            host.endsWith("tidal.com") -> MusicService.TIDAL
-            host.endsWith("soundcloud.com") -> MusicService.SOUNDCLOUD
-            host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
-            else -> null
-        }
+    fun serviceFor(text: String): MusicService? = text.trim().toHttpUrlOrNull()?.host?.let(::serviceForHost)
+
+    private fun serviceForHost(host: String): MusicService? = when {
+        host.isOn("spotify.com") || host.isOn("spotify.link") -> MusicService.SPOTIFY
+        host == "music.youtube.com" -> MusicService.YOUTUBE_MUSIC
+        host == "youtu.be" || host.isOn("youtube.com") -> MusicService.YOUTUBE
+        host.isOn("music.apple.com") -> MusicService.APPLE_MUSIC
+        host.isOn("deezer.com") || host.isOn("deezer.page.link") || host == "dzr.page.link" -> MusicService.DEEZER
+        host.isOn("tidal.com") -> MusicService.TIDAL
+        host.isOn("soundcloud.com") -> MusicService.SOUNDCLOUD
+        host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
+        else -> null
     }
+
+    /** True for [domain] itself and its subdomains, but not look-alikes such as "notdeezer.com". */
+    private fun String.isOn(domain: String) = this == domain || endsWith(".$domain")
 
     fun extractFirstUrl(text: String): String? {
         val match = urlRegex.find(text)?.value ?: return null
-        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')
+        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '、')
     }
 
     /** Short-link landing pages sometimes redirect with JavaScript; the target URL is still in the HTML. */
@@ -139,7 +144,8 @@ internal object MusicLinks {
         val typeIndex = segments.indexOfFirst { it in setOf("song", "album", "artist", "playlist") }
         if (typeIndex == -1 || typeIndex == segments.lastIndex) return null
         val id = segments.last().removePrefix("id")
-        val trackId = url.queryParameter("i")
+        // An empty or broken "i" still leaves a valid album link.
+        val trackId = url.queryParameter("i")?.takeIf { numericIdRegex.matches(it) }
         val (type, itemId) = when (segments[typeIndex]) {
             "song" -> ItemType.TRACK to id
             "album" -> if (trackId != null) ItemType.TRACK to trackId else ItemType.ALBUM to id
@@ -195,7 +201,7 @@ internal object MusicLinks {
         }
 
     private fun canonical(url: HttpUrl): String {
-        val trackId = url.queryParameter("i")
+        val trackId = url.queryParameter("i")?.takeIf { numericIdRegex.matches(it) }
         return url.newBuilder().scheme("https").query(null)
             .apply { if (trackId != null) addQueryParameter("i", trackId) }
             .build().toString()

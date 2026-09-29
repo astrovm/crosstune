@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer; see backup_rules.xml for why preferences are left out. -->
 <data-extraction-rules>
-    <cloud-backup />
+    <cloud-backup>
+        <exclude domain="sharedpref" path="crosstune_preferences.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="crosstune_preferences.xml" />
+    </device-transfer>
 </data-extraction-rules>

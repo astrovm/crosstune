@@ -264,4 +264,34 @@ class MetadataParsersTest {
             )?.artworkUrl
         )
     }
+
+    @Test
+    fun youtubeTopicTitlesKeepTheirDash() {
+        assertEquals(
+            MusicMetadata("Bohemian Rhapsody - Remastered 2011", "Queen"),
+            MetadataParsers.youtube(json("""{"title":"Bohemian Rhapsody - Remastered 2011","author_name":"Queen - Topic"}"""))
+        )
+    }
+
+    @Test
+    fun tidalArtistsAndPlaylistsAreNotSplitOnBy() {
+        assertEquals(
+            MusicMetadata("Death by Stereo", "", ItemType.ARTIST),
+            MetadataParsers.tidal("<title>Death by Stereo on TIDAL</title>", ItemType.ARTIST)
+        )
+        assertEquals(
+            MusicMetadata("Chill by Someone", "", ItemType.PLAYLIST),
+            MetadataParsers.tidal("<title>Chill by Someone on TIDAL</title>", ItemType.PLAYLIST)
+        )
+    }
+
+    @Test
+    fun deezerErrorCodesMapToAppErrors() {
+        fun error(code: Int) = MetadataParsers.deezerError(json("""{"error":{"code":$code}}"""))
+        assertEquals(AppError.RATE_LIMITED, error(4))
+        assertEquals(AppError.SERVICE_UNAVAILABLE, error(700))
+        assertEquals(AppError.NOT_FOUND, error(800))
+        assertEquals(AppError.METADATA_UNAVAILABLE, error(300))
+        assertNull(MetadataParsers.deezerError(json("""{"title":"Song"}""")))
+    }
 }

@@ -6,13 +6,13 @@ import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.TileService
 
-/** Quick Settings tile that opens whatever Spotify link is on the clipboard. */
+/** Quick Settings tile that opens whatever music link is on the clipboard. */
 class ClipboardTileService : TileService() {
 
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
-        val intent = Intent(this, MainActivity::class.java)
+        val intent = Intent().setClassName(this, MainActivity.PASTE_ALIAS)
             .setAction(MainActivity.ACTION_PASTE_FROM_CLIPBOARD)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

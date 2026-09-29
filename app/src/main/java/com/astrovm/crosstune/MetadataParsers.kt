@@ -18,6 +18,10 @@ internal object MetadataParsers {
     private val attributeRegex = Regex("""([A-Za-z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
     private val tidalSuffixRegex = Regex("""(^|\s)on TIDAL$""")
     private val entityRegex = Regex("""&(#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z]+);""")
+    // https://developers.deezer.com/api/errors
+    private const val DEEZER_QUOTA_EXCEEDED = 4
+    private const val DEEZER_SERVICE_BUSY = 700
+    private const val DEEZER_DATA_NOT_FOUND = 800
     private val namedEntities = mapOf(
         "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " "
     )
@@ -52,10 +56,12 @@ internal object MetadataParsers {
     /** YouTube oEmbed: "Artist - Song (Official Video)" by "ArtistVEVO", or "Song" by "Artist - Topic". */
     fun youtube(json: JSONObject): MusicMetadata? {
         val rawTitle = json.optString("title").replace(videoNoiseRegex, "").trim().ifEmpty { return null }
-        val author = json.optString("author_name").removeSuffix(" - Topic").removeSuffix("VEVO").trim()
+        val authorName = json.optString("author_name")
+        val author = authorName.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // hqdefault is letterboxed to 4:3; mqdefault is the bare 16:9 frame, whose center is the cover on art tracks.
         val artwork = json.optString("thumbnail_url").replace("/hqdefault.", "/mqdefault.").ifBlank { null }
-        val separator = rawTitle.indexOf(" - ")
+        // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011".
+        val separator = if (authorName.endsWith(" - Topic")) -1 else rawTitle.indexOf(" - ")
         return if (separator > 0) {
             MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim(), artworkUrl = artwork)
         } else {
@@ -85,7 +91,7 @@ internal object MetadataParsers {
         return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image())
     }
 
-    /** Deezer API object; errors come back as {"error": {...}} with HTTP 200. */
+    /** Deezer API object; errors come back as {"error": {...}} with HTTP 200, see [deezerError]. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
         if (json.has("error")) return null
         val title = json.optString("title").ifEmpty { json.optString("name") }
@@ -101,10 +107,27 @@ internal object MetadataParsers {
         return MusicMetadata(title, artist, type, artwork).takeIf { title.isNotBlank() }
     }
 
+    /** The error inside a Deezer API response, or null when there is none. */
+    fun deezerError(json: JSONObject): AppError? {
+        val error = json.optJSONObject("error") ?: return null
+        return when (error.optInt("code")) {
+            DEEZER_QUOTA_EXCEEDED -> AppError.RATE_LIMITED
+            DEEZER_SERVICE_BUSY -> AppError.SERVICE_UNAVAILABLE
+            DEEZER_DATA_NOT_FOUND -> AppError.NOT_FOUND
+            else -> AppError.METADATA_UNAVAILABLE
+        }
+    }
+
     /** TIDAL pages title themselves "Name by Artist on TIDAL" or "Name on TIDAL". */
     fun tidal(html: String, type: ItemType): MusicMetadata? {
         val title = titleTag(html)?.replace(tidalSuffixRegex, "")?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return splitBy(title, " by ", type).copy(artworkUrl = openGraphTags(html).image())
+        // Only songs and albums name an artist; "Death by Stereo" is an artist, not "Death" by "Stereo".
+        val metadata = if (type == ItemType.TRACK || type == ItemType.ALBUM) {
+            splitBy(title, " by ", type)
+        } else {
+            MusicMetadata(title, "", type)
+        }
+        return metadata.copy(artworkUrl = openGraphTags(html).image())
     }
 
     /** SoundCloud oEmbed: tracks and sets are "Name by Artist", artists are just the name. */

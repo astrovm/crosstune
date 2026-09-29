@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
@@ -16,11 +17,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
+import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
+import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -73,13 +77,17 @@ class MainActivityTest {
     @After
     fun tearDown() {
         runCatching { controller?.pause()?.stop()?.destroy() }
-        MainActivity.httpClientFactory = { okhttp3.OkHttpClient() }
+        MainActivity.httpClientFactory = ::httpClient
     }
 
     // region helpers
 
+    /** What the Quick Settings tile and launcher shortcut send. */
+    private fun pasteIntent() =
+        Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD).setClassName(app, MainActivity.PASTE_ALIAS)
+
     private fun launch(intent: Intent = Intent(Intent.ACTION_MAIN)): MainActivity {
-        intent.setClass(app, MainActivity::class.java)
+        if (intent.component == null) intent.setClass(app, MainActivity::class.java)
         val built = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         controller = built
         composeRule.waitForIdle()
@@ -695,7 +703,7 @@ class MainActivityTest {
             "https://open.spotify.com/embed?uri=",
             "https://open.spotify.com/embed?uri=spotify%3Atrack%3Ashort",
             "https://notspotify.link/AbCdEf",
-            "spotify.link/AbCdEf"
+            "notspotify.link/AbCdEf"
         )
         for (input in rejected) {
             typeUrl(input)
@@ -1318,7 +1326,7 @@ class MainActivityTest {
         app.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("link", "Listen https://open.spotify.com/track/$TRACK_ID"))
 
-        launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
+        launch(pasteIntent())
         controller!!.windowFocusChanged(false)
         assertTrue(fake.requestedUrls.isEmpty())
 
@@ -1335,7 +1343,7 @@ class MainActivityTest {
     @Test
     fun clipboardShortcutWithEmptyClipboardExplains() {
         app.getSystemService(ClipboardManager::class.java).clearPrimaryClip()
-        launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
+        launch(pasteIntent())
         controller!!.windowFocusChanged(true)
 
         assertTextShown(string(R.string.error_clipboard_empty))
@@ -1730,6 +1738,204 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.setup_welcome_title))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
         assertTrue(prefs().getBoolean("setup_complete", false))
+    }
+
+    // endregion
+
+    // region review fixes
+
+    @Test
+    fun mainActivityIsSingleTopSoRepeatedLaunchesReachOnNewIntent() {
+        val info = app.packageManager.getActivityInfo(ComponentName(app, MainActivity::class.java), 0)
+        assertEquals(ActivityInfo.LAUNCH_SINGLE_TOP, info.launchMode)
+
+        val activity = launch()
+        val delivered = trackLink()
+        controller!!.newIntent(delivered)
+        assertEquals(delivered, activity.intent)
+    }
+
+    @Test
+    fun secondTileTapReadsTheNewClipboard() {
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        clipboard.clearPrimaryClip()
+        launch(pasteIntent())
+        controller!!.windowFocusChanged(true)
+        assertTextShown(string(R.string.error_clipboard_empty))
+
+        respondWithTrack("Second", "Artist · Song")
+        clipboard.setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
+        controller!!.windowFocusChanged(false)
+        controller!!.newIntent(pasteIntent())
+        controller!!.windowFocusChanged(true)
+
+        waitUntil { controller!!.get().isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun otherAppsCantTriggerAClipboardRead() {
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
+        // Straight to MainActivity, not through the unexported alias.
+        launch(Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD))
+        controller!!.windowFocusChanged(true)
+
+        assertTrue(fake.requestedUrls.isEmpty())
+        assertFalse(controller!!.get().isFinishing)
+    }
+
+    @Test
+    fun incomingLinkIsLookedUpAgainAfterProcessDeath() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            FakeSpotify.html(request, FakeSpotify.trackPage("Survivor", "Artist · Song"))
+        }
+        launch(trackLink())
+        waitUntil { fake.requestedUrls.size == 1 }
+        val saved = Bundle()
+        controller!!.saveInstanceState(saved)
+        controller!!.pause().stop().destroy()
+        release.countDown()
+
+        // A new controller has a new ViewModel, as after Android ends the process.
+        fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Survivor", "Artist · Song")) }
+        val restored = Robolectric.buildActivity(MainActivity::class.java, trackLink().setClass(app, MainActivity::class.java))
+            .setup(saved)
+        controller = restored
+        waitUntil { restored.get().isFinishing }
+        assertEquals(2, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun typedLinkIsNotReopenedAfterProcessDeath() {
+        respondWithTrack("Typed", "Artist · Song")
+        launch()
+        resolveTyped()
+        val saved = Bundle()
+        controller!!.saveInstanceState(saved)
+        controller!!.pause().stop().destroy()
+
+        val restored = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_MAIN).setClass(app, MainActivity::class.java))
+            .setup(saved)
+        controller = restored
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.size)
+        assertFalse(restored.get().isFinishing)
+    }
+
+    @Test
+    fun pendingClipboardReadSurvivesRecreation() {
+        respondWithTrack("Later", "Artist · Song")
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
+        launch(pasteIntent())
+        controller!!.windowFocusChanged(false)
+        val saved = Bundle()
+        controller!!.saveInstanceState(saved)
+        controller!!.pause().stop().destroy()
+
+        val restored = Robolectric.buildActivity(MainActivity::class.java, pasteIntent()).setup(saved)
+        controller = restored
+        restored.windowFocusChanged(true)
+        waitUntil { restored.get().isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun sharedStyledTextIsRead() {
+        respondWithTrack("Styled", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, SpannableString("https://open.spotify.com/track/$TRACK_ID"))
+            }
+        )
+        waitUntil { activity.isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun sharedBlankTextFallsBackToTheSubject() {
+        respondWithTrack("Subject", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, " ")
+                putExtra(Intent.EXTRA_SUBJECT, "https://open.spotify.com/track/$TRACK_ID")
+            }
+        )
+        waitUntil { activity.isFinishing }
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun openingTheOriginalDuringAnExactMatchOpensOnlyOneApp() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"data":[{"title":"Slow","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/1"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Slow", "Artist · Song"))
+            }
+        }
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_deezer))
+        waitForText(string(R.string.matching_text))
+        click(string(R.string.open_in_spotify))
+        release.countDown()
+        Thread.sleep(200L)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("com.spotify.music", nextStartedActivity()!!.`package`)
+        assertNull(nextStartedActivity())
+        assertTextAbsent(string(R.string.matching_text))
+    }
+
+    @Test
+    fun historyEntryAfterAFailedIncomingLinkDoesNotCloseCrosstune() {
+        respondWithTrack("Remembered", "Artist · Song")
+        launch()
+        resolveTyped()
+        controller!!.pause().stop().destroy()
+
+        fake.handler = { throw IOException("offline") }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
+        waitForText(string(R.string.error_network))
+
+        click("Remembered")
+        assertTextAbsent(string(R.string.retry_button))
+        click(string(R.string.open_in_spotify))
+
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun theChosenDefaultIsMarkedSelectedInItsMenu() {
+        launch()
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.target_youtube_music)) and isSelected()).onLast().assertExists()
+    }
+
+    @Test
+    fun systemBackStepsBackThroughSetup() {
+        freshInstall()
+        val activity = launch()
+        click(string(R.string.setup_get_started))
+        assertTextShown(string(R.string.setup_sources_title))
+
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+
+        assertTextShown(string(R.string.setup_welcome_title))
+        assertFalse(activity.isFinishing)
     }
 
     // endregion
