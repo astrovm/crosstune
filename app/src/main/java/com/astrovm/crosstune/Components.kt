@@ -53,7 +53,7 @@ internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier
  * foreground is scaled up to fill the badge: launchers crop it to a circle and leave wide margins.
  */
 @Composable
-internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 36.dp) {
+internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
     Box(
         modifier = modifier
             .testTag(LOGO_TAG)
@@ -62,7 +62,7 @@ internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 36.dp) {
             .background(colorResource(R.color.ic_launcher_background)),
         contentAlignment = Alignment.Center
     ) {
-        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(size * 1.5f))
+        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(size * 1.8f))
     }
 }
 
