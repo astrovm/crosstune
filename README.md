@@ -38,7 +38,7 @@ Crosstune reads the link's title and artist from the service it comes from, then
 ## Features
 
 - **9 services.** Crosstune reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp. It opens them in any of those, or in Amazon Music.
-- **15 languages.** English, Spanish (Argentine), Portuguese (Brazil), German, French, Russian, Indonesian, Turkish, Italian, Japanese, Korean, Chinese (Simplified), Hindi, Polish and Dutch. Crosstune follows your phone's language, and Android 13 or newer also lets you pick one just for Crosstune.
+- **15 languages.** English, Spanish, Portuguese (Brazil), German, French, Russian, Indonesian, Turkish, Italian, Japanese, Korean, Chinese (Simplified), Hindi, Polish and Dutch. Crosstune follows your phone's language, and Android 13 or newer also lets you pick one just for Crosstune.
 - **One app per service.** Send YouTube links to YouTube Music and everything else to Apple Music, for example.
 - **Ask every time.** Choose the app each time you tap or share a link.
 - **Exact match.** Apple Music and Deezer can open the song, album or artist itself instead of a search.
