@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
@@ -30,10 +31,7 @@ internal class ArtworkLoader(
         val bitmap = try {
             client.newCall(request).executeAsync().use { response ->
                 if (!response.isSuccessful) return null
-                withContext(ioDispatcher) {
-                    val bytes = response.body.bytes()
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                }
+                withContext(ioDispatcher) { decode(response.body.bytes()) }
             }
         } catch (_: IOException) {
             null
@@ -41,7 +39,18 @@ internal class ArtworkLoader(
         return bitmap.asImageBitmap().also { cache.put(url, it) }
     }
 
+    /** Covers are shown at most ~100dp, so large ones (Deezer's are 1000px) are sampled down to save memory. */
+    private fun decode(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sampleSize = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= MAX_SIZE_PX) sampleSize *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    }
+
     private companion object {
-        const val MAX_CACHED = 16
+        /** Room for the result plus a full history list. */
+        const val MAX_CACHED = 32
+        const val MAX_SIZE_PX = 400
     }
 }

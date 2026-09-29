@@ -48,7 +48,7 @@ class PreviewAndThemeTest {
     fun settingsPreviewRendersSourcesRulesAndCustomDestinations() {
         composeRule.setContent { SettingsScreenPreview() }
 
-        composeRule.onNodeWithText("Opens in: YouTube Music").assertExists()
+        composeRule.onNodeWithText("Opens in YouTube Music").assertExists()
         composeRule.onNodeWithText("https://yewtu.be/search?q={query}").assertExists()
     }
 

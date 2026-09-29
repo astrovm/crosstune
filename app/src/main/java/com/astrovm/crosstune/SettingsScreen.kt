@@ -1,25 +1,22 @@
 package com.astrovm.crosstune
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,9 +27,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -40,140 +39,159 @@ import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 @Composable
 internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
     var addingCustom by rememberSaveable { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val githubUrl = stringResource(R.string.github_repo_url)
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .safeDrawingPadding()
-                .padding(innerPadding),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
+    Page(
+        title = stringResource(R.string.settings_title),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        }
+    ) {
+        if (state.showLinkSettingsHelper) {
+            LinkSettingsHelper(actions, modifier = Modifier.padding(top = 4.dp))
+        }
+
+        SectionHeader(stringResource(R.string.settings_default_title))
+        Group {
+            DefaultDestinationMenu(
+                destinations = state.destinations,
+                selected = state.defaultDestination,
+                onSelect = actions.onTargetChange,
+                label = stringResource(R.string.settings_default_label),
+                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+            )
+        }
+
+        SectionHeader(
+            title = stringResource(R.string.settings_links_title),
+            description = stringResource(R.string.settings_links_description)
+        )
+        Group {
+            MusicService.entries.filter { it.canBeSource }.forEachIndexed { index, source ->
+                if (index > 0) GroupDivider()
+                SourceRow(source, state, actions)
+            }
+        }
+
+        SectionHeader(
+            title = stringResource(R.string.settings_custom_title),
+            description = stringResource(R.string.settings_custom_description)
+        )
+        Group {
+            state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
+                Row(
+                    modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(custom.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            custom.template,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = { actions.onRemoveCustom(custom) }) {
+                        AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.remove_button))
+                    }
+                }
+                GroupDivider()
+            }
+            if (addingCustom) {
+                AddCustomDestinationForm(
+                    onAdd = { name, template ->
+                        actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
+                    },
+                    onCancel = { addingCustom = false }
+                )
+            } else {
+                TextButton(
+                    onClick = { addingCustom = true },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.add_custom_destination_button), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+
+        SectionHeader(stringResource(R.string.settings_behaviour_title))
+        Group {
+            SettingSwitch(
+                label = stringResource(R.string.setting_ask_each_time),
+                description = stringResource(R.string.setting_ask_each_time_description),
+                checked = state.askEachTime,
+                onCheckedChange = actions.onAskEachTimeChange
+            )
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_exact_match),
+                description = stringResource(R.string.setting_exact_match_description),
+                checked = state.exactMatch,
+                onCheckedChange = actions.onExactMatchChange
+            )
+        }
+
+        SectionHeader(stringResource(R.string.settings_about_title))
+        Group {
+            Row(
                 modifier = Modifier
-                    .widthIn(max = 680.dp)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp)
+                    .clickable { uriHandler.openUri(githubUrl) }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.settings_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onBack) { Text(stringResource(R.string.done_button)) }
-                }
-
-                if (state.showLinkSettingsHelper) {
-                    Box(modifier = Modifier.padding(top = 12.dp)) { LinkSettingsHelper(actions) }
-                }
-
-                SectionTitle(R.string.settings_links_title, R.string.settings_links_description)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    MusicService.entries.filter { it.canBeSource }.forEachIndexed { index, source ->
-                        if (index > 0) HorizontalDivider()
-                        SourceRow(source, state, actions)
-                    }
-                }
-
-                SectionTitle(R.string.settings_custom_title, R.string.settings_custom_description)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
-                            Row(
-                                modifier = Modifier.padding(start = 16.dp, end = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(custom.name, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        custom.template,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                TextButton(onClick = { actions.onRemoveCustom(custom) }) {
-                                    Text(stringResource(R.string.remove_button))
-                                }
-                            }
-                            HorizontalDivider()
-                        }
-                        if (addingCustom) {
-                            AddCustomDestinationForm(
-                                onAdd = { name, template ->
-                                    actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
-                                },
-                                onCancel = { addingCustom = false }
-                            )
-                        } else {
-                            TextButton(onClick = { addingCustom = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                                Text(stringResource(R.string.add_custom_destination_button))
-                            }
-                        }
-                    }
-                }
-
-                SectionTitle(R.string.settings_behaviour_title, null)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                        SettingSwitch(
-                            label = stringResource(R.string.setting_ask_each_time),
-                            description = stringResource(R.string.setting_ask_each_time_description),
-                            checked = state.askEachTime,
-                            onCheckedChange = actions.onAskEachTimeChange
-                        )
-                        SettingSwitch(
-                            label = stringResource(R.string.setting_exact_match),
-                            description = stringResource(R.string.setting_exact_match_description),
-                            checked = state.exactMatch,
-                            onCheckedChange = actions.onExactMatchChange
-                        )
-                    }
-                }
+                Text(
+                    text = stringResource(R.string.made_by),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
     }
 }
 
-@Composable
-private fun SectionTitle(title: Int, description: Int?) {
-    Text(
-        text = stringResource(title),
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)
-    )
-    if (description != null) {
-        Text(
-            text = stringResource(description),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-    }
-}
-
-/** One source service: whether Crosstune intercepts its links, and where they go. */
+/** One source service: a switch for whether Crosstune intercepts its links, and where they go beneath. */
 @Composable
 private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActions) {
     val intercepted = source in state.intercepted
-    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-        SettingSwitch(
-            label = stringResource(source.labelRes),
-            description = stringResource(
-                if (intercepted) R.string.source_intercepted else R.string.source_not_intercepted
-            ),
-            checked = intercepted,
-            onCheckedChange = { actions.onInterceptChange(source, it) }
-        )
-        var expanded by remember { mutableStateOf(false) }
-        val rule = state.rules[source]
-        val defaultLabel = stringResource(R.string.rule_default, state.defaultDestination.label())
-        Box(modifier = Modifier.padding(top = 8.dp)) {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.rule_opens_in, rule?.label() ?: defaultLabel))
+    var expanded by remember { mutableStateOf(false) }
+    val rule = state.rules[source]
+    val defaultLabel = stringResource(R.string.rule_default, state.defaultDestination.label())
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(value = intercepted, role = Role.Switch) { actions.onInterceptChange(source, it) }
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(source.labelRes),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(checked = intercepted, onCheckedChange = null)
+        }
+        Box(modifier = Modifier.padding(start = 8.dp)) {
+            TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                Text(
+                    stringResource(R.string.rule_opens_in, rule?.label() ?: defaultLabel),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                AppIcon(
+                    R.drawable.ic_expand_more,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(16.dp)
+                )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 DropdownMenuItem(
@@ -202,12 +220,13 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
     var name by rememberSaveable { mutableStateOf("") }
     var template by rememberSaveable { mutableStateOf("https://") }
     var invalid by rememberSaveable { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
         OutlinedTextField(
             value = name,
             onValueChange = { name = it; invalid = false },
             label = { Text(stringResource(R.string.custom_name_label)) },
             singleLine = true,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
@@ -220,11 +239,12 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
             isError = invalid,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp)
+                .padding(top = 12.dp)
         )
-        Row(modifier = Modifier.align(Alignment.End)) {
+        Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel_button)) }
             TextButton(onClick = { invalid = !onAdd(name, template) }) { Text(stringResource(R.string.add_button)) }
         }

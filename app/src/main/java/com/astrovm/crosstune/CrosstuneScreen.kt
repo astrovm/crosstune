@@ -1,57 +1,60 @@
 package com.astrovm.crosstune
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.activity.compose.BackHandler
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,10 +62,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
-/** Everything the screen can ask for; the Activity wires these to the ViewModel and system services. */
+internal const val RESULT_TAG = "result"
+internal const val DEFAULT_MENU_TAG = "default_destination"
+
 internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
+    val onPaste: () -> Unit = {},
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -114,86 +120,235 @@ internal fun Destination.openLabel(): String =
         stringResource(R.string.open_in_custom, (this as Destination.Custom).name)
     }
 
+/** Page scaffold shared by every screen: a flat top bar (none when [title] is null) and a centered, scrollable column. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun Page(
+    title: String?,
+    navigationIcon: @Composable () -> Unit = {},
+    actions: @Composable () -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable () -> Unit
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            if (title != null) {
+                TopAppBar(
+                    title = {
+                        Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    navigationIcon = navigationIcon,
+                    actions = { actions() },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                )
+            }
+        },
+        bottomBar = bottomBar
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = ContentMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
+            ) {
+                content()
+            }
+        }
+    }
+}
+
 @Composable
 private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
-    val gradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-        )
-    )
-    val uriHandler = LocalUriHandler.current
-    val githubUrl = stringResource(R.string.github_repo_url)
-
     if (state.showDestinationPicker) {
         DestinationPicker(state.destinations, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-                .safeDrawingPadding()
-                .padding(innerPadding)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+    Page(
+        title = stringResource(R.string.app_name),
+        actions = {
+            IconButton(onClick = onOpenSettings) {
+                AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
+            }
+        }
+    ) {
+        Text(
+            text = stringResource(R.string.app_tagline),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 20.dp)
+        )
+
+        if (state.showLinkSettingsHelper) {
+            LinkSettingsHelper(actions, modifier = Modifier.padding(bottom = 16.dp))
+        }
+
+        LinkField(state, actions)
+        DefaultDestinationMenu(
+            destinations = state.destinations,
+            selected = state.defaultDestination,
+            onSelect = actions.onTargetChange,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        StatusSection(state, actions)
+        state.result?.let { ResultCard(it, state.link, state.resultDestination, actions) }
+
+        if (state.history.isNotEmpty()) {
+            HistorySection(state.history, actions)
+        }
+    }
+}
+
+/** Reminder to allow links in Android's settings, until done or dismissed. */
+@Composable
+internal fun LinkSettingsHelper(actions: ScreenActions, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
+            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
                 Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = stringResource(R.string.link_settings_helper_title),
+                    style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = stringResource(R.string.app_tagline),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .widthIn(max = 520.dp)
+                    text = stringResource(R.string.link_settings_helper_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
-                TextButton(onClick = onOpenSettings, modifier = Modifier.padding(bottom = 12.dp)) {
-                    Text(stringResource(R.string.settings_button))
-                }
-
-                if (state.showLinkSettingsHelper) {
-                    LinkSettingsHelper(actions)
-                }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 680.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        InputSection(state, actions)
-                        DestinationSelector(state.destinations, state.defaultDestination, actions.onTargetChange)
-                        StatusSection(state, actions)
-                        state.result?.let { ResultCard(it, state.link, state.resultDestination, actions) }
+                    TextButton(onClick = actions.onOpenLinkSettings) {
+                        Text(stringResource(R.string.open_link_settings_button))
+                    }
+                    TextButton(onClick = actions.onDismissLinkSettingsHelper) {
+                        Text(stringResource(R.string.dismiss_button))
                     }
                 }
+            }
+        }
+    }
+}
 
-                if (state.history.isNotEmpty()) {
-                    HistorySection(state.history, actions)
+/** One rounded field: paste when empty, clear once filled; the keyboard's Go button looks it up. */
+@Composable
+private fun LinkField(state: UiState, actions: ScreenActions) {
+    val busy = state.isLoading || state.isMatching
+    TextField(
+        value = state.linkText,
+        onValueChange = actions.onUrlChange,
+        singleLine = true,
+        label = { Text(stringResource(R.string.spotify_link_label)) },
+        placeholder = { Text(stringResource(R.string.spotify_link_placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { AppIcon(R.drawable.ic_link, contentDescription = null) },
+        trailingIcon = {
+            if (state.linkText.isEmpty()) {
+                IconButton(onClick = actions.onPaste, enabled = !busy) {
+                    AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
                 }
+            } else {
+                IconButton(onClick = actions.onClear, enabled = !busy) {
+                    AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.clear_button))
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Go
+        ),
+        keyboardActions = KeyboardActions(onGo = { actions.onResolve() }),
+        enabled = !busy,
+        shape = MaterialTheme.shapes.large,
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            errorIndicatorColor = Color.Transparent,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+    // Tonal, so the result's Open button stays the one primary action on screen.
+    FilledTonalButton(
+        onClick = actions.onResolve,
+        enabled = !busy,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .height(52.dp)
+    ) {
+        Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge)
+    }
+}
 
-                TextButton(
-                    onClick = { uriHandler.openUri(githubUrl) },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.made_by),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+/** "Opens in YouTube Music ▾": the default destination, one tap away without taking up the screen. */
+@Composable
+internal fun DefaultDestinationMenu(
+    destinations: List<Destination>,
+    selected: Destination,
+    onSelect: (Destination) -> Unit,
+    modifier: Modifier = Modifier,
+    /** In settings the row is labelled like the others, with the choice at the end. */
+    label: String? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (label != null) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        } else {
+            Text(
+                text = stringResource(R.string.default_open_with_label),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box {
+            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+                Text(selected.label())
+                AppIcon(
+                    R.drawable.ic_expand_more,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .size(18.dp)
+                )
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                destinations.forEach { destination ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                destination.label(),
+                                color = if (destination == selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(destination)
+                        }
                     )
                 }
             }
@@ -202,171 +357,47 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
 }
 
 @Composable
-internal fun LinkSettingsHelper(actions: ScreenActions) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 680.dp)
-            .padding(bottom = 12.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+private fun StatusSection(state: UiState, actions: ScreenActions) {
+    AnimatedVisibility(visible = state.isLoading || state.isMatching, enter = fadeIn(), exit = fadeOut()) {
+        Column(modifier = Modifier.padding(top = 20.dp)) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(
-                text = stringResource(R.string.link_settings_helper_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = stringResource(R.string.link_settings_helper_body),
+                text = stringResource(if (state.isLoading) R.string.loading_text else R.string.matching_text),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Button(onClick = actions.onOpenLinkSettings, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.open_link_settings_button))
-                }
-                TextButton(onClick = actions.onDismissLinkSettingsHelper, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.dismiss_button))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InputSection(state: UiState, actions: ScreenActions) {
-    val busy = state.isLoading || state.isMatching
-    OutlinedTextField(
-        value = state.linkText,
-        onValueChange = actions.onUrlChange,
-        singleLine = true,
-        label = { Text(stringResource(R.string.spotify_link_label)) },
-        placeholder = { Text(stringResource(R.string.spotify_link_placeholder)) },
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            keyboardType = KeyboardType.Uri,
-            imeAction = ImeAction.Done
-        ),
-        keyboardActions = KeyboardActions(onDone = { actions.onResolve() }),
-        enabled = !busy,
-        modifier = Modifier.fillMaxWidth()
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Button(onClick = actions.onResolve, enabled = !busy, modifier = Modifier.weight(1f)) {
-            Text(stringResource(R.string.resolve_button))
-        }
-        OutlinedButton(onClick = actions.onClear, enabled = !busy, modifier = Modifier.weight(1f)) {
-            Text(stringResource(R.string.clear_button))
-        }
-    }
-}
-
-@Composable
-private fun DestinationSelector(
-    destinations: List<Destination>,
-    selected: Destination,
-    onTargetChange: (Destination) -> Unit
-) {
-    Text(
-        text = stringResource(R.string.default_open_with_label),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 16.dp)
-    )
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        destinations.forEach { destination ->
-            FilterChip(
-                selected = destination == selected,
-                onClick = { onTargetChange(destination) },
-                label = { Text(destination.label()) }
+                modifier = Modifier.padding(top = 10.dp)
             )
         }
-    }
-}
-
-@Composable
-internal fun SettingSwitch(
-    label: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 12.dp)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(checked = checked, onCheckedChange = null, modifier = Modifier.padding(start = 12.dp))
-    }
-}
-
-@Composable
-private fun StatusSection(state: UiState, actions: ScreenActions) {
-    if (state.isLoading || state.isMatching) {
-        LinearProgressIndicator(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp)
-        )
-        Text(
-            text = stringResource(if (state.isLoading) R.string.loading_text else R.string.matching_text),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp)
-        )
     }
 
     val error = state.error ?: return
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            .padding(top = 20.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer
     ) {
-        Row(
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(error.messageRes),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 8.dp)
-            )
-            if (state.canRetry) {
-                TextButton(onClick = actions.onRetry) {
-                    Text(stringResource(R.string.retry_button))
-                }
-            }
-            // A link Crosstune couldn't read can still be opened in the app it belongs to.
-            state.link?.let { link ->
-                TextButton(onClick = actions.onOpenOriginal) {
-                    Text(stringResource(link.service.openLabelRes))
+        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
+            AppIcon(R.drawable.ic_error, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                Text(
+                    text = stringResource(error.messageRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (state.canRetry) {
+                        TextButton(onClick = actions.onRetry) {
+                            Text(stringResource(R.string.retry_button))
+                        }
+                    }
+                    // A link Crosstune couldn't read can still be opened in the app it belongs to.
+                    state.link?.let { link ->
+                        TextButton(onClick = actions.onOpenOriginal) {
+                            Text(stringResource(link.service.openLabelRes))
+                        }
+                    }
                 }
             }
         }
@@ -380,22 +411,19 @@ private fun ResultCard(
     destination: Destination,
     actions: ScreenActions
 ) {
-    ElevatedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp)
+            .padding(top = 24.dp)
+            .animateContentSize()
+            .testTag(RESULT_TAG),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.result_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                result.artworkUrl?.let { url ->
-                    Artwork(url, actions.loadArtwork, modifier = Modifier.padding(end = 16.dp))
-                }
-                Column {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CoverArt(result.artworkUrl, actions.loadArtwork, size = 96.dp)
+                Column(modifier = Modifier.padding(start = 16.dp)) {
                     Text(
                         text = listOfNotNull(
                             stringResource(result.type.labelRes),
@@ -407,25 +435,32 @@ private fun ResultCard(
                     Text(
                         text = result.title,
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                     if (result.artist.isNotBlank()) {
                         Text(
                             text = result.artist,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
             Button(
                 onClick = actions.onOpen,
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp)
+                    .padding(top = 20.dp)
+                    .height(52.dp)
             ) {
-                Text(destination.openLabel())
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text(destination.openLabel(), style = MaterialTheme.typography.labelLarge)
             }
             Row(
                 modifier = Modifier
@@ -433,15 +468,26 @@ private fun ResultCard(
                     .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(onClick = actions.onCopySearch, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.copy_search_button))
-                }
-                OutlinedButton(onClick = actions.onShareSearch, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.share_search_button))
-                }
+                SecondaryAction(
+                    R.drawable.ic_content_copy,
+                    stringResource(R.string.copy_search_button),
+                    actions.onCopySearch,
+                    Modifier.weight(1f)
+                )
+                SecondaryAction(
+                    R.drawable.ic_share,
+                    stringResource(R.string.share_search_button),
+                    actions.onShareSearch,
+                    Modifier.weight(1f)
+                )
             }
             if (link != null && link.service != (destination as? Destination.Service)?.service) {
-                TextButton(onClick = actions.onOpenOriginal, modifier = Modifier.fillMaxWidth()) {
+                TextButton(
+                    onClick = actions.onOpenOriginal,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                ) {
                     Text(stringResource(link.service.openLabelRes))
                 }
             }
@@ -449,59 +495,44 @@ private fun ResultCard(
     }
 }
 
-/** Square cover next to the result; nothing is shown if it can't be loaded. */
 @Composable
-private fun Artwork(url: String, load: suspend (String) -> ImageBitmap?, modifier: Modifier = Modifier) {
-    val image by produceState<ImageBitmap?>(initialValue = null, url) { value = load(url) }
-    image?.let {
-        // Decorative: the title and artist sit right beside it.
-        Image(
-            bitmap = it,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = modifier
-                .size(88.dp)
-                .clip(MaterialTheme.shapes.medium)
-                .testTag(ARTWORK_TAG)
-        )
+private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FilledTonalButton(onClick = onClick, contentPadding = ButtonDefaults.ButtonWithIconContentPadding, modifier = modifier) {
+        AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-internal const val ARTWORK_TAG = "artwork"
-
 @Composable
 private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 680.dp)
-            .padding(top = 12.dp)
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+    SectionHeader(
+        title = stringResource(R.string.history_title),
+        action = {
+            TextButton(onClick = actions.onClearHistory) {
+                Text(stringResource(R.string.clear_history_button))
+            }
+        },
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    Group {
+        history.forEachIndexed { index, entry ->
+            if (index > 0) GroupDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 4.dp),
+                    .clickable { actions.onHistoryEntryClick(entry) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.history_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = actions.onClearHistory) {
-                    Text(stringResource(R.string.clear_history_button))
-                }
-            }
-            history.forEachIndexed { index, entry ->
-                if (index > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { actions.onHistoryEntryClick(entry) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    Text(text = entry.metadata.title, style = MaterialTheme.typography.bodyLarge)
+                CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
+                Column(modifier = Modifier.padding(start = 16.dp)) {
+                    Text(
+                        text = entry.metadata.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text(
                         text = listOf(
                             stringResource(entry.link.type.labelRes),
@@ -511,7 +542,9 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                             .filter { it.isNotBlank() }
                             .joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -527,9 +560,14 @@ private fun DestinationPicker(destinations: List<Destination>, onPick: (Destinat
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 destinations.forEach { destination ->
-                    TextButton(onClick = { onPick(destination) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(destination.openLabel())
-                    }
+                    Text(
+                        text = destination.openLabel(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(destination) }
+                            .padding(vertical = 14.dp, horizontal = 4.dp)
+                    )
                 }
             }
         },

@@ -2,10 +2,13 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.ClipData
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
@@ -87,9 +90,31 @@ class MainActivityTest {
 
     private fun prefs() = app.getSharedPreferences("crosstune_preferences", Context.MODE_PRIVATE)
 
+    /** Buttons are found by their text, or by their accessibility label when they're icons. */
     private fun click(text: String) {
-        composeRule.onNodeWithText(text).performClick()
+        composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
+    }
+
+    /** Picks the default destination from the "Opens in" menu under the link field. */
+    private fun chooseDefault(label: String) {
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        // The menu item is the last match: the menu button itself may show the same name.
+        composeRule.onAllNodesWithText(label).onLast().performClick()
+        composeRule.waitForIdle()
+    }
+
+    private fun assertResultShown() {
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+    }
+
+    private fun assertResultAbsent() {
+        composeRule.onNodeWithTag(RESULT_TAG).assertDoesNotExist()
+    }
+
+    private fun waitForResult() {
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun typeUrl(value: String) {
@@ -130,7 +155,7 @@ class MainActivityTest {
     private fun inSettings(block: () -> Unit) {
         click(string(R.string.settings_button))
         block()
-        click(string(R.string.done_button))
+        click(string(R.string.back_button))
     }
 
     private fun installActivity(component: ComponentName, filter: IntentFilter) {
@@ -310,7 +335,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
         waitForText("Cut To The Feeling")
 
-        assertTextShown(string(R.string.result_title))
+        assertResultShown()
         assertTextShown("Carly Rae Jepsen")
         assertFalse(activity.isFinishing)
         // Manual resolution keeps the user's input as typed.
@@ -341,13 +366,13 @@ class MainActivityTest {
             shared.getStringExtra(Intent.EXTRA_TEXT)
         )
 
-        click(string(R.string.target_youtube))
+        chooseDefault(string(R.string.target_youtube))
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube))
         click(string(R.string.open_in_youtube))
         assertEquals("com.google.android.youtube", nextStartedActivity()!!.`package`)
 
-        click(string(R.string.target_youtube_music))
+        chooseDefault(string(R.string.target_youtube_music))
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube_music))
     }
@@ -397,6 +422,8 @@ class MainActivityTest {
             typeUrl(input)
             click(string(R.string.resolve_button))
             assertTextShown(string(R.string.error_invalid_url))
+            // An empty field offers Paste instead of Clear; typing clears the error too.
+            if (input.isEmpty()) typeUrl("x")
             click(string(R.string.clear_button))
             assertTextAbsent(string(R.string.error_invalid_url))
         }
@@ -412,6 +439,33 @@ class MainActivityTest {
 
         typeUrl("nope again")
         assertTextAbsent(string(R.string.error_invalid_url))
+    }
+
+    @Test
+    fun pasteLooksUpTheCopiedLinkWithoutOpeningIt() {
+        respondWithTrack("Pasted Song", "Pasted Artist · Song")
+        val activity = launch()
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "Listen: https://open.spotify.com/track/$TRACK_ID?si=x"))
+
+        click(string(R.string.paste_button))
+        waitForText("Pasted Song")
+
+        composeRule.onNode(hasSetTextAction()).assert(hasText("https://open.spotify.com/track/$TRACK_ID?si=x"))
+        assertResultShown()
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun pasteWithAnEmptyClipboardExplains() {
+        launch()
+        app.getSystemService(ClipboardManager::class.java).clearPrimaryClip()
+
+        click(string(R.string.paste_button))
+
+        assertTextShown(string(R.string.error_clipboard_empty))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test
@@ -549,7 +603,7 @@ class MainActivityTest {
     fun clearResetsResultButKeepsTarget() {
         respondWithTrack("Clear Me", "Artist · Song")
         launch()
-        click(string(R.string.target_youtube))
+        chooseDefault(string(R.string.target_youtube))
 
         typeUrl(TRACK_ID)
         click(string(R.string.resolve_button))
@@ -557,7 +611,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.open_in_youtube))
 
         click(string(R.string.clear_button))
-        assertTextAbsent(string(R.string.result_title))
+        assertResultAbsent()
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
     }
 
@@ -588,6 +642,7 @@ class MainActivityTest {
     @Test
     fun madeByLinkOpensRepository() {
         launch()
+        click(string(R.string.settings_button))
         click(string(R.string.made_by))
 
         val started = nextStartedActivity()
@@ -615,11 +670,11 @@ class MainActivityTest {
             typeUrl(input)
             click(string(R.string.resolve_button))
             // "Variant" stays in the history list, so wait for the result card itself.
-            waitForText(string(R.string.result_title))
+            waitForResult()
             assertEquals(input, listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
             assertTextAbsent(string(R.string.error_invalid_url))
             click(string(R.string.clear_button))
-            assertTextAbsent(string(R.string.result_title))
+            assertResultAbsent()
         }
     }
 
@@ -679,7 +734,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
         waitForText(string(R.string.error_metadata_unavailable))
 
-        assertTextAbsent(string(R.string.result_title))
+        assertResultAbsent()
         assertTextAbsent("Artist")
     }
 
@@ -702,7 +757,7 @@ class MainActivityTest {
     fun titleOnlyTrackOpensSearchWithoutArtist() {
         respondWithTrack("Solo", null)
         launch()
-        click(string(R.string.target_youtube))
+        chooseDefault(string(R.string.target_youtube))
 
         typeUrl(TRACK_ID)
         click(string(R.string.resolve_button))
@@ -748,7 +803,7 @@ class MainActivityTest {
     @Test
     fun selectedTargetSurvivesRelaunch() {
         launch()
-        click(string(R.string.target_youtube))
+        chooseDefault(string(R.string.target_youtube))
         controller!!.pause().stop().destroy()
 
         respondWithTrack("Remembered", "Artist · Song")
@@ -852,7 +907,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
 
         composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.clear_button)).assertIsNotEnabled()
+        composeRule.onNode(hasContentDescription(string(R.string.clear_button))).assertIsNotEnabled()
         composeRule.onNodeWithText(TRACK_ID).assertIsNotEnabled()
 
         release.countDown()
@@ -1058,7 +1113,7 @@ class MainActivityTest {
     private fun resolveTyped(input: String = TRACK_ID) {
         typeUrl(input)
         click(string(R.string.resolve_button))
-        waitForText(string(R.string.result_title))
+        waitForResult()
     }
 
     @Test
@@ -1108,8 +1163,8 @@ class MainActivityTest {
             R.string.target_soundcloud to ("com.soundcloud.android" to "https://soundcloud.com/search?q=Song%20Artist")
         )
         for ((label, destination) in expected) {
-            click(string(label))
-            composeRule.onNode(hasText(string(label)) and isSelectable()).assertIsSelected()
+            chooseDefault(string(label))
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(label)))
             click(string(MusicService.entries.first { it.labelRes == label }.openLabelRes))
             val opened = nextStartedActivity()!!
             assertEquals(destination.first, opened.`package`)
@@ -1148,7 +1203,7 @@ class MainActivityTest {
         click(string(R.string.cancel_button))
 
         assertTextAbsent(string(R.string.picker_title))
-        assertTextShown(string(R.string.result_title))
+        assertResultShown()
         assertFalse(activity.isFinishing)
         inSettings { click(string(R.string.setting_ask_each_time)) }
         assertFalse(prefs().getBoolean("ask_each_time", true))
@@ -1171,12 +1226,12 @@ class MainActivityTest {
         assertTrue(prefs().getBoolean("exact_match", false))
         resolveTyped()
 
-        click(string(R.string.target_apple_music))
+        chooseDefault(string(R.string.target_apple_music))
         click(string(R.string.open_in_apple_music))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
 
-        click(string(R.string.target_deezer))
+        chooseDefault(string(R.string.target_deezer))
         click(string(R.string.open_in_deezer))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
@@ -1244,11 +1299,11 @@ class MainActivityTest {
 
         launch()
         assertTextShown(string(R.string.history_title))
-        assertTextAbsent(string(R.string.result_title))
+        assertResultAbsent()
         fake.requestedUrls.clear()
 
         click("First Song")
-        assertTextShown(string(R.string.result_title))
+        assertResultShown()
         composeRule.onNodeWithText("https://open.spotify.com/track/$TRACK_ID").assertExists()
         assertTrue(fake.requestedUrls.isEmpty())
 
@@ -1419,7 +1474,7 @@ class MainActivityTest {
         composeRule.onAllNodes(hasText(string(R.string.target_apple_music))).onLast().performClick()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
-        click(string(R.string.done_button))
+        click(string(R.string.back_button))
         controller!!.pause().stop().destroy()
 
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/4NRXx6U8ABQ")))
@@ -1464,9 +1519,9 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.custom_template_invalid))
         click(string(R.string.add_button))
         assertTextShown("https://lyrics.example/search?q={query}")
-        click(string(R.string.done_button))
+        click(string(R.string.back_button))
 
-        click("Lyrics")
+        chooseDefault("Lyrics")
         resolveTyped()
         click(string(R.string.open_in_custom, "Lyrics"))
         val opened = nextStartedActivity()!!
@@ -1479,7 +1534,7 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         click(string(R.string.remove_button))
         assertTextAbsent("https://lyrics.example/search?q={query}")
-        click(string(R.string.done_button))
+        click(string(R.string.back_button))
         assertTextAbsent("Lyrics")
         assertTextShown(string(R.string.open_in_youtube_music))
     }

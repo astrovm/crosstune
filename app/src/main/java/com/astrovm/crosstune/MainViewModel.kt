@@ -151,6 +151,13 @@ internal class MainViewModel(
         resolve(input, openWhenReady = true)
     }
 
+    /** Clipboard text pasted with the field's Paste button: looked up, but only opened on request. */
+    fun pasteLink(text: String?) {
+        if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
+        uiState = uiState.copy(linkText = MusicLinks.extractFirstUrl(text) ?: text.trim(), error = null)
+        resolveTypedInput()
+    }
+
     /** Clipboard text from the Quick Settings tile or launcher shortcut. */
     fun resolveClipboard(text: String?) {
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
