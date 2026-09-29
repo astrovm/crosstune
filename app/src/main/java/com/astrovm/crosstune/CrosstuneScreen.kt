@@ -197,7 +197,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         if (state.showLinkSettingsHelper) {
             LinkSettingsHelper(actions, modifier = Modifier.padding(bottom = 16.dp))
         }
-        BlockingAppsNotice(state.blockingApps, actions, modifier = Modifier.padding(bottom = 16.dp))
+        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(bottom = 16.dp))
 
         LinkField(state, actions)
         DefaultDestinationMenu(

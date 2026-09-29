@@ -24,8 +24,8 @@ Setup takes about a minute.
 
 1. Open Crosstune and pick the services people send you links from.
 2. Pick the app you listen in.
-3. Tap **Open link settings**, then **Add link**, and turn on every link Crosstune lists.
-4. If the service's own app is installed (Spotify, for example), open its link settings and turn off **Open supported links**, or choose **In your browser** on newer Android. Otherwise that app keeps opening its links. On Android 12 or newer, Crosstune tells you which apps still do.
+3. Tap **Open link settings**, then **Add link**, tick all the links and tap **Add**.
+4. If one of those services' apps is installed (Spotify, for example), Crosstune shows a button to its settings. There, choose **In your browser**, or turn off **Open supported links**. Otherwise that app keeps opening its own links.
 
 That's it. Music links you tap now open in your app.
 

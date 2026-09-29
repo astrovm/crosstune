@@ -54,7 +54,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
         if (state.showLinkSettingsHelper) {
             LinkSettingsHelper(actions, modifier = Modifier.padding(top = 4.dp))
         }
-        BlockingAppsNotice(state.blockingApps, actions, modifier = Modifier.padding(top = 4.dp))
+        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(top = 4.dp))
 
         SectionHeader(stringResource(R.string.settings_default_title))
         Group {

@@ -1763,6 +1763,91 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.blocking_apps_title))
     }
 
+    /** Setup as if Spotify were picked and its app installed and claiming the links; returns a way to change its switch. */
+    private fun setupWithSpotifyAppInTheWay(): (Boolean) -> Unit {
+        val spotify = MusicService.SPOTIFY.packageName
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        var appAllowsLinks = true
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != spotify || appAllowsLinks }) {
+            LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_VERIFIED }
+        }
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        // A saved default looks like an older install, so mark setup as still pending explicitly.
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        return { allowed -> appAllowsLinks = allowed }
+    }
+
+    @Test
+    fun setupAsksToStopAnInstalledAppTakingTheLinksAsAFourthStep() {
+        val setAppAllowsLinks = setupWithSpotifyAppInTheWay()
+        launch()
+        click(string(R.string.setup_get_started))
+        assertTextShown(string(R.string.setup_step, 1, 4))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_allow_step_tick))
+        // Stopping the app has its own step, so the allow step no longer carries that task.
+        assertTextAbsent(string(R.string.setup_apps_title))
+        click(string(R.string.next_button))
+
+        assertTextShown(string(R.string.setup_step, 4, 4))
+        assertTextShown(string(R.string.setup_apps_title))
+        assertTextShown(string(R.string.setup_still_opens))
+        click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
+        val started = nextStartedActivity()!!
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
+        assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
+
+        // Fixed in Android's settings: the row stays, marked done, rather than vanishing.
+        setAppAllowsLinks(false)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_done))
+        assertTextAbsent(string(R.string.setup_still_opens))
+        assertTextShown(string(R.string.service_spotify))
+
+        click(string(R.string.setup_finish))
+        assertTrue(prefs().getBoolean("setup_complete", false))
+    }
+
+    @Test
+    fun setupHasThreeStepsWhenNoInstalledAppIsInTheWay() {
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        assertTextShown(string(R.string.setup_step, 1, 3))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_step, 3, 3))
+        assertTextShown(string(R.string.setup_finish))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+
+        assertTextShown(string(R.string.setup_step, 4, 4))
+        assertTextShown(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
+        // Android can't say whether the app still takes the links, so there is nothing to mark.
+        assertTextAbsent(string(R.string.setup_still_opens))
+        assertTextAbsent(string(R.string.setup_done))
+    }
+
     @Test
     fun setupCanGoBackAndHandlesPickingNoServices() {
         freshInstall()
