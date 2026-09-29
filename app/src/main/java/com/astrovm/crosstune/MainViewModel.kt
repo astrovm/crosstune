@@ -130,7 +130,7 @@ internal class MainViewModel(
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
         uiState = uiState.copy(handlingIncomingLink = false)
-        val input = MusicLinks.parse(uiState.linkText) ?: return showError(AppError.INVALID_URL)
+        val input = MusicLinks.parse(uiState.linkText) ?: return rejectInput()
         resolve(input, openWhenReady = false)
     }
 
@@ -142,7 +142,7 @@ internal class MainViewModel(
         if (input == null) {
             // Intercepted services' links include pages Crosstune can't convert, such as a
             // SoundCloud feed; hand those straight to the service's app.
-            val service = MusicLinks.serviceFor(incoming) ?: return showError(AppError.INVALID_URL)
+            val service = MusicLinks.serviceFor(incoming) ?: return rejectInput()
             effectChannel.trySend(Effect.Open(incoming, service.packageName, finishAfterOpen = true))
             return
         }
@@ -150,6 +150,17 @@ internal class MainViewModel(
             uiState = uiState.copy(linkText = input.link.url)
         }
         resolve(input, openWhenReady = true)
+    }
+
+    /**
+     * Text that isn't a music link replaces the previous result. Otherwise the error would sit above an
+     * old song and offer to open it, as if that were the link that failed.
+     */
+    private fun rejectInput() {
+        job?.cancel()
+        lastRequest = null
+        uiState = uiState.copy(result = null, link = null, showDestinationPicker = false)
+        showError(AppError.INVALID_URL)
     }
 
     /** Clipboard text pasted with the field's Paste button: looked up, but only opened on request. */
