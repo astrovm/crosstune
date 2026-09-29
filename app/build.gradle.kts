@@ -110,6 +110,26 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
+// Everything CI verifies, so `./gradlew :app:ci` locally runs exactly what the CI job does.
+tasks.register("ci") {
+    group = "verification"
+    description = "Unit tests with the 100% line coverage gate, lint, and the debug and minified release APKs."
+    dependsOn(
+        "testDebugUnitTest",
+        "koverLogDebug",
+        "koverXmlReportDebug",
+        "koverVerifyDebug",
+        "lintDebug",
+        "assembleDebug",
+        "assembleRelease"
+    )
+}
+
+// Kover doesn't hook its gate into `check`, so without this a local check passes below 100%.
+tasks.named("check") {
+    dependsOn("koverVerifyDebug")
+}
+
 tasks.withType<Test>().configureEach {
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
