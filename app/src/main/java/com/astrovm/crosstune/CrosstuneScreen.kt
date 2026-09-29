@@ -51,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 internal const val RESULT_TAG = "result"
+internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 
 internal data class ScreenActions(
@@ -89,6 +91,7 @@ internal data class ScreenActions(
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCopySearch: () -> Unit = {},
+    val onCopyLink: () -> Unit = {},
     val onShareSearch: () -> Unit = {},
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
@@ -476,7 +479,14 @@ private fun ResultCard(
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CoverArt(result.artworkUrl, actions.loadArtwork, size = 96.dp)
-                Column(modifier = Modifier.padding(start = 16.dp)) {
+                // Tapping the song copies its search text, e.g. to paste into an app Crosstune can't open.
+                Column(
+                    modifier = Modifier
+                        .padding(start = 16.dp)
+                        .testTag(RESULT_TEXT_TAG)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
+                ) {
                     Text(
                         text = listOfNotNull(
                             stringResource(result.type.labelRes),
@@ -523,8 +533,8 @@ private fun ResultCard(
             ) {
                 SecondaryAction(
                     R.drawable.ic_content_copy,
-                    stringResource(R.string.copy_search_button),
-                    actions.onCopySearch,
+                    stringResource(R.string.copy_button),
+                    actions.onCopyLink,
                     Modifier.weight(1f)
                 )
                 SecondaryAction(

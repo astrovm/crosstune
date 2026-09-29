@@ -100,6 +100,11 @@ class MainActivityTest {
     private fun prefs() = app.getSharedPreferences("crosstune_preferences", Context.MODE_PRIVATE)
 
     /** Buttons are found by their text, or by their accessibility label when they're icons. */
+    private fun clickResultText() {
+        composeRule.onNodeWithTag(RESULT_TEXT_TAG).performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun click(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
@@ -226,7 +231,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
         waitForText("Cut To The Feeling")
 
-        click(string(R.string.copy_search_button))
+        clickResultText()
 
         assertEquals(string(R.string.search_copied_to_clipboard), ShadowToast.getTextOfLatestToast())
     }
@@ -394,7 +399,7 @@ class MainActivityTest {
         assertEquals("com.google.android.apps.youtube.music", opened!!.`package`)
         assertFalse(activity.isFinishing)
 
-        click(string(R.string.copy_search_button))
+        clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals(
             "Cut To The Feeling Carly Rae Jepsen",
@@ -402,6 +407,12 @@ class MainActivityTest {
         )
         // Android 13+ confirms clipboard writes itself, so the app stays quiet.
         assertNull(ShadowToast.getTextOfLatestToast())
+
+        click(string(R.string.copy_button))
+        assertEquals(
+            "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
+            clipboard.primaryClip!!.getItemAt(0).text.toString()
+        )
 
         click(string(R.string.share_search_button))
         val chooser = nextStartedActivity()
@@ -436,7 +447,7 @@ class MainActivityTest {
 
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
 
-        click(string(R.string.copy_search_button))
+        clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals("Only Title", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }
@@ -815,7 +826,7 @@ class MainActivityTest {
         waitForText("Rock & Roll")
         assertTextShown("AC/DC")
 
-        click(string(R.string.copy_search_button))
+        clickResultText()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals("Rock & Roll AC/DC", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }

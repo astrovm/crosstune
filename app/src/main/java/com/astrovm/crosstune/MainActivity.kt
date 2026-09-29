@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCopySearch = ::copySearch,
+                        onCopyLink = ::copyLink,
                         onShareSearch = ::shareSearch,
                         onHistoryEntryClick = viewModel::showHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
@@ -211,12 +212,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun copySearch() {
-        val query = viewModel.searchQuery() ?: return
+        copyToClipboard("Crosstune search query", viewModel.searchQuery(), R.string.search_copied_to_clipboard)
+    }
+
+    private fun copyLink() {
+        copyToClipboard("Crosstune link", viewModel.searchUrl(), R.string.link_copied_to_clipboard)
+    }
+
+    private fun copyToClipboard(label: String, text: String?, confirmationRes: Int) {
+        text ?: return
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText("Crosstune search query", query))
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
         // Android 13+ shows its own confirmation whenever the clipboard changes.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(this, getString(R.string.search_copied_to_clipboard), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(confirmationRes), Toast.LENGTH_SHORT).show()
         }
     }
 
