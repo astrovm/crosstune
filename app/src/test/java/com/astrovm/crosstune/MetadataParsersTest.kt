@@ -194,4 +194,74 @@ class MetadataParsersTest {
         )
         assertNull(MetadataParsers.bandcamp("<html></html>", ItemType.TRACK))
     }
+
+    @Test
+    fun picksUpArtworkFromEveryService() {
+        val image = """<meta property="og:image" content="https://img.example/cover.jpg">"""
+        assertEquals(
+            "https://img.example/cover.jpg",
+            MetadataParsers.spotify("""<meta property="og:title" content="Song">$image""", ItemType.TRACK)?.artworkUrl
+        )
+        assertEquals(
+            "https://img.example/cover.jpg",
+            MetadataParsers.applePlaylist("""<meta property="og:title" content="Mix on Apple Music">$image""")?.artworkUrl
+        )
+        assertEquals(
+            "https://img.example/cover.jpg",
+            MetadataParsers.tidal("<title>Song by Artist on TIDAL</title>$image", ItemType.TRACK)?.artworkUrl
+        )
+        assertEquals(
+            "https://img.example/cover.jpg",
+            MetadataParsers.bandcamp("""<meta property="og:title" content="Record, by Band">$image""", ItemType.ALBUM)?.artworkUrl
+        )
+        // YouTube's default thumbnail is letterboxed, so the unpadded frame is used instead.
+        assertEquals(
+            "https://i.ytimg.com/vi/qizghQs4K6E/mqdefault.jpg",
+            MetadataParsers.youtube(
+                JSONObject("""{"title":"Gee","author_name":"Girls' Generation - Topic","thumbnail_url":"https://i.ytimg.com/vi/qizghQs4K6E/hqdefault.jpg"}""")
+            )?.artworkUrl
+        )
+        assertEquals(
+            "https://is1-ssl.mzstatic.com/image/thumb/Music/x.jpg/600x600bb.jpg",
+            MetadataParsers.appleMusic(
+                JSONObject("""{"results":[{"trackName":"Song","artistName":"Artist","artworkUrl100":"https://is1-ssl.mzstatic.com/image/thumb/Music/x.jpg/100x100bb.jpg"}]}"""),
+                ItemType.TRACK
+            )?.artworkUrl
+        )
+        assertEquals(
+            "https://cdn-images.dzcdn.net/images/cover/a/1000x1000.jpg",
+            MetadataParsers.deezer(
+                JSONObject("""{"title":"Song","artist":{"name":"Artist"},"album":{"cover_xl":"https://cdn-images.dzcdn.net/images/cover/a/1000x1000.jpg"}}"""),
+                ItemType.TRACK
+            )?.artworkUrl
+        )
+        assertEquals(
+            "https://cdn-images.dzcdn.net/images/artist/b/1000x1000.jpg",
+            MetadataParsers.deezer(
+                JSONObject("""{"name":"Artist","picture_xl":"https://cdn-images.dzcdn.net/images/artist/b/1000x1000.jpg"}"""),
+                ItemType.ARTIST
+            )?.artworkUrl
+        )
+        assertEquals(
+            "https://i1.sndcdn.com/artworks-x-t500x500.jpg",
+            MetadataParsers.soundCloud(
+                JSONObject("""{"title":"Song by Artist","author_name":"Artist","thumbnail_url":"https://i1.sndcdn.com/artworks-x-t500x500.jpg"}"""),
+                ItemType.TRACK
+            )?.artworkUrl
+        )
+    }
+
+    @Test
+    fun artworkIsOptional() {
+        assertNull(MetadataParsers.spotify("""<meta property="og:title" content="Song">""", ItemType.TRACK)?.artworkUrl)
+        assertNull(MetadataParsers.youtube(JSONObject("""{"title":"Song","author_name":"Artist"}"""))?.artworkUrl)
+        assertNull(MetadataParsers.deezer(JSONObject("""{"title":"Song","artist":{"name":"Artist"}}"""), ItemType.TRACK)?.artworkUrl)
+        // iTunes has no artist pictures.
+        assertNull(
+            MetadataParsers.appleMusic(
+                JSONObject("""{"results":[{"artistName":"Artist","artworkUrl100":"https://x/100x100bb.jpg"}]}"""),
+                ItemType.ARTIST
+            )?.artworkUrl
+        )
+    }
 }

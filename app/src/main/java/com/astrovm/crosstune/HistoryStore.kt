@@ -38,6 +38,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .putOpt("region", entry.link.region)
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
+                    .putOpt("artwork", entry.metadata.artworkUrl)
             )
         }
         preferences.edit { putString(KEY_HISTORY, array.toString()) }
@@ -51,7 +52,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val service = MusicService.fromName(optString("service", MusicService.SPOTIFY.name)) ?: return null
         val url = optString("url").ifEmpty { "https://open.spotify.com/${type.name.lowercase()}/$id" }
         val link = MusicLink(service, type, id, url, optString("region").ifEmpty { null })
-        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type))
+        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }))
     }
 
     private companion object {

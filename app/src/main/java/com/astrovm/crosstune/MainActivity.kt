@@ -36,7 +36,8 @@ class MainActivity : ComponentActivity() {
                     LinkResolver(client),
                     ExactMatcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
-                    LinkInterception(applicationContext)
+                    LinkInterception(applicationContext),
+                    ArtworkLoader(client)
                 )
             }
         }
@@ -94,7 +95,8 @@ class MainActivity : ComponentActivity() {
                         onHistoryEntryClick = viewModel::showHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
                         onOpenLinkSettings = ::openAppLinkSettings,
-                        onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper
+                        onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
+                        loadArtwork = viewModel.artwork::load
                     )
                 )
             }

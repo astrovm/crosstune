@@ -39,7 +39,7 @@ class HistoryStoreTest {
         ItemType.entries.forEachIndexed { index, type -> store.add(entry(index, type)) }
         val apple = HistoryEntry(
             MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1", "https://music.apple.com/ar/song/x/1", "ar"),
-            MusicMetadata("Song", "Artist")
+            MusicMetadata("Song", "Artist", artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/a/600x600bb.jpg")
         )
         store.add(apple)
 

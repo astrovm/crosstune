@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.ClipData
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
@@ -411,6 +412,45 @@ class MainActivityTest {
 
         typeUrl("nope again")
         assertTextAbsent(string(R.string.error_invalid_url))
+    }
+
+    @Test
+    fun resultShowsTheCoverWhenItLoads() {
+        fake.handler = { request ->
+            if (request.url.host == "img.example") {
+                FakeSpotify.image(request, FakeSpotify.png())
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Cover Song", "Cover Artist · Song", "https://img.example/cover.jpg"))
+            }
+        }
+        launch()
+
+        typeUrl("https://open.spotify.com/track/$TRACK_ID")
+        click(string(R.string.resolve_button))
+        waitForText("Cover Song")
+        composeRule.waitUntil(TIMEOUT_MS) {
+            composeRule.onAllNodes(hasTestTag(ARTWORK_TAG)).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals("https://img.example/cover.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
+    }
+
+    @Test
+    fun resultHasNoCoverWhenItFailsToLoad() {
+        fake.handler = { request ->
+            if (request.url.host == "img.example") {
+                FakeSpotify.image(request, ByteArray(0), code = 404)
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Plain Song", "Plain Artist · Song", "https://img.example/cover.jpg"))
+            }
+        }
+        launch()
+
+        typeUrl("https://open.spotify.com/track/$TRACK_ID")
+        click(string(R.string.resolve_button))
+        waitForText("Plain Song")
+        composeRule.waitUntil(TIMEOUT_MS) { "https://img.example/cover.jpg" in fake.requestedUrls }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasTestTag(ARTWORK_TAG)).assertDoesNotExist()
     }
 
     @Test
