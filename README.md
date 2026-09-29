@@ -10,7 +10,9 @@ Crosstune opens music links from one service in the app you actually use. Share,
 
 ## What You Can Do
 
-- Share a music link to Crosstune from any app, paste it, or tap a Spotify link.
+- Choose which services' links Crosstune opens when you tap them, from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp. Links from any service can also be shared to Crosstune or pasted.
+- Send each service's links to a different place, e.g. YouTube videos to YouTube Music and everything else to Apple Music.
+- Add custom destinations: any app or website with a search URL, such as `https://example.com/search?q={query}`.
 - Open songs, albums, artists and playlists.
 - Choose a default destination, or turn on **Ask where to open shared links** to pick one for each link.
 - Turn on **Open exact matches when possible** to open Apple Music and Deezer items directly instead of a search.
@@ -34,7 +36,7 @@ Crosstune opens music links from one service in the app you actually use. Share,
 
 Amazon Music is a destination only: its links show no details without JavaScript. YouTube playlists and channels aren't supported for the same reason.
 
-If links keep opening in your browser, use the in-app **Open Link Settings** button and enable Crosstune for supported links.
+Only Spotify links are opened by Crosstune out of the box. Turn on other services under **Settings → Links Crosstune opens**. Android doesn't let third-party apps verify these domains, so after turning a service on, use the **Open Link Settings** button and allow its links under "Open by default". Pages Crosstune can't convert, like a SoundCloud feed, go straight to the service's own app.
 
 ## Privacy
 

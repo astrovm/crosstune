@@ -32,7 +32,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -54,10 +59,14 @@ internal data class ScreenActions(
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
-    val onOpenWith: (MusicService) -> Unit = {},
+    val onOpenWith: (Destination) -> Unit = {},
     val onOpenOriginal: () -> Unit = {},
     val onDismissPicker: () -> Unit = {},
-    val onTargetChange: (MusicService) -> Unit = {},
+    val onTargetChange: (Destination) -> Unit = {},
+    val onInterceptChange: (MusicService, Boolean) -> Unit = { _, _ -> },
+    val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
+    val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
+    val onRemoveCustom: (Destination.Custom) -> Unit = {},
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -68,8 +77,33 @@ internal data class ScreenActions(
     val onDismissLinkSettingsHelper: () -> Unit = {}
 )
 
+/** Switches between the main screen and settings; system back returns from settings. */
 @Composable
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showSettings) { showSettings = false }
+    if (showSettings) {
+        SettingsScreen(state, actions, onBack = { showSettings = false })
+    } else {
+        MainScreen(state, actions, onOpenSettings = { showSettings = true })
+    }
+}
+
+// if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
+@Composable
+internal fun Destination.label(): String =
+    if (this is Destination.Service) stringResource(service.labelRes) else (this as Destination.Custom).name
+
+@Composable
+internal fun Destination.openLabel(): String =
+    if (this is Destination.Service) {
+        stringResource(service.openLabelRes)
+    } else {
+        stringResource(R.string.open_in_custom, (this as Destination.Custom).name)
+    }
+
+@Composable
+private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
     val gradient = Brush.verticalGradient(
         colors = listOf(
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -81,7 +115,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     val githubUrl = stringResource(R.string.github_repo_url)
 
     if (state.showDestinationPicker) {
-        DestinationPicker(onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
+        DestinationPicker(state.destinations, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -111,9 +145,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .padding(top = 8.dp, bottom = 20.dp)
+                        .padding(top = 8.dp)
                         .widthIn(max = 520.dp)
                 )
+                TextButton(onClick = onOpenSettings, modifier = Modifier.padding(bottom = 12.dp)) {
+                    Text(stringResource(R.string.settings_button))
+                }
 
                 if (state.showLinkSettingsHelper) {
                     LinkSettingsHelper(actions)
@@ -127,21 +164,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         InputSection(state, actions)
-                        DestinationSelector(state.selectedTarget, actions.onTargetChange)
-                        SettingSwitch(
-                            label = stringResource(R.string.setting_ask_each_time),
-                            description = stringResource(R.string.setting_ask_each_time_description),
-                            checked = state.askEachTime,
-                            onCheckedChange = actions.onAskEachTimeChange
-                        )
-                        SettingSwitch(
-                            label = stringResource(R.string.setting_exact_match),
-                            description = stringResource(R.string.setting_exact_match_description),
-                            checked = state.exactMatch,
-                            onCheckedChange = actions.onExactMatchChange
-                        )
+                        DestinationSelector(state.destinations, state.defaultDestination, actions.onTargetChange)
                         StatusSection(state, actions)
-                        state.result?.let { ResultCard(it, state.link, state.selectedTarget, actions) }
+                        state.result?.let { ResultCard(it, state.link, state.resultDestination, actions) }
                     }
                 }
 
@@ -165,7 +190,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 }
 
 @Composable
-private fun LinkSettingsHelper(actions: ScreenActions) {
+internal fun LinkSettingsHelper(actions: ScreenActions) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -235,7 +260,11 @@ private fun InputSection(state: UiState, actions: ScreenActions) {
 }
 
 @Composable
-private fun DestinationSelector(selectedTarget: MusicService, onTargetChange: (MusicService) -> Unit) {
+private fun DestinationSelector(
+    destinations: List<Destination>,
+    selected: Destination,
+    onTargetChange: (Destination) -> Unit
+) {
     Text(
         text = stringResource(R.string.default_open_with_label),
         style = MaterialTheme.typography.labelLarge,
@@ -246,18 +275,18 @@ private fun DestinationSelector(selectedTarget: MusicService, onTargetChange: (M
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        MusicService.entries.forEach { target ->
+        destinations.forEach { destination ->
             FilterChip(
-                selected = target == selectedTarget,
-                onClick = { onTargetChange(target) },
-                label = { Text(stringResource(target.labelRes)) }
+                selected = destination == selected,
+                onClick = { onTargetChange(destination) },
+                label = { Text(destination.label()) }
             )
         }
     }
 }
 
 @Composable
-private fun SettingSwitch(
+internal fun SettingSwitch(
     label: String,
     description: String,
     checked: Boolean,
@@ -336,7 +365,7 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
 private fun ResultCard(
     result: MusicMetadata,
     link: MusicLink?,
-    selectedTarget: MusicService,
+    destination: Destination,
     actions: ScreenActions
 ) {
     ElevatedCard(
@@ -378,7 +407,7 @@ private fun ResultCard(
                     .fillMaxWidth()
                     .padding(top = 12.dp)
             ) {
-                Text(stringResource(selectedTarget.openLabelRes))
+                Text(destination.openLabel())
             }
             Row(
                 modifier = Modifier
@@ -393,7 +422,7 @@ private fun ResultCard(
                     Text(stringResource(R.string.share_search_button))
                 }
             }
-            if (link != null && link.service != selectedTarget) {
+            if (link != null && link.service != (destination as? Destination.Service)?.service) {
                 TextButton(onClick = actions.onOpenOriginal, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(link.service.openLabelRes))
                 }
@@ -453,15 +482,15 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
 }
 
 @Composable
-private fun DestinationPicker(onPick: (MusicService) -> Unit, onDismiss: () -> Unit) {
+private fun DestinationPicker(destinations: List<Destination>, onPick: (Destination) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
-            Column {
-                MusicService.entries.forEach { target ->
-                    TextButton(onClick = { onPick(target) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(target.openLabelRes))
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                destinations.forEach { destination ->
+                    TextButton(onClick = { onPick(destination) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(destination.openLabel())
                     }
                 }
             }

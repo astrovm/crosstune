@@ -53,6 +53,23 @@ internal object MusicLinks {
         return LinkInput.ShortLink(url.newBuilder().scheme("https").build().toString())
     }
 
+    /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
+    fun serviceFor(text: String): MusicService? {
+        val host = text.trim().toHttpUrlOrNull()?.host ?: return null
+        return when {
+            host == "spotify.com" || host.endsWith(".spotify.com") || host.endsWith("spotify.link") -> MusicService.SPOTIFY
+            host == "music.youtube.com" -> MusicService.YOUTUBE_MUSIC
+            host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com") -> MusicService.YOUTUBE
+            host.endsWith("music.apple.com") -> MusicService.APPLE_MUSIC
+            host.endsWith("deezer.com") || host.endsWith("deezer.page.link") || host == "dzr.page.link" ->
+                MusicService.DEEZER
+            host.endsWith("tidal.com") -> MusicService.TIDAL
+            host.endsWith("soundcloud.com") -> MusicService.SOUNDCLOUD
+            host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
+            else -> null
+        }
+    }
+
     fun extractFirstUrl(text: String): String? {
         val match = urlRegex.find(text)?.value ?: return null
         return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}')

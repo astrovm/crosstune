@@ -45,6 +45,14 @@ class PreviewAndThemeTest {
     }
 
     @Test
+    fun settingsPreviewRendersSourcesRulesAndCustomDestinations() {
+        composeRule.setContent { SettingsScreenPreview() }
+
+        composeRule.onNodeWithText("Opens in: YouTube Music").assertExists()
+        composeRule.onNodeWithText("https://yewtu.be/search?q={query}").assertExists()
+    }
+
+    @Test
     fun lightThemeUsesLightPalette() {
         val colors = mutableListOf<Color>()
         composeRule.setContent {

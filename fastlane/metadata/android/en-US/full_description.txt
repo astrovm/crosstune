@@ -6,6 +6,8 @@ Share, paste or tap a link to a song, album, artist or playlist from Spotify, Yo
 <ul>
 <li>Understands links, short links and URIs from eight services.</li>
 <li>Opens a result, or a link it couldn't read, in the app it came from.</li>
+<li>Choose which services' links Crosstune intercepts, and where each service's links go.</li>
+<li>Add custom destinations for any app or website with a search URL.</li>
 <li>Choose a default destination, or have Crosstune ask where to open each shared link.</li>
 <li>Optional exact matches: for Apple Music and Deezer, Crosstune can look the item up with their public search APIs and open it directly instead of a search.</li>
 <li>Quick Settings tile and launcher shortcut that open whatever music link you copied.</li>

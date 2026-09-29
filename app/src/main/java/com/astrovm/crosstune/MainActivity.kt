@@ -35,7 +35,8 @@ class MainActivity : ComponentActivity() {
                 MainViewModel(
                     LinkResolver(client),
                     ExactMatcher(client),
-                    getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+                    getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
+                    LinkInterception(applicationContext)
                 )
             }
         }
@@ -77,10 +78,14 @@ class MainActivity : ComponentActivity() {
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
-                        onOpenWith = { target -> viewModel.openResult(target, finishAfterOpen = true) },
+                        onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },
                         onOpenOriginal = viewModel::openOriginal,
                         onDismissPicker = viewModel::dismissDestinationPicker,
-                        onTargetChange = viewModel::selectTarget,
+                        onTargetChange = viewModel::selectDefault,
+                        onInterceptChange = viewModel::setIntercepted,
+                        onRuleChange = viewModel::setRule,
+                        onAddCustom = viewModel::addCustomDestination,
+                        onRemoveCustom = viewModel::removeCustomDestination,
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCopySearch = ::copySearch,
@@ -125,7 +130,8 @@ class MainActivity : ComponentActivity() {
 
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
-        val opened = tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(effect.packageName)) ||
+        val packageName = effect.packageName
+        val opened = packageName != null && tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(packageName)) ||
             openOutsideCrosstune(uri)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
@@ -138,6 +144,8 @@ class MainActivity : ComponentActivity() {
      * so a plain VIEW intent could loop straight back here.
      */
     private fun openOutsideCrosstune(uri: Uri): Boolean {
+        // Custom destinations may use an app's own scheme, which Crosstune never handles.
+        if (uri.scheme != "https" && uri.scheme != "http") return tryStartActivity(Intent(Intent.ACTION_VIEW, uri))
         val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
         val (own, others) = packageManager.queryIntentActivities(intent, 0)
             .partition { it.activityInfo.packageName == packageName }
