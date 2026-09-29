@@ -310,6 +310,45 @@ class MainActivityTest {
     }
 
     @Test
+    fun textThatIsNotALinkReplacesThePreviousResult() {
+        respondWithTrack("Old Song", "Artist · Song")
+        launch()
+        resolveTyped()
+        assertResultShown()
+
+        typeUrl("just some words")
+        click(string(R.string.resolve_button))
+
+        // The error stands alone: no old song above it, and no offer to open that song.
+        assertTextShown(string(R.string.error_invalid_url))
+        assertResultAbsent()
+        assertTextAbsent(string(R.string.open_in_spotify))
+    }
+
+    @Test
+    fun aSharedNonLinkReplacesThePreviousResult() {
+        respondWithTrack("Old Song", "Artist · Song")
+        launch()
+        resolveTyped()
+        assertResultShown()
+
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(
+            controller!!.get(),
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "not a music link")
+            }
+        )
+        composeRule.waitForIdle()
+
+        assertTextShown(string(R.string.error_invalid_url))
+        assertResultAbsent()
+        assertTextAbsent(string(R.string.open_in_spotify))
+    }
+
+    @Test
     fun sharedIntentWithoutPayloadIsIgnored() {
         launch(Intent(Intent.ACTION_SEND).apply { type = "text/plain" })
         assertTextAbsent(string(R.string.error_invalid_url))
