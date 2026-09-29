@@ -11,7 +11,8 @@ import androidx.annotation.RequiresApi
 /**
  * Turns interception of each source service's links on or off, and reports what Android allows.
  * Each service has its own activity-alias in the manifest, all disabled until the user picks
- * services during setup, so Android's "Open by default" settings only list the domains they chose.
+ * services during setup. Android's "Open by default" settings still list every alias's domains,
+ * enabled or not, so setup names the ones to select for each service.
  */
 internal class LinkInterception(private val context: Context) {
 
@@ -39,10 +40,10 @@ internal class LinkInterception(private val context: Context) {
     }.toSet()
 
     /**
-     * Services whose links the user has allowed Crosstune to open, or null before Android 12,
-     * which has no way to ask.
+     * The hosts of each source the user hasn't allowed Crosstune to open yet, empty once all are,
+     * or null before Android 12, which has no way to ask.
      */
-    fun approvedServices(): Set<MusicService>? {
+    fun unapprovedHosts(): Map<MusicService, List<String>>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         val state = try {
@@ -50,7 +51,7 @@ internal class LinkInterception(private val context: Context) {
         } catch (_: PackageManager.NameNotFoundException) {
             null
         } ?: return null
-        return approvedFrom(state.hostToStateMap)
+        return unapprovedFrom(state.hostToStateMap)
     }
 
     private fun component(service: MusicService) =
@@ -59,24 +60,27 @@ internal class LinkInterception(private val context: Context) {
     companion object {
         const val ALIAS_PREFIX = "com.astrovm.crosstune.intercept."
 
-        /** The main web host of each source; a service counts as allowed once this one is. */
-        private val PRIMARY_HOSTS = mapOf(
-            MusicService.SPOTIFY to "open.spotify.com",
-            MusicService.YOUTUBE_MUSIC to "music.youtube.com",
-            MusicService.YOUTUBE to "www.youtube.com",
-            MusicService.APPLE_MUSIC to "music.apple.com",
-            MusicService.DEEZER to "www.deezer.com",
-            MusicService.TIDAL to "tidal.com",
-            MusicService.SOUNDCLOUD to "soundcloud.com",
-            MusicService.BANDCAMP to "*.bandcamp.com"
+        /** Every web host each source's alias declares in the manifest; a service is allowed once all are. */
+        val HOSTS = mapOf(
+            MusicService.SPOTIFY to listOf("open.spotify.com", "spotify.link", "www.spotify.link"),
+            MusicService.YOUTUBE_MUSIC to listOf("music.youtube.com"),
+            MusicService.YOUTUBE to listOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"),
+            MusicService.APPLE_MUSIC to listOf("music.apple.com", "geo.music.apple.com"),
+            MusicService.DEEZER to listOf(
+                "deezer.com", "www.deezer.com", "link.deezer.com", "deezer.page.link", "dzr.page.link"
+            ),
+            MusicService.TIDAL to listOf("tidal.com", "www.tidal.com", "listen.tidal.com"),
+            MusicService.SOUNDCLOUD to listOf("soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com"),
+            MusicService.BANDCAMP to listOf("*.bandcamp.com")
         )
 
         @RequiresApi(Build.VERSION_CODES.S)
-        private fun approvedFrom(hostStates: Map<String, Int>): Set<MusicService> = PRIMARY_HOSTS
-            .filterValues { host ->
-                (hostStates[host] ?: DomainVerificationUserState.DOMAIN_STATE_NONE) !=
-                    DomainVerificationUserState.DOMAIN_STATE_NONE
+        private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =
+            HOSTS.mapValues { (_, hosts) ->
+                hosts.filter { host ->
+                    (hostStates[host] ?: DomainVerificationUserState.DOMAIN_STATE_NONE) ==
+                        DomainVerificationUserState.DOMAIN_STATE_NONE
+                }
             }
-            .keys
     }
 }

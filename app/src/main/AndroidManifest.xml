@@ -64,7 +64,7 @@
         <!--
             One alias per source service so each can be turned on or off during setup or in
             Crosstune's settings (see LinkInterception). All start disabled. Third-party apps can't verify these domains, so Android asks the
-            user to allow them under "Open by default".
+            user to allow them under "Open by default". Keep each alias's hosts in sync with LinkInterception.HOSTS.
         -->
         <activity-alias
             android:name=".intercept.SPOTIFY"

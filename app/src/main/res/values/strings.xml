@@ -55,7 +55,7 @@
     <string name="setup_destination_title">Where do you listen?</string>
     <string name="setup_destination_body">Crosstune sends links here. You can pick a different destination for each service later in Settings.</string>
     <string name="setup_allow_title">Allow the links</string>
-    <string name="setup_allow_body">Android asks you to confirm which links Crosstune may open. Tap the button below, choose "Add link" under "Open by default", and select the links for these services.</string>
+    <string name="setup_allow_body">Android asks you to confirm which links Crosstune may open. Tap the button below, choose "Add link" under "Open by default", and select the links listed below. Android shows links for every service Crosstune supports; only these matter.</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
     <string name="setup_allowed">Allowed</string>
     <string name="setup_not_allowed">Not allowed yet</string>
