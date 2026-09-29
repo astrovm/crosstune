@@ -28,15 +28,22 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels {
         viewModelFactory {
             initializer {
+                val client = httpClientFactory()
                 MainViewModel(
-                    SpotifyResolver(httpClientFactory()),
+                    SpotifyResolver(client),
+                    ExactMatcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
                 )
             }
         }
     }
 
+    /** Set when launched to read the clipboard, which Android only allows once the window has focus. */
+    private var pendingClipboardRead = false
+
     companion object {
+        const val ACTION_PASTE_FROM_CLIPBOARD = "com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
+
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = { OkHttpClient() }
     }
@@ -51,7 +58,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.effects.collect { effect ->
                     when (effect) {
-                        is Effect.OpenSearch -> openSearch(effect)
+                        is Effect.Open -> open(effect)
                     }
                 }
             }
@@ -61,15 +68,24 @@ class MainActivity : ComponentActivity() {
             CrosstuneTheme {
                 CrosstuneScreen(
                     state = viewModel.uiState,
-                    onUrlChange = viewModel::onUrlChange,
-                    onResolveClick = viewModel::resolveTypedInput,
-                    onClearClick = viewModel::clear,
-                    onOpenClick = { viewModel.openResult() },
-                    onTargetChange = viewModel::selectTarget,
-                    onCopySearchClick = ::copySearch,
-                    onShareSearchClick = ::shareSearch,
-                    onOpenLinkSettingsClick = ::openAppLinkSettings,
-                    onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper
+                    actions = ScreenActions(
+                        onUrlChange = viewModel::onUrlChange,
+                        onResolve = viewModel::resolveTypedInput,
+                        onClear = viewModel::clear,
+                        onRetry = viewModel::retry,
+                        onOpen = { viewModel.openResult() },
+                        onOpenWith = { target -> viewModel.openResult(target, finishAfterOpen = true) },
+                        onDismissPicker = viewModel::dismissDestinationPicker,
+                        onTargetChange = viewModel::selectTarget,
+                        onAskEachTimeChange = viewModel::setAskEachTime,
+                        onExactMatchChange = viewModel::setExactMatch,
+                        onCopySearch = ::copySearch,
+                        onShareSearch = ::shareSearch,
+                        onHistoryEntryClick = viewModel::showHistoryEntry,
+                        onClearHistory = viewModel::clearHistory,
+                        onOpenLinkSettings = ::openAppLinkSettings,
+                        onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper
+                    )
                 )
             }
         }
@@ -91,10 +107,19 @@ class MainActivity : ComponentActivity() {
                     ?: intent.getStringExtra(Intent.EXTRA_SUBJECT)
                     ?: return
             )
+            ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = true
         }
     }
 
-    private fun openSearch(effect: Effect.OpenSearch) {
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus || !pendingClipboardRead) return
+        pendingClipboardRead = false
+        val clip = getSystemService(ClipboardManager::class.java)?.primaryClip
+        viewModel.resolveClipboard(clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString())
+    }
+
+    private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
         val opened = tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(effect.packageName)) ||
             tryStartActivity(Intent(Intent.ACTION_VIEW, uri))

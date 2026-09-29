@@ -30,6 +30,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -37,8 +41,14 @@
                 <data android:scheme="https" />
                 <data android:host="open.spotify.com" />
                 <data android:pathPattern="/track/.*" />
+                <data android:pathPattern="/album/.*" />
+                <data android:pathPattern="/artist/.*" />
+                <data android:pathPattern="/playlist/.*" />
                 <!-- Localized share links such as /intl-es/track/… -->
                 <data android:pathPattern="/intl-.*/track/.*" />
+                <data android:pathPattern="/intl-.*/album/.*" />
+                <data android:pathPattern="/intl-.*/artist/.*" />
+                <data android:pathPattern="/intl-.*/playlist/.*" />
             </intent-filter>
 
             <intent-filter>
@@ -65,6 +75,17 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".ClipboardTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_open_link"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
