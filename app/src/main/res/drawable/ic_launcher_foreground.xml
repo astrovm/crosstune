@@ -14,7 +14,7 @@
     <path
         android:fillColor="#FFFFFFFF"
         android:pathData="M49,32c8,3 14,7 14,17c-4,-5 -8,-6 -14,-6z" />
-    <!-- Arrow: opens in your app -->
+    <!-- Arrow: opens in your favorite app -->
     <path
         android:fillColor="#FFC6FF3D"
         android:pathData="M55,64h11v-7l12,10 -12,10v-7h-11z" />
