@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon's arrow, cropped like ic_logo_note so the two line up. Tinted in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group android:translateX="-30" android:translateY="-31">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M55,64h11v-7l12,10 -12,10v-7h-11z" />
+    </group>
+</vector>

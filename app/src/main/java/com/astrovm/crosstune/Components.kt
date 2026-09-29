@@ -3,7 +3,6 @@ package com.astrovm.crosstune
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,11 +25,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -49,20 +46,24 @@ internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier
 }
 
 /**
- * The launcher icon, drawn from its own layers because Compose can't paint an adaptive icon. The
- * foreground is scaled up to fill the badge: launchers crop it to a circle and leave wide margins.
+ * The launcher icon's note and arrow without its badge, tinted from the theme so they read on both
+ * light and dark backgrounds. (Compose can't paint the adaptive icon itself.)
  */
 @Composable
-internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
-    Box(
-        modifier = modifier
-            .testTag(LOGO_TAG)
-            .size(size)
-            .clip(RoundedCornerShape(size / 3))
-            .background(colorResource(R.color.ic_launcher_background)),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(size * 1.8f))
+internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 20.dp) {
+    Box(modifier = modifier.testTag(LOGO_TAG).size(size)) {
+        Image(
+            painterResource(R.drawable.ic_logo_note),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.fillMaxSize()
+        )
+        Image(
+            painterResource(R.drawable.ic_logo_arrow),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon's music note, cropped to its bounds so it can sit beside text. Tinted in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group android:translateX="-30" android:translateY="-31">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M31,68a9,9 0,1 0,18 0a9,9 0,1 0,-18 0z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M42,32h7v36h-7z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M49,32c8,3 14,7 14,17c-4,-5 -8,-6 -14,-6z" />
+    </group>
+</vector>
