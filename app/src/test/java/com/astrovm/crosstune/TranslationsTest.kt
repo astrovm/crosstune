@@ -26,7 +26,7 @@ class TranslationsTest {
      * (`values-id` compiles but never loads).
      */
     private val languages = mapOf(
-        "values-es" to "es-AR",
+        "values-es" to "es",
         "values-pt" to "pt-BR",
         "values-de" to "de-DE",
         "values-fr" to "fr-FR",
@@ -114,8 +114,8 @@ class TranslationsTest {
     }
 
     @Test
-    @Config(qualifiers = "es-rAR")
-    fun argentineSpanishShowsSpanish() {
+    @Config(qualifiers = "es")
+    fun spanishShowsSpanish() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         assertEquals(strings("values-es").getValue("settings_title"), app.getString(R.string.settings_title))
         assertNotEquals(english.getValue("settings_title"), app.getString(R.string.settings_title))
