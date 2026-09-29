@@ -1,8 +1,8 @@
 # Crosstune
 
-**Crosstune opens music links in the music app you use.**
+**Open any music link in your favorite app.**
 
-Example: a friend sends you a Spotify link, but you use YouTube Music. Tap the link and Crosstune opens the same song in YouTube Music. It works for songs, albums, artists and playlists.
+A friend sends you a Spotify link, but you use YouTube Music? Tap it and the same song opens in YouTube Music. Works with songs, albums, artists and playlists.
 
 <p align="center">
   <img src="screenshots/home.png" alt="A Spotify link resolved to its song, ready to open in YouTube Music" width="200">
@@ -21,7 +21,7 @@ Example: a friend sends you a Spotify link, but you use YouTube Music. Tap the l
 
 ## 🚀 Set up (1 minute)
 
-1. Open Crosstune. Choose which services' links it should open, and which app you listen in.
+1. Open Crosstune. Pick the services people send you links from, and the app you listen in.
 2. Tap **Open link settings**, then **Add link**, and turn on the links Crosstune lists.
 3. Done. Now tap a music link anywhere and it opens in your app.
 

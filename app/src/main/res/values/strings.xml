@@ -4,7 +4,7 @@
     <string name="publisher_id">astrovm</string>
     <string name="publisher_name">astrovm</string>
 
-    <string name="app_tagline">Opens music links in the music app you use.</string>
+    <string name="app_tagline">Open any music link in your favorite app.</string>
     <string name="spotify_link_label">Music link</string>
     <string name="spotify_link_placeholder">Paste a music link</string>
     <string name="resolve_button">Look up</string>
@@ -29,8 +29,8 @@
     <string name="settings_default_title">Default app</string>
     <string name="settings_default_label">Open results in</string>
     <string name="settings_about_title">About</string>
-    <string name="settings_links_title">Which links Crosstune opens</string>
-    <string name="settings_links_description">When you tap a link from a service that\'s turned on, it opens in Crosstune. Links you share or paste always work.</string>
+    <string name="settings_links_title">Open links from</string>
+    <string name="settings_links_description">Tapping a link from these services opens it in Crosstune. Sharing or pasting works for all of them.</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Custom destinations</string>
@@ -44,7 +44,7 @@
     <string name="custom_template_invalid">Enter a name and a URL that contains {query}.</string>
     <string name="settings_behaviour_title">Behavior</string>
     <string name="setup_welcome_title">Welcome to Crosstune</string>
-    <string name="setup_welcome_body">When someone sends you a music link, Crosstune opens the same song in the app you use.</string>
+    <string name="setup_welcome_body">Got a Spotify link but you use YouTube Music? Tap it and the same song opens there.</string>
     <string name="setup_get_started">Get started</string>
     <string name="next_button">Next</string>
     <string name="back_button">Back</string>
@@ -52,9 +52,9 @@
     <string name="setup_installed">Installed</string>
     <string name="setup_step">Step %1$d of %2$d</string>
     <string name="setup_sources_title">Which links should Crosstune open?</string>
-    <string name="setup_sources_body">When you tap a link from these services, it opens in Crosstune.</string>
+    <string name="setup_sources_body">Pick the services people send you links from.</string>
     <string name="setup_destination_title">Where do you listen?</string>
-    <string name="setup_destination_body">Crosstune opens songs in this app. You can change it later in Settings.</string>
+    <string name="setup_destination_body">Pick the app you listen in. You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
     <string name="setup_allow_body">Tap Open link settings, then Add link, then turn on the links listed below.</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
@@ -75,9 +75,9 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_ask_each_time">Ask which app to use</string>
-    <string name="setting_ask_each_time_description">Choose an app every time you share a link to Crosstune.</string>
+    <string name="setting_ask_each_time_description">Pick an app each time you share a link.</string>
     <string name="setting_exact_match">Open the exact song</string>
-    <string name="setting_exact_match_description">Only for Apple Music and Deezer. Other apps open a search instead.</string>
+    <string name="setting_exact_match_description">Works with Apple Music and Deezer. Other apps get a search.</string>
     <string name="matching_text">Finding the exact song…</string>
     <string name="picker_title">Open with</string>
     <string name="cancel_button">Cancel</string>
@@ -93,7 +93,7 @@
     <string name="share_search_link">Share search link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_settings_helper_title">Links still open in another app?</string>
-    <string name="link_settings_helper_body">Tap Open link settings and let Crosstune open them.</string>
+    <string name="link_settings_helper_body">Tap Open link settings and let Crosstune handle them.</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
     <string name="made_by">Made by @astrovm</string>
