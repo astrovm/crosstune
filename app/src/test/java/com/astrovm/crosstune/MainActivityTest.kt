@@ -150,6 +150,29 @@ class MainActivityTest {
     }
 
     @Test
+    @Config(sdk = [30])
+    fun openLinkSettingsUsesAppDetailsBeforeAndroid12() {
+        launch()
+        click(string(R.string.open_link_settings_button))
+
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStartedActivity()!!.action)
+    }
+
+    @Test
+    @Config(sdk = [32])
+    fun copySearchShowsToastBeforeAndroid13() {
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Cut To The Feeling")
+
+        click(string(R.string.copy_search_button))
+
+        assertEquals(string(R.string.search_copied_to_clipboard), ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test
     fun openLinkSettingsFallsBackToAppDetails() {
         shadowOf(app).checkActivities(true)
         installActivity(
@@ -279,7 +302,8 @@ class MainActivityTest {
             "Cut To The Feeling Carly Rae Jepsen",
             clipboard.primaryClip!!.getItemAt(0).text.toString()
         )
-        assertEquals(string(R.string.search_copied_to_clipboard), ShadowToast.getTextOfLatestToast())
+        // Android 13+ confirms clipboard writes itself, so the app stays quiet.
+        assertNull(ShadowToast.getTextOfLatestToast())
 
         click(string(R.string.share_search_button))
         val chooser = nextStartedActivity()
