@@ -9,13 +9,18 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request makes an in-progress run pointless; runs on main always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-26.04
+    timeout-minutes: 20
     steps:
+      # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -24,18 +29,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
-      - name: Unit tests with coverage (100% line minimum)
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug
+      # Same task as locally: unit tests with the 100% line coverage gate, lint, debug and release APKs.
+      - name: Test, lint and build
+        run: ./gradlew :app:ci
 
-      - name: Build debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
-
-      - name: Upload test and coverage reports
+      - name: Upload test, coverage and lint reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-reports
+          name: reports
           path: |
             app/build/reports/tests/
             app/build/reports/kover/
+            app/build/reports/lint-results-debug.html
+          retention-days: 14
           if-no-files-found: warn

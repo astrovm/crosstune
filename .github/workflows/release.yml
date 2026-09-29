@@ -20,6 +20,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     permissions:
       contents: write
     env:
@@ -64,11 +65,9 @@ jobs:
         with:
           cache-read-only: true
 
-      - name: Unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
-
-      - name: Build release APK
-        run: ./gradlew --no-daemon :app:assembleRelease
+      # The same checks as CI, which also build the minified release APK.
+      - name: Test, lint and build
+        run: ./gradlew :app:ci
 
       - name: Verify version metadata
         run: |

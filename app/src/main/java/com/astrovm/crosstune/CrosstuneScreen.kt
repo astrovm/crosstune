@@ -547,7 +547,11 @@ internal fun CrosstuneScreenPreview() {
         CrosstuneScreen(
             state = UiState(
                 linkText = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
-                result = MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen"),
+                result = MusicMetadata(
+                    "Cut To The Feeling",
+                    "Carly Rae Jepsen",
+                    artworkUrl = "https://i.scdn.co/image/cut-to-the-feeling"
+                ),
                 link = MusicLink(
                     MusicService.SPOTIFY,
                     ItemType.TRACK,

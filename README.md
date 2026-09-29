@@ -84,6 +84,14 @@ APK output:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Test
+
+```bash
+./gradlew :app:ci
+```
+
+Runs exactly what CI runs: the Robolectric unit tests with a 100% line coverage gate, lint, and the debug and minified release builds. Coverage and lint reports end up in `app/build/reports/`.
+
 ### Install on Device (ADB)
 
 ```bash
@@ -92,7 +100,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Releasing
 
-The [Release workflow](.github/workflows/release.yml) runs the unit tests, builds a minified release APK, signs it, and publishes it to a GitHub release as `Crosstune-vX.Y.Z.apk`. You can start it either way:
+The [Release workflow](.github/workflows/release.yml) runs the same checks as CI (tests, coverage, lint and a minified release build), signs it, and publishes it to a GitHub release as `Crosstune-vX.Y.Z.apk`. You can start it either way:
 
 - Push a tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
 - Or run **Actions → Release → Run workflow**, pick the branch, and enter the tag. The workflow creates the tag on that commit.
