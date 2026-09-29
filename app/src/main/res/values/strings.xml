@@ -56,7 +56,7 @@
     <string name="setup_destination_title">Where do you listen?</string>
     <string name="setup_destination_body">Pick the app you listen in. You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
-    <string name="setup_allow_body">Tap Open link settings, then Add link, then turn on the links listed below. If the service\'s own app is installed, also turn off Open supported links in that app\'s settings.</string>
+    <string name="setup_allow_body">Tap Open link settings, then Add link, then turn on the links listed below. If the service\'s own app is installed, also open its link settings and turn off Open supported links, or choose In your browser.</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
     <string name="setup_allowed">Allowed</string>
     <string name="setup_not_allowed">Not allowed yet</string>
@@ -95,7 +95,7 @@
     <string name="link_settings_helper_title">Links still open in another app?</string>
     <string name="link_settings_helper_body">Tap Open link settings and allow Crosstune to open them.</string>
     <string name="blocking_apps_title">These apps still open the links</string>
-    <string name="blocking_apps_body">Open each app\'s link settings and turn off Open supported links. Then its links open in Crosstune.</string>
+    <string name="blocking_apps_body">In each app\'s link settings, turn off Open supported links or choose In your browser. Then its links open in Crosstune.</string>
     <string name="open_app_link_settings_button">Open %1$s settings</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
