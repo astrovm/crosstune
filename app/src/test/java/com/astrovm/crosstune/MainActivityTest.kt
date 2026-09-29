@@ -5,6 +5,8 @@ import android.content.ClipData
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
@@ -75,7 +77,7 @@ class MainActivityTest {
         return built.get()
     }
 
-    private fun string(id: Int): String = app.getString(id)
+    private fun string(id: Int, vararg args: Any): String = app.getString(id, *args)
 
     private fun prefs() = app.getSharedPreferences("crosstune_preferences", Context.MODE_PRIVATE)
 
@@ -117,6 +119,12 @@ class MainActivityTest {
         addCategory(Intent.CATEGORY_DEFAULT)
         addCategory(Intent.CATEGORY_BROWSABLE)
         addDataScheme("https")
+    }
+
+    private fun inSettings(block: () -> Unit) {
+        click(string(R.string.settings_button))
+        block()
+        click(string(R.string.done_button))
     }
 
     private fun installActivity(component: ComponentName, filter: IntentFilter) {
@@ -988,12 +996,12 @@ class MainActivityTest {
         for (link in links) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
             val handlers = app.packageManager.queryIntentActivities(intent, 0)
-            assertTrue(link, handlers.any { it.activityInfo.name == MainActivity::class.java.name })
+            assertTrue(link, handlers.any { it.activityInfo.packageName == app.packageName })
         }
         val podcast = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/show/$TRACK_ID"))
             .addCategory(Intent.CATEGORY_BROWSABLE)
         assertTrue(app.packageManager.queryIntentActivities(podcast, 0).none {
-            it.activityInfo.name == MainActivity::class.java.name
+            it.activityInfo.packageName == app.packageName
         })
     }
 
@@ -1067,7 +1075,7 @@ class MainActivityTest {
     fun askEachTimeOffersDestinationsForIncomingLinks() {
         respondWithTrack("Pick Me", "Artist · Song")
         launch()
-        click(string(R.string.setting_ask_each_time))
+        inSettings { click(string(R.string.setting_ask_each_time)) }
         assertTrue(prefs().getBoolean("ask_each_time", false))
         controller!!.pause().stop().destroy()
 
@@ -1096,7 +1104,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.picker_title))
         assertTextShown(string(R.string.result_title))
         assertFalse(activity.isFinishing)
-        click(string(R.string.setting_ask_each_time))
+        inSettings { click(string(R.string.setting_ask_each_time)) }
         assertFalse(prefs().getBoolean("ask_each_time", true))
     }
 
@@ -1113,7 +1121,7 @@ class MainActivityTest {
             }
         }
         launch()
-        click(string(R.string.setting_exact_match))
+        inSettings { click(string(R.string.setting_exact_match)) }
         assertTrue(prefs().getBoolean("exact_match", false))
         resolveTyped()
 
@@ -1127,7 +1135,7 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
 
-        click(string(R.string.setting_exact_match))
+        inSettings { click(string(R.string.setting_exact_match)) }
         assertFalse(prefs().getBoolean("exact_match", true))
     }
 
@@ -1322,7 +1330,159 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_CHOOSER, opened.action)
         @Suppress("DEPRECATION")
         val excluded = opened.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS)!!.map { (it as ComponentName).className }
-        assertTrue(excluded.toString(), MainActivity::class.java.name in excluded)
+        assertTrue(excluded.toString(), "${LinkInterception.ALIAS_PREFIX}SPOTIFY" in excluded)
+    }
+
+    // endregion
+
+    // region settings
+
+    @Test
+    fun turningOnASourceInterceptsItsLinksAndAsksAndroidForPermission() {
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+        click(string(R.string.settings_button))
+        assertTextAbsent(string(R.string.link_settings_helper_title))
+
+        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        assertTextShown(string(R.string.link_settings_helper_title))
+        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).performClick()
+        composeRule.waitForIdle()
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        // Turning a source off doesn't hide an unanswered permission hint.
+        assertTextShown(string(R.string.link_settings_helper_title))
+    }
+
+    @Test
+    fun perSourceRuleSendsThatServicesLinksElsewhere() {
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+        }
+        launch()
+        click(string(R.string.settings_button))
+        // The YouTube row's dropdown is the third "Opens in" button (Spotify, YouTube Music, YouTube).
+        composeRule.onAllNodes(hasText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))))[2]
+            .performClick()
+        composeRule.waitForIdle()
+        // Apple Music is also a source row; the dropdown item is the last match.
+        composeRule.onAllNodes(hasText(string(R.string.target_apple_music))).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
+        click(string(R.string.done_button))
+        controller!!.pause().stop().destroy()
+
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/4NRXx6U8ABQ")))
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals("com.apple.android.music", opened.`package`)
+        assertEquals("https://music.apple.com/search?term=Blinding%20Lights%20The%20Weeknd", opened.dataString)
+
+        // Spotify links still use the default.
+        assertNull(DestinationStore(prefs()).rule(MusicService.SPOTIFY))
+    }
+
+    @Test
+    fun ruleCanBeResetToTheDefault() {
+        DestinationStore(prefs()).setRule(MusicService.SPOTIFY, Destination.Service(MusicService.DEEZER))
+        launch()
+        click(string(R.string.settings_button))
+
+        click(string(R.string.rule_opens_in, "Deezer"))
+        click(string(R.string.rule_default, "YouTube Music"))
+
+        assertNull(DestinationStore(prefs()).rule(MusicService.SPOTIFY))
+    }
+
+    @Test
+    fun customDestinationsCanBeAddedUsedAndRemoved() {
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        respondWithTrack("Custom Song", "Artist · Song")
+        launch()
+        click(string(R.string.settings_button))
+
+        click(string(R.string.add_custom_destination_button))
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_name_label))).performTextReplacement("Lyrics")
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
+            .performTextReplacement("https://lyrics.example/search")
+        click(string(R.string.add_button))
+        assertTextShown(string(R.string.custom_template_invalid))
+
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
+            .performTextReplacement("https://lyrics.example/search?q={query}")
+        assertTextAbsent(string(R.string.custom_template_invalid))
+        click(string(R.string.add_button))
+        assertTextShown("https://lyrics.example/search?q={query}")
+        click(string(R.string.done_button))
+
+        click("Lyrics")
+        resolveTyped()
+        click(string(R.string.open_in_custom, "Lyrics"))
+        val opened = nextStartedActivity()!!
+        assertEquals("https://lyrics.example/search?q=Custom%20Song%20Artist", opened.dataString)
+        assertEquals(
+            "com.example.browser",
+            app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName
+        )
+
+        click(string(R.string.settings_button))
+        click(string(R.string.remove_button))
+        assertTextAbsent("https://lyrics.example/search?q={query}")
+        click(string(R.string.done_button))
+        assertTextAbsent("Lyrics")
+        assertTextShown(string(R.string.open_in_youtube_music))
+    }
+
+    @Test
+    fun customDestinationWithAnAppSchemeOpensDirectly() {
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        respondWithTrack("Scheme", "Artist · Song")
+        launch()
+        resolveTyped()
+
+        click(string(R.string.open_in_custom, "Player"))
+
+        val opened = nextStartedActivity()!!
+        assertEquals("player://search/Scheme%20Artist", opened.dataString)
+        assertNull(opened.`package`)
+    }
+
+    @Test
+    fun addingACustomDestinationCanBeCancelled() {
+        launch()
+        click(string(R.string.settings_button))
+        click(string(R.string.add_custom_destination_button))
+        click(string(R.string.cancel_button))
+
+        assertTextAbsent(string(R.string.custom_name_label))
+        assertTrue(DestinationStore(prefs()).customDestinations().isEmpty())
+    }
+
+    @Test
+    fun systemBackLeavesSettings() {
+        val activity = launch()
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.settings_links_title))
+
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+
+        assertTextAbsent(string(R.string.settings_links_title))
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun interceptedPagesCrosstuneCantConvertGoStraightToTheirApp() {
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://soundcloud.com/discover")))
+
+        val opened = nextStartedActivity()!!
+        assertEquals("com.soundcloud.android", opened.`package`)
+        assertEquals("https://soundcloud.com/discover", opened.dataString)
+        waitUntil { activity.isFinishing }
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     // endregion

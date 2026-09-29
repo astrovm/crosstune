@@ -111,6 +111,8 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
+    // Robolectric loads a full Android runtime per SDK level the tests use.
+    maxHeapSize = "3g"
     // Robolectric's Android 16 runtime reaches into JDK internals.
     jvmArgs(
         "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",

@@ -154,4 +154,27 @@ class MusicLinksTest {
         assertNull(MusicLinks.fromUrl("https://www.deezer.com/deezer-links-404".toHttpUrl()))
         assertNull(link("spotify:podcast:37i9dQZF1DXcBWIGoYBM5M"))
     }
+
+    @Test
+    fun anyPageOfAKnownServiceIsAttributedToIt() {
+        val pages = mapOf(
+            "https://open.spotify.com/show/abc" to MusicService.SPOTIFY,
+            "https://www.spotify.com/premium" to MusicService.SPOTIFY,
+            "https://spotify.link/x" to MusicService.SPOTIFY,
+            "https://music.youtube.com/library" to MusicService.YOUTUBE_MUSIC,
+            "https://www.youtube.com/@TheWeeknd" to MusicService.YOUTUBE,
+            "https://youtu.be/" to MusicService.YOUTUBE,
+            "https://youtube.com/feed" to MusicService.YOUTUBE,
+            "https://music.apple.com/us/browse" to MusicService.APPLE_MUSIC,
+            "https://www.deezer.com/en/channels" to MusicService.DEEZER,
+            "https://deezer.page.link/x" to MusicService.DEEZER,
+            "https://dzr.page.link/x" to MusicService.DEEZER,
+            "https://listen.tidal.com/feed" to MusicService.TIDAL,
+            "https://soundcloud.com/discover" to MusicService.SOUNDCLOUD,
+            "https://artist.bandcamp.com/merch" to MusicService.BANDCAMP
+        )
+        pages.forEach { (url, service) -> assertEquals(url, service, MusicLinks.serviceFor(url)) }
+        assertNull(MusicLinks.serviceFor("https://example.com/music"))
+        assertNull(MusicLinks.serviceFor("not a url"))
+    }
 }

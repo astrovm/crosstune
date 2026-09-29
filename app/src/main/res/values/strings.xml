@@ -23,6 +23,26 @@
     <string name="open_in_bandcamp">Open in Bandcamp</string>
     <string name="open_in_amazon_music">Open in Amazon Music</string>
     <string name="from_service">from %1$s</string>
+    <string name="open_in_custom">Open in %1$s</string>
+    <string name="settings_button">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="done_button">Done</string>
+    <string name="settings_links_title">Links Crosstune opens</string>
+    <string name="settings_links_description">Turn on a service to have its links open in Crosstune, then choose where they go. Android asks you to allow each new service under "Open by default".</string>
+    <string name="source_intercepted">Links open in Crosstune</string>
+    <string name="source_not_intercepted">Links open normally; you can still share them to Crosstune</string>
+    <string name="rule_opens_in">Opens in: %1$s</string>
+    <string name="rule_default">Default (%1$s)</string>
+    <string name="settings_custom_title">Custom destinations</string>
+    <string name="settings_custom_description">Open results in any app or website with a search URL.</string>
+    <string name="add_custom_destination_button">Add custom destination</string>
+    <string name="remove_button">Remove</string>
+    <string name="add_button">Add</string>
+    <string name="custom_name_label">Name</string>
+    <string name="custom_template_label">Search URL</string>
+    <string name="custom_template_hint">Use {query} where the search text goes, e.g. https://example.com/search?q={query}</string>
+    <string name="custom_template_invalid">Enter a name and a URL containing {query}.</string>
+    <string name="settings_behaviour_title">Behavior</string>
     <string name="target_apple_music">Apple Music</string>
     <string name="target_deezer">Deezer</string>
     <string name="target_tidal">TIDAL</string>
