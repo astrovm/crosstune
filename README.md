@@ -38,7 +38,7 @@ Crosstune reads the link's title and artist from the service it comes from, then
 
 - **9 services.** Crosstune reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp. It opens them in any of those, or in Amazon Music.
 - **One app per service.** Send YouTube links to YouTube Music and everything else to Apple Music, for example.
-- **Ask every time.** Choose the app each time you share a link.
+- **Ask every time.** Choose the app each time you tap or share a link.
 - **Exact match.** Apple Music and Deezer can open the song, album or artist itself instead of a search.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
 - **Shortcuts.** Paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.
