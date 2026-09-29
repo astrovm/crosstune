@@ -94,10 +94,12 @@
     <string name="shortcut_paste_short">Open copied link</string>
     <string name="shortcut_paste_long">Open copied music link</string>
     <string name="error_clipboard_empty">Copy a music link first.</string>
-    <string name="copy_search_button">Copy search</string>
+    <string name="copy_button">Copy</string>
+    <string name="copy_search_action">Copy search text</string>
     <string name="share_search_button">Share</string>
     <string name="share_search_link">Share search link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
+    <string name="link_copied_to_clipboard">Link copied</string>
     <string name="link_settings_helper_title">Allow the new links</string>
     <string name="link_settings_helper_body">Tap Open link settings, then Add link, and tick all the links.</string>
     <string name="blocking_apps_title">These apps still open the links</string>
