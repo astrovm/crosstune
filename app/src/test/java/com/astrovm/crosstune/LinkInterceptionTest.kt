@@ -2,14 +2,19 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 class LinkInterceptionTest {
@@ -23,12 +28,11 @@ class LinkInterceptionTest {
     }
 
     @Test
-    fun onlySpotifyIsInterceptedByDefault() {
+    fun nothingIsInterceptedUntilTheUserChooses() {
         MusicService.entries.filter { it.canBeSource }.forEach { service ->
-            assertEquals(service.name, service == MusicService.SPOTIFY, interception.isEnabled(service))
+            assertFalse(service.name, interception.isEnabled(service))
         }
-        assertTrue(handledByCrosstune("https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl"))
-        assertFalse(handledByCrosstune("https://www.youtube.com/watch?v=4NRXx6U8ABQ"))
+        assertFalse(handledByCrosstune("https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl"))
     }
 
     @Test
@@ -55,5 +59,40 @@ class LinkInterceptionTest {
         // Pages outside the supported item paths are left to their own apps.
         interception.setEnabled(MusicService.YOUTUBE, true)
         assertFalse(handledByCrosstune("https://www.youtube.com/@TheWeeknd"))
+    }
+
+    @Test
+    fun approvedServicesFollowAndroidsPerDomainState() {
+        var states: Map<String, Int>? = mapOf(
+            "open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED,
+            "spotify.link" to DomainVerificationUserState.DOMAIN_STATE_NONE,
+            "www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_NONE,
+            "*.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+        )
+        FakeDomainVerification.install(app) { states }
+
+        assertEquals(setOf(MusicService.SPOTIFY, MusicService.BANDCAMP), interception.approvedServices())
+
+        states = null
+        assertNull(interception.approvedServices())
+    }
+
+    @Test
+    fun approvalsAreUnknownWithoutTheSystemService() {
+        // Robolectric, like some trimmed-down devices, has no domain verification service.
+        assertNull(interception.approvedServices())
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun approvalsAreUnknownBeforeAndroid12() {
+        assertNull(interception.approvedServices())
+    }
+
+    @Test
+    fun installedAppsAreDetected() {
+        assertTrue(interception.installedServices().isEmpty())
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.aspiro.tidal" })
+        assertEquals(setOf(MusicService.TIDAL), interception.installedServices())
     }
 }

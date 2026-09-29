@@ -75,6 +75,9 @@ internal class DestinationStore(private val preferences: SharedPreferences) {
     fun defaultDestination(): Destination =
         find(preferences.getString(KEY_DEFAULT, null)) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
 
+    /** False until the user picks a default, e.g. during first-run setup. */
+    fun hasDefault(): Boolean = find(preferences.getString(KEY_DEFAULT, null)) != null
+
     fun setDefault(destination: Destination) {
         preferences.edit { putString(KEY_DEFAULT, destination.key) }
     }

@@ -36,7 +36,9 @@ Crosstune opens music links from one service in the app you actually use. Share,
 
 Amazon Music is a destination only: its links show no details without JavaScript. YouTube playlists and channels aren't supported for the same reason.
 
-Only Spotify links are opened by Crosstune out of the box. Turn on other services under **Settings → Links Crosstune opens**. Android doesn't let third-party apps verify these domains, so after turning a service on, use the **Open Link Settings** button and allow its links under "Open by default". Pages Crosstune can't convert, like a SoundCloud feed, go straight to the service's own app.
+The first time you open Crosstune, a short setup asks which services' links it should open, where to send them (installed apps are listed first), and walks you through allowing those links in Android. Android doesn't let third-party apps verify these domains, so you allow them under "Open by default"; on Android 12 and later, setup shows which ones are allowed so far. Everything can be changed later under **Settings**. Pages Crosstune can't convert, like a SoundCloud feed, go straight to the service's own app. If you tap a link before finishing setup, Crosstune asks where to open it and shows setup on the next launch.
+
+Updating from a version before setup existed keeps Spotify links opening in Crosstune and skips setup.
 
 ## Privacy
 

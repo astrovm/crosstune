@@ -12,9 +12,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageInfo
+import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
@@ -59,6 +62,8 @@ class MainActivityTest {
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
+        // Most tests exercise the main screen; first-run setup has its own tests.
+        prefs().edit().putBoolean("setup_complete", true).commit()
     }
 
     @After
@@ -985,6 +990,7 @@ class MainActivityTest {
 
     @Test
     fun localizedTrackLinksAreRoutedToCrosstune() {
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         val links = listOf(
             "https://open.spotify.com/track/$TRACK_ID",
             "https://open.spotify.com/intl-es/track/$TRACK_ID",
@@ -1296,6 +1302,7 @@ class MainActivityTest {
 
     @Test
     fun fallbackNeverOpensCrosstuneItself() {
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         // Crosstune handles this Spotify link, so without its app installed a plain VIEW intent could loop back.
         shadowOf(app).checkActivities(true)
         installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
@@ -1312,6 +1319,7 @@ class MainActivityTest {
 
     @Test
     fun fallbackWithSeveralBrowsersShowsAChooserWithoutCrosstune() {
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         shadowOf(app).checkActivities(true)
         installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
         installActivity(ComponentName("com.example.other", "com.example.other.Browser"), browserFilter())
@@ -1483,6 +1491,140 @@ class MainActivityTest {
         assertEquals("https://soundcloud.com/discover", opened.dataString)
         waitUntil { activity.isFinishing }
         assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    // endregion
+
+    // region first-run setup
+
+    private fun freshInstall() {
+        prefs().edit().clear().commit()
+    }
+
+    private fun toggleRow(label: String) {
+        composeRule.onNode(hasText(label) and isToggleable()).performClick()
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun firstLaunchWalksThroughSetupAndAppliesTheChoices() {
+        freshInstall()
+        FakeDomainVerification.install(app) {
+            mapOf("www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
+        }
+        launch()
+        assertTextShown(string(R.string.setup_welcome_title))
+        assertFalse(prefs().getBoolean("setup_complete", true))
+
+        click(string(R.string.setup_get_started))
+        toggleRow(string(R.string.target_youtube))
+        toggleRow(string(R.string.service_spotify))
+        toggleRow(string(R.string.service_spotify))
+        assertEquals(
+            setOf(MusicService.YOUTUBE),
+            MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
+        )
+
+        click(string(R.string.next_button))
+        // No built-in default: a destination has to be picked before moving on.
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
+        click(string(R.string.target_deezer))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_allowed))
+        click(string(R.string.open_link_settings_button))
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+
+        click(string(R.string.setup_finish))
+        assertTextShown(string(R.string.app_tagline))
+        assertTextAbsent(string(R.string.link_settings_helper_title))
+        assertTrue(prefs().getBoolean("setup_complete", false))
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
+
+        controller!!.pause().stop().destroy()
+        launch()
+        assertTextAbsent(string(R.string.setup_welcome_title))
+    }
+
+    @Test
+    fun setupShowsWhatStillNeedsAllowingWhenAndroidReportsIt() {
+        freshInstall()
+        var states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_NONE)
+        FakeDomainVerification.install(app) { states }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        // A saved default looks like an older install, so mark setup as still pending explicitly.
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_not_allowed))
+
+        // Returning from Android's settings refreshes the status.
+        states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_allowed))
+    }
+
+    @Test
+    fun setupCanGoBackAndHandlesPickingNoServices() {
+        freshInstall()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.back_button))
+        assertTextShown(string(R.string.setup_welcome_title))
+
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.target_youtube_music))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_allow_none))
+        assertTextAbsent(string(R.string.open_link_settings_button))
+    }
+
+    @Test
+    fun setupListsInstalledAppsFirst() {
+        freshInstall()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
+        launch()
+        click(string(R.string.setup_get_started))
+
+        val rows = composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes()
+        val firstLabel = rows.first().config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString { it.text }
+        assertEquals("${string(R.string.target_soundcloud)}, ${string(R.string.setup_installed)}", firstLabel)
+        assertTextShown(string(R.string.setup_installed))
+    }
+
+    @Test
+    fun linkOpenedBeforeSetupAsksWhereToGoThenSetupFollows() {
+        freshInstall()
+        respondWithTrack("Early", "Artist · Song")
+        val activity = launch(trackLink())
+
+        waitForText(string(R.string.picker_title))
+        assertTextAbsent(string(R.string.setup_welcome_title))
+        click(string(R.string.open_in_tidal))
+        waitUntil { activity.isFinishing }
+        assertEquals("com.aspiro.tidal", nextStartedActivity()!!.`package`)
+        controller!!.pause().stop().destroy()
+
+        // History from that link must not be mistaken for an install from before setup existed.
+        launch()
+        assertTextShown(string(R.string.setup_welcome_title))
+    }
+
+    @Test
+    fun updatingFromAVersionWithoutSetupKeepsSpotifyLinksAndSkipsSetup() {
+        freshInstall()
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+
+        assertTextAbsent(string(R.string.setup_welcome_title))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
+        assertTrue(prefs().getBoolean("setup_complete", false))
     }
 
     // endregion

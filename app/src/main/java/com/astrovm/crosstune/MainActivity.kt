@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
                         onRuleChange = viewModel::setRule,
                         onAddCustom = viewModel::addCustomDestination,
                         onRemoveCustom = viewModel::removeCustomDestination,
+                        onCompleteSetup = viewModel::completeSetup,
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCopySearch = ::copySearch,
@@ -98,6 +99,12 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The user may have just allowed links, or installed a music app, outside Crosstune.
+        viewModel.refreshSystemState()
     }
 
     override fun onNewIntent(intent: Intent) {
