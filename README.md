@@ -1,8 +1,8 @@
 # Crosstune
 
-**Open any music link in the app you actually use.**
+**Tap any music link. It opens in *your* app.**
 
-A friend sends a Spotify link but you use YouTube Music? Tap it, and Crosstune opens the same song there. It works with songs, albums, artists and playlists across eight services.
+Friend sends Spotify, you use YouTube Music? Crosstune opens the same song there. Songs, albums, artists, playlists.
 
 <p align="center">
   <img src="screenshots/home.png" alt="A Spotify link resolved to its song, ready to open in YouTube Music" width="200">
@@ -11,81 +11,91 @@ A friend sends a Spotify link but you use YouTube Music? Tap it, and Crosstune o
   <img src="screenshots/setup.png" alt="First-run setup: choosing which links Crosstune opens" width="200">
 </p>
 
-## Download
+## ⬇️ Get it
 
-Get the latest `Crosstune-vX.Y.Z.apk` from [Releases](https://github.com/astrovm/crosstune/releases), or add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates. Requires Android 8.0 or later.
+- **APK:** [Releases](https://github.com/astrovm/crosstune/releases)
+- **Auto-updates:** add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium)
+- **Needs:** Android 8.0+
 
-> **Updating from v1.0.6 or earlier?** Newer releases are signed with a different key, so uninstall the old version once before installing.
+> ⚠️ **Coming from v1.0.6 or older?** Uninstall once first. The signing key changed.
 
-## Getting started
+## 🚀 Set up (1 minute)
 
-1. Open Crosstune. A short setup asks which services' links it should open (apps you have installed are listed first) and where to send them.
-2. Tap **Open link settings**, choose **Add link**, and select the links setup lists for you. Android requires this once per service.
-3. That's it. Tap a music link anywhere and it opens in your app.
+1. Open Crosstune. Pick your links and your app.
+2. Tap **Open link settings** → **Add link** → select the links shown.
+3. Done. Tap a music link anywhere.
 
-You can also paste a link into Crosstune, or share one to it from any app.
+Also works by pasting or sharing a link to Crosstune.
 
-## Features
+## ✨ What it does
 
-- **Eight services in, nine out.** Read links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp, and open them in any of those or in Amazon Music.
-- **Your rules.** Pick a default app, or send each service somewhere different, like YouTube videos to YouTube Music and everything else to Apple Music.
-- **Ask every time.** Turn on **Ask where to open shared links** to choose an app for each link.
-- **Exact matches.** Turn on **Open exact matches when possible** to open the exact item in Apple Music or Deezer instead of a search.
-- **Custom destinations.** Add any app or website that has a search URL, like `https://example.com/search?q={query}`.
-- **Quick access.** Paste with one tap, reopen recent links with their covers, or use the **Open copied music link** Quick Settings tile and launcher shortcut.
-- **Always a way out.** Open a result, or a link Crosstune couldn't read, in the app it came from. Copy the search text or share a search link.
-
-## Supported links
-
-| Service | Links Crosstune understands |
+| | |
 | --- | --- |
-| Spotify | Songs, albums, artists and playlists on `open.spotify.com`, `spotify.link` short links, `spotify:` URIs, bare track IDs |
-| YouTube Music | `music.youtube.com/watch?v=…` |
-| YouTube | Videos on `youtube.com` and `youtu.be`, Shorts and live streams |
-| Apple Music | Songs, albums, artists and playlists on `music.apple.com` |
-| Deezer | Songs, albums, artists and playlists on `deezer.com`, `link.deezer.com` short links |
-| TIDAL | Songs, albums, artists and playlists on `tidal.com` and `listen.tidal.com` |
-| SoundCloud | Artists, tracks and sets on `soundcloud.com`, `on.soundcloud.com` short links |
-| Bandcamp | Tracks and albums on `*.bandcamp.com` |
+| 🎵 **8 in, 9 out** | Reads Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp. Opens in any of them, or Amazon Music. |
+| 🎯 **Per-service rules** | e.g. YouTube → YouTube Music, everything else → Apple Music. |
+| 🤔 **Ask every time** | Pick an app for each link. |
+| ✅ **Exact matches** | Apple Music and Deezer open the exact item, not a search. |
+| ➕ **Custom apps** | Any search URL, like `https://example.com/search?q={query}`. |
+| ⚡ **Fast access** | One-tap paste, recent links, Quick Settings tile, launcher shortcut. |
 
-Amazon Music works as a destination only, because its pages don't expose song details. YouTube playlists and channels aren't supported for the same reason.
+## 🔗 Supported links
 
-## Troubleshooting
+| Service | Works with |
+| --- | --- |
+| Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs |
+| YouTube Music | Songs |
+| YouTube | Videos, Shorts, live, `youtu.be` |
+| Apple Music | Songs, albums, artists, playlists |
+| Deezer | Songs, albums, artists, playlists, `link.deezer.com` |
+| TIDAL | Songs, albums, artists, playlists |
+| SoundCloud | Artists, tracks, sets, `on.soundcloud.com` |
+| Bandcamp | Tracks, albums |
 
-- **Links still open in another app or the browser.** Make sure the service is turned on in Crosstune's **Settings**, then open Android's **Settings → Apps → Crosstune → Open by default**, tap **Add link** and select that service's links.
-- **A link opens in the service's own app.** Pages Crosstune can't convert, like a SoundCloud feed, are handed straight to that app.
-- **A song opens as a search.** Most apps have no public way to look up a song without an account, so Crosstune opens a search. For Apple Music and Deezer, turn on **Open exact matches when possible**.
+Not supported: Amazon Music links, YouTube playlists and channels. Their pages don't show song details.
 
-## Privacy
+## 🛠️ Something wrong?
 
-No accounts, analytics or ads. To show a link's title, artist and cover, Crosstune asks the service the link belongs to, using its public page or official key-less API (YouTube and SoundCloud oEmbed, the iTunes Lookup API, the Deezer API). With exact matches on, it also sends the title and artist to [Apple's iTunes Search API](https://performance-partners.apple.com/search-api) or [Deezer's API](https://developers.deezer.com/api). History never leaves your device.
+- **Links open somewhere else?** Turn the service on in Crosstune **Settings**. Then Android **Settings → Apps → Crosstune → Open by default → Add link**.
+- **Opened in the original app?** Crosstune can't convert that page (like a SoundCloud feed), so it passes it on.
+- **Got a search, not the song?** Most apps have no public lookup. Turn on **Exact matches** for Apple Music and Deezer.
 
-## Verify your download
+## 🔒 Privacy
 
-Release APKs are signed with this certificate. Each release's notes repeat the fingerprint (SHA-256):
+- ❌ No accounts, analytics or ads.
+- 🏠 History stays on your device.
+- 🌐 To read a link's title, artist and cover, Crosstune asks only that link's service (public page or key-less API).
+- 🎯 With **Exact matches** on, the title and artist also go to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
+
+<details>
+<summary><b>🔏 Verify your download</b></summary>
+
+Release APKs are signed with this certificate (SHA-256). Each release repeats it:
 
 ```text
 64:EC:D5:52:E3:4B:B4:15:8A:04:6B:DE:1B:BD:BC:C9:04:23:9D:59:33:CF:74:C4:62:B6:FD:02:A7:B0:F6:FA
 ```
 
-## For developers
+</details>
 
-You need the Android SDK and JDK 17 or later. If you build from the command line, point `local.properties` at the SDK with `sdk.dir=/path/to/Android/Sdk`.
+<details>
+<summary><b>👩‍💻 For developers</b></summary>
+
+**Needs:** Android SDK, JDK 17+. From the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
 
 ```bash
 ./gradlew :app:assembleDebug   # APK in app/build/outputs/apk/debug/
 ./gradlew :app:ci              # exactly what CI runs
 ```
 
-`:app:ci` runs the Robolectric unit tests with a 100% line coverage gate, lint, and the debug and minified release builds. Reports end up in `app/build/reports/`.
-
-The version comes from Git: `versionName` is the latest tag without the `v` (plus `-dev.N` for commits after it) and `versionCode` is the total commit count.
+- `:app:ci` = Robolectric tests (100% line coverage gate) + lint + debug and minified release builds. Reports in `app/build/reports/`.
+- Version comes from Git: `versionName` = latest tag without `v` (+ `-dev.N` after it). `versionCode` = commit count.
 
 ### Releasing
 
-Push a tag (`git tag vX.Y.Z && git push origin vX.Y.Z`), or run **Actions → Release → Run workflow** with a tag name. The [Release workflow](.github/workflows/release.yml) runs the same checks as CI, then builds, signs and publishes `Crosstune-vX.Y.Z.apk` to a GitHub release.
+1. Push a tag: `git tag vX.Y.Z && git push origin vX.Y.Z` (or **Actions → Release → Run workflow**).
+2. The [Release workflow](.github/workflows/release.yml) runs CI checks, then signs and publishes `Crosstune-vX.Y.Z.apk`.
 
-It needs these repository secrets:
+Required secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -94,6 +104,8 @@ It needs these repository secrets:
 | `RELEASE_KEY_ALIAS` | Key alias |
 | `RELEASE_KEY_PASSWORD` | Key password |
 
-Back up the keystore and never replace it: Android only installs updates signed with the same key.
+> ⚠️ Back up the keystore. Never replace it. Android only installs updates signed with the same key.
 
-Store listing metadata for F-Droid and similar catalogs lives in [`fastlane/metadata/android`](fastlane/metadata/android).
+Store metadata lives in [`fastlane/metadata/android`](fastlane/metadata/android).
+
+</details>
