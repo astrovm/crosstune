@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -351,21 +352,20 @@ private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenAc
     Group {
         apps.forEachIndexed { index, app ->
             if (index > 0) GroupDivider()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(app.labelRes), style = MaterialTheme.typography.bodyLarge)
+            // The button sits under the name and status: translated button labels are too long to share a row.
+            Column(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(app.labelRes),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f)
+                    )
                     // Before Android 12 there's no way to tell whether the app still takes the links.
                     state.blockingApps?.let { blocking ->
-                        Spacer(Modifier.height(6.dp))
                         StatusTag(app !in blocking, stringResource(R.string.setup_done), stringResource(R.string.setup_still_opens))
                     }
                 }
-                TextButton(onClick = { actions.onOpenAppLinkSettings(app) }) {
+                TextButton(onClick = { actions.onOpenAppLinkSettings(app) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
                     Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
                 }
             }

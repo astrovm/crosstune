@@ -71,6 +71,12 @@ android {
         compose = true
     }
 
+    androidResources {
+        // Lists the languages under res/values-* in the app's locale config, so each shows up in
+        // Android 13+'s per-app language setting without another file to keep in sync.
+        generateLocaleConfig = true
+    }
+
     testOptions {
         unitTests {
             isIncludeAndroidResources = true

@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -60,6 +62,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -528,20 +531,26 @@ private fun ResultCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
                     .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Same height even when only one label wraps.
                 SecondaryAction(
                     R.drawable.ic_content_copy,
                     stringResource(R.string.copy_button),
                     actions.onCopyLink,
-                    Modifier.weight(1f)
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 )
                 SecondaryAction(
                     R.drawable.ic_share,
                     stringResource(R.string.share_search_button),
                     actions.onShareSearch,
-                    Modifier.weight(1f)
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 )
             }
             if (link != null && link.service != (destination as? Destination.Service)?.service) {
@@ -563,7 +572,8 @@ private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modif
     FilledTonalButton(onClick = onClick, contentPadding = ButtonDefaults.ButtonWithIconContentPadding, modifier = modifier) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Long translations wrap to a second line instead of being cut off.
+        Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 

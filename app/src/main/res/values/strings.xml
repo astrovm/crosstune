@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Crosstune</string>
-    <string name="publisher_id">astrovm</string>
-    <string name="publisher_name">astrovm</string>
+    <string name="app_name" translatable="false">Crosstune</string>
+    <string name="publisher_id" translatable="false">astrovm</string>
+    <string name="publisher_name" translatable="false">astrovm</string>
 
     <string name="app_tagline">Open any music link in your favorite app.</string>
     <string name="spotify_link_label">Music link</string>
@@ -12,13 +12,13 @@
     <string name="clear_button">Clear</string>
     <string name="loading_text">Looking up the link…</string>
     <string name="default_open_with_label">Opens in</string>
-    <string name="target_youtube_music">YouTube Music</string>
-    <string name="target_youtube">YouTube</string>
+    <string name="target_youtube_music" translatable="false">YouTube Music</string>
+    <string name="target_youtube" translatable="false">YouTube</string>
     <string name="open_in_youtube_music">Open in YouTube Music</string>
     <string name="open_in_youtube">Open in YouTube</string>
-    <string name="service_spotify">Spotify</string>
-    <string name="service_bandcamp">Bandcamp</string>
-    <string name="service_amazon_music">Amazon Music</string>
+    <string name="service_spotify" translatable="false">Spotify</string>
+    <string name="service_bandcamp" translatable="false">Bandcamp</string>
+    <string name="service_amazon_music" translatable="false">Amazon Music</string>
     <string name="open_in_spotify">Open in Spotify</string>
     <string name="open_in_bandcamp">Open in Bandcamp</string>
     <string name="open_in_amazon_music">Open in Amazon Music</string>
@@ -66,10 +66,10 @@
     <string name="setup_done">Done</string>
     <string name="setup_allowed">Allowed</string>
     <string name="setup_not_allowed">Not allowed yet</string>
-    <string name="target_apple_music">Apple Music</string>
-    <string name="target_deezer">Deezer</string>
-    <string name="target_tidal">TIDAL</string>
-    <string name="target_soundcloud">SoundCloud</string>
+    <string name="target_apple_music" translatable="false">Apple Music</string>
+    <string name="target_deezer" translatable="false">Deezer</string>
+    <string name="target_tidal" translatable="false">TIDAL</string>
+    <string name="target_soundcloud" translatable="false">SoundCloud</string>
     <string name="open_in_apple_music">Open in Apple Music</string>
     <string name="open_in_deezer">Open in Deezer</string>
     <string name="open_in_tidal">Open in TIDAL</string>
@@ -109,7 +109,7 @@
     <string name="dismiss_button">Dismiss</string>
     <string name="settings_version">Version</string>
     <string name="made_by">Made by @astrovm</string>
-    <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
+    <string name="github_repo_url" translatable="false">https://github.com/astrovm/crosstune</string>
 
     <string name="error_invalid_url">This isn\'t a link to a song, album, artist or playlist.</string>
     <string name="error_network">Couldn\'t connect. Check your internet and try again.</string>
