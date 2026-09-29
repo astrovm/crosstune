@@ -92,6 +92,7 @@ internal data class ScreenActions(
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
+    val onOpenAppLinkSettings: (MusicService) -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
 )
@@ -196,6 +197,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         if (state.showLinkSettingsHelper) {
             LinkSettingsHelper(actions, modifier = Modifier.padding(bottom = 16.dp))
         }
+        BlockingAppsNotice(state.blockingApps, actions, modifier = Modifier.padding(bottom = 16.dp))
 
         LinkField(state, actions)
         DefaultDestinationMenu(
@@ -243,6 +245,38 @@ internal fun LinkSettingsHelper(actions: ScreenActions, modifier: Modifier = Mod
                     TextButton(onClick = actions.onDismissLinkSettingsHelper) {
                         Text(stringResource(R.string.dismiss_button))
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Lists installed music apps that still open links meant for Crosstune, each with a button to its
+ * own link settings, where "Open supported links" has to be turned off. Nothing shows when there are none.
+ */
+@Composable
+internal fun BlockingAppsNotice(apps: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier) {
+    if (apps.isEmpty()) return
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer
+    ) {
+        Column(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
+            Text(text = stringResource(R.string.blocking_apps_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = stringResource(R.string.blocking_apps_body),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            MusicService.entries.filter { it in apps }.forEach { app ->
+                TextButton(
+                    onClick = { actions.onOpenAppLinkSettings(app) },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                ) {
+                    Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
                 }
             }
         }

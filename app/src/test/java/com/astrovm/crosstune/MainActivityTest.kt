@@ -1722,6 +1722,48 @@ class MainActivityTest {
     }
 
     @Test
+    fun anInstalledAppThatStillTakesTheLinksIsFlaggedAndOpensItsOwnSettings() {
+        val spotify = MusicService.SPOTIFY.packageName
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        var appAllowsLinks = true
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != spotify || appAllowsLinks }) { packageName ->
+            val approved = DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+            if (packageName == spotify) {
+                mapOf("open.spotify.com" to approved)
+            } else {
+                LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { approved }
+            }
+        }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+
+        val openButton = string(R.string.open_app_link_settings_button, string(R.string.service_spotify))
+        assertTextShown(string(R.string.blocking_apps_title))
+        click(openButton)
+        val started = nextStartedActivity()!!
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
+        assertEquals(Uri.parse("package:$spotify"), started.data)
+
+        // Back from Android's settings with the app's link handling off, the notice is gone.
+        appAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.blocking_apps_title))
+    }
+
+    @Test
+    fun noBlockingNoticeForAppsCrosstuneDoesNotIntercept() {
+        val spotify = MusicService.SPOTIFY.packageName
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        launch()
+        assertTextAbsent(string(R.string.blocking_apps_title))
+    }
+
+    @Test
     fun setupCanGoBackAndHandlesPickingNoServices() {
         freshInstall()
         launch()

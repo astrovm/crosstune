@@ -284,6 +284,7 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
             }
         }
     }
+    BlockingAppsNotice(state.blockingApps, actions, modifier = Modifier.padding(top = 16.dp))
     FilledTonalButton(
         onClick = actions.onOpenLinkSettings,
         contentPadding = ButtonDefaults.ButtonWithIconContentPadding,

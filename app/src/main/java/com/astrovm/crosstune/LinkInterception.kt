@@ -54,6 +54,28 @@ internal class LinkInterception(private val context: Context) {
         return unapprovedFrom(state.hostToStateMap)
     }
 
+    /**
+     * Installed music apps that still open links Crosstune is set to intercept. A domain an app
+     * has verified goes to that app before any app the user allows, so Crosstune only gets the
+     * link once "Open supported links" is turned off in that app's own settings. Null before
+     * Android 12, which can't say.
+     */
+    fun blockingApps(sources: Set<MusicService>): Set<MusicService>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
+        val wanted = sources.flatMap { HOSTS[it].orEmpty() }
+        return installedServices().filter { app ->
+            val state = try {
+                manager.getDomainVerificationUserState(app.packageName)
+            } catch (_: PackageManager.NameNotFoundException) {
+                null
+            }
+            state != null && state.isLinkHandlingAllowed && state.hostToStateMap.any { (host, hostState) ->
+                hostState != DomainVerificationUserState.DOMAIN_STATE_NONE && wanted.any { covers(it, host) }
+            }
+        }.toSet()
+    }
+
     private fun component(service: MusicService) =
         ComponentName(context.packageName, "$ALIAS_PREFIX${service.name}")
 
@@ -73,6 +95,16 @@ internal class LinkInterception(private val context: Context) {
             MusicService.SOUNDCLOUD to listOf("soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com"),
             MusicService.BANDCAMP to listOf("*.bandcamp.com")
         )
+
+        /** Whether two hosts, either of which may be a `*.` wildcard, can name the same site. */
+        private fun covers(a: String, b: String): Boolean {
+            fun suffix(host: String) = host.removePrefix("*")
+            return when {
+                a.startsWith("*.") -> b.endsWith(suffix(a))
+                b.startsWith("*.") -> a.endsWith(suffix(b))
+                else -> a == b
+            }
+        }
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =
