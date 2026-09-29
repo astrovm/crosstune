@@ -261,22 +261,21 @@ internal fun BlockingAppsNotice(apps: Set<MusicService>, actions: ScreenActions,
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer
+        color = MaterialTheme.colorScheme.secondaryContainer
     ) {
-        Column(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
-            Text(text = stringResource(R.string.blocking_apps_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = stringResource(R.string.blocking_apps_body),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            MusicService.entries.filter { it in apps }.forEach { app ->
-                TextButton(
-                    onClick = { actions.onOpenAppLinkSettings(app) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer)
-                ) {
-                    Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
+        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
+            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                Text(text = stringResource(R.string.blocking_apps_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(R.string.blocking_apps_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                MusicService.entries.filter { it in apps }.forEach { app ->
+                    TextButton(onClick = { actions.onOpenAppLinkSettings(app) }) {
+                        Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
+                    }
                 }
             }
         }
