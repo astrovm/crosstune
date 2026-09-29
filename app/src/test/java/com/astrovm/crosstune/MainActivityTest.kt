@@ -454,13 +454,13 @@ class MainActivityTest {
     }
 
     @Test
-    fun unreadableBodyShowsMetadataError() {
+    fun unreadableBodyShowsNetworkError() {
         fake.handler = { request: Request -> FakeSpotify.brokenBody(request) }
         launch()
 
         typeUrl(TRACK_ID)
         click(string(R.string.resolve_button))
-        waitForText(string(R.string.error_metadata_unavailable))
+        waitForText(string(R.string.error_network))
     }
 
     @Test
@@ -799,8 +799,196 @@ class MainActivityTest {
         assertEquals(1, fake.requestedUrls.size)
     }
 
+    // region lifecycle and error handling
+
+    private fun waitUntil(condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (!condition() && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20L)
+        }
+        assertTrue("condition not met; requests=${fake.requestedUrls}", condition())
+    }
+
+    private fun trackLink() = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID"))
+
+    @Test
+    fun notFoundPageShowsNotFoundInsteadOfOpeningSpotifyHomepageMetadata() {
+        // Spotify's 404 page still carries generic og: tags that used to be read as a track.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                FakeSpotify.trackPage("Spotify - Web Player: Music for everyone", "Spotify is a digital music service"),
+                code = 404
+            )
+        }
+        val activity = launch(trackLink())
+
+        waitForText(string(R.string.error_not_found))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+        assertTextAbsent("Spotify - Web Player: Music for everyone")
+    }
+
+    @Test
+    fun httpErrorsMapToSpecificMessages() {
+        launch()
+        val cases = listOf(
+            410 to R.string.error_not_found,
+            429 to R.string.error_rate_limited,
+            503 to R.string.error_spotify_unavailable,
+            403 to R.string.error_metadata_unavailable
+        )
+        for ((code, message) in cases) {
+            fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Error", "Page"), code = code) }
+            typeUrl(TRACK_ID)
+            click(string(R.string.resolve_button))
+            waitForText(string(message))
+            assertTextAbsent("Error")
+        }
+    }
+
+    @Test
+    fun shortLinkLandingPageWithTrackUrlInHtmlResolves() {
+        fake.handler = { request ->
+            if (request.url.host == "spotify.link") {
+                FakeSpotify.html(
+                    request,
+                    "<script>window.location='https://open.spotify.com/intl-de/track/$TRACK_ID?si=x'</script>"
+                )
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Scripted", "Artist · Song"))
+            }
+        }
+        launch()
+
+        typeUrl("http://spotify.link/AbCdEf")
+        click(string(R.string.resolve_button))
+        waitForText("Scripted")
+
+        // Cleartext short links are upgraded instead of being blocked by the network security policy.
+        assertEquals("https://spotify.link/AbCdEf", fake.requestedUrls.first())
+    }
+
+    @Test
+    fun missingShortLinkShowsNotFound() {
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 404) }
+        launch()
+
+        typeUrl("https://spotify.link/gone")
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.error_not_found))
+    }
+
+    @Test
+    fun rotationKeepsResultWithoutRefetching() {
+        respondWithTrack("Kept", "Artist · Song")
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Kept")
+
+        controller!!.recreate()
+        composeRule.waitForIdle()
+
+        assertTextShown("Kept")
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun rotationWhileIncomingLinkLoadsOpensSearchOnce() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            FakeSpotify.html(request, FakeSpotify.trackPage("Once", "Artist · Song"))
+        }
+        launch(trackLink())
+        waitUntil { fake.requestedUrls.size == 1 }
+
+        controller!!.recreate()
+        release.countDown()
+        val recreated = controller!!.get()
+        waitUntil { recreated.isFinishing }
+
+        assertEquals(1, fake.requestedUrls.size)
+        assertNotNull(nextStartedActivity())
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun newerLinkCancelsOlderRequest() {
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.pathSegments.last() == TRACK_ID) {
+                release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, FakeSpotify.trackPage("Stale", "Old · Song"))
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Fresh", "New · Song"))
+            }
+        }
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitUntil { fake.requestedUrls.size == 1 }
+
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(
+            controller!!.get(),
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID"))
+        )
+        waitUntil { controller!!.get().isFinishing }
+        release.countDown()
+        Thread.sleep(100L)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTextShown("Fresh")
+        assertTextAbsent("Stale")
+    }
+
+    @Test
+    fun relaunchFromRecentsDoesNotReopenTheLink() {
+        val intent = trackLink().addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
+        val activity = launch(intent)
+
+        assertTrue(fake.requestedUrls.isEmpty())
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun missingAppAndBrowserShowsErrorInsteadOfCrashing() {
+        shadowOf(app).checkActivities(true)
+        respondWithTrack("Nowhere", "Artist · Song")
+        val activity = launch(trackLink())
+
+        waitForText(string(R.string.error_no_app_to_open))
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun localizedTrackLinksAreRoutedToCrosstune() {
+        val links = listOf(
+            "https://open.spotify.com/track/$TRACK_ID",
+            "https://open.spotify.com/intl-es/track/$TRACK_ID",
+            "https://open.spotify.com/intl-pt-BR/track/$TRACK_ID?si=1"
+        )
+        for (link in links) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
+            val handlers = app.packageManager.queryIntentActivities(intent, 0)
+            assertTrue(link, handlers.any { it.activityInfo.name == MainActivity::class.java.name })
+        }
+        val album = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/album/$TRACK_ID"))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+        assertTrue(app.packageManager.queryIntentActivities(album, 0).none {
+            it.activityInfo.name == MainActivity::class.java.name
+        })
+    }
+
+    // endregion
+
     private companion object {
         const val TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
+        const val OTHER_TRACK_ID = "0VjIjW4GlUZAMYd2vXMi3b"
         const val TIMEOUT_MS = 5_000L
     }
 }

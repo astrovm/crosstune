@@ -34,10 +34,11 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="open.spotify.com"
-                    android:pathPrefix="/track/" />
+                <data android:scheme="https" />
+                <data android:host="open.spotify.com" />
+                <data android:pathPattern="/track/.*" />
+                <!-- Localized share links such as /intl-es/track/… -->
+                <data android:pathPattern="/intl-.*/track/.*" />
             </intent-filter>
 
             <intent-filter>

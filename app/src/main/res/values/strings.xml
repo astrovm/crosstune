@@ -28,6 +28,10 @@
     <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
 
     <string name="error_invalid_url">Enter a valid Spotify track URL.</string>
-    <string name="error_network">Could not reach Spotify right now. Check your connection and try again.</string>
+    <string name="error_network">Could not reach Spotify. Check your connection and try again.</string>
+    <string name="error_not_found">Spotify couldn\'t find this track. It may have been removed, or the link may be wrong.</string>
+    <string name="error_rate_limited">Spotify is limiting requests right now. Wait a moment and try again.</string>
+    <string name="error_spotify_unavailable">Spotify isn\'t responding right now. Try again in a moment.</string>
+    <string name="error_no_app_to_open">No installed app can open this link.</string>
     <string name="error_metadata_unavailable">Track metadata is unavailable for this link.</string>
 </resources>
