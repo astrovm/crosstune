@@ -52,12 +52,18 @@
     <string name="setup_installed">Installed</string>
     <string name="setup_step">Step %1$d of %2$d</string>
     <string name="setup_sources_title">Which links should Crosstune open?</string>
-    <string name="setup_sources_body">Pick the services people send you links from.</string>
+    <string name="setup_sources_body">Pick the services you get links from.</string>
     <string name="setup_destination_title">Where do you listen?</string>
     <string name="setup_destination_body">Pick the app you listen in. You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
-    <string name="setup_allow_body">Tap Open link settings, then Add link, then turn on the links listed below.</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
+    <string name="setup_allow_step_open">Tap Open link settings.</string>
+    <string name="setup_allow_step_add">Tap Add link.</string>
+    <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
+    <string name="setup_apps_title">Stop the other apps</string>
+    <string name="setup_apps_body">These apps open their own links first. In each one, choose “In your browser” or turn off “Open supported links”.</string>
+    <string name="setup_still_opens">Still opens links</string>
+    <string name="setup_done">Done</string>
     <string name="setup_allowed">Allowed</string>
     <string name="setup_not_allowed">Not allowed yet</string>
     <string name="target_apple_music">Apple Music</string>
@@ -92,10 +98,14 @@
     <string name="share_search_button">Share</string>
     <string name="share_search_link">Share search link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
-    <string name="link_settings_helper_title">Links still open in another app?</string>
-    <string name="link_settings_helper_body">Tap Open link settings and allow Crosstune to open them.</string>
+    <string name="link_settings_helper_title">Allow the new links</string>
+    <string name="link_settings_helper_body">Tap Open link settings, then Add link, and tick all the links.</string>
+    <string name="blocking_apps_title">These apps still open the links</string>
+    <string name="blocking_apps_body">In each one, choose “In your browser” or turn off “Open supported links”.</string>
+    <string name="open_app_link_settings_button">Open %1$s settings</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
+    <string name="settings_version">Version</string>
     <string name="made_by">Made by @astrovm</string>
     <string name="github_repo_url">https://github.com/astrovm/crosstune</string>
 

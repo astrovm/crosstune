@@ -30,9 +30,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,16 +52,21 @@ private const val STEP_WELCOME = 0
 private const val STEP_SOURCES = 1
 private const val STEP_DESTINATION = 2
 private const val STEP_ALLOW = 3
+private const val STEP_APPS = 4
 
 /**
- * First-run setup: which services' links to open, where to send them, and allowing the links in
- * Android. Choices apply as they're made, so leaving halfway keeps them; setup shows again until finished.
+ * First-run setup: which services' links to open, where to send them, allowing the links in
+ * Android, and, when a service's own app is installed, stopping that app from taking them.
+ * Choices apply as they're made, so leaving halfway keeps them; setup shows again until finished.
  */
 @Composable
 internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     var step by rememberSaveable { mutableIntStateOf(STEP_WELCOME) }
     // System back steps back like the Back button instead of leaving setup.
     BackHandler(enabled = step > STEP_WELCOME) { step-- }
+    val appsToFix = appsToStop(state)
+    // The last step is only there when an installed app is in the way.
+    val lastStep = if (appsToFix.isEmpty()) STEP_ALLOW else STEP_APPS
 
     Page(
         title = null,
@@ -79,7 +87,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                         Text(stringResource(R.string.back_button), style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                val isLast = step == STEP_ALLOW
+                val isLast = step >= lastStep
                 Button(
                     onClick = { if (isLast) actions.onCompleteSetup() else step++ },
                     // There's no built-in default any more, so one has to be picked.
@@ -102,12 +110,13 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     ) {
         AnimatedContent(targetState = step, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "setup") { shown ->
             Column {
-                if (shown > STEP_WELCOME) StepProgress(shown)
+                if (shown > STEP_WELCOME) StepProgress(shown, lastStep)
                 when (shown) {
                     STEP_WELCOME -> Welcome()
                     STEP_SOURCES -> SourcesStep(state, actions)
                     STEP_DESTINATION -> DestinationStep(state, actions)
-                    else -> AllowStep(state, actions)
+                    STEP_ALLOW -> AllowStep(state, actions)
+                    else -> AppsStep(appsToFix, state, actions)
                 }
             }
         }
@@ -115,15 +124,15 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
 }
 
 @Composable
-private fun StepProgress(step: Int) {
+private fun StepProgress(step: Int, lastStep: Int) {
     Column(modifier = Modifier.padding(top = 24.dp)) {
         Text(
-            text = stringResource(R.string.setup_step, step, STEP_ALLOW),
+            text = stringResource(R.string.setup_step, step, lastStep),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        LinearProgressIndicator(progress = { step / STEP_ALLOW.toFloat() }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { step / lastStep.toFloat() }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -243,13 +252,63 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
     }
 }
 
+/** A numbered instruction, short enough to read at a glance. */
+@Composable
+private fun NumberedStep(number: Int, text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = number.toString(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+        Text(text = text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+@Composable
+private fun StatusTag(done: Boolean, doneText: String, todoText: String) {
+    Tag(
+        if (done) doneText else todoText,
+        if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+        if (done) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+    )
+}
+
 @Composable
 private fun AllowStep(state: UiState, actions: ScreenActions) {
     if (state.intercepted.isEmpty()) {
         StepHeader(R.string.setup_allow_title, R.string.setup_allow_none)
         return
     }
-    StepHeader(R.string.setup_allow_title, R.string.setup_allow_body)
+    Text(
+        text = stringResource(R.string.setup_allow_title),
+        style = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.padding(top = 28.dp, bottom = 16.dp)
+    )
+    NumberedStep(1, stringResource(R.string.setup_allow_step_open))
+    NumberedStep(2, stringResource(R.string.setup_allow_step_add))
+    NumberedStep(3, stringResource(R.string.setup_allow_step_tick))
+    FilledTonalButton(
+        onClick = actions.onOpenLinkSettings,
+        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 24.dp)
+            .height(52.dp)
+    ) {
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Text(stringResource(R.string.open_link_settings_button), style = MaterialTheme.typography.labelLarge)
+    }
     Group {
         MusicService.entries.filter { it in state.intercepted }.forEachIndexed { index, source ->
             if (index > 0) GroupDivider()
@@ -263,15 +322,10 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
                         modifier = Modifier.weight(1f)
                     )
                     if (unapproved != null) {
-                        val allowed = unapproved.isEmpty()
-                        Tag(
-                            stringResource(if (allowed) R.string.setup_allowed else R.string.setup_not_allowed),
-                            if (allowed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                            if (allowed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
-                        )
+                        StatusTag(unapproved.isEmpty(), stringResource(R.string.setup_allowed), stringResource(R.string.setup_not_allowed))
                     }
                 }
-                // Android lists every service's links, so name the ones still to select for this one.
+                // Android lists every service's links, so name the ones still to tick for this one.
                 val hosts = unapproved ?: LinkInterception.HOSTS[source].orEmpty()
                 if (hosts.isNotEmpty()) {
                     Text(
@@ -284,18 +338,55 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
             }
         }
     }
-    FilledTonalButton(
-        onClick = actions.onOpenLinkSettings,
-        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp)
-            .height(52.dp)
-    ) {
-        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Text(stringResource(R.string.open_link_settings_button), style = MaterialTheme.typography.labelLarge)
+}
+
+/**
+ * Installed apps that would still take the links, each with a button to its own link settings.
+ * Every app that has been in the way stays listed, marked done once fixed, so the list doesn't
+ * shrink under the user's finger.
+ */
+@Composable
+private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenActions) {
+    StepHeader(R.string.setup_apps_title, R.string.setup_apps_body)
+    Group {
+        apps.forEachIndexed { index, app ->
+            if (index > 0) GroupDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = stringResource(app.labelRes), style = MaterialTheme.typography.bodyLarge)
+                    // Before Android 12 there's no way to tell whether the app still takes the links.
+                    state.blockingApps?.let { blocking ->
+                        Spacer(Modifier.height(6.dp))
+                        StatusTag(app !in blocking, stringResource(R.string.setup_done), stringResource(R.string.setup_still_opens))
+                    }
+                }
+                TextButton(onClick = { actions.onOpenAppLinkSettings(app) }) {
+                    Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
+                }
+            }
+        }
     }
+}
+
+/**
+ * Installed apps setup should ask the user to stop: on Android 12+ every one seen taking the
+ * links (kept once seen, so fixing one doesn't remove its row); before that, every installed app
+ * whose links Crosstune opens, since Android can't say which really do.
+ */
+@Composable
+private fun appsToStop(state: UiState): List<MusicService> {
+    var seen by rememberSaveable { mutableStateOf("") }
+    val blocking = state.blockingApps
+        ?: return MusicService.entries.filter { it in state.installed && it in state.intercepted }
+    val known = seen.split(',').filter { it.isNotEmpty() }
+    val all = (known + blocking.map { it.name }).distinct()
+    SideEffect { if (all.size != known.size) seen = all.joinToString(",") }
+    return MusicService.entries.filter { it.name in all }
 }
 
 @Preview(showBackground = true)

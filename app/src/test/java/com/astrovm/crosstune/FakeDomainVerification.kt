@@ -16,12 +16,24 @@ import java.util.UUID
 internal object FakeDomainVerification {
 
     /** [hostStates] null makes the system report the package as unknown. */
-    fun install(app: Application, hostStates: () -> Map<String, Int>?) {
+    fun install(app: Application, hostStates: () -> Map<String, Int>?) =
+        installPerPackage(app) { hostStates() }
+
+    /**
+     * Like [install], but [state] answers for whichever package is asked about, e.g. an installed
+     * music app, and [linkHandlingAllowed] is that package's "Open supported links" switch.
+     */
+    fun installPerPackage(
+        app: Application,
+        linkHandlingAllowed: (packageName: String) -> Boolean = { true },
+        state: (packageName: String) -> Map<String, Int>?
+    ) {
         val binder = Class.forName("android.content.pm.verify.domain.IDomainVerificationManager")
-        val service = Proxy.newProxyInstance(binder.classLoader, arrayOf(binder)) { _, method, _ ->
+        val service = Proxy.newProxyInstance(binder.classLoader, arrayOf(binder)) { _, method, args ->
             check(method.name == "getDomainVerificationUserState") { "Unexpected call ${method.name}" }
-            val states = hostStates() ?: throw nameNotFound()
-            userState(app.packageName, states)
+            val packageName = args[0] as String
+            val states = state(packageName) ?: throw nameNotFound()
+            userState(packageName, states, linkHandlingAllowed(packageName))
         }
         val manager = DomainVerificationManager::class.java
             .getDeclaredConstructor(Context::class.java, binder)
@@ -39,9 +51,9 @@ internal object FakeDomainVerification {
             .newInstance(code) as Throwable
     }
 
-    private fun userState(packageName: String, states: Map<String, Int>): DomainVerificationUserState =
+    private fun userState(packageName: String, states: Map<String, Int>, linkHandlingAllowed: Boolean): DomainVerificationUserState =
         DomainVerificationUserState::class.java.declaredConstructors
             .first { it.parameterCount == 5 }
             .apply { isAccessible = true }
-            .newInstance(UUID.randomUUID(), packageName, Process.myUserHandle(), true, states) as DomainVerificationUserState
+            .newInstance(UUID.randomUUID(), packageName, Process.myUserHandle(), linkHandlingAllowed, states) as DomainVerificationUserState
 }

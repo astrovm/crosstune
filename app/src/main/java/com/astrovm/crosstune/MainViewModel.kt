@@ -38,6 +38,11 @@ internal data class UiState(
     val installed: Set<MusicService> = emptySet(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
     val unapprovedHosts: Map<MusicService, List<String>>? = null,
+    /**
+     * Installed music apps that still open links Crosstune intercepts, until changed in their own
+     * settings; null before Android 12, which can't tell.
+     */
+    val blockingApps: Set<MusicService>? = null,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false
 ) {
@@ -99,15 +104,19 @@ internal class MainViewModel(
     private var job: Job? = null
     private var lastRequest: Pair<LinkInput, Boolean>? = null
 
-    private fun UiState.withDestinations() = copy(
-        defaultDestination = destinationStore.defaultDestination(),
-        destinations = destinationStore.allDestinations(),
-        rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
-        intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet(),
-        hasDefault = destinationStore.hasDefault(),
-        installed = interception.installedServices(),
-        unapprovedHosts = interception.unapprovedHosts()
-    )
+    private fun UiState.withDestinations(): UiState {
+        val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
+        return copy(
+            defaultDestination = destinationStore.defaultDestination(),
+            destinations = destinationStore.allDestinations(),
+            rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
+            intercepted = intercepted,
+            hasDefault = destinationStore.hasDefault(),
+            installed = interception.installedServices(),
+            unapprovedHosts = interception.unapprovedHosts(),
+            blockingApps = interception.blockingApps(intercepted)
+        )
+    }
 
     /** Re-reads what can change outside the app, e.g. after returning from Android's link settings. */
     fun refreshSystemState() {

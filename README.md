@@ -8,7 +8,7 @@ Someone sends you a link from one music service, but you listen on another. With
   <img src="screenshots/home.png" alt="A Spotify link resolved to its song, ready to open in YouTube Music" width="200">
   <img src="screenshots/recent.png" alt="The result with recent links and their covers" width="200">
   <img src="screenshots/settings.png" alt="Settings: default app and which services' links Crosstune opens" width="200">
-  <img src="screenshots/setup.png" alt="First-run setup: choosing which links Crosstune opens" width="200">
+  <img src="screenshots/setup.png" alt="First-run setup: allowing the links in Android" width="200">
 </p>
 
 ## ⬇️ Install
@@ -24,7 +24,8 @@ Setup takes about a minute.
 
 1. Open Crosstune and pick the services people send you links from.
 2. Pick the app you listen in.
-3. Tap **Open link settings**, then **Add link**, and turn on every link Crosstune lists.
+3. Tap **Open link settings**, then **Add link**, tick all the links and tap **Add**.
+4. If one of those services' apps is installed (Spotify, for example), Crosstune shows a button to its settings. There, choose **In your browser**, or turn off **Open supported links**. Otherwise that app keeps opening its own links.
 
 That's it. Music links you tap now open in your app.
 

@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -54,6 +55,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
         if (state.showLinkSettingsHelper) {
             LinkSettingsHelper(actions, modifier = Modifier.padding(top = 4.dp))
         }
+        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(top = 4.dp))
 
         SectionHeader(stringResource(R.string.settings_default_title))
         Group {
@@ -143,6 +145,24 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_version),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = appVersion(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            GroupDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .clickable { uriHandler.openUri(githubUrl) }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -156,6 +176,13 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             }
         }
     }
+}
+
+/** The installed version, e.g. "1.2.1", or "1.2.1-dev.5" for a build made after a release. */
+@Composable
+private fun appVersion(): String {
+    val context = LocalContext.current
+    return remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
 }
 
 /** One source service: a switch for whether Crosstune intercepts its links, and where they go beneath. */

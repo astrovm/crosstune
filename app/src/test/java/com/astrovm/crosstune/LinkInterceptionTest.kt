@@ -109,4 +109,82 @@ class LinkInterceptionTest {
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.aspiro.tidal" })
         assertEquals(setOf(MusicService.TIDAL), interception.installedServices())
     }
+
+    private fun installApp(service: MusicService) =
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = service.packageName })
+
+    @Test
+    fun anInstalledAppThatVerifiedTheLinksBlocksThem() {
+        installApp(MusicService.SPOTIFY)
+        installApp(MusicService.TIDAL)
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            when (packageName) {
+                MusicService.SPOTIFY.packageName -> mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+                // TIDAL's app has not verified anything.
+                else -> mapOf("tidal.com" to DomainVerificationUserState.DOMAIN_STATE_NONE)
+            }
+        }
+
+        val sources = setOf(MusicService.SPOTIFY, MusicService.TIDAL)
+        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(sources))
+        // A service Crosstune isn't intercepting is none of its business.
+        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.TIDAL)))
+    }
+
+    @Test
+    fun anAppBlocksTheLinksOfAnotherServiceItAlsoClaims() {
+        installApp(MusicService.YOUTUBE_MUSIC)
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+
+        assertEquals(setOf(MusicService.YOUTUBE_MUSIC), interception.blockingApps(setOf(MusicService.YOUTUBE)))
+    }
+
+    @Test
+    fun wildcardHostsAreMatchedBySuffix() {
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("artist.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.BANDCAMP)))
+
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("*.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.BANDCAMP)))
+        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.DEEZER)))
+    }
+
+    @Test
+    fun anAppStopsBlockingOnceItsLinkHandlingIsTurnedOff() {
+        installApp(MusicService.SPOTIFY)
+        var allowed = true
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { allowed }) {
+            mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+
+        allowed = false
+        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+    }
+
+    @Test
+    fun blockingAppsAreUnknownWithoutTheSystemService() {
+        installApp(MusicService.SPOTIFY)
+        assertNull(interception.blockingApps(setOf(MusicService.SPOTIFY)))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun blockingAppsAreUnknownBeforeAndroid12() {
+        assertNull(interception.blockingApps(setOf(MusicService.SPOTIFY)))
+    }
+
+    @Test
+    fun anAppTheSystemDoesNotShowIsNotBlocking() {
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app) { null }
+        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+    }
 }

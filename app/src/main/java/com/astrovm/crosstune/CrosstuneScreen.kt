@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -92,6 +93,7 @@ internal data class ScreenActions(
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
+    val onOpenAppLinkSettings: (MusicService) -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
 )
@@ -129,6 +131,7 @@ internal fun Destination.openLabel(): String =
 @Composable
 internal fun Page(
     title: String?,
+    titleLeading: (@Composable () -> Unit)? = null,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
@@ -141,7 +144,13 @@ internal fun Page(
             if (title != null) {
                 TopAppBar(
                     title = {
-                        Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (titleLeading != null) {
+                                titleLeading()
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     },
                     navigationIcon = navigationIcon,
                     actions = { actions() },
@@ -180,6 +189,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
 
     Page(
         title = stringResource(R.string.app_name),
+        titleLeading = { AppLogo() },
         actions = {
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
@@ -196,6 +206,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         if (state.showLinkSettingsHelper) {
             LinkSettingsHelper(actions, modifier = Modifier.padding(bottom = 16.dp))
         }
+        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(bottom = 16.dp))
 
         LinkField(state, actions)
         DefaultDestinationMenu(
@@ -242,6 +253,37 @@ internal fun LinkSettingsHelper(actions: ScreenActions, modifier: Modifier = Mod
                     }
                     TextButton(onClick = actions.onDismissLinkSettingsHelper) {
                         Text(stringResource(R.string.dismiss_button))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Lists installed music apps that still open links meant for Crosstune, each with a button to its
+ * own link settings, where "Open supported links" has to be turned off. Nothing shows when there are none.
+ */
+@Composable
+internal fun BlockingAppsNotice(apps: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier) {
+    if (apps.isEmpty()) return
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
+            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                Text(text = stringResource(R.string.blocking_apps_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(R.string.blocking_apps_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                MusicService.entries.filter { it in apps }.forEach { app ->
+                    TextButton(onClick = { actions.onOpenAppLinkSettings(app) }) {
+                        Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
                     }
                 }
             }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal const val ARTWORK_TAG = "artwork"
+internal const val LOGO_TAG = "logo"
 
 /** Widest the content gets on tablets and in landscape, so lines stay easy to read. */
 internal val ContentMaxWidth = 600.dp
@@ -41,6 +43,28 @@ internal val ContentMaxWidth = 600.dp
 @Composable
 internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier: Modifier = Modifier) {
     Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier)
+}
+
+/**
+ * The launcher icon's note and arrow without its badge, tinted from the theme so they read on both
+ * light and dark backgrounds. (Compose can't paint the adaptive icon itself.)
+ */
+@Composable
+internal fun AppLogo(modifier: Modifier = Modifier, size: Dp = 20.dp) {
+    Box(modifier = modifier.testTag(LOGO_TAG).size(size)) {
+        Image(
+            painterResource(R.drawable.ic_logo_note),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.fillMaxSize()
+        )
+        Image(
+            painterResource(R.drawable.ic_logo_arrow),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }
 
 /** Small heading above a group, optionally with an explanation and a trailing action. */

@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
                         onHistoryEntryClick = viewModel::showHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
                         onOpenLinkSettings = ::openAppLinkSettings,
+                        onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
                         loadArtwork = viewModel.artwork::load
                     )
@@ -229,12 +230,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openAppLinkSettings() {
-        val packageUri = "package:$packageName".toUri()
+        openLinkSettingsOf(packageName)
+        viewModel.dismissLinkSettingsHelper()
+    }
+
+    /** Opens Android's link settings for one app: Crosstune's to allow links, another's to turn its links off. */
+    private fun openLinkSettingsOf(appPackage: String) {
+        val packageUri = "package:$appPackage".toUri()
         val openedDefaults = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             tryStartActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri))
         if (!openedDefaults) {
             tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri))
         }
-        viewModel.dismissLinkSettingsHelper()
     }
 }
