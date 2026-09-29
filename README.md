@@ -23,7 +23,7 @@ A friend sends you a Spotify link, but you use YouTube Music? Tap it and the sam
 
 1. Open Crosstune. Pick the services people send you links from, and the app you listen in.
 2. Tap **Open link settings**, then **Add link**, and turn on the links Crosstune lists.
-3. Done. Now tap a music link anywhere and it opens in your app.
+3. Done. Now tap a music link anywhere and it opens in the app you picked.
 
 You can also paste a link into Crosstune, or share a link to it from any app.
 
@@ -33,7 +33,7 @@ You can also paste a link into Crosstune, or share a link to it from any app.
 - **A different app per service**: for example, YouTube links go to YouTube Music and everything else goes to Apple Music.
 - **Ask which app to use**: choose an app every time you share a link.
 - **Open the exact song**: Apple Music and Deezer can open the song itself instead of a search.
-- **Your own apps**: add any app or website that has a search page, like `https://example.com/search?q={query}`.
+- **More apps and sites**: add any app or website that has a search page, like `https://example.com/search?q={query}`.
 - **Shortcuts**: paste with one tap, reopen recent links, or use the Quick Settings tile and the home screen shortcut.
 
 ## Supported links
