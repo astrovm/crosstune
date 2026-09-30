@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">사용할 앱 매번 묻기</string>
     <string name="setting_ask_each_time_description">링크를 탭하거나 공유할 때마다 앱을 선택해요.</string>
     <string name="setting_exact_match">정확한 항목 열기</string>
-    <string name="setting_exact_match_description">Apple Music과 Deezer에서 노래, 앨범, 아티스트에 사용할 수 있어요. 다른 앱은 검색 결과가 열려요.</string>
+    <string name="setting_exact_match_description">Apple Music, Deezer, YouTube Music, Bandcamp에서 노래, 앨범, 아티스트에, YouTube에서 노래에 사용할 수 있어요. 다른 앱은 검색 결과가 열려요.</string>
     <string name="matching_text">정확한 항목을 찾는 중…</string>
     <string name="picker_title">열기 앱 선택</string>
     <string name="cancel_button">취소</string>

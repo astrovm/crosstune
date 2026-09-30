@@ -7,7 +7,7 @@
 <li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp의 링크를 읽고, 이 서비스들 또는 Amazon Music에서 열어요.</li>
 <li>서비스마다 여는 앱을 다르게 지정할 수 있어요. 예를 들어 YouTube 링크는 YouTube Music, 나머지는 모두 Apple Music에서 열 수 있어요.</li>
 <li>사용할 앱 매번 묻기: 링크를 탭하거나 공유할 때마다 앱을 선택해요.</li>
-<li>정확한 항목 열기: Apple Music과 Deezer에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있어요.</li>
+<li>정확한 항목 열기: Apple Music, Deezer, YouTube Music, Bandcamp에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있고, YouTube에서는 노래를 바로 열 수 있어요.</li>
 <li>검색 페이지가 있는 다른 앱과 사이트를 추가할 수 있어요.</li>
 <li>한 번의 탭으로 붙여넣고, 최근 링크를 다시 열고, 빠른 설정 타일을 쓰거나 앱 아이콘을 길게 눌러 복사한 링크를 열 수 있어요.</li>
 <li>링크를 읽을 수 없나요? 링크가 온 앱에서 열거나, 검색어를 복사하거나, 검색 링크를 공유하세요.</li>
@@ -15,4 +15,4 @@
 </ul>
 
 <b>개인정보 보호</b>
-계정, 분석, 광고가 없어요. 기록은 기기에만 저장돼요. 링크의 제목, 아티스트, 커버를 표시하기 위해 Crosstune은 링크가 온 서비스에만 요청해요. 정확한 항목 열기를 켜면 제목과 아티스트가 Apple 또는 Deezer의 검색 API로도 전송돼요.
+계정, 분석, 광고가 없어요. 기록은 기기에만 저장돼요. 링크의 제목, 아티스트, 커버를 표시하기 위해 Crosstune은 링크가 온 서비스에만 요청해요. 정확한 항목 열기를 켜면 제목과 아티스트가 Apple, Deezer, YouTube Music, YouTube 또는 Bandcamp의 검색으로도 전송돼요.

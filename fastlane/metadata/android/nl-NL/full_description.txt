@@ -7,7 +7,7 @@ Stuurt een vriend je een Spotify-link, maar gebruik jij YouTube Music? Tik erop 
 <li>Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud en Bandcamp en opent ze in een van die apps of in Amazon Music.</li>
 <li>Stuur elke service ergens anders heen, bijvoorbeeld YouTube-links naar YouTube Music en al het andere naar Apple Music.</li>
 <li>Vraag welke app: kies een app telkens als je op een link tikt of deze deelt.</li>
-<li>Exacte match openen: Apple Music en Deezer kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht.</li>
+<li>Exacte match openen: Apple Music, Deezer, YouTube Music en Bandcamp kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, en YouTube kan het nummer openen.</li>
 <li>Voeg andere apps en sites met een zoekpagina toe.</li>
 <li>Plak met één tik, open recente links opnieuw, gebruik de tegel in Snelle instellingen of houd het app-icoon lang ingedrukt om een gekopieerde link te openen.</li>
 <li>Kan een link niet worden gelezen? Open hem in de app waar hij vandaan komt, kopieer de zoektekst of deel een zoeklink.</li>
@@ -15,4 +15,4 @@ Stuurt een vriend je een Spotify-link, maar gebruik jij YouTube Music? Tik erop 
 </ul>
 
 <b>Privacy</b>
-Geen accounts, analyse of advertenties. Je geschiedenis blijft op je apparaat. Om de titel, artiest en hoes van een link te tonen, vraagt Crosstune alleen de service waar de link vandaan komt. Als Exacte match openen aanstaat, gaan de titel en artiest ook naar de zoek-API van Apple of Deezer.
+Geen accounts, analyse of advertenties. Je geschiedenis blijft op je apparaat. Om de titel, artiest en hoes van een link te tonen, vraagt Crosstune alleen de service waar de link vandaan komt. Als Exacte match openen aanstaat, gaan de titel en artiest ook naar de zoekfunctie van Apple, Deezer, YouTube Music, YouTube of Bandcamp.

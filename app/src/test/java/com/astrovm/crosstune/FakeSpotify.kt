@@ -22,12 +22,16 @@ import java.util.Collections
 class FakeSpotify : Interceptor {
     val requestedUrls: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+    /** What each request sent, empty for a GET. */
+    val requestBodies: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
     @Volatile
     var handler: (Request) -> Response = { request -> html(request, "") }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         requestedUrls += request.url.toString()
+        requestBodies += request.body?.let { body -> Buffer().also(body::writeTo).readUtf8() }.orEmpty()
         return handler(request)
     }
 

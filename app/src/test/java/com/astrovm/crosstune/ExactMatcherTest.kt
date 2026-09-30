@@ -97,7 +97,7 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
 
         fake.requestedUrls.clear()
-        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertNull(runBlocking { matcher().find(MusicService.SOUNDCLOUD, song) })
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST)) })
         assertTrue(fake.requestedUrls.isEmpty())
     }
@@ -122,5 +122,83 @@ class ExactMatcherTest {
             "https://music.apple.com/single",
             runBlocking { matcher().find(MusicService.APPLE_MUSIC, MusicMetadata("Hit", "Artist", ItemType.ALBUM)) }
         )
+    }
+
+    @Test
+    fun bandcampMatchesTracksAlbumsAndArtists() {
+        respond(
+            """{"auto":{"results":[
+                {"type":"t","name":"Beyoncé Song (Cover)","band_name":"Other","item_url_path":"https://other.bandcamp.com/track/cover"},
+                {"type":"t","name":"Beyonce Song","band_name":"Carly Rae Jepsen","item_url_path":"https://carly.bandcamp.com/track/beyonce-song"}
+            ]}}"""
+        )
+        assertEquals("https://carly.bandcamp.com/track/beyonce-song", runBlocking { matcher().find(MusicService.BANDCAMP, song) })
+        assertEquals("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", fake.requestedUrls.last())
+        assertTrue(fake.requestBodies.last(), fake.requestBodies.last().contains("\"search_filter\":\"t\""))
+
+        respond("""{"auto":{"results":[{"type":"a","name":"After Hours","band_name":"The Weeknd","item_url_path":"https://w.bandcamp.com/album/after-hours"}]}}""")
+        val album = MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
+        assertEquals("https://w.bandcamp.com/album/after-hours", runBlocking { matcher().find(MusicService.BANDCAMP, album) })
+        assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"a\""))
+
+        respond("""{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://w.bandcamp.com"}]}}""")
+        val artist = MusicMetadata("The Weeknd", "", ItemType.ARTIST)
+        assertEquals("https://w.bandcamp.com", runBlocking { matcher().find(MusicService.BANDCAMP, artist) })
+        assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"b\""))
+
+        respond("""{"auto":{"results":[{"type":"t","name":"Beyoncé Song","band_name":"Someone Else","item_url_path":"https://x"}]}}""")
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, song) })
+    }
+
+    private fun youTubeMusicRow(name: String, details: String, videoId: String? = null, browseId: String? = null): String {
+        fun column(text: String) =
+            """{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$text"}]}}}"""
+        val identity = when {
+            videoId != null -> """"playlistItemData":{"videoId":"$videoId"}"""
+            else -> """"navigationEndpoint":{"browseEndpoint":{"browseId":"$browseId"}}"""
+        }
+        return """{"musicResponsiveListItemRenderer":{"flexColumns":[${column(name)},${column(details)}],$identity}}"""
+    }
+
+    /** The rows are nested a few levels deep, in sections. */
+    private fun youTubeMusicPage(vararg rows: String) =
+        """{"contents":{"tabbedSearchResultsRenderer":{"tabs":[{"tabRenderer":{"content":{"sectionListRenderer":{"contents":[
+            {"musicShelfRenderer":{"contents":[${rows.joinToString(",")}]}}]}}}}]}}}"""
+
+    @Test
+    fun youTubeMusicMatchesSongsAlbumsAndArtists() {
+        respond(
+            youTubeMusicPage(
+                youTubeMusicRow("Beyoncé Song (Remix)", "Carly Rae Jepsen • Album • 4:14", videoId = "remix000000"),
+                youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen & Guest • Album • 3:20", videoId = "exact000000")
+            )
+        )
+        assertEquals("https://music.youtube.com/watch?v=exact000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", fake.requestedUrls.last())
+        assertTrue(fake.requestBodies.last(), fake.requestBodies.last().contains("EgWKAQIIAWoKEAoQAxAEEAkQBQ=="))
+
+        respond(youTubeMusicPage(youTubeMusicRow("After Hours", "Album • The Weeknd • 2020", browseId = "MPREb_abc")))
+        val album = MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
+        assertEquals("https://music.youtube.com/browse/MPREb_abc", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, album) })
+
+        respond(youTubeMusicPage(youTubeMusicRow("The Weeknd", "Artist • 1M monthly audience", browseId = "UC123")))
+        val artist = MusicMetadata("The Weeknd", "", ItemType.ARTIST)
+        assertEquals("https://music.youtube.com/channel/UC123", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, artist) })
+
+        respond(youTubeMusicPage(youTubeMusicRow("Beyoncé Song", "Someone Else • Album • 3:20", videoId = "other000000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        respond("""{"contents":{}}""")
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun youTubeOnlyOpensSongsFromTheSameSearch() {
+        respond(youTubeMusicPage(youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen • Album • 3:20", videoId = "exact000000")))
+        assertEquals("https://www.youtube.com/watch?v=exact000000", runBlocking { matcher().find(MusicService.YOUTUBE, song) })
+
+        fake.requestedUrls.clear()
+        val album = MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE, album) })
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 }

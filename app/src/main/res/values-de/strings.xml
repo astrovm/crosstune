@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">Nach der App fragen</string>
     <string name="setting_ask_each_time_description">Wähle bei jedem angetippten oder geteilten Link eine App.</string>
     <string name="setting_exact_match">Genauen Treffer öffnen</string>
-    <string name="setting_exact_match_description">Funktioniert mit Apple Music und Deezer für Songs, Alben und Künstler. Andere Apps erhalten eine Suche.</string>
+    <string name="setting_exact_match_description">Funktioniert mit Apple Music, Deezer, YouTube Music und Bandcamp für Songs, Alben und Künstler sowie mit YouTube für Songs. Andere Apps erhalten eine Suche.</string>
     <string name="matching_text">Genauer Treffer wird gesucht…</string>
     <string name="picker_title">Öffnen mit</string>
     <string name="cancel_button">Abbrechen</string>
