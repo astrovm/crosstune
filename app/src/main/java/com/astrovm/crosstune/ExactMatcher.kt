@@ -21,8 +21,8 @@ import java.util.Locale
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
  * Search API and Deezer's public API, plus the search behind Bandcamp's and YouTube Music's own
- * websites, which have no documented API. Other destinations need credentials, so they keep
- * using a search. Any failure or uncertain match returns null so the caller falls back to a search.
+ * websites, which have no documented API. Other destinations need credentials, so they keep using a
+ * search. Any failure or uncertain match returns null so the caller falls back to a search.
  */
 internal class ExactMatcher(
     private val client: OkHttpClient,
@@ -96,11 +96,15 @@ internal class ExactMatcher(
         }?.optString("link")?.ifBlank { null }
     }
 
+    /**
+     * Songs and albums only. An artist match would rest on the name alone, and anyone can register a page
+     * named after a famous artist (or share their name), so artists are left to the search.
+     */
     private suspend fun findOnBandcamp(metadata: MusicMetadata): String? {
         val filter = when (metadata.type) {
             ItemType.TRACK -> "t"
             ItemType.ALBUM -> "a"
-            else -> "b"
+            else -> return null
         }
         val body = JSONObject()
             .put("search_text", searchQuery(metadata))
@@ -111,10 +115,7 @@ internal class ExactMatcher(
         return results.objects().firstOrNull { result ->
             matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") }) &&
                 isOnArtistsOwnPage(metadata, result.optString("item_url_root"))
-        }?.let { result ->
-            // Artists are just their page; tracks and albums have their own.
-            if (metadata.type == ItemType.ARTIST) result.optString("item_url_root") else result.optString("item_url_path")
-        }?.ifBlank { null }
+        }?.optString("item_url_path")?.ifBlank { null }
     }
 
     /**
@@ -125,10 +126,9 @@ internal class ExactMatcher(
      */
     private fun isOnArtistsOwnPage(metadata: MusicMetadata, pageUrl: String): Boolean {
         val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
-        val credit = if (metadata.type == ItemType.ARTIST) metadata.title else metadata.artist
         if (host.isEmpty()) return false
         // Without an artist there is nothing to check the page against, so leave it to the search.
-        return artistNames(credit).any { name ->
+        return artistNames(metadata.artist).any { name ->
             // "The" only counts as an article when it is a word of its own: not in "Thelonious".
             listOf(name, name.replace(leadingArticle, "")).map(::normalize).any { candidate ->
                 candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }

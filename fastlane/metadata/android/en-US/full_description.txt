@@ -7,7 +7,7 @@ A friend sends you a Spotify link, but you use YouTube Music? Tap it and the sam
 <li>Reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp, and opens them in any of those or in Amazon Music.</li>
 <li>Send each service somewhere different, like YouTube links to YouTube Music and everything else to Apple Music.</li>
 <li>Ask which app to use: pick an app each time you tap or share a link.</li>
-<li>Open the exact match: Apple Music, Deezer, YouTube Music and Bandcamp can open the song, album or artist itself instead of a search, and YouTube can open the song.</li>
+<li>Open the exact match: Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.</li>
 <li>Add other apps and sites that have a search page.</li>
 <li>Paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.</li>
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
