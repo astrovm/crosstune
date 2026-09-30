@@ -45,6 +45,9 @@ android {
         applicationId = "com.astrovm.crosstune"
         minSdk = 26
         targetSdk = 37
+        // F-Droid's update checker only reads this line. It does not run Gradle.
+        // For tag vX.Y.Z the value is X*1000000 + Y*10000 + Z*100. Change it when tagging.
+        // fdroid-versionCode: 1040100
         versionCode = derivedVersionCode
         versionName = derivedVersionName
 

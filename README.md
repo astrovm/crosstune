@@ -101,12 +101,13 @@ You need the Android SDK and JDK 17 or newer. When building from the command lin
 
 `:app:ci` runs the Robolectric tests with a 100% line coverage gate, lint, and the debug and minified release builds. Reports go to `app/build/reports/`.
 
-The version comes from Git. `versionName` is the latest tag without the `v`, plus `-dev.N` for commits after it. `versionCode` is the commit count.
+The version comes from Git. `versionName` is the latest tag without the `v`, plus `-dev.N` for commits after it. `versionCode` for `vX.Y.Z` is `X*1000000 + Y*10000 + Z*100`, plus the commits after the tag, up to 99.
 
 ### Releasing
 
-1. Push a tag with `git tag vX.Y.Z && git push origin vX.Y.Z`, or run **Actions → Release → Run workflow**.
-2. The [Release workflow](.github/workflows/release.yml) runs the CI checks, then signs and publishes `Crosstune-vX.Y.Z.apk`.
+1. Set `// fdroid-versionCode:` in `app/build.gradle.kts` to the tag's version code, with no commits after the tag.
+2. Push a tag with `git tag vX.Y.Z && git push origin vX.Y.Z`, or run **Actions → Release → Run workflow**.
+3. The [Release workflow](.github/workflows/release.yml) runs the CI checks, then signs and publishes `Crosstune-vX.Y.Z.apk`.
 
 It needs these repository secrets:
 
