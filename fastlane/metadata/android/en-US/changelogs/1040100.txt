@@ -1,0 +1,3 @@
+Exact match opens songs on YouTube, and songs, albums and artists on YouTube Music. Bandcamp opens songs and albums.
+
+A link from another app leaves Settings. The result label no longer clips its first letter.
