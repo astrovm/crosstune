@@ -171,6 +171,12 @@ class ExactMatcherTest {
             "https://weeknd.bandcamp.com",
             runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("The Weeknd", "", ItemType.ARTIST)) }
         )
+
+        // ...but only as a word of its own: "Thelonious" doesn't start with an article.
+        respond(
+            """{"auto":{"results":[{"type":"b","name":"Thelonious Monk","item_url_root":"https://loniousmonk.bandcamp.com"}]}}"""
+        )
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("Thelonious Monk", "", ItemType.ARTIST)) })
     }
 
     @Test
@@ -220,6 +226,14 @@ class ExactMatcherTest {
 
         respond(youTubeMusicPage(youTubeMusicRow("Beyoncé Song", "Someone Else • Album • 3:20", videoId = "other000000")))
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        // Rows without their columns, like a header or an ad, are skipped rather than crashing the search.
+        respond(
+            youTubeMusicPage(
+                """{"musicResponsiveListItemRenderer":{}}""",
+                youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen • Album • 3:20", videoId = "after0000000")
+            )
+        )
+        assertEquals("https://music.youtube.com/watch?v=after0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         respond("""{"contents":{}}""")
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }

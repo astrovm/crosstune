@@ -29,6 +29,7 @@ internal class ExactMatcher(
     private val country: String = Locale.getDefault().country,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
+    private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
     private val artistSeparator = Regex(
         """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
         RegexOption.IGNORE_CASE
@@ -124,12 +125,14 @@ internal class ExactMatcher(
      */
     private fun isOnArtistsOwnPage(metadata: MusicMetadata, pageUrl: String): Boolean {
         val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
-        val names = if (metadata.type == ItemType.ARTIST) artists(metadata.title) else artists(metadata.artist)
+        val credit = if (metadata.type == ItemType.ARTIST) metadata.title else metadata.artist
         if (host.isEmpty()) return false
-        return names.isEmpty() || names.any { name ->
-            val bare = name.removePrefix("the")
-            listOf(name, bare).any { candidate ->
-                candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
+        return artistNames(credit).let { names ->
+            names.isEmpty() || names.any { name ->
+                // "The" only counts as an article when it is a word of its own: not in "Thelonious".
+                listOf(name, name.replace(leadingArticle, "")).map(::normalize).any { candidate ->
+                    candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
+                }
             }
         }
     }
@@ -185,7 +188,7 @@ internal class ExactMatcher(
 
     private suspend fun fetchJson(url: String, body: JSONObject? = null): JSONObject {
         val request = Request.Builder().url(url)
-            .apply { if (body == null) get() else post(body.toString().toRequestBody(JSON_MEDIA_TYPE)) }
+            .apply { if (body == null) get() else post(body.toString().toRequestBody("application/json".toMediaType())) }
             .build()
         return client.newCall(request).executeAsync().use { response ->
             JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
@@ -206,8 +209,9 @@ internal class ExactMatcher(
     }
 
     /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own. */
-    private fun artists(credit: String): Set<String> =
-        credit.split(artistSeparator).map(::normalize).filter { it.isNotEmpty() }.toSet()
+    private fun artists(credit: String): Set<String> = artistNames(credit).map(::normalize).filter { it.isNotEmpty() }.toSet()
+
+    private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
     private fun normalize(text: String): String =
         Normalizer.normalize(text, Normalizer.Form.NFD)
@@ -229,6 +233,5 @@ internal class ExactMatcher(
         const val YOUTUBE_MUSIC_SONGS = "EgWKAQIIAWoKEAoQAxAEEAkQBQ=="
         const val YOUTUBE_MUSIC_ALBUMS = "EgWKAQIYAWoKEAoQAxAEEAkQBQ=="
         const val YOUTUBE_MUSIC_ARTISTS = "EgWKAQIgAWoKEAoQAxAEEAkQBQ=="
-        val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
 }

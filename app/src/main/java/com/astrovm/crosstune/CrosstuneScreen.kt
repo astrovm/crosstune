@@ -48,7 +48,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -103,6 +102,7 @@ internal data class ScreenActions(
     val onOpenLinkSettings: () -> Unit = {},
     val onOpenAppLinkSettings: (MusicService) -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
+    val onSettingsLeft: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
 )
 
@@ -112,12 +112,13 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     // A link from another app is about to open or show its result, so don't leave the user in settings.
-    // The count is saved with the screen: it is the same after a rotation, which keeps settings open,
-    // but lower than the ViewModel's after the process was restored around a pending link.
-    var seenIncomingLinks by rememberSaveable { mutableIntStateOf(state.incomingLinkCount) }
-    LaunchedEffect(state.incomingLinkCount) {
-        if (state.incomingLinkCount > seenIncomingLinks) showSettings = false
-        seenIncomingLinks = state.incomingLinkCount
+    // The request is consumed once handled, so a rotation keeps settings open, while a restored process
+    // that re-resolves a pending link still asks for it.
+    LaunchedEffect(state.leaveSettings) {
+        if (state.leaveSettings) {
+            showSettings = false
+            actions.onSettingsLeft()
+        }
     }
     // A link from another app is handled right away; setup waits for the next regular launch.
     if (!state.setupComplete && !state.handlingIncomingLink) {
