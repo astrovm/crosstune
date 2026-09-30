@@ -151,6 +151,14 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun bandcampFallsBackToSearchWhenTheSourceHasNoArtist() {
+        respond(
+            """{"auto":{"results":[{"type":"t","name":"Beyoncé Song","band_name":"Fan","item_url_root":"https://fan.bandcamp.com","item_url_path":"https://fan.bandcamp.com/track/beyonce-song"}]}}"""
+        )
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, song.copy(artist = "")) })
+    }
+
+    @Test
     fun bandcampPageNamesMustBeTheWholeArtistName() {
         val chandelier = MusicMetadata("Chandelier", "Sia")
         fun page(host: String) =

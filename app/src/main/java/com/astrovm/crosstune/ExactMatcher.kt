@@ -127,12 +127,11 @@ internal class ExactMatcher(
         val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
         val credit = if (metadata.type == ItemType.ARTIST) metadata.title else metadata.artist
         if (host.isEmpty()) return false
-        return artistNames(credit).let { names ->
-            names.isEmpty() || names.any { name ->
-                // "The" only counts as an article when it is a word of its own: not in "Thelonious".
-                listOf(name, name.replace(leadingArticle, "")).map(::normalize).any { candidate ->
-                    candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
-                }
+        // Without an artist there is nothing to check the page against, so leave it to the search.
+        return artistNames(credit).any { name ->
+            // "The" only counts as an article when it is a word of its own: not in "Thelonious".
+            listOf(name, name.replace(leadingArticle, "")).map(::normalize).any { candidate ->
+                candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
             }
         }
     }
