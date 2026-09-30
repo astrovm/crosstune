@@ -151,6 +151,29 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun bandcampPageNamesMustBeTheWholeArtistName() {
+        val chandelier = MusicMetadata("Chandelier", "Sia")
+        fun page(host: String) =
+            """{"auto":{"results":[{"type":"t","name":"Chandelier","band_name":"Sia","item_url_root":"https://$host.bandcamp.com","item_url_path":"https://$host.bandcamp.com/track/chandelier"}]}}"""
+
+        respond(page("asia"))
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, chandelier) })
+        respond(page("siamusic"))
+        assertEquals("https://siamusic.bandcamp.com/track/chandelier", runBlocking { matcher().find(MusicService.BANDCAMP, chandelier) })
+        respond(page("sia"))
+        assertEquals("https://sia.bandcamp.com/track/chandelier", runBlocking { matcher().find(MusicService.BANDCAMP, chandelier) })
+
+        // A leading "The" is often left out of the page name.
+        respond(
+            """{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://weeknd.bandcamp.com"}]}}"""
+        )
+        assertEquals(
+            "https://weeknd.bandcamp.com",
+            runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("The Weeknd", "", ItemType.ARTIST)) }
+        )
+    }
+
+    @Test
     fun bandcampIgnoresUploadsCreditedToTheArtistFromSomeoneElsesPage() {
         respond(
             """{"auto":{"results":[

@@ -34,6 +34,9 @@ internal class ExactMatcher(
         RegexOption.IGNORE_CASE
     )
 
+    /** What an artist's own Bandcamp page name may add to their name. */
+    private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
+
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type == ItemType.PLAYLIST) return null
         return withTimeoutOrNull(TIMEOUT_MS) {
@@ -115,13 +118,20 @@ internal class ExactMatcher(
 
     /**
      * Anyone can upload to Bandcamp under any artist name, so a fan's cover credited to "Rick Astley"
-     * would match. Real artists sit on a page named after them, like catpower.bandcamp.com; anything
-     * else, e.g. a label's page, is left to the search fallback.
+     * would match. Real artists sit on a page named after them, like catpower.bandcamp.com, or with a
+     * usual suffix, like catpowermusic. A whole name is required: "sia" must not pass on asia.bandcamp.com.
+     * Anything else, e.g. a label's page, is left to the search fallback.
      */
     private fun isOnArtistsOwnPage(metadata: MusicMetadata, pageUrl: String): Boolean {
         val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
         val names = if (metadata.type == ItemType.ARTIST) artists(metadata.title) else artists(metadata.artist)
-        return host.isNotEmpty() && (names.isEmpty() || names.any(host::contains))
+        if (host.isEmpty()) return false
+        return names.isEmpty() || names.any { name ->
+            val bare = name.removePrefix("the")
+            listOf(name, bare).any { candidate ->
+                candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
+            }
+        }
     }
 
     /**
