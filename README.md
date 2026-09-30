@@ -41,7 +41,7 @@ Crosstune reads the link's title and artist from the service it comes from, then
 - **15 languages.** English, Spanish, Portuguese (Brazil), German, French, Russian, Indonesian, Turkish, Italian, Japanese, Korean, Chinese (Simplified), Hindi, Polish and Dutch. Crosstune follows your phone's language, and Android 13 or newer also lets you pick one just for Crosstune.
 - **One app per service.** Send YouTube links to YouTube Music and everything else to Apple Music, for example.
 - **Ask every time.** Choose the app each time you tap or share a link.
-- **Exact match.** Apple Music and Deezer can open the song, album or artist itself instead of a search.
+- **Exact match.** Apple Music, Deezer, YouTube Music and Bandcamp can open the song, album or artist itself instead of a search, and YouTube can open the song.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
 - **Shortcuts.** Paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.
 
@@ -69,14 +69,14 @@ In Crosstune's **Settings**, turn the service on under **Open links from**. Then
 Some pages, like a SoundCloud feed, aren't a song, album, artist or playlist. Crosstune can't read those, so it passes them to that service's app.
 
 **I got a search, not the song.**
-Most apps don't offer a public way to find a song without an account, so Crosstune searches for it by title and artist. If you use Apple Music or Deezer, turn on **Open the exact match**.
+Most apps don't offer a public way to find a song without an account, so Crosstune searches for it by title and artist. If you use Apple Music, Deezer, YouTube Music, YouTube or Bandcamp, turn on **Open the exact match**.
 
 ## Privacy
 
 - No account, no analytics, no ads.
 - Your history stays on your device.
 - To show a link's title, artist and cover, Crosstune asks only the service the link comes from, through its public page or public API. Covers load from that service's image servers.
-- With **Open the exact match** on, the title and artist are also sent to [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) search API.
+- With **Open the exact match** on, the title and artist are also sent to the search of the app you open it in: [Apple's](https://performance-partners.apple.com/search-api) or [Deezer's](https://developers.deezer.com/api) API, or the website search behind YouTube Music, YouTube and Bandcamp.
 
 <details>
 <summary><b>Verify your download</b></summary>

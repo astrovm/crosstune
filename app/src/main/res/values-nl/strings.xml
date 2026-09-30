@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">Vragen welke app</string>
     <string name="setting_ask_each_time_description">Kies een app telkens als je op een link tikt of deze deelt.</string>
     <string name="setting_exact_match">Exacte match openen</string>
-    <string name="setting_exact_match_description">Werkt met Apple Music en Deezer, voor nummers, albums en artiesten. Andere apps krijgen een zoekopdracht.</string>
+    <string name="setting_exact_match_description">Werkt met Apple Music, Deezer, YouTube Music en Bandcamp, voor nummers, albums en artiesten, en met YouTube voor nummers. Andere apps krijgen een zoekopdracht.</string>
     <string name="matching_text">Exacte match zoeken…</string>
     <string name="picker_title">Openen met</string>
     <string name="cancel_button">Annuleren</string>

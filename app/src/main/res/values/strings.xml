@@ -83,7 +83,7 @@
     <string name="setting_ask_each_time">Ask which app to use</string>
     <string name="setting_ask_each_time_description">Pick an app each time you tap or share a link.</string>
     <string name="setting_exact_match">Open the exact match</string>
-    <string name="setting_exact_match_description">Works with Apple Music and Deezer, for songs, albums and artists. Other apps get a search.</string>
+    <string name="setting_exact_match_description">Works with Apple Music, Deezer, YouTube Music and Bandcamp for songs, albums and artists, and with YouTube for songs. Other apps get a search.</string>
     <string name="matching_text">Finding the exact match…</string>
     <string name="picker_title">Open with</string>
     <string name="cancel_button">Cancel</string>
