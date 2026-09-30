@@ -494,7 +494,7 @@ private fun ResultCard(
                         text = listOfNotNull(
                             stringResource(result.type.labelRes),
                             link?.let { stringResource(R.string.from_service, stringResource(it.service.labelRes)) }
-                        ).joinToString(" · "),
+                        ).joinToString(" "),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -613,7 +613,7 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                             stringResource(entry.link.service.labelRes)
                         )
                             .filter { it.isNotBlank() }
-                            .joinToString(" · "),
+                            .joinToString(", "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

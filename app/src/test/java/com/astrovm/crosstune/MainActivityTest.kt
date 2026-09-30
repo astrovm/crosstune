@@ -1207,7 +1207,7 @@ class MainActivityTest {
         launch()
 
         resolveTyped("https://open.spotify.com/intl-es/album/$TRACK_ID")
-        assertTextShown("Album · from Spotify")
+        assertTextShown("Album from Spotify")
         click(string(R.string.open_in_youtube_music))
         assertEquals("https://music.youtube.com/search?q=After%20Hours%20The%20Weeknd", nextStartedActivity()!!.dataString)
 
@@ -1218,7 +1218,7 @@ class MainActivityTest {
 
         click(string(R.string.clear_button))
         resolveTyped("https://open.spotify.com/playlist/$TRACK_ID")
-        assertTextShown("Playlist · from Spotify")
+        assertTextShown("Playlist from Spotify")
         assertEquals(
             listOf(
                 "https://open.spotify.com/album/$TRACK_ID",
@@ -1430,7 +1430,7 @@ class MainActivityTest {
         }
         launch()
         resolveTyped("https://music.youtube.com/watch?v=4NRXx6U8ABQ&list=x")
-        assertTextShown("Song · from YouTube Music")
+        assertTextShown("Song from YouTube Music")
         // Opening the source in itself needs no separate "open original" button.
         assertTextAbsent(string(R.string.open_in_youtube))
 
