@@ -1,11 +1,14 @@
 version: 2
 updates:
   - package-ecosystem: gradle
+    assignees: [astrovm]
     directory: /
     schedule:
       interval: weekly
 
   - package-ecosystem: github-actions
+
+    assignees: [astrovm]
     directory: /
     schedule:
       interval: weekly
