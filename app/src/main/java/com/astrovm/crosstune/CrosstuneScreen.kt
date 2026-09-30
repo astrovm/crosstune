@@ -112,13 +112,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     // A link from another app is about to open or show its result, so don't leave the user in settings.
-    // The count seen at first composition is skipped so rotating the screen keeps settings open.
-    val seenIncomingLinks = remember { mutableIntStateOf(state.incomingLinkCount) }
+    // The count is saved with the screen: it is the same after a rotation, which keeps settings open,
+    // but lower than the ViewModel's after the process was restored around a pending link.
+    var seenIncomingLinks by rememberSaveable { mutableIntStateOf(state.incomingLinkCount) }
     LaunchedEffect(state.incomingLinkCount) {
-        if (state.incomingLinkCount != seenIncomingLinks.intValue) {
-            seenIncomingLinks.intValue = state.incomingLinkCount
-            showSettings = false
-        }
+        if (state.incomingLinkCount > seenIncomingLinks) showSettings = false
+        seenIncomingLinks = state.incomingLinkCount
     }
     // A link from another app is handled right away; setup waits for the next regular launch.
     if (!state.setupComplete && !state.handlingIncomingLink) {
