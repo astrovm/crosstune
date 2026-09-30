@@ -626,7 +626,7 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                             stringResource(entry.link.service.labelRes)
                         )
                             .filter { it.isNotBlank() }
-                            .joinToString(", "),
+                            .joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
