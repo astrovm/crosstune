@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">हर बार ऐप्लिकेशन पूछें</string>
     <string name="setting_ask_each_time_description">लिंक पर टैप करने या शेयर करने पर हर बार ऐप्लिकेशन चुनें।</string>
     <string name="setting_exact_match">सटीक मैच खोलें</string>
-    <string name="setting_exact_match_description">गानों, एल्बम और कलाकारों के लिए Apple Music, Deezer, YouTube Music और Bandcamp में, और गानों के लिए YouTube में काम करता है। बाकी ऐप्लिकेशन में सर्च खुलता है।</string>
+    <string name="setting_exact_match_description">गानों, एल्बम और कलाकारों के लिए Apple Music, Deezer और YouTube Music में, गानों और एल्बम के लिए Bandcamp में, और गानों के लिए YouTube में काम करता है। बाकी ऐप्लिकेशन में सर्च खुलता है।</string>
     <string name="matching_text">सटीक मैच खोजा जा रहा है…</string>
     <string name="picker_title">इसमें खोलें</string>
     <string name="cancel_button">रद्द करें</string>

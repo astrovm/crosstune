@@ -7,7 +7,7 @@ Bir arkadaşınız size Spotify bağlantısı gönderdi ama siz YouTube Music mi
 <li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud ve Bandcamp bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music'te açar.</li>
 <li>Her servisi farklı bir yere yönlendirin; örneğin YouTube bağlantılarını YouTube Music'e, diğer hepsini Apple Music'e.</li>
 <li>Hangi uygulamanın kullanılacağını sorun: bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı her seferinde siz seçin.</li>
-<li>Tam eşleşmeyi açın: Apple Music, Deezer, YouTube Music ve Bandcamp, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; YouTube ise şarkıyı açabilir.</li>
+<li>Tam eşleşmeyi açın: Apple Music, Deezer ve YouTube Music, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; Bandcamp şarkıyı veya albümü, YouTube ise şarkıyı açabilir.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
 <li>Tek dokunuşla yapıştırın, son bağlantıları yeniden açın, Hızlı Ayarlar kutucuğunu kullanın veya kopyalanan bir bağlantıyı açmak için uygulama simgesine uzun basın.</li>
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>

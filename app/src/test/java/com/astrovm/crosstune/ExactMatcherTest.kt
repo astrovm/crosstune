@@ -125,7 +125,7 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun bandcampMatchesTracksAlbumsAndArtists() {
+    fun bandcampMatchesTracksAndAlbums() {
         respond(
             """{"auto":{"results":[
                 {"type":"t","name":"Beyoncé Song (Cover)","band_name":"Other","item_url_root":"https://other.bandcamp.com","item_url_path":"https://other.bandcamp.com/track/cover"},
@@ -141,10 +141,11 @@ class ExactMatcherTest {
         assertEquals("https://theweeknd.bandcamp.com/album/after-hours", runBlocking { matcher().find(MusicService.BANDCAMP, album) })
         assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"a\""))
 
-        respond("""{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://theweeknd.bandcamp.com"}]}}""")
+        // Artists would only be matched by name, which anyone can register a page for: always a search.
+        fake.requestedUrls.clear()
         val artist = MusicMetadata("The Weeknd", "", ItemType.ARTIST)
-        assertEquals("https://theweeknd.bandcamp.com", runBlocking { matcher().find(MusicService.BANDCAMP, artist) })
-        assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"b\""))
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, artist) })
+        assertTrue(fake.requestedUrls.isEmpty())
 
         respond("""{"auto":{"results":[{"type":"t","name":"Beyoncé Song","band_name":"Someone Else","item_url_root":"https://someoneelse.bandcamp.com","item_url_path":"https://x"}]}}""")
         assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, song) })
@@ -172,19 +173,16 @@ class ExactMatcherTest {
         assertEquals("https://sia.bandcamp.com/track/chandelier", runBlocking { matcher().find(MusicService.BANDCAMP, chandelier) })
 
         // A leading "The" is often left out of the page name.
-        respond(
-            """{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://weeknd.bandcamp.com"}]}}"""
-        )
-        assertEquals(
-            "https://weeknd.bandcamp.com",
-            runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("The Weeknd", "", ItemType.ARTIST)) }
-        )
+        fun weeknd(host: String) =
+            """{"auto":{"results":[{"type":"t","name":"Starboy","band_name":"The Weeknd","item_url_root":"https://$host.bandcamp.com","item_url_path":"https://$host.bandcamp.com/track/starboy"}]}}"""
+        respond(weeknd("weeknd"))
+        assertEquals("https://weeknd.bandcamp.com/track/starboy", runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("Starboy", "The Weeknd")) })
 
         // ...but only as a word of its own: "Thelonious" doesn't start with an article.
         respond(
-            """{"auto":{"results":[{"type":"b","name":"Thelonious Monk","item_url_root":"https://loniousmonk.bandcamp.com"}]}}"""
+            """{"auto":{"results":[{"type":"t","name":"Round Midnight","band_name":"Thelonious Monk","item_url_root":"https://loniousmonk.bandcamp.com","item_url_path":"https://loniousmonk.bandcamp.com/track/round-midnight"}]}}"""
         )
-        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("Thelonious Monk", "", ItemType.ARTIST)) })
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, MusicMetadata("Round Midnight", "Thelonious Monk")) })
     }
 
     @Test

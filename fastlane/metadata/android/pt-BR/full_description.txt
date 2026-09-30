@@ -7,7 +7,7 @@ Um amigo manda um link do Spotify, mas você usa o YouTube Music? Toque nele e a
 <li>Lê links do Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud e Bandcamp, e abre em qualquer um deles ou no Amazon Music.</li>
 <li>Envie cada serviço para um lugar diferente, como links do YouTube para o YouTube Music e todo o resto para o Apple Music.</li>
 <li>Pergunte qual app usar: escolha um app cada vez que tocar em um link ou compartilhá-lo.</li>
-<li>Abra o resultado exato: o Apple Music, o Deezer, o YouTube Music e o Bandcamp podem abrir a própria música, álbum ou artista em vez de uma busca, e o YouTube pode abrir a música.</li>
+<li>Abra o resultado exato: o Apple Music, o Deezer e o YouTube Music podem abrir a própria música, álbum ou artista em vez de uma busca, o Bandcamp a música ou o álbum, e o YouTube a música.</li>
 <li>Adicione outros apps e sites que tenham uma página de busca.</li>
 <li>Cole com um toque, reabra links recentes, use o bloco das Configurações rápidas ou mantenha o ícone do app pressionado para abrir um link copiado.</li>
 <li>Não consegue ler um link? Abra-o no app de origem, copie o texto da busca ou compartilhe um link de busca.</li>

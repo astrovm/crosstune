@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">Спрашивать, где открыть</string>
     <string name="setting_ask_each_time_description">Выбирать приложение при каждом нажатии на ссылку или отправке.</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
-    <string name="setting_exact_match_description">Работает в Apple Music, Deezer, YouTube Music и Bandcamp для песен, альбомов и исполнителей, а в YouTube для песен. В остальных приложениях откроется поиск.</string>
+    <string name="setting_exact_match_description">Работает в Apple Music, Deezer и YouTube Music для песен, альбомов и исполнителей, в Bandcamp для песен и альбомов, а в YouTube для песен. В остальных приложениях откроется поиск.</string>
     <string name="matching_text">Ищем точное совпадение…</string>
     <string name="picker_title">Открыть в</string>
     <string name="cancel_button">Отмена</string>

@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">询问使用哪个应用</string>
     <string name="setting_ask_each_time_description">每次点按或分享链接时选择应用。</string>
     <string name="setting_exact_match">打开精确匹配</string>
-    <string name="setting_exact_match_description">适用于 Apple Music、Deezer、YouTube Music 和 Bandcamp 的歌曲、专辑和艺人，以及 YouTube 的歌曲。其他应用会打开搜索结果。</string>
+    <string name="setting_exact_match_description">适用于 Apple Music、Deezer 和 YouTube Music 的歌曲、专辑和艺人，Bandcamp 的歌曲和专辑，以及 YouTube 的歌曲。其他应用会打开搜索结果。</string>
     <string name="matching_text">正在查找精确匹配…</string>
     <string name="picker_title">打开方式</string>
     <string name="cancel_button">取消</string>

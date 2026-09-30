@@ -7,7 +7,7 @@ Znajomy przysłał Ci link do Spotify, a Ty słuchasz w YouTube Music? Kliknij g
 <li>Rozpoznaje linki ze Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud i Bandcamp oraz otwiera je w dowolnej z tych aplikacji lub w Amazon Music.</li>
 <li>Kieruj każdy serwis gdzie indziej, np. linki z YouTube do YouTube Music, a resztę do Apple Music.</li>
 <li>Pytaj, której aplikacji użyć: wybieraj aplikację za każdym razem, gdy klikasz lub udostępniasz link.</li>
-<li>Otwieraj dokładne dopasowanie: Apple Music, Deezer, YouTube Music i Bandcamp mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, a YouTube może otworzyć utwór.</li>
+<li>Otwieraj dokładne dopasowanie: Apple Music, Deezer i YouTube Music mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, Bandcamp utwór lub album, a YouTube utwór.</li>
 <li>Dodawaj inne aplikacje i strony z wyszukiwarką.</li>
 <li>Wklejaj jednym kliknięciem, wracaj do ostatnich linków, używaj kafelka w Szybkich ustawieniach albo przytrzymaj ikonę aplikacji, by otworzyć skopiowany link.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>

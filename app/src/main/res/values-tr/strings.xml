@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">Hangi uygulamanın kullanılacağını sor</string>
     <string name="setting_ask_each_time_description">Bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı siz seçin.</string>
     <string name="setting_exact_match">Tam eşleşmeyi aç</string>
-    <string name="setting_exact_match_description">Şarkılar, albümler ve sanatçılar için Apple Music, Deezer, YouTube Music ve Bandcamp ile, şarkılar için YouTube ile çalışır. Diğer uygulamalarda arama yapılır.</string>
+    <string name="setting_exact_match_description">Şarkılar, albümler ve sanatçılar için Apple Music, Deezer ve YouTube Music ile, şarkılar ve albümler için Bandcamp ile, şarkılar için YouTube ile çalışır. Diğer uygulamalarda arama yapılır.</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>
     <string name="picker_title">Şununla aç</string>
     <string name="cancel_button">İptal</string>

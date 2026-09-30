@@ -41,7 +41,7 @@ Crosstune reads the link's title and artist from the service it comes from, then
 - **15 languages.** English, Spanish, Portuguese (Brazil), German, French, Russian, Indonesian, Turkish, Italian, Japanese, Korean, Chinese (Simplified), Hindi, Polish and Dutch. Crosstune follows your phone's language, and Android 13 or newer also lets you pick one just for Crosstune.
 - **One app per service.** Send YouTube links to YouTube Music and everything else to Apple Music, for example.
 - **Ask every time.** Choose the app each time you tap or share a link.
-- **Exact match.** Apple Music, Deezer, YouTube Music and Bandcamp can open the song, album or artist itself instead of a search, and YouTube can open the song.
+- **Exact match.** Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
 - **Shortcuts.** Paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.
 

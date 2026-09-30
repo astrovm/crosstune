@@ -70,7 +70,7 @@
     <string name="setting_ask_each_time">Pytaj, której aplikacji użyć</string>
     <string name="setting_ask_each_time_description">Wybieraj aplikację za każdym razem, gdy klikasz lub udostępniasz link.</string>
     <string name="setting_exact_match">Otwieraj dokładne dopasowanie</string>
-    <string name="setting_exact_match_description">Działa z Apple Music, Deezer, YouTube Music i Bandcamp dla utworów, albumów i wykonawców oraz z YouTube dla utworów. Inne aplikacje otwierają wyszukiwanie.</string>
+    <string name="setting_exact_match_description">Działa z Apple Music, Deezer i YouTube Music dla utworów, albumów i wykonawców, z Bandcamp dla utworów i albumów oraz z YouTube dla utworów. Inne aplikacje otwierają wyszukiwanie.</string>
     <string name="matching_text">Szukanie dokładnego dopasowania…</string>
     <string name="picker_title">Otwórz w</string>
     <string name="cancel_button">Anuluj</string>
