@@ -485,10 +485,12 @@ private fun ResultCard(
                 // Tapping the song copies its search text, e.g. to paste into an app Crosstune can't open.
                 Column(
                     modifier = Modifier
-                        .padding(start = 16.dp)
+                        .padding(start = 8.dp)
                         .testTag(RESULT_TEXT_TAG)
                         .clip(MaterialTheme.shapes.small)
                         .clickable(onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
+                        // Inset inside the clip so the rounded corner doesn't cut into the first glyph.
+                        .padding(horizontal = 8.dp)
                 ) {
                     Text(
                         text = listOfNotNull(
