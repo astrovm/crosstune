@@ -128,25 +128,35 @@ class ExactMatcherTest {
     fun bandcampMatchesTracksAlbumsAndArtists() {
         respond(
             """{"auto":{"results":[
-                {"type":"t","name":"Beyoncé Song (Cover)","band_name":"Other","item_url_path":"https://other.bandcamp.com/track/cover"},
-                {"type":"t","name":"Beyonce Song","band_name":"Carly Rae Jepsen","item_url_path":"https://carly.bandcamp.com/track/beyonce-song"}
+                {"type":"t","name":"Beyoncé Song (Cover)","band_name":"Other","item_url_root":"https://other.bandcamp.com","item_url_path":"https://other.bandcamp.com/track/cover"},
+                {"type":"t","name":"Beyonce Song","band_name":"Carly Rae Jepsen","item_url_root":"https://carlyraejepsen.bandcamp.com","item_url_path":"https://carlyraejepsen.bandcamp.com/track/beyonce-song"}
             ]}}"""
         )
-        assertEquals("https://carly.bandcamp.com/track/beyonce-song", runBlocking { matcher().find(MusicService.BANDCAMP, song) })
+        assertEquals("https://carlyraejepsen.bandcamp.com/track/beyonce-song", runBlocking { matcher().find(MusicService.BANDCAMP, song) })
         assertEquals("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", fake.requestedUrls.last())
         assertTrue(fake.requestBodies.last(), fake.requestBodies.last().contains("\"search_filter\":\"t\""))
 
-        respond("""{"auto":{"results":[{"type":"a","name":"After Hours","band_name":"The Weeknd","item_url_path":"https://w.bandcamp.com/album/after-hours"}]}}""")
+        respond("""{"auto":{"results":[{"type":"a","name":"After Hours","band_name":"The Weeknd","item_url_root":"https://theweeknd.bandcamp.com","item_url_path":"https://theweeknd.bandcamp.com/album/after-hours"}]}}""")
         val album = MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
-        assertEquals("https://w.bandcamp.com/album/after-hours", runBlocking { matcher().find(MusicService.BANDCAMP, album) })
+        assertEquals("https://theweeknd.bandcamp.com/album/after-hours", runBlocking { matcher().find(MusicService.BANDCAMP, album) })
         assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"a\""))
 
-        respond("""{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://w.bandcamp.com"}]}}""")
+        respond("""{"auto":{"results":[{"type":"b","name":"The Weeknd","item_url_root":"https://theweeknd.bandcamp.com"}]}}""")
         val artist = MusicMetadata("The Weeknd", "", ItemType.ARTIST)
-        assertEquals("https://w.bandcamp.com", runBlocking { matcher().find(MusicService.BANDCAMP, artist) })
+        assertEquals("https://theweeknd.bandcamp.com", runBlocking { matcher().find(MusicService.BANDCAMP, artist) })
         assertTrue(fake.requestBodies.last().contains("\"search_filter\":\"b\""))
 
-        respond("""{"auto":{"results":[{"type":"t","name":"Beyoncé Song","band_name":"Someone Else","item_url_path":"https://x"}]}}""")
+        respond("""{"auto":{"results":[{"type":"t","name":"Beyoncé Song","band_name":"Someone Else","item_url_root":"https://someoneelse.bandcamp.com","item_url_path":"https://x"}]}}""")
+        assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, song) })
+    }
+
+    @Test
+    fun bandcampIgnoresUploadsCreditedToTheArtistFromSomeoneElsesPage() {
+        respond(
+            """{"auto":{"results":[
+                {"type":"t","name":"Beyoncé Song","band_name":"Carly Rae Jepsen","item_url_root":"https://fanuploader.bandcamp.com","item_url_path":"https://fanuploader.bandcamp.com/track/beyonce-song"}
+            ]}}"""
+        )
         assertNull(runBlocking { matcher().find(MusicService.BANDCAMP, song) })
     }
 

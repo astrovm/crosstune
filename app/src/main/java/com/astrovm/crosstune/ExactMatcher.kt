@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -104,11 +105,23 @@ internal class ExactMatcher(
             .put("full_page", false)
         val results = fetchJson(BANDCAMP_SEARCH_URL, body).optJSONObject("auto")?.optJSONArray("results") ?: return null
         return results.objects().firstOrNull { result ->
-            matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") })
+            matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") }) &&
+                isOnArtistsOwnPage(metadata, result.optString("item_url_root"))
         }?.let { result ->
             // Artists are just their page; tracks and albums have their own.
             if (metadata.type == ItemType.ARTIST) result.optString("item_url_root") else result.optString("item_url_path")
         }?.ifBlank { null }
+    }
+
+    /**
+     * Anyone can upload to Bandcamp under any artist name, so a fan's cover credited to "Rick Astley"
+     * would match. Real artists sit on a page named after them, like catpower.bandcamp.com; anything
+     * else, e.g. a label's page, is left to the search fallback.
+     */
+    private fun isOnArtistsOwnPage(metadata: MusicMetadata, pageUrl: String): Boolean {
+        val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
+        val names = if (metadata.type == ItemType.ARTIST) artists(metadata.title) else artists(metadata.artist)
+        return host.isNotEmpty() && (names.isEmpty() || names.any(host::contains))
     }
 
     /**
