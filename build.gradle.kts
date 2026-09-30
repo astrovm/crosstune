@@ -8,7 +8,7 @@ buildscript {
             classpath("org.bouncycastle:bcutil-jdk18on:1.86")
             classpath("org.bitbucket.b_c:jose4j:0.9.7")
             classpath("org.jdom:jdom2:2.0.6.1")
-            classpath("org.apache.commons:commons-lang3:3.20.0")
+            classpath("org.apache.commons:commons-lang3:3.21.0")
             classpath("org.apache.httpcomponents:httpclient:4.5.14")
         }
     }
@@ -17,5 +17,5 @@ buildscript {
 plugins {
     id("com.android.application") version "9.4.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.20" apply false
-    id("org.jetbrains.kotlinx.kover") version "0.9.10" apply false
+    id("org.jetbrains.kotlinx.kover") version "0.9.11" apply false
 }
