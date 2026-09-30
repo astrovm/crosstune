@@ -355,6 +355,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSharedLinkLeavesSettings() {
+        launch()
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.setting_exact_match))
+
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(
+            controller!!.get(),
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "not a music link")
+            }
+        )
+        composeRule.waitForIdle()
+
+        assertTextAbsent(string(R.string.setting_exact_match))
+        assertTextShown(string(R.string.error_invalid_url))
+    }
+
+    @Test
     fun sharedIntentWithoutPayloadIsIgnored() {
         launch(Intent(Intent.ACTION_SEND).apply { type = "text/plain" })
         assertTextAbsent(string(R.string.error_invalid_url))

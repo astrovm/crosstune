@@ -46,7 +46,9 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -109,6 +111,15 @@ internal data class ScreenActions(
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
+    // A link from another app is about to open or show its result, so don't leave the user in settings.
+    // The count seen at first composition is skipped so rotating the screen keeps settings open.
+    val seenIncomingLinks = remember { mutableIntStateOf(state.incomingLinkCount) }
+    LaunchedEffect(state.incomingLinkCount) {
+        if (state.incomingLinkCount != seenIncomingLinks.intValue) {
+            seenIncomingLinks.intValue = state.incomingLinkCount
+            showSettings = false
+        }
+    }
     // A link from another app is handled right away; setup waits for the next regular launch.
     if (!state.setupComplete && !state.handlingIncomingLink) {
         SetupScreen(state, actions)

@@ -44,7 +44,9 @@ internal data class UiState(
      */
     val blockingApps: Set<MusicService>? = null,
     /** Set while handling a link from another app, which takes priority over setup. */
-    val handlingIncomingLink: Boolean = false
+    val handlingIncomingLink: Boolean = false,
+    /** Bumped for every link from another app, so the screen can leave settings even for a repeated link. */
+    val incomingLinkCount: Int = 0
 ) {
     /** Where the current result opens: its source's rule, or the default. */
     val resultDestination: Destination
@@ -146,7 +148,11 @@ internal class MainViewModel(
     /** Resolves a link from another app and opens it (or offers destinations) as soon as it is ready. */
     fun resolveIncoming(text: String?) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
-        uiState = uiState.copy(linkText = incoming, handlingIncomingLink = true)
+        uiState = uiState.copy(
+            linkText = incoming,
+            handlingIncomingLink = true,
+            incomingLinkCount = uiState.incomingLinkCount + 1
+        )
         val input = MusicLinks.parse(incoming)
         if (input == null) {
             // Intercepted services' links include pages Crosstune can't convert, such as a
