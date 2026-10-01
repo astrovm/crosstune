@@ -72,8 +72,8 @@ class MainActivityTest {
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
-        // Most tests exercise the main screen; first-run setup has its own tests.
-        prefs().edit().putBoolean("setup_complete", true).commit()
+        // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
     }
 
     @After
@@ -1300,6 +1300,36 @@ class MainActivityTest {
     }
 
     @Test
+    fun askEachTimeMatchesOnlyTheChosenDestination() {
+        prefs().edit().putBoolean("ask_each_time", true).putBoolean("exact_match", true)
+            .putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com") {
+                FakeSpotify.html(request,
+                    """{"results":[{"trackName":"Pick Me","artistName":"Artist","trackViewUrl":"https://music.apple.com/us/song/1"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Pick Me", "Artist · Song"))
+            }
+        }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.picker_title))
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+        assertTextAbsent(string(R.string.matching_text))
+        assertNull(nextStartedActivity())
+
+        // Refreshing the stored destination while the picker is open must still wait for a choice.
+        ViewModelProvider(activity)[MainViewModel::class.java].selectDefault(Destination.Service(MusicService.YOUTUBE_MUSIC))
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.size)
+
+        click(string(R.string.open_in_apple_music))
+        waitUntil { activity.isFinishing }
+        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        assertEquals(2, fake.requestedUrls.size)
+        assertTrue(fake.requestedUrls.last().startsWith("https://itunes.apple.com/search?"))
+    }
+
+    @Test
     fun dismissingTheDestinationPickerKeepsTheResult() {
         prefs().edit().putBoolean("ask_each_time", true).commit()
         respondWithTrack("Stay", "Artist · Song")
@@ -1313,6 +1343,62 @@ class MainActivityTest {
         assertFalse(activity.isFinishing)
         inSettings { click(string(R.string.setting_ask_each_time)) }
         assertFalse(prefs().getBoolean("ask_each_time", true))
+    }
+
+    @Test
+    fun dismissingThePickerPreparesTheDisplayedDestinationWithoutOpeningIt() {
+        prefs().edit().putBoolean("ask_each_time", true).putBoolean("exact_match", true)
+            .putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request,
+                    """{"data":[{"title":"Stay","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/1"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Stay", "Artist · Song"))
+            }
+        }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.picker_title))
+        assertEquals(1, fake.requestedUrls.size)
+        click(string(R.string.cancel_button))
+        waitForDestinationReady()
+        click(string(R.string.copy_button))
+        assertEquals("https://www.deezer.com/track/1",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(2, fake.requestedUrls.size)
+        assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun exactMatchingDefaultsToEnabledAndKeepsAnExplicitOptOutAcrossLaunches() {
+        prefs().edit().remove("exact_match").putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request,
+                    """{"data":[{"title":"Default","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/1"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Default", "Artist · Song"))
+            }
+        }
+        val activity = launch()
+        assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.exactMatch)
+        resolveTyped()
+        waitForDestinationReady()
+        click(string(R.string.copy_button))
+        assertEquals("https://www.deezer.com/track/1",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+
+        inSettings { click(string(R.string.setting_exact_match)) }
+        controller!!.pause().stop().destroy()
+        fake.requestedUrls.clear()
+        val restored = launch()
+        assertFalse(ViewModelProvider(restored)[MainViewModel::class.java].uiState.exactMatch)
+        resolveTyped()
+        click(string(R.string.copy_button))
+        assertEquals("https://www.deezer.com/search/Default%20Artist",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
     }
 
     @Test
@@ -2073,14 +2159,26 @@ class MainActivityTest {
     @Test
     fun linkOpenedBeforeSetupAsksWhereToGoThenSetupFollows() {
         freshInstall()
-        respondWithTrack("Early", "Artist · Song")
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request,
+                    """{"data":[{"title":"Early","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/1"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Early", "Artist · Song"))
+            }
+        }
         val activity = launch(trackLink())
 
         waitForText(string(R.string.picker_title))
         assertTextAbsent(string(R.string.setup_welcome_title))
-        click(string(R.string.open_in_tidal))
+        assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.exactMatch)
+        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+        click(string(R.string.open_in_deezer))
         waitUntil { activity.isFinishing }
-        assertEquals("com.aspiro.tidal", nextStartedActivity()!!.`package`)
+        val opened = nextStartedActivity()!!
+        assertEquals("deezer.android.app", opened.`package`)
+        assertEquals("https://www.deezer.com/track/1", opened.dataString)
+        assertEquals(2, fake.requestedUrls.size)
         controller!!.pause().stop().destroy()
 
         // History from that link must not be mistaken for an install from before setup existed.

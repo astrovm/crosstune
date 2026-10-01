@@ -30,7 +30,7 @@ internal data class UiState(
     val rules: Map<MusicService, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
     val askEachTime: Boolean = false,
-    val exactMatch: Boolean = false,
+    val exactMatch: Boolean = true,
     val showDestinationPicker: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
@@ -81,7 +81,7 @@ internal class MainViewModel(
     var uiState by mutableStateOf(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
-            exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, false),
+            exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
@@ -244,21 +244,23 @@ internal class MainViewModel(
 
     /** A destination or exact-match preference change prepares the current result again. */
     private fun prepareResultDestination() {
-        if (uiState.result == null) return
+        if (uiState.result == null || uiState.showDestinationPicker) return
         job?.cancel()
         uiState = uiState.copy(isMatching = false)
         job = viewModelScope.launch { prepareResult() }
     }
 
     private suspend fun prepareResult() {
+        // Incoming links without a chosen destination must not search the default before asking.
+        if (pendingOpen && (uiState.askEachTime || !uiState.setupComplete)) {
+            pendingOpen = false
+            uiState = uiState.copy(showDestinationPicker = true)
+            return
+        }
         prepareDestination(uiState.resultDestination)
         if (!pendingOpen) return
         pendingOpen = false
-        when {
-            // Before setup there's no default yet, so ask.
-            uiState.askEachTime || !uiState.setupComplete -> uiState = uiState.copy(showDestinationPicker = true)
-            else -> open(uiState.resultDestination, finishAfterOpen = true)
-        }
+        open(uiState.resultDestination, finishAfterOpen = true)
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
@@ -307,6 +309,8 @@ internal class MainViewModel(
 
     fun dismissDestinationPicker() {
         uiState = uiState.copy(showDestinationPicker = false)
+        // The result is now available for manual actions using its displayed destination.
+        prepareResultDestination()
     }
 
     fun showHistoryEntry(entry: HistoryEntry) {
