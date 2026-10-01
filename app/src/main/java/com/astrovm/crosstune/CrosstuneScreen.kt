@@ -233,7 +233,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             modifier = Modifier.padding(top = 8.dp)
         )
         StatusSection(state, actions)
-        state.result?.let { ResultCard(it, state.link, state.resultDestination, actions) }
+        state.result?.let { ResultCard(it, state.link, state.resultDestination, !state.isMatching, actions) }
 
         if (state.history.isNotEmpty()) {
             HistorySection(state.history, actions)
@@ -479,6 +479,7 @@ private fun ResultCard(
     result: MusicMetadata,
     link: MusicLink?,
     destination: Destination,
+    destinationReady: Boolean,
     actions: ScreenActions
 ) {
     Surface(
@@ -531,6 +532,7 @@ private fun ResultCard(
             }
             Button(
                 onClick = actions.onOpen,
+                enabled = destinationReady,
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -555,7 +557,8 @@ private fun ResultCard(
                     actions.onCopyLink,
                     Modifier
                         .weight(1f)
-                        .fillMaxHeight()
+                        .fillMaxHeight(),
+                    enabled = destinationReady
                 )
                 SecondaryAction(
                     R.drawable.ic_share,
@@ -563,7 +566,8 @@ private fun ResultCard(
                     actions.onShareSearch,
                     Modifier
                         .weight(1f)
-                        .fillMaxHeight()
+                        .fillMaxHeight(),
+                    enabled = destinationReady
                 )
             }
             if (link != null && link.service != (destination as? Destination.Service)?.service) {
@@ -581,8 +585,8 @@ private fun ResultCard(
 }
 
 @Composable
-private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    FilledTonalButton(onClick = onClick, contentPadding = ButtonDefaults.ButtonWithIconContentPadding, modifier = modifier) {
+private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    FilledTonalButton(onClick = onClick, enabled = enabled, contentPadding = ButtonDefaults.ButtonWithIconContentPadding, modifier = modifier) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.size(ButtonDefaults.IconSpacing))
         // Long translations wrap to a second line instead of being cut off.

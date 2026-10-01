@@ -35,6 +35,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import okhttp3.Request
 import org.junit.After
@@ -129,6 +130,12 @@ class MainActivityTest {
 
     private fun waitForResult() {
         composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun waitForDestinationReady() {
+        composeRule.waitUntil(TIMEOUT_MS) {
+            !composeRule.onNodeWithText(string(R.string.copy_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
+        }
     }
 
     private fun typeUrl(value: String) {
@@ -1326,17 +1333,35 @@ class MainActivityTest {
         resolveTyped()
 
         chooseDefault(string(R.string.target_apple_music))
+        waitForDestinationReady()
+        click(string(R.string.copy_button))
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.share_search_button))
+        val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertEquals("https://music.apple.com/us/song/1", shared.getStringExtra(Intent.EXTRA_TEXT))
+        val requestsBeforeOpen = fake.requestedUrls.size
         click(string(R.string.open_in_apple_music))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        assertEquals(requestsBeforeOpen, fake.requestedUrls.size)
 
         chooseDefault(string(R.string.target_deezer))
+        waitForDestinationReady()
         click(string(R.string.open_in_deezer))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
 
+        val requestsBeforeReturning = fake.requestedUrls.size
+        chooseDefault(string(R.string.target_apple_music))
+        click(string(R.string.copy_button))
+        assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
+
         inSettings { click(string(R.string.setting_exact_match)) }
         assertFalse(prefs().getBoolean("exact_match", true))
+        click(string(R.string.copy_button))
+        assertEquals("https://music.apple.com/search?term=Exact%20Artist", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }
 
     @Test
@@ -1351,17 +1376,133 @@ class MainActivityTest {
             }
         }
         prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
-        launch()
+        val activity = launch()
         resolveTyped()
 
-        click(string(R.string.open_in_deezer))
         waitForText(string(R.string.matching_text))
         composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.open_in_deezer)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.copy_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.share_search_button)).assertIsNotEnabled()
+        assertNull(ViewModelProvider(activity)[MainViewModel::class.java].destinationUrl())
+        assertNull(nextStartedActivity())
 
         release.countDown()
+        waitUntil { composeRule.onAllNodesWithTextCount(string(R.string.matching_text)) == 0 }
+        click(string(R.string.copy_button))
+        assertEquals(
+            "https://www.deezer.com/search/Slow%20Artist",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        )
+        val requestsBeforeOpen = fake.requestedUrls.size
+        click(string(R.string.open_in_deezer))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(requestsBeforeOpen, fake.requestedUrls.size)
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.matching_text))
+    }
+
+    @Test
+    fun youtubeMusicLinksAreMatchedBeforeAnyActionAndRecentLinksArePreparedAgain() {
+        prefs().edit().putBoolean("exact_match", true).commit()
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                val title = if (fake.requestBodies.last().contains("Second")) "Second" else "First"
+                val videoId = if (title == "Second") "second00000" else "first000000"
+                FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                    "flexColumns":[
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Artist • Album • 3:00"}]}}}
+                    ],"playlistItemData":{"videoId":"$videoId"}
+                }}]}""")
+            } else {
+                val title = if (request.url.pathSegments.last() == OTHER_TRACK_ID) "Second" else "First"
+                FakeSpotify.html(request, FakeSpotify.trackPage(title, "Artist · Song"))
+            }
+        }
+        launch()
+        resolveTyped()
+        waitForDestinationReady()
+        assertEquals(2, fake.requestedUrls.size)
+        assertNull(nextStartedActivity())
+
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        click(string(R.string.copy_button))
+        assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.share_search_button))
+        assertEquals(
+            "https://music.youtube.com/watch?v=first000000",
+            nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)
+        )
+        click(string(R.string.open_in_youtube_music))
+        assertEquals("https://music.youtube.com/watch?v=first000000", nextStartedActivity()!!.dataString)
+        assertEquals(2, fake.requestedUrls.size)
+
+        resolveTyped(OTHER_TRACK_ID)
+        waitForDestinationReady()
+        click(string(R.string.copy_button))
+        assertEquals("https://music.youtube.com/watch?v=second00000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(4, fake.requestedUrls.size)
+
+        click("First")
+        waitForDestinationReady()
+        click(string(R.string.copy_button))
+        assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(5, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun changingDestinationDuringAnIncomingMatchKeepsTheAutomaticOpen() {
+        val release = CountDownLatch(1)
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.deezer.com" -> {
+                    release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    FakeSpotify.html(request, """{"data":[]}""")
+                }
+                "itunes.apple.com" -> FakeSpotify.html(request,
+                    """{"results":[{"trackName":"Switch","artistName":"Artist","trackViewUrl":"https://music.apple.com/us/song/1"}]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("Switch", "Artist · Song"))
+            }
+        }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.matching_text))
+        chooseDefault(string(R.string.target_apple_music))
+        waitUntil { activity.isFinishing }
+        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        release.countDown()
+        Thread.sleep(200L)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun aNewIncomingLinkCancelsTheOldMatchWithoutReusingItsUrl() {
+        val release = CountDownLatch(1)
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                val first = request.url.queryParameter("q") == "First Artist"
+                if (first) release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                val title = if (first) "First" else "Second"
+                val id = if (first) 1 else 2
+                FakeSpotify.html(request,
+                    """{"data":[{"title":"$title","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/$id"}]}""")
+            } else {
+                val title = if (request.url.pathSegments.last() == OTHER_TRACK_ID) "Second" else "First"
+                FakeSpotify.html(request, FakeSpotify.trackPage(title, "Artist · Song"))
+            }
+        }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.matching_text))
+        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
+        waitUntil { activity.isFinishing }
+        assertEquals("https://www.deezer.com/track/2", nextStartedActivity()!!.dataString)
+        release.countDown()
+        Thread.sleep(200L)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(nextStartedActivity())
     }
 
     @Test
@@ -2103,7 +2244,6 @@ class MainActivityTest {
         launch()
         resolveTyped()
 
-        click(string(R.string.open_in_deezer))
         waitForText(string(R.string.matching_text))
         click(string(R.string.open_in_spotify))
         release.countDown()
@@ -2113,6 +2253,12 @@ class MainActivityTest {
         assertEquals("com.spotify.music", nextStartedActivity()!!.`package`)
         assertNull(nextStartedActivity())
         assertTextAbsent(string(R.string.matching_text))
+        // Cancelling to open the source leaves a usable search fallback for the result.
+        click(string(R.string.copy_button))
+        assertEquals(
+            "https://www.deezer.com/search/Slow%20Artist",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        )
     }
 
     @Test
