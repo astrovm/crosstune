@@ -1,0 +1,138 @@
+{
+  "lang": "tr",
+  "og_locale": "tr_TR",
+  "name": "Türkçe",
+  "title": "Crosstune: her müzik bağlantısını favori uygulamanızda açın",
+  "description": "Herhangi bir servisten gelen müzik bağlantısına dokunun, aynı şarkı dinlediğiniz uygulamada açılsın. Android için ücretsiz ve açık kaynak.",
+  "tagline": "Her müzik bağlantısını favori uygulamanızda açın.",
+  "features_link": "Özellikler",
+  "github_label": "GitHub'da Crosstune",
+  "theme_to_dark": "Koyu moda geç",
+  "theme_to_light": "Açık moda geç",
+  "h1": "Her müzik bağlantısını <em>favori</em> uygulamanızda açın.",
+  "lede": "Bir servisten bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Dokunun, aynı şarkı dinlediğiniz yerde açılsın.",
+  "download": "Android için indir",
+  "note": "Ücretsiz, açık kaynak ve reklamsız. Android 8 ve sonrasında çalışır.",
+  "alt_home": "YouTube Music'te açılmaya hazır bir Apple Music şarkısı",
+  "alt_picker": "Bağlantıyı hangi uygulamanın açacağını seçme",
+  "features_h2": "Neler yapar",
+  "cards": [
+    [
+      "Dokun ve dinle",
+      "Bağlantılar doğrudan favori uygulamanızda açılır."
+    ],
+    [
+      "Tam eşleşme",
+      "Desteklenen uygulamalar arama yerine şarkının kendisini açar."
+    ],
+    [
+      "Sizin kurallarınız",
+      "Her servis için bir uygulama seçin ya da her seferinde sorulsun."
+    ],
+    [
+      "Her uygulama",
+      "Arama sayfası olan her uygulamayı veya siteyi ekleyin."
+    ],
+    [
+      "Kısayollar",
+      "Tek dokunuşla yapıştırma, son bağlantılar, Hızlı Ayarlar kutucuğu."
+    ],
+    [
+      "Gizli",
+      "Hesap yok. Geçmiş telefonunuzda kalır."
+    ]
+  ],
+  "works_with": "Uyumlu servisler",
+  "services_note": "Şarkıları, albümleri, sanatçıları ve çalma listelerini açar. Kurulum yaklaşık bir dakika sürer ve uygulama size adım adım yol gösterir.",
+  "made_with": "astro tarafından {heart} ile yapıldı",
+  "privacy_link": "Gizlilik politikası",
+  "language_label": "Dil",
+  "privacy_title": "Crosstune Gizlilik Politikası",
+  "updated": "Son güncelleme: 1 Ekim 2026",
+  "short_h2": "Kısaca",
+  "short_items": [
+    "Hesap, reklam veya analiz yok.",
+    "Crosstune'un sunucusu yok. Geçmişiniz telefonunuzda kalır.",
+    "Dönüştürdüğünüz bağlantılar yalnızca ilgili müzik servislerine gider.",
+    "Geçmişi istediğiniz zaman uygulamadan temizleyebilirsiniz."
+  ],
+  "details_h2": "Ayrıntılar",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune, astrovm tarafından geliştirilen ve müzik bağlantılarını seçtiğiniz müzik uygulamasında veya web sitesinde açan bir Android uygulamasıdır. Bu politika, uygulamanın hangi bilgileri kullandığını ve bu bilgilerin nereye gittiğini açıklar."
+    ],
+    [
+      "h2",
+      "Hesap, reklam veya analiz yok"
+    ],
+    [
+      "p",
+      "Crosstune hesap gerektirmez; reklam, analiz veya çökme raporlama servisi içermez. Geliştirici, müzik bağlantılarınızı veya dinleme geçmişinizi alan bir sunucu işletmez. Crosstune bilgilerinizi satmaz."
+    ],
+    [
+      "h2",
+      "Cihazınızdaki bilgiler"
+    ],
+    [
+      "p",
+      "Uygulama, ayarlarınızı ve son çözümlenen bağlantıları cihazınızda saklar. Son kayıtlar kaynak bağlantıyı, başlığı, sanatçıyı, kapak görselinin URL'sini ve hazırlanan hedef bağlantıları içerebilir. Bu tercihler ve geçmiş, uygulamanın Android bulut yedekleme ve cihaz aktarma kurallarının dışında tutulur."
+    ],
+    [
+      "p",
+      "Crosstune, yapıştırdığınız, kendisiyle paylaştığınız veya Android bağlantı yönetimi üzerinden açtığınız bağlantıyı okur. Pano kısayolları, siz onları kullandığınızda pano metnini okur. Uygulama, desteklenen müzik uygulamalarından hangilerinin yüklü olduğunu kontrol eder ve bunları hedef olarak sunar. Bu bilgiler cihazınızda kalır."
+    ],
+    [
+      "h2",
+      "Müzik servislerine yapılan istekler"
+    ],
+    [
+      "p",
+      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud ve Bandcamp bulunur."
+    ],
+    [
+      "p",
+      "“Tam eşleşmeyi aç” açıkken uygulama, öğenin başlığını ve sanatçısını hedefin arama servisine gönderir: Apple Music, Deezer, YouTube Music, YouTube veya Bandcamp. Bu seçeneği Ayarlar'dan kapatabilirsiniz. Bir hedefi açtığınızda, seçilen uygulama veya web sitesi hedef bağlantıyı ya da arama terimlerini alır. Eklediğiniz diğer uygulamalar ve siteler, arama terimlerini sizin ayarladığınız URL şablonunda alır. Bir sonucu paylaştığınızda, sonuç seçtiğiniz uygulamaya veya kişiye gönderilir."
+    ],
+    [
+      "p",
+      "Diğer internet istekleri gibi bu istekler de IP adresinizi ve normal istek bilgilerini iletişim kurulan servise açar. Bu servisler istek kayıtlarını saklayabilir ve bilgileri kendi gizlilik politikalarına göre işleyebilir. Geliştirici, bu verileri nasıl işlediklerini veya sakladıklarını kontrol etmez. Bir müzik servisi, açtıktan sonra kendi hesabını veya aboneliğini gerektirebilir."
+    ],
+    [
+      "h2",
+      "İzinler ve güvenlik"
+    ],
+    [
+      "p",
+      "Crosstune, müzik bilgilerini ve kapak görsellerini almak için Android'in internet iznini kullanır. Konum, mikrofon, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Kendi uygulamanızı veya sitenizi eklerseniz güvenilir bir HTTPS adresi seçin."
+    ],
+    [
+      "h2",
+      "Saklama ve silme"
+    ],
+    [
+      "p",
+      "Son geçmişi uygulamadan temizleyebilirsiniz. Android Ayarları'nda Crosstune'un uygulama depolama alanını temizlemek, yerel ayarlarını ve geçmişini siler. Geliştiricinin silinecek bir sunucu tarafı hesabı veya dinleme geçmişi kaydı yoktur. Üçüncü taraf müzik servislerinin zaten aldığı istekler, bu servislerin saklama ve silme politikalarına tabidir."
+    ],
+    [
+      "h2",
+      "Çocuklar"
+    ],
+    [
+      "p",
+      "Crosstune kullanıcılardan yaşlarını veya kişisel profil bilgilerini istemez ve geliştiricinin işlettiği bir sunucuda bilerek çocukların kişisel bilgilerini toplamaz. Bağlantılı müzik servislerinin kendi yaş şartları ve gizlilik politikaları vardır. Ebeveynler ve vasiler, bir çocuk bu servisleri kullanmadan önce bunları incelemelidir."
+    ],
+    [
+      "h2",
+      "İletişim ve değişiklikler"
+    ],
+    [
+      "p",
+      "Gizlilikle ilgili sorularınız için {email} adresine yazın. Geliştiriciye e-posta gönderirseniz, geliştiricinin yanıt verebilmesi için e-posta servisi adresinizi ve mesajınızı işler. Lütfen paylaşmanız gerekmeyen hassas bilgileri eklemeyin."
+    ],
+    [
+      "p",
+      "Bu politika, uygulamanın çalışma şekli değiştiğinde güncellenebilir. Güncellemeler bu sayfada yeni bir tarihle yayımlanır."
+    ]
+  ]
+}

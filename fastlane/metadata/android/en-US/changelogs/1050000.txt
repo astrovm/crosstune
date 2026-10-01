@@ -1,0 +1,5 @@
+Pick the app's language in Settings.
+
+Links you open, copy or share no longer carry tracking like ?si= or utm_. You can turn this off in Settings.
+
+Settings now says "Made with ♥ by astro", in your language.

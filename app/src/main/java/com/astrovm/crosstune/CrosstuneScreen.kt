@@ -102,6 +102,8 @@ internal data class ScreenActions(
     val onCompleteSetup: () -> Unit = {},
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
+    val onCleanLinksChange: (Boolean) -> Unit = {},
+    val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},
     val onCopyLink: () -> Unit = {},
     val onShareSearch: () -> Unit = {},

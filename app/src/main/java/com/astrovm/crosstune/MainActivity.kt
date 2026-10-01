@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -106,6 +107,8 @@ class MainActivity : ComponentActivity() {
                         onCompleteSetup = viewModel::completeSetup,
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,
+                        onCleanLinksChange = viewModel::setCleanLinks,
+                        onLanguageChange = { AppLanguage.set(this, it) },
                         onCopySearch = ::copySearch,
                         onCopyLink = ::copyLink,
                         onShareSearch = ::shareSearch,
@@ -122,6 +125,10 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
     }
 
     override fun onResume() {

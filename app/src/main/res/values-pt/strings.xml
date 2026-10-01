@@ -71,6 +71,10 @@
     <string name="setting_ask_each_time_description">Escolha um app cada vez que tocar em um link ou compartilhá-lo.</string>
     <string name="setting_exact_match">Abrir o resultado exato</string>
     <string name="setting_exact_match_description">Funciona com Apple Music, Deezer e YouTube Music, para músicas, álbuns e artistas, com o Bandcamp para músicas e álbuns, e com o YouTube para músicas. Os outros apps recebem uma busca.</string>
+    <string name="setting_clean_links">Remover rastreamento dos links</string>
+    <string name="setting_clean_links_description">Tira partes de rastreamento, como ?si= ou utm_, dos links que você abre, copia ou compartilha.</string>
+    <string name="setting_language">Idioma</string>
+    <string name="language_system_default">Padrão do sistema</string>
     <string name="matching_text">Procurando o resultado exato…</string>
     <string name="picker_title">Abrir com</string>
     <string name="cancel_button">Cancelar</string>

@@ -32,6 +32,8 @@ internal data class UiState(
     val intercepted: Set<MusicService> = emptySet(),
     val askEachTime: Boolean = false,
     val exactMatch: Boolean = true,
+    /** Drops tracking parameters from links Crosstune opens, copies or shares. */
+    val cleanLinks: Boolean = true,
     val showDestinationPicker: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
@@ -84,6 +86,7 @@ internal class MainViewModel(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
+            cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
@@ -299,7 +302,7 @@ internal class MainViewModel(
         uiState.link?.takeIf { it.service == service }?.let { link ->
             return link.url
         }
-        uiState.destinationUrls[destination]?.let { return it.url }
+        uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
             matcher.find(service, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -308,7 +311,7 @@ internal class MainViewModel(
         }
         val url = exactUrl ?: destination.searchUrl(searchQuery(metadata))
         rememberDestination(destination, PreparedLink(url, exactUrl != null, uiState.exactMatch))
-        return url
+        return url.forSharing()
     }
 
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
@@ -381,12 +384,12 @@ internal class MainViewModel(
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = (destination as? Destination.Service)?.service
         if (service == entry.link.service) return entry.link.url
-        entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url }
+        entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
         val url = exactUrl ?: destination.searchUrl(searchQuery(entry.metadata))
         val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, uiState.exactMatch))
         uiState = uiState.copy(history = history)
-        return url
+        return url.forSharing()
     }
 
     fun clearHistory() {
@@ -399,7 +402,7 @@ internal class MainViewModel(
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
         uiState.link?.takeIf { (destination as? Destination.Service)?.service == it.service }?.let { return it.url }
-        uiState.destinationUrls[destination]?.let { return it.url }
+        uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         if (uiState.isMatching) return null
         return searchQuery()?.let(destination::searchUrl)?.also { url ->
             rememberDestination(destination, PreparedLink(url, exact = false, matchingEnabled = uiState.exactMatch))
@@ -473,6 +476,14 @@ internal class MainViewModel(
         prepareResultDestination()
     }
 
+    fun setCleanLinks(enabled: Boolean) {
+        uiState = uiState.copy(cleanLinks = enabled)
+        preferences.edit { putBoolean(KEY_CLEAN_LINKS, enabled) }
+    }
+
+    /** Saved links keep what the service returned, so turning the setting off brings it back. */
+    private fun String.forSharing(): String = if (uiState.cleanLinks) TrackingLinks.clean(this) else this
+
     fun dismissLinkSettingsHelper() {
         uiState = uiState.copy(showLinkSettingsHelper = false)
         preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
@@ -487,6 +498,7 @@ internal class MainViewModel(
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
+        private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SETUP_COMPLETE = "setup_complete"
 
         /** Preferences only an install from before first-run setup can have. */

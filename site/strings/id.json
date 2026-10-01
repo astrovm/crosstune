@@ -1,0 +1,138 @@
+{
+  "lang": "id",
+  "og_locale": "id_ID",
+  "name": "Bahasa Indonesia",
+  "title": "Crosstune: buka link musik apa pun di aplikasi favoritmu",
+  "description": "Ketuk link musik dari layanan apa pun, dan lagu yang sama terbuka di aplikasi yang kamu pakai untuk mendengarkan. Gratis dan open source untuk Android.",
+  "tagline": "Buka link musik apa pun di aplikasi favoritmu.",
+  "features_link": "Fitur",
+  "github_label": "Crosstune di GitHub",
+  "theme_to_dark": "Beralih ke mode gelap",
+  "theme_to_light": "Beralih ke mode terang",
+  "h1": "Buka link musik apa pun di aplikasi <em>favoritmu</em>.",
+  "lede": "Dapat link dari satu layanan, tapi kamu dengar di layanan lain? Ketuk linknya, dan lagu yang sama terbuka di tempat kamu mendengarkan.",
+  "download": "Download untuk Android",
+  "note": "Gratis, open source, dan tanpa iklan. Berfungsi di Android 8 atau yang lebih baru.",
+  "alt_home": "Lagu dari Apple Music yang siap dibuka di YouTube Music",
+  "alt_picker": "Memilih aplikasi untuk membuka link",
+  "features_h2": "Yang bisa dilakukan",
+  "cards": [
+    [
+      "Ketuk dan langsung buka",
+      "Link langsung terbuka di aplikasi favoritmu."
+    ],
+    [
+      "Persis sama",
+      "Aplikasi yang didukung membuka lagunya langsung, bukan hasil pencarian."
+    ],
+    [
+      "Aturanmu sendiri",
+      "Pilih aplikasi untuk tiap layanan, atau tanya setiap kali."
+    ],
+    [
+      "Aplikasi apa pun",
+      "Tambahkan aplikasi atau situs apa pun yang punya halaman pencarian."
+    ],
+    [
+      "Pintasan",
+      "Tempel dengan satu ketukan, link terbaru, kartu Setelan Cepat."
+    ],
+    [
+      "Privat",
+      "Tanpa akun. Riwayat tetap di ponselmu."
+    ]
+  ],
+  "works_with": "Berfungsi dengan",
+  "services_note": "Membuka lagu, album, artis, dan playlist. Penyiapannya sekitar satu menit, dan aplikasi akan memandumu.",
+  "made_with": "Dibuat dengan {heart} oleh astro",
+  "privacy_link": "Kebijakan privasi",
+  "language_label": "Bahasa",
+  "privacy_title": "Kebijakan Privasi Crosstune",
+  "updated": "Terakhir diperbarui: 1 Oktober 2026",
+  "short_h2": "Singkatnya",
+  "short_items": [
+    "Tanpa akun, iklan, atau analitik.",
+    "Crosstune tidak punya server. Riwayatmu tetap di ponselmu.",
+    "Link yang kamu konversi hanya dikirim ke layanan musik yang terkait.",
+    "Hapus riwayat kapan saja di aplikasi."
+  ],
+  "details_h2": "Detail",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune adalah aplikasi Android yang dikembangkan oleh astrovm untuk membuka link musik di aplikasi musik atau situs yang kamu pilih. Kebijakan ini menjelaskan informasi apa yang dipakai aplikasi dan ke mana informasi itu dikirim."
+    ],
+    [
+      "h2",
+      "Tanpa akun, iklan, atau analitik"
+    ],
+    [
+      "p",
+      "Crosstune tidak memerlukan akun dan tidak menyertakan iklan, analitik, atau layanan pelaporan error. Developer tidak mengoperasikan server yang menerima link musik atau riwayat dengarmu. Crosstune tidak menjual informasimu."
+    ],
+    [
+      "h2",
+      "Informasi di perangkatmu"
+    ],
+    [
+      "p",
+      "Aplikasi menyimpan setelan dan link terbaru yang sudah diproses di perangkatmu. Entri terbaru bisa berisi link sumber, judul, artis, URL sampul, dan link tujuan yang sudah disiapkan. Setelan dan riwayat ini dikecualikan dari aturan cadangan cloud dan transfer perangkat Android milik aplikasi."
+    ],
+    [
+      "p",
+      "Crosstune membaca link yang kamu tempel, bagikan ke aplikasi, atau buka lewat penanganan link Android. Pintasan papan klipnya membaca teks papan klip saat kamu menggunakannya. Aplikasi memeriksa aplikasi musik yang didukung mana saja yang terpasang agar bisa menawarkannya sebagai tujuan. Informasi itu tetap di perangkatmu."
+    ],
+    [
+      "h2",
+      "Permintaan ke layanan musik"
+    ],
+    [
+      "p",
+      "Untuk memproses link musik, Crosstune meminta halaman publik atau API publiknya dari layanan sumber. Aplikasi juga memuat gambar sampul dari server gambar layanan itu. Layanan sumber yang didukung antara lain Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, dan Bandcamp."
+    ],
+    [
+      "p",
+      "Jika “Buka yang persis sama” aktif, aplikasi mengirim judul dan artis item ke layanan pencarian tujuan: Apple Music, Deezer, YouTube Music, YouTube, atau Bandcamp. Kamu bisa menonaktifkan opsi ini di Setelan. Saat kamu membuka tujuan, aplikasi atau situs yang dipilih menerima link tujuan atau kata kunci pencarian. Aplikasi dan situs lain yang kamu tambahkan menerima kata kunci pencarian dalam template URL yang kamu atur. Membagikan hasil akan mengirimnya ke aplikasi atau penerima yang kamu pilih."
+    ],
+    [
+      "p",
+      "Seperti permintaan internet lainnya, permintaan ini memperlihatkan alamat IP dan informasi permintaan biasa ke layanan yang dihubungi. Layanan tersebut bisa menyimpan log permintaan dan memproses informasi sesuai kebijakan privasinya sendiri. Developer tidak mengendalikan cara mereka memproses atau menyimpan data itu. Layanan musik bisa meminta akun atau langganannya sendiri setelah kamu membukanya."
+    ],
+    [
+      "h2",
+      "Izin dan keamanan"
+    ],
+    [
+      "p",
+      "Crosstune memakai izin internet Android untuk mengambil informasi musik dan gambar sampul. Aplikasi tidak meminta izin lokasi, mikrofon, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika kamu menambahkan aplikasi atau situs sendiri, pilih alamat HTTPS yang tepercaya."
+    ],
+    [
+      "h2",
+      "Penyimpanan dan penghapusan"
+    ],
+    [
+      "p",
+      "Kamu bisa menghapus riwayat terbaru di aplikasi. Menghapus penyimpanan aplikasi Crosstune di Setelan Android akan menghapus setelan dan riwayat lokalnya. Developer tidak menyimpan akun atau catatan riwayat dengar di server yang perlu dihapus. Permintaan yang sudah diterima layanan musik pihak ketiga mengikuti kebijakan penyimpanan dan penghapusan layanan tersebut."
+    ],
+    [
+      "h2",
+      "Anak-anak"
+    ],
+    [
+      "p",
+      "Crosstune tidak menanyakan usia atau informasi profil pribadi pengguna dan tidak dengan sengaja mengumpulkan informasi pribadi anak-anak di server yang dioperasikan developer. Layanan musik yang ditautkan punya persyaratan usia dan kebijakan privasinya sendiri. Orang tua dan wali sebaiknya meninjaunya sebelum anak menggunakannya."
+    ],
+    [
+      "h2",
+      "Kontak dan perubahan"
+    ],
+    [
+      "p",
+      "Untuk pertanyaan seputar privasi, hubungi {email}. Jika kamu mengirim email ke developer, layanan email akan memproses alamat dan pesanmu agar developer bisa membalas. Jangan sertakan informasi sensitif yang tidak perlu kamu bagikan."
+    ],
+    [
+      "p",
+      "Kebijakan ini bisa diperbarui saat cara kerja aplikasi berubah. Pembaruan akan muncul di halaman ini dengan tanggal yang baru."
+    ]
+  ]
+}

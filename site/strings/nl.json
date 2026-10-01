@@ -1,0 +1,138 @@
+{
+  "lang": "nl",
+  "og_locale": "nl_NL",
+  "name": "Nederlands",
+  "title": "Crosstune: open elke muzieklink in je favoriete app",
+  "description": "Tik op een muzieklink van welke service dan ook en hetzelfde nummer opent in de app waarin je luistert. Gratis en open source voor Android.",
+  "tagline": "Open elke muzieklink in je favoriete app.",
+  "features_link": "Functies",
+  "github_label": "Crosstune op GitHub",
+  "theme_to_dark": "Overschakelen naar donkere modus",
+  "theme_to_light": "Overschakelen naar lichte modus",
+  "h1": "Open elke muzieklink in <em>je</em> favoriete app.",
+  "lede": "Een link van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent waar je luistert.",
+  "download": "Downloaden voor Android",
+  "note": "Gratis, open source en zonder advertenties. Werkt op Android 8 of hoger.",
+  "alt_home": "Een nummer uit Apple Music, klaar om te openen in YouTube Music",
+  "alt_picker": "Kiezen welke app de link opent",
+  "features_h2": "Wat het doet",
+  "cards": [
+    [
+      "Tik en klaar",
+      "Links openen direct in je favoriete app."
+    ],
+    [
+      "Exacte match",
+      "Ondersteunde apps openen het nummer zelf in plaats van een zoekopdracht."
+    ],
+    [
+      "Jouw regels",
+      "Kies een app per service, of laat het elke keer vragen."
+    ],
+    [
+      "Elke app",
+      "Voeg elke app of site met een zoekpagina toe."
+    ],
+    [
+      "Snelkoppelingen",
+      "Plakken met één tik, recente links, tegel in Snelle instellingen."
+    ],
+    [
+      "Privé",
+      "Geen account. Je geschiedenis blijft op je telefoon."
+    ]
+  ],
+  "works_with": "Werkt met",
+  "services_note": "Opent nummers, albums, artiesten en afspeellijsten. Instellen duurt ongeveer een minuut en de app helpt je stap voor stap.",
+  "made_with": "Gemaakt met {heart} door astro",
+  "privacy_link": "Privacybeleid",
+  "language_label": "Taal",
+  "privacy_title": "Privacybeleid van Crosstune",
+  "updated": "Laatst bijgewerkt: 1 oktober 2026",
+  "short_h2": "In het kort",
+  "short_items": [
+    "Geen account, advertenties of analyse.",
+    "Er is geen Crosstune-server. Je geschiedenis blijft op je telefoon.",
+    "Links die je omzet, gaan alleen naar de betrokken muziekservices.",
+    "Wis je geschiedenis wanneer je wilt in de app."
+  ],
+  "details_h2": "Details",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune is een Android-app van astrovm die muzieklinks opent in de muziekapp of op de website die jij kiest. Dit beleid legt uit welke informatie de app gebruikt en waar die naartoe gaat."
+    ],
+    [
+      "h2",
+      "Geen account, advertenties of analyse"
+    ],
+    [
+      "p",
+      "Crosstune vraagt geen account en bevat geen advertenties, analyse of service voor crashrapporten. De ontwikkelaar beheert geen server die je muzieklinks of luistergeschiedenis ontvangt. Crosstune verkoopt je gegevens niet."
+    ],
+    [
+      "h2",
+      "Informatie op je apparaat"
+    ],
+    [
+      "p",
+      "De app bewaart je instellingen en recent omgezette links op je apparaat. Recente items kunnen de bronlink, titel, artiest, URL van de hoes en voorbereide bestemmingslinks bevatten. Deze voorkeuren en geschiedenis zijn uitgesloten van de regels van de app voor Android-cloudback-ups en apparaatoverdracht."
+    ],
+    [
+      "p",
+      "Crosstune leest een link die je plakt, met de app deelt of opent via de linkafhandeling van Android. De klembordsnelkoppelingen lezen de tekst op het klembord wanneer je ze gebruikt. De app controleert welke ondersteunde muziekapps geïnstalleerd zijn, zodat ze als bestemming kunnen worden aangeboden. Die informatie blijft op je apparaat."
+    ],
+    [
+      "h2",
+      "Verzoeken aan muziekservices"
+    ],
+    [
+      "p",
+      "Om een muzieklink om te zetten, vraagt Crosstune de openbare pagina of openbare API op bij de bronservice. De app laadt ook de hoes van de afbeeldingsservers van de service. Ondersteunde bronservices zijn onder andere Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud en Bandcamp."
+    ],
+    [
+      "p",
+      "Als ‘Exacte match openen’ aanstaat, stuurt de app de titel en artiest van het item naar de zoekdienst van de bestemming: Apple Music, Deezer, YouTube Music, YouTube of Bandcamp. Je kunt deze optie uitzetten in Instellingen. Als je een bestemming opent, ontvangt de gekozen app of website de bestemmingslink of de zoektermen. Eigen bestemmingen ontvangen de zoektermen in de URL-sjabloon die je instelt. Als je een resultaat deelt, gaat het naar de app of ontvanger die je kiest."
+    ],
+    [
+      "p",
+      "Zoals bij andere internetverzoeken krijgt de benaderde service je IP-adres en de gebruikelijke verzoekinformatie te zien. Die services kunnen verzoeklogboeken bewaren en informatie verwerken volgens hun eigen privacybeleid. De ontwikkelaar heeft geen invloed op hoe zij die gegevens verwerken of bewaren. Een muziekservice kan een eigen account of abonnement vereisen nadat je hem opent."
+    ],
+    [
+      "h2",
+      "Machtigingen en beveiliging"
+    ],
+    [
+      "p",
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. De app vraagt geen machtigingen voor locatie, microfoon, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekservices gebruiken HTTPS. Als je een eigen bestemming instelt, kies dan een vertrouwd HTTPS-adres."
+    ],
+    [
+      "h2",
+      "Bewaren en verwijderen"
+    ],
+    [
+      "p",
+      "Je kunt de recente geschiedenis wissen in de app. Als je de app-opslag van Crosstune wist in de Android-instellingen, worden de lokale instellingen en geschiedenis verwijderd. De ontwikkelaar heeft geen account of luistergeschiedenis op een server die verwijderd kan worden. Verzoeken die muziekservices van derden al hebben ontvangen, vallen onder het bewaar- en verwijderbeleid van die services."
+    ],
+    [
+      "h2",
+      "Kinderen"
+    ],
+    [
+      "p",
+      "Crosstune vraagt gebruikers niet naar hun leeftijd of persoonlijke profielgegevens en verzamelt niet bewust persoonsgegevens van kinderen op een server van de ontwikkelaar. Gekoppelde muziekservices hebben hun eigen leeftijdseisen en privacybeleid. Ouders en voogden kunnen die het beste bekijken voordat een kind ze gebruikt."
+    ],
+    [
+      "h2",
+      "Contact en wijzigingen"
+    ],
+    [
+      "p",
+      "Voor vragen over privacy kun je mailen naar {email}. Als je de ontwikkelaar mailt, verwerkt de e-maildienst je adres en bericht zodat de ontwikkelaar kan antwoorden. Stuur liever geen gevoelige informatie mee die je niet hoeft te delen."
+    ],
+    [
+      "p",
+      "Dit beleid kan worden bijgewerkt als de werking van de app verandert. Updates verschijnen op deze pagina met een nieuwe datum."
+    ]
+  ]
+}
