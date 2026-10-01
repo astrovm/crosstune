@@ -10,14 +10,6 @@ Someone sends you a link from one music service, but you listen on another. With
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="First-run setup: allowing the links in Android" width="200">
 </p>
 
-<p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" alt="Behavior settings: ask which app to use and open the exact match" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" alt="Adding a custom app or site with a search URL template" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6.png" alt="Choosing an app for Dreams Come True by S.E.S. after sharing a link" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.png" alt="Destination choices with service icons" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8.png" alt="Per-service routing: Spotify links open in Apple Music while the default remains YouTube Music" width="200">
-</p>
-
 ## ⬇️ Install
 
 Crosstune runs on Android 8.0 or newer.
