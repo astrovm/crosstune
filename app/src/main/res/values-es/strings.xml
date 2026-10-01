@@ -105,7 +105,6 @@
     <string name="error_no_app_to_open">Ninguna app instalada puede abrir este link.</string>
     <string name="error_metadata_unavailable">No se pudieron leer los datos de este link.</string>
     <string name="search_in_destination">Buscar en %1$s</string>
-    <string name="result_destination_label">Para este enlace</string>
     <string name="make_default">Usar por defecto</string>
     <string name="history_open">Abrir %1$s</string>
     <string name="history_copy">Copiar enlace de %1$s</string>

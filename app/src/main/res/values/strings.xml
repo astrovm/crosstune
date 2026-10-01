@@ -119,7 +119,6 @@
     <string name="error_no_app_to_open">No installed app can open this link.</string>
     <string name="error_metadata_unavailable">Couldn\'t read the details of this link.</string>
     <string name="search_in_destination">Search in %1$s</string>
-    <string name="result_destination_label">For this link</string>
     <string name="make_default">Make default</string>
     <string name="history_open">Open %1$s</string>
     <string name="history_copy">Copy link for %1$s</string>

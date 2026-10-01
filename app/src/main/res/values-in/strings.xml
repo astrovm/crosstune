@@ -105,7 +105,6 @@
     <string name="error_no_app_to_open">Tidak ada aplikasi terinstal yang bisa membuka link ini.</string>
     <string name="error_metadata_unavailable">Tidak bisa membaca detail link ini.</string>
     <string name="search_in_destination">Cari di %1$s</string>
-    <string name="result_destination_label">Untuk tautan ini</string>
     <string name="make_default">Jadikan default</string>
     <string name="history_open">Buka %1$s</string>
     <string name="history_copy">Salin tautan untuk %1$s</string>

@@ -105,7 +105,6 @@
     <string name="error_no_app_to_open">Geen geïnstalleerde app kan deze link openen.</string>
     <string name="error_metadata_unavailable">De gegevens van deze link kunnen niet worden gelezen.</string>
     <string name="search_in_destination">Zoeken in %1$s</string>
-    <string name="result_destination_label">Voor deze link</string>
     <string name="make_default">Als standaard instellen</string>
     <string name="history_open">%1$s openen</string>
     <string name="history_copy">Link voor %1$s kopiëren</string>

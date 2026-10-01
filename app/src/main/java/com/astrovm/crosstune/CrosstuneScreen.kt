@@ -242,7 +242,6 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
                 selected = if (state.result == null) state.defaultDestination else state.resultDestination,
                 onSelect = if (state.result == null) actions.onTargetChange else actions.onResultTargetChange,
                 installed = state.installed,
-                label = if (state.result != null) stringResource(R.string.result_destination_label) else null,
                 modifier = Modifier.weight(1f)
             )
             if (state.result != null && state.resultDestination != state.defaultDestination) {

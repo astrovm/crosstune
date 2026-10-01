@@ -37,7 +37,7 @@ Crosstune reads the link's title and artist from the service it comes from, then
 
 **Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match. Search fallbacks use a **Search in…** button.
 
-The destination labeled **For this link** applies to the current result. Use **Make default** to keep it for future links; per-source rules remain in Settings. The picker puts installed apps first, shows icons for every service, and includes the current item's title and artist.
+The destination menu still says **Opens in**. A change applies to the current result. Use **Make default** to keep it for future links; per-source rules remain in Settings. The picker puts installed apps first, shows icons for every service, and includes the current item's title and artist.
 
 ## Features
 

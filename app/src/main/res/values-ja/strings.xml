@@ -106,7 +106,6 @@
     <string name="error_no_app_to_open">このリンクを開けるアプリがインストールされていません。</string>
     <string name="error_metadata_unavailable">このリンクの詳細を読み取れませんでした。</string>
     <string name="search_in_destination">%1$sで検索</string>
-    <string name="result_destination_label">このリンクのみ</string>
     <string name="make_default">デフォルトに設定</string>
     <string name="history_open">%1$sを開く</string>
     <string name="history_copy">%1$sのリンクをコピー</string>

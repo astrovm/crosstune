@@ -105,7 +105,6 @@
     <string name="error_no_app_to_open">Aucune application installée ne peut ouvrir ce lien.</string>
     <string name="error_metadata_unavailable">Impossible de lire les détails de ce lien.</string>
     <string name="search_in_destination">Rechercher dans %1$s</string>
-    <string name="result_destination_label">Pour ce lien</string>
     <string name="make_default">Définir par défaut</string>
     <string name="history_open">Ouvrir %1$s</string>
     <string name="history_copy">Copier le lien de %1$s</string>
