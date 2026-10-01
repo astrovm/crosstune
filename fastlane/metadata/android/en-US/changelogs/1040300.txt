@@ -1,0 +1,3 @@
+Settings now links to the privacy policy.
+
+Clearer welcome text and translation fixes in every language.
