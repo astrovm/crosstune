@@ -44,6 +44,7 @@
     <string name="setup_step">चरण %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune कौन-से लिंक खोले?</string>
     <string name="setup_sources_body">वे सेवाएँ चुनें जिनके लिंक आपको मिलते हैं।</string>
+    <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
     <string name="setup_destination_body">वह ऐप्लिकेशन चुनें जिसमें आप सुनते हैं। इसे बाद में बदला जा सकता है।</string>
     <string name="setup_allow_title">लिंक की अनुमति दें</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">सर्च टेक्स्ट कॉपी करें</string>
     <string name="share_search_button">शेयर करें</string>
     <string name="share_search_link">सर्च लिंक शेयर करें</string>
+    <string name="copy_original_link">%1$s लिंक कॉपी करें</string>
+    <string name="share_original_link">%1$s लिंक शेयर करें</string>
     <string name="search_copied_to_clipboard">सर्च टेक्स्ट कॉपी हो गया</string>
     <string name="link_copied_to_clipboard">लिंक कॉपी हो गया</string>
     <string name="link_settings_helper_title">नए लिंक की अनुमति दें</string>

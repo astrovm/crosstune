@@ -60,20 +60,29 @@ internal class LinkInterception(private val context: Context) {
      * link once "Open supported links" is turned off in that app's own settings. Null before
      * Android 12, which can't say.
      */
-    fun blockingApps(sources: Set<MusicService>): Set<MusicService>? {
+    fun blockingApps(sources: Set<MusicService>): Set<MusicService>? =
+        claimingApps(sources)?.filterValues { it }?.keys
+
+    /**
+     * Installed music apps that claim links Crosstune is set to intercept, each with whether it
+     * still opens them, i.e. hasn't had "Open supported links" turned off. Null before Android 12,
+     * which can't say.
+     */
+    fun claimingApps(sources: Set<MusicService>): Map<MusicService, Boolean>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         val wanted = sources.flatMap { HOSTS[it].orEmpty() }
-        return installedServices().filter { app ->
+        return installedServices().mapNotNull { app ->
             val state = try {
                 manager.getDomainVerificationUserState(app.packageName)
             } catch (_: PackageManager.NameNotFoundException) {
                 null
-            }
-            state != null && state.isLinkHandlingAllowed && state.hostToStateMap.any { (host, hostState) ->
+            } ?: return@mapNotNull null
+            val claims = state.hostToStateMap.any { (host, hostState) ->
                 hostState != DomainVerificationUserState.DOMAIN_STATE_NONE && wanted.any { covers(it, host) }
             }
-        }.toSet()
+            if (claims) app to state.isLinkHandlingAllowed else null
+        }.toMap()
     }
 
     private fun component(service: MusicService) =

@@ -44,6 +44,7 @@
     <string name="setup_step">Langkah %1$d dari %2$d</string>
     <string name="setup_sources_title">Link mana yang harus dibuka Crosstune?</string>
     <string name="setup_sources_body">Pilih layanan yang link-nya sering kamu terima.</string>
+    <string name="setup_sources_listening_note">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana.</string>
     <string name="setup_destination_title">Kamu dengar musik di mana?</string>
     <string name="setup_destination_body">Pilih aplikasi yang kamu pakai untuk mendengarkan. Bisa diubah nanti.</string>
     <string name="setup_allow_title">Izinkan link</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_button">Bagikan</string>
     <string name="share_search_link">Bagikan link pencarian</string>
+    <string name="copy_original_link">Salin tautan %1$s</string>
+    <string name="share_original_link">Bagikan tautan %1$s</string>
     <string name="search_copied_to_clipboard">Teks pencarian disalin</string>
     <string name="link_copied_to_clipboard">Link disalin</string>
     <string name="link_settings_helper_title">Izinkan link baru</string>

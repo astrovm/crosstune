@@ -44,6 +44,7 @@
     <string name="setup_step">Paso %1$d de %2$d</string>
     <string name="setup_sources_title">¿Qué links tiene que abrir Crosstune?</string>
     <string name="setup_sources_body">Elegí los servicios de los que te llegan links.</string>
+    <string name="setup_sources_listening_note">Escuchás en %1$s, así que sus links ya se abren ahí.</string>
     <string name="setup_destination_title">¿Dónde escuchás?</string>
     <string name="setup_destination_body">Elegí la app donde escuchás música. Después lo podés cambiar.</string>
     <string name="setup_allow_title">Permitir los links</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">Copiar texto de búsqueda</string>
     <string name="share_search_button">Compartir</string>
     <string name="share_search_link">Compartir link de búsqueda</string>
+    <string name="copy_original_link">Copiar link de %1$s</string>
+    <string name="share_original_link">Compartir link de %1$s</string>
     <string name="search_copied_to_clipboard">Texto de búsqueda copiado</string>
     <string name="link_copied_to_clipboard">Link copiado</string>
     <string name="link_settings_helper_title">Permitir los links nuevos</string>

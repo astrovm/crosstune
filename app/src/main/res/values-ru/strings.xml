@@ -44,6 +44,7 @@
     <string name="setup_step">Шаг %1$d из %2$d</string>
     <string name="setup_sources_title">Какие ссылки открывать в Crosstune?</string>
     <string name="setup_sources_body">Выберите сервисы, из которых вам присылают ссылки.</string>
+    <string name="setup_sources_listening_note">Вы слушаете в %1$s, поэтому его ссылки и так открываются там.</string>
     <string name="setup_destination_title">Где вы слушаете музыку?</string>
     <string name="setup_destination_body">Выберите приложение для прослушивания. Позже его можно сменить.</string>
     <string name="setup_allow_title">Разрешите ссылки</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">Копировать текст поиска</string>
     <string name="share_search_button">Поделиться</string>
     <string name="share_search_link">Поделиться ссылкой на поиск</string>
+    <string name="copy_original_link">Копировать ссылку %1$s</string>
+    <string name="share_original_link">Поделиться ссылкой %1$s</string>
     <string name="search_copied_to_clipboard">Текст поиска скопирован</string>
     <string name="link_copied_to_clipboard">Ссылка скопирована</string>
     <string name="link_settings_helper_title">Разрешите новые ссылки</string>

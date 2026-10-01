@@ -44,6 +44,7 @@
     <string name="setup_step">Étape %1$d sur %2$d</string>
     <string name="setup_sources_title">Quels liens Crosstune doit-il ouvrir ?</string>
     <string name="setup_sources_body">Choisissez les services dont vous recevez des liens.</string>
+    <string name="setup_sources_listening_note">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà.</string>
     <string name="setup_destination_title">Où écoutez-vous ?</string>
     <string name="setup_destination_body">Choisissez l\'application dans laquelle vous écoutez. Vous pourrez la changer plus tard.</string>
     <string name="setup_allow_title">Autoriser les liens</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">Copier le texte de recherche</string>
     <string name="share_search_button">Partager</string>
     <string name="share_search_link">Partager le lien de recherche</string>
+    <string name="copy_original_link">Copier le lien %1$s</string>
+    <string name="share_original_link">Partager le lien %1$s</string>
     <string name="search_copied_to_clipboard">Texte de recherche copié</string>
     <string name="link_copied_to_clipboard">Lien copié</string>
     <string name="link_settings_helper_title">Autoriser les nouveaux liens</string>

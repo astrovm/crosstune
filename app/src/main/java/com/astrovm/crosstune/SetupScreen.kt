@@ -50,25 +50,27 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
-private const val STEP_WELCOME = 0
-private const val STEP_SOURCES = 1
-private const val STEP_DESTINATION = 2
-private const val STEP_ALLOW = 3
-private const val STEP_APPS = 4
+private enum class SetupStep { DESTINATION, SOURCES, APPS, ALLOW }
 
 /**
- * First-run setup: which services' links to open, where to send them, allowing the links in
- * Android, and, when a service's own app is installed, stopping that app from taking them.
+ * First-run setup: where the user listens, which other services' links to open, stopping the
+ * services' own installed apps from taking them, and allowing the links in Android. Stopping the
+ * apps comes first because Android won't let Crosstune take links another app has verified.
  * Choices apply as they're made, so leaving halfway keeps them; setup shows again until finished.
  */
 @Composable
 internal fun SetupScreen(state: UiState, actions: ScreenActions) {
-    var step by rememberSaveable { mutableIntStateOf(STEP_WELCOME) }
-    // System back steps back like the Back button instead of leaving setup.
-    BackHandler(enabled = step > STEP_WELCOME) { step-- }
+    // 0 is the welcome page; after that, a position in [steps].
+    var position by rememberSaveable { mutableIntStateOf(0) }
     val appsToFix = appsToStop(state)
-    // The last step is only there when an installed app is in the way.
-    val lastStep = if (appsToFix.isEmpty()) STEP_ALLOW else STEP_APPS
+    // Stopping the apps is only a step when an installed app is in the way.
+    val steps = SetupStep.entries.filter { it != SetupStep.APPS || appsToFix.isNotEmpty() }
+    // The step list can shrink under the user, e.g. when Android stops reporting an app.
+    val current = position.coerceAtMost(steps.size)
+    val step = if (current == 0) null else steps[current - 1]
+    val back = { position = current - 1 }
+    // System back steps back like the Back button instead of leaving setup.
+    BackHandler(enabled = current > 0, onBack = back)
 
     Page(
         title = null,
@@ -84,22 +86,22 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .widthIn(max = 290.dp)
                     .heightIn(min = 52.dp)
-                if (step > STEP_WELCOME) {
-                    OutlinedButton(onClick = { step-- }, modifier = buttonModifier) {
+                if (step != null) {
+                    OutlinedButton(onClick = back, modifier = buttonModifier) {
                         Text(stringResource(R.string.back_button), style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                val isLast = step >= lastStep
+                val isLast = current == steps.size
                 Button(
-                    onClick = { if (isLast) actions.onCompleteSetup() else step++ },
+                    onClick = { if (isLast) actions.onCompleteSetup() else position = current + 1 },
                     // There's no built-in default any more, so one has to be picked.
-                    enabled = step != STEP_DESTINATION || state.hasDefault,
+                    enabled = step != SetupStep.DESTINATION || state.hasDefault,
                     modifier = buttonModifier
                 ) {
                     Text(
                         stringResource(
                             when {
-                                step == STEP_WELCOME -> R.string.setup_get_started
+                                step == null -> R.string.setup_get_started
                                 isLast -> R.string.setup_finish
                                 else -> R.string.next_button
                             }
@@ -112,13 +114,13 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     ) {
         AnimatedContent(targetState = step, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "setup") { shown ->
             Column {
-                if (shown > STEP_WELCOME) StepProgress(shown, lastStep)
+                if (shown == null) return@Column Welcome()
+                StepProgress(steps.indexOf(shown) + 1, steps.size)
                 when (shown) {
-                    STEP_WELCOME -> Welcome()
-                    STEP_SOURCES -> SourcesStep(state, actions)
-                    STEP_DESTINATION -> DestinationStep(state, actions)
-                    STEP_ALLOW -> AllowStep(state, actions)
-                    else -> AppsStep(appsToFix, state, actions)
+                    SetupStep.DESTINATION -> DestinationStep(state, actions)
+                    SetupStep.SOURCES -> SourcesStep(state, actions)
+                    SetupStep.APPS -> AppsStep(appsToFix, state, actions)
+                    SetupStep.ALLOW -> AllowStep(state, actions)
                 }
             }
         }
@@ -199,7 +201,7 @@ private fun <T> List<T>.installedFirst(installed: Set<MusicService>, service: (T
     sortedByDescending { service(it) in installed }
 
 @Composable
-private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label: String, tag: @Composable () -> Unit) {
+private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label: String, tag: @Composable () -> Unit = {}) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -218,21 +220,38 @@ private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label
     }
 }
 
+/** The service the user listens in, whose links already open where they should. */
+private fun UiState.listeningService(): MusicService? =
+    if (hasDefault) (defaultDestination as? Destination.Service)?.service else null
+
+/**
+ * The services the user gets links from. The one they listen in isn't offered: its links already
+ * open there, and stopping its app from taking them would only get in the way.
+ */
 @Composable
 private fun SourcesStep(state: UiState, actions: ScreenActions) {
     StepHeader(R.string.setup_sources_title, R.string.setup_sources_body)
+    val listening = state.listeningService()
     Group {
-        MusicService.entries.filter { it.canBeSource }.installedFirst(state.installed) { it }
+        // Links usually come from the services the user doesn't use, so installed apps aren't put first.
+        MusicService.entries.filter { it.canBeSource && it != listening }
             .forEachIndexed { index, source ->
                 if (index > 0) GroupDivider()
                 val checked = source in state.intercepted
                 ChoiceRow(
                     modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) { actions.onInterceptChange(source, it) },
                     control = { Checkbox(checked = checked, onCheckedChange = null) },
-                    label = stringResource(source.labelRes),
-                    tag = { InstalledTag(source, state.installed) }
+                    label = stringResource(source.labelRes)
                 )
             }
+    }
+    if (listening != null && listening.canBeSource) {
+        Text(
+            text = stringResource(R.string.setup_sources_listening_note, stringResource(listening.labelRes)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
+        )
     }
 }
 
@@ -245,7 +264,13 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
                 if (index > 0) GroupDivider()
                 val selected = state.hasDefault && destination == state.defaultDestination
                 ChoiceRow(
-                    modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) { actions.onTargetChange(destination) },
+                    modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) {
+                        actions.onTargetChange(destination)
+                        // Crosstune would only hand the app its own links back, so stop opening them.
+                        (destination as? Destination.Service)?.service
+                            ?.takeIf { it in state.intercepted }
+                            ?.let { actions.onInterceptChange(it, false) }
+                    },
                     control = { RadioButton(selected = selected, onClick = null) },
                     label = destination.label(),
                     tag = { InstalledTag((destination as? Destination.Service)?.service, state.installed) }
@@ -376,18 +401,20 @@ private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenAc
 
 /**
  * Installed apps setup should ask the user to stop: on Android 12+ every one seen taking the
- * links (kept once seen, so fixing one doesn't remove its row); before that, every installed app
- * whose links Crosstune opens, since Android can't say which really do.
+ * links that still claims some Crosstune opens (kept once seen, so fixing one doesn't remove its
+ * row, but dropped once the user stops opening its links); before that, every installed app whose
+ * links Crosstune opens, since Android can't say which really do.
  */
 @Composable
 private fun appsToStop(state: UiState): List<MusicService> {
     var seen by rememberSaveable { mutableStateOf("") }
     val blocking = state.blockingApps
         ?: return MusicService.entries.filter { it in state.installed && it in state.intercepted }
+    val claiming = state.claimingApps.orEmpty()
     val known = seen.split(',').filter { it.isNotEmpty() }
     val all = (known + blocking.map { it.name }).distinct()
     SideEffect { if (all.size != known.size) seen = all.joinToString(",") }
-    return MusicService.entries.filter { it.name in all }
+    return MusicService.entries.filter { it.name in all && it in claiming }
 }
 
 @Preview(showBackground = true)

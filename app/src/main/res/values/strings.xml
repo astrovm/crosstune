@@ -53,6 +53,7 @@
     <string name="setup_step">Step %1$d of %2$d</string>
     <string name="setup_sources_title">Which links should Crosstune open?</string>
     <string name="setup_sources_body">Pick the services you get links from.</string>
+    <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
     <string name="setup_destination_title">Where do you listen?</string>
     <string name="setup_destination_body">Pick the app you listen in. You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
@@ -102,6 +103,8 @@
     <string name="copy_search_action">Copy search text</string>
     <string name="share_search_button">Share</string>
     <string name="share_search_link">Share search link</string>
+    <string name="copy_original_link">Copy %1$s link</string>
+    <string name="share_original_link">Share %1$s link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_copied_to_clipboard">Link copied</string>
     <string name="link_settings_helper_title">Allow the new links</string>

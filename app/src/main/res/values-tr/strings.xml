@@ -44,6 +44,7 @@
     <string name="setup_step">Adım %1$d / %2$d</string>
     <string name="setup_sources_title">Crosstune hangi bağlantıları açsın?</string>
     <string name="setup_sources_body">Bağlantı aldığınız servisleri seçin.</string>
+    <string name="setup_sources_listening_note">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor.</string>
     <string name="setup_destination_title">Nerede dinliyorsunuz?</string>
     <string name="setup_destination_body">Dinlediğiniz uygulamayı seçin. Daha sonra değiştirebilirsiniz.</string>
     <string name="setup_allow_title">Bağlantılara izin verin</string>
@@ -89,6 +90,8 @@
     <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_button">Paylaş</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>
+    <string name="copy_original_link">%1$s bağlantısını kopyala</string>
+    <string name="share_original_link">%1$s bağlantısını paylaş</string>
     <string name="search_copied_to_clipboard">Arama metni kopyalandı</string>
     <string name="link_copied_to_clipboard">Bağlantı kopyalandı</string>
     <string name="link_settings_helper_title">Yeni bağlantılara izin verin</string>

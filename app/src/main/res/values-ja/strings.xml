@@ -45,6 +45,7 @@
     <string name="setup_step">ステップ %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune で開くリンクは？</string>
     <string name="setup_sources_body">リンクをよく受け取るサービスを選んでください。</string>
+    <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
     <string name="setup_destination_body">聴いているアプリを選んでください。あとから変更できます。</string>
     <string name="setup_allow_title">リンクを許可</string>
@@ -90,6 +91,8 @@
     <string name="copy_search_action">検索テキストをコピー</string>
     <string name="share_search_button">共有</string>
     <string name="share_search_link">検索リンクを共有</string>
+    <string name="copy_original_link">%1$s のリンクをコピー</string>
+    <string name="share_original_link">%1$s のリンクを共有</string>
     <string name="search_copied_to_clipboard">検索テキストをコピーしました</string>
     <string name="link_copied_to_clipboard">リンクをコピーしました</string>
     <string name="link_settings_helper_title">新しいリンクを許可</string>
