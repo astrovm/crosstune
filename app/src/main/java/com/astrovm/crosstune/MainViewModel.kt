@@ -18,6 +18,8 @@ internal data class UiState(
     val isLoading: Boolean = false,
     val isMatching: Boolean = false,
     val result: MusicMetadata? = null,
+    /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
+    val destinationUrls: Map<Destination, String> = emptyMap(),
     /** The link [result] came from, or the incoming link that failed, so it can still be opened as is. */
     val link: MusicLink? = null,
     val error: AppError? = null,
@@ -28,7 +30,7 @@ internal data class UiState(
     val rules: Map<MusicService, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
     val askEachTime: Boolean = false,
-    val exactMatch: Boolean = false,
+    val exactMatch: Boolean = true,
     val showDestinationPicker: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
@@ -79,7 +81,7 @@ internal class MainViewModel(
     var uiState by mutableStateOf(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
-            exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, false),
+            exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
@@ -105,6 +107,7 @@ internal class MainViewModel(
 
     private var job: Job? = null
     private var lastRequest: Pair<LinkInput, Boolean>? = null
+    private var pendingOpen = false
 
     private fun UiState.withDestinations(): UiState {
         val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
@@ -122,7 +125,9 @@ internal class MainViewModel(
 
     /** Re-reads what can change outside the app, e.g. after returning from Android's link settings. */
     fun refreshSystemState() {
+        val previousDestination = uiState.resultDestination
         uiState = uiState.withDestinations()
+        if (previousDestination != uiState.resultDestination) prepareResultDestination()
     }
 
     fun completeSetup() {
@@ -178,7 +183,8 @@ internal class MainViewModel(
     private fun rejectInput() {
         job?.cancel()
         lastRequest = null
-        uiState = uiState.copy(result = null, link = null, showDestinationPicker = false)
+        pendingOpen = false
+        uiState = uiState.copy(result = null, destinationUrls = emptyMap(), link = null, showDestinationPicker = false)
         showError(AppError.INVALID_URL)
     }
 
@@ -202,6 +208,7 @@ internal class MainViewModel(
 
     private fun resolve(input: LinkInput, openWhenReady: Boolean) {
         lastRequest = input to openWhenReady
+        pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         job?.cancel()
         uiState = uiState.copy(
@@ -209,6 +216,7 @@ internal class MainViewModel(
             isMatching = false,
             error = null,
             result = null,
+            destinationUrls = emptyMap(),
             link = null,
             showDestinationPicker = false
         )
@@ -220,40 +228,63 @@ internal class MainViewModel(
                     canRetry = resolution.error.canRetry,
                     link = resolution.link
                 )
-                is Resolution.Resolved -> onResolved(resolution, input, openWhenReady)
+                is Resolution.Resolved -> onResolved(resolution, input)
             }
         }
     }
 
-    private suspend fun onResolved(resolution: Resolution.Resolved, input: LinkInput, openWhenReady: Boolean) {
+    private suspend fun onResolved(resolution: Resolution.Resolved, input: LinkInput) {
         val history = historyStore.add(HistoryEntry(resolution.link, resolution.metadata))
         uiState = uiState.copy(isLoading = false, result = resolution.metadata, link = resolution.link, history = history)
         if (input is LinkInput.ShortLink) {
             uiState = uiState.copy(linkText = resolution.link.url)
         }
-        when {
-            !openWhenReady -> Unit
-            // Before setup there's no default yet, so ask.
-            uiState.askEachTime || !uiState.setupComplete -> uiState = uiState.copy(showDestinationPicker = true)
-            else -> open(uiState.resultDestination, finishAfterOpen = true)
+        prepareResult()
+    }
+
+    /** A destination or exact-match preference change prepares the current result again. */
+    private fun prepareResultDestination() {
+        if (uiState.result == null || uiState.showDestinationPicker) return
+        job?.cancel()
+        uiState = uiState.copy(isMatching = false)
+        job = viewModelScope.launch { prepareResult() }
+    }
+
+    private suspend fun prepareResult() {
+        // Incoming links without a chosen destination must not search the default before asking.
+        if (pendingOpen && (uiState.askEachTime || !uiState.setupComplete)) {
+            pendingOpen = false
+            uiState = uiState.copy(showDestinationPicker = true)
+            return
         }
+        prepareDestination(uiState.resultDestination)
+        if (!pendingOpen) return
+        pendingOpen = false
+        open(uiState.resultDestination, finishAfterOpen = true)
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination = uiState.resultDestination, finishAfterOpen: Boolean = false) {
-        uiState = uiState.copy(showDestinationPicker = false)
+        pendingOpen = false
+        uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
         job?.cancel()
         job = viewModelScope.launch { open(destination, finishAfterOpen) }
     }
 
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
-        val metadata = uiState.result ?: return
+        val url = prepareDestination(destination) ?: return
+        val service = (destination as? Destination.Service)?.service
+        effectChannel.send(Effect.Open(url, service?.packageName, finishAfterOpen))
+    }
+
+    private suspend fun prepareDestination(destination: Destination): String? {
+        val metadata = uiState.result ?: return null
         val service = (destination as? Destination.Service)?.service
         // The link already belongs to the destination: open it as is instead of searching.
         uiState.link?.takeIf { it.service == service }?.let { link ->
-            effectChannel.send(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
-            return
+            return link.url
         }
+        uiState.destinationUrls[destination]?.let { return it }
         val exactUrl = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
             matcher.find(service, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -261,7 +292,8 @@ internal class MainViewModel(
             null
         }
         val url = exactUrl ?: destination.searchUrl(searchQuery(metadata))
-        effectChannel.send(Effect.Open(url, service?.packageName, finishAfterOpen))
+        uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to url))
+        return url
     }
 
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
@@ -269,29 +301,37 @@ internal class MainViewModel(
         val link = uiState.link ?: return
         // An exact match may still be running; it must not open a second app when it finishes.
         job?.cancel()
+        pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
+        // Returning from the source app must not restart the canceled lookup, even for Open-first.
+        destinationUrl()
         val finishAfterOpen = lastRequest?.second == true
         effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
     }
 
     fun dismissDestinationPicker() {
         uiState = uiState.copy(showDestinationPicker = false)
+        // The result is now available for manual actions using its displayed destination.
+        prepareResultDestination()
     }
 
     fun showHistoryEntry(entry: HistoryEntry) {
         job?.cancel()
         // The entry replaces whatever was being looked up, including a link from another app.
         lastRequest = null
+        pendingOpen = false
         uiState = uiState.copy(
             linkText = entry.link.url,
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
+            destinationUrls = emptyMap(),
             link = entry.link,
             error = null,
             canRetry = false,
             handlingIncomingLink = false
         )
+        prepareResultDestination()
     }
 
     fun clearHistory() {
@@ -301,20 +341,26 @@ internal class MainViewModel(
 
     fun searchQuery(): String? = uiState.result?.let(::searchQuery)
 
-    fun searchUrl(): String? {
+    fun destinationUrl(): String? {
         val destination = uiState.resultDestination
         uiState.link?.takeIf { (destination as? Destination.Service)?.service == it.service }?.let { return it.url }
-        return searchQuery()?.let(destination::searchUrl)
+        uiState.destinationUrls[destination]?.let { return it }
+        if (uiState.isMatching) return null
+        return searchQuery()?.let(destination::searchUrl)?.also { url ->
+            uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to url))
+        }
     }
 
     fun clear() {
         job?.cancel()
         lastRequest = null
+        pendingOpen = false
         uiState = uiState.copy(
             linkText = "",
             isLoading = false,
             isMatching = false,
             result = null,
+            destinationUrls = emptyMap(),
             link = null,
             error = null,
             showDestinationPicker = false,
@@ -324,12 +370,12 @@ internal class MainViewModel(
 
     fun selectDefault(destination: Destination) {
         destinationStore.setDefault(destination)
-        uiState = uiState.withDestinations()
+        refreshSystemState()
     }
 
     fun setRule(source: MusicService, destination: Destination?) {
         destinationStore.setRule(source, destination)
-        uiState = uiState.withDestinations()
+        refreshSystemState()
     }
 
     fun setIntercepted(source: MusicService, enabled: Boolean) {
@@ -347,7 +393,7 @@ internal class MainViewModel(
 
     fun removeCustomDestination(custom: Destination.Custom) {
         destinationStore.removeCustom(custom)
-        uiState = uiState.withDestinations()
+        refreshSystemState()
     }
 
     fun setAskEachTime(enabled: Boolean) {
@@ -356,8 +402,9 @@ internal class MainViewModel(
     }
 
     fun setExactMatch(enabled: Boolean) {
-        uiState = uiState.copy(exactMatch = enabled)
+        uiState = uiState.copy(exactMatch = enabled, destinationUrls = emptyMap())
         preferences.edit { putBoolean(KEY_EXACT_MATCH, enabled) }
+        prepareResultDestination()
     }
 
     fun dismissLinkSettingsHelper() {

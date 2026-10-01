@@ -35,6 +35,8 @@ You don't have to set up anything to paste a link into Crosstune or share one to
 
 Crosstune reads the link's title and artist from the service it comes from, then searches for them in your app. Links you tap or share open straight away. Links you paste into Crosstune show the song and its cover first.
 
+**Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match.
+
 ## Features
 
 - **9 services.** Crosstune reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud and Bandcamp. It opens them in any of those, or in Amazon Music.
@@ -69,7 +71,7 @@ In Crosstune's **Settings**, turn the service on under **Open links from**. Then
 Some pages, like a SoundCloud feed, aren't a song, album, artist or playlist. Crosstune can't read those, so it passes them to that service's app.
 
 **I got a search, not the song.**
-Most apps don't offer a public way to find a song without an account, so Crosstune searches for it by title and artist. If you use Apple Music, Deezer, YouTube Music, YouTube or Bandcamp, turn on **Open the exact match**.
+Most apps don't offer a public way to find a song without an account, so Crosstune searches for it by title and artist. Apple Music, Deezer, YouTube Music, YouTube and Bandcamp support exact matching, which is enabled by default. If you turned it off, turn on **Open the exact match**. When no confident match is available, Crosstune uses a search link.
 
 ## Privacy
 

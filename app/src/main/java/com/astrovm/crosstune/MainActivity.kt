@@ -217,7 +217,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun copyLink() {
-        copyToClipboard("Crosstune link", viewModel.searchUrl(), R.string.link_copied_to_clipboard)
+        copyToClipboard("Crosstune link", viewModel.destinationUrl(), R.string.link_copied_to_clipboard)
     }
 
     private fun copyToClipboard(label: String, text: String?, confirmationRes: Int) {
@@ -231,7 +231,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun shareSearch() {
-        val url = viewModel.searchUrl() ?: return
+        val url = viewModel.destinationUrl() ?: return
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
