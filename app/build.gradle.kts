@@ -4,39 +4,6 @@ plugins {
     id("org.jetbrains.kotlinx.kover")
 }
 
-fun Project.gitOutput(vararg args: String): String? {
-    return try {
-        val process = ProcessBuilder(listOf("git", *args))
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (process.waitFor() == 0) output.ifEmpty { null } else null
-    } catch (_: Exception) {
-        null
-    }
-}
-
-// The release workflow names its tag, since git describe may pick another tag on the same commit.
-val latestTagRef = providers.gradleProperty("releaseTag").orNull ?: gitOutput("describe", "--tags", "--abbrev=0")
-val latestTagName = latestTagRef?.removePrefix("v")
-val commitsSinceTag = latestTagRef?.let { gitOutput("rev-list", "--count", "$it..HEAD")?.toIntOrNull() }
-
-val derivedVersionName = when {
-    latestTagName == null -> "0.0.0-dev"
-    commitsSinceTag == null || commitsSinceTag == 0 -> latestTagName
-    else -> "$latestTagName-dev.$commitsSinceTag"
-}
-
-// From the tag, not the commit count, so a hotfix built from an older branch still installs as an update:
-// vX.Y.Z is X*1000000 + Y*10000 + Z*100, and builds after the tag add up to 99.
-val derivedVersionCode = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(latestTagName.orEmpty())
-    ?.destructured
-    ?.let { (major, minor, patch) ->
-        major.toInt() * 1_000_000 + minor.toInt() * 10_000 + patch.toInt() * 100 + (commitsSinceTag ?: 0).coerceAtMost(99)
-    }
-    ?: 1
-
 android {
     namespace = "com.astrovm.crosstune"
     compileSdk = 37
@@ -45,11 +12,9 @@ android {
         applicationId = "com.astrovm.crosstune"
         minSdk = 26
         targetSdk = 37
-        // F-Droid's update checker only reads this line. It does not run Gradle.
-        // For tag vX.Y.Z the value is X*1000000 + Y*10000 + Z*100. Change it when tagging.
-        // fdroid-versionCode: 1040200
-        versionCode = derivedVersionCode
-        versionName = derivedVersionName
+        // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
+        versionCode = 1040200
+        versionName = "1.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
