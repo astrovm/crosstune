@@ -1,6 +1,6 @@
 Apri qualsiasi link musicale nella tua app preferita.
 
-Un amico ti manda un link di Spotify, ma tu usi YouTube Music? Toccalo e lo stesso brano si apre in YouTube Music. Funziona con brani, album, artisti e playlist.
+Qualcuno ti manda un link da un servizio musicale, ma tu ascolti su un altro. Tocca il link e lo stesso brano si apre nella tua app. Da Spotify a YouTube Music, da Apple Music a Deezer, da TIDAL a Spotify: combinali come vuoi. Funziona con brani, album, artisti e playlist.
 
 <b>Funzionalità</b>
 <ul>
@@ -10,7 +10,7 @@ Un amico ti manda un link di Spotify, ma tu usi YouTube Music? Toccalo e lo stes
 <li>Apri il risultato esatto: Apple Music, Deezer e YouTube Music possono aprire direttamente il brano, l'album o l'artista invece di una ricerca, Bandcamp il brano o l'album, e YouTube il brano.</li>
 <li>Aggiungi altre app e siti con una pagina di ricerca.</li>
 <li>Incolla con un tocco, riapri i link recenti, usa il riquadro delle Impostazioni rapide o tieni premuta l'icona dell'app per aprire un link copiato.</li>
-<li>Non riesce a leggere un link? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
+<li>Link non leggibile? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
 <li>Colori Material You su Android 12 e versioni successive.</li>
 </ul>
 

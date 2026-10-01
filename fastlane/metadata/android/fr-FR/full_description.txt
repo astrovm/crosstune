@@ -1,13 +1,13 @@
 Ouvrez n'importe quel lien musical dans votre application préférée.
 
-Un ami vous envoie un lien Spotify, mais vous utilisez YouTube Music ? Appuyez dessus et le même morceau s'ouvre dans YouTube Music. Fonctionne avec les titres, albums, artistes et playlists.
+Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un autre. Appuyez sur le lien et le même morceau s'ouvre dans votre application. De Spotify à YouTube Music, d'Apple Music à Deezer, de TIDAL à Spotify : combinez-les comme vous voulez. Fonctionne avec les titres, albums, artistes et playlists.
 
 <b>Fonctionnalités</b>
 <ul>
 <li>Lit les liens de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud et Bandcamp, et les ouvre dans n'importe lequel de ces services ou dans Amazon Music.</li>
 <li>Envoyez chaque service vers une destination différente, par exemple les liens YouTube vers YouTube Music et tout le reste vers Apple Music.</li>
-<li>Demandez quelle application utiliser : choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</li>
-<li>Ouvrez le résultat exact : Apple Music, Deezer et YouTube Music peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp le titre ou l'album, et YouTube le titre.</li>
+<li>Demander quelle application utiliser : choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</li>
+<li>Ouvrir le résultat exact : Apple Music, Deezer et YouTube Music peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp le titre ou l'album, et YouTube le titre.</li>
 <li>Ajoutez d'autres applications et sites dotés d'une page de recherche.</li>
 <li>Collez d'un seul geste, rouvrez vos liens récents, utilisez la tuile des réglages rapides ou appuyez longuement sur l'icône de l'application pour ouvrir un lien copié.</li>
 <li>Un lien illisible ? Ouvrez-le dans l'application d'origine, copiez le texte de recherche ou partagez un lien de recherche.</li>

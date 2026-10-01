@@ -1,6 +1,6 @@
 Otwieraj dowolny link muzyczny w ulubionej aplikacji.
 
-Znajomy przysłał Ci link do Spotify, a Ty słuchasz w YouTube Music? Kliknij go, a ten sam utwór otworzy się w YouTube Music. Działa z utworami, albumami, wykonawcami i playlistami.
+Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kliknij link, a ten sam utwór otworzy się w Twojej aplikacji. Ze Spotify do YouTube Music, z Apple Music do Deezera, z TIDAL do Spotify: łącz je, jak chcesz. Działa z utworami, albumami, wykonawcami i playlistami.
 
 <b>Funkcje</b>
 <ul>

@@ -36,7 +36,7 @@
     <string name="custom_template_invalid">名前と、{query} を含む URL を入力してください。</string>
     <string name="settings_behaviour_title">動作</string>
     <string name="setup_welcome_title">Crosstune へようこそ</string>
-    <string name="setup_welcome_body">Spotify のリンクをもらったけれど、使っているのは YouTube Music？ タップすれば、同じ曲がそこで開きます。</string>
+    <string name="setup_welcome_body">ある音楽サービスのリンクをもらったけれど、聴いているのは別のサービス？ タップすれば、同じ曲がいつものアプリで開きます。</string>
     <string name="setup_get_started">始める</string>
     <string name="next_button">次へ</string>
     <string name="back_button">戻る</string>
@@ -109,4 +109,5 @@
     <string name="make_default">デフォルトに設定</string>
     <string name="history_open">%1$sを開く</string>
     <string name="history_copy">%1$sのリンクをコピー</string>
+    <string name="privacy_policy">プライバシーポリシー</string>
 </resources>

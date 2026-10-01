@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Gib einen Namen und eine URL mit {query} ein.</string>
     <string name="settings_behaviour_title">Verhalten</string>
     <string name="setup_welcome_title">Willkommen bei Crosstune</string>
-    <string name="setup_welcome_body">Du hast einen Spotify-Link, nutzt aber YouTube Music? Tippe darauf, und derselbe Song öffnet sich dort.</string>
+    <string name="setup_welcome_body">Du hast einen Musik-Link von einem Dienst, hörst aber auf einem anderen? Tippe darauf, und derselbe Song öffnet sich in deiner App.</string>
     <string name="setup_get_started">Los geht\'s</string>
     <string name="next_button">Weiter</string>
     <string name="back_button">Zurück</string>
@@ -108,4 +108,5 @@
     <string name="make_default">Als Standard festlegen</string>
     <string name="history_open">%1$s öffnen</string>
     <string name="history_copy">Link für %1$s kopieren</string>
+    <string name="privacy_policy">Datenschutzerklärung</string>
 </resources>

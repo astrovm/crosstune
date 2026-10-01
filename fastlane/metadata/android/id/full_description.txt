@@ -1,6 +1,6 @@
 Buka link musik apa pun di aplikasi favoritmu.
 
-Teman mengirim link Spotify, tapi kamu pakai YouTube Music? Ketuk linknya, dan lagu yang sama terbuka di YouTube Music. Berfungsi untuk lagu, album, artis, dan playlist.
+Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lain. Ketuk linknya, dan lagu yang sama terbuka di aplikasimu. Spotify ke YouTube Music, Apple Music ke Deezer, TIDAL ke Spotify: padukan sesukamu. Berfungsi untuk lagu, album, artis, dan playlist.
 
 <b>Fitur</b>
 <ul>
@@ -9,7 +9,7 @@ Teman mengirim link Spotify, tapi kamu pakai YouTube Music? Ketuk linknya, dan l
 <li>Tanya aplikasi yang dipakai: pilih aplikasi setiap kali kamu mengetuk atau membagikan link.</li>
 <li>Buka yang persis sama: Apple Music, Deezer, dan YouTube Music bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp membuka lagu atau albumnya, dan YouTube membuka lagunya.</li>
 <li>Tambahkan aplikasi dan situs lain yang punya halaman pencarian.</li>
-<li>Tempel dengan satu ketukan, buka ulang link terbaru, pakai kartu Pengaturan Cepat, atau tekan lama ikon aplikasi untuk membuka link yang disalin.</li>
+<li>Tempel dengan satu ketukan, buka ulang link terbaru, pakai kartu Setelan Cepat, atau tekan lama ikon aplikasi untuk membuka link yang disalin.</li>
 <li>Link tidak terbaca? Buka di aplikasi asalnya, salin teks pencarian, atau bagikan link pencarian.</li>
 <li>Warna Material You di Android 12 ke atas.</li>
 </ul>

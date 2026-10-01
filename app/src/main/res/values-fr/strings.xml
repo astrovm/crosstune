@@ -26,7 +26,7 @@
     <string name="rule_default">Par défaut (%1$s)</string>
     <string name="settings_custom_title">Autres applications et sites</string>
     <string name="settings_custom_description">Ajoutez n\'importe quelle application ou n\'importe quel site doté d\'une page de recherche.</string>
-    <string name="add_custom_destination_button">Ajouter une appli ou un site</string>
+    <string name="add_custom_destination_button">Ajouter une application ou un site</string>
     <string name="remove_button">Supprimer</string>
     <string name="add_button">Ajouter</string>
     <string name="custom_name_label">Nom</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Saisissez un nom et une URL contenant {query}.</string>
     <string name="settings_behaviour_title">Comportement</string>
     <string name="setup_welcome_title">Bienvenue dans Crosstune</string>
-    <string name="setup_welcome_body">Vous avez reçu un lien Spotify mais vous utilisez YouTube Music ? Appuyez dessus et le même morceau s\'ouvre dans YouTube Music.</string>
+    <string name="setup_welcome_body">Vous avez reçu un lien d\'un service de musique, mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s\'ouvre dans votre application.</string>
     <string name="setup_get_started">Commencer</string>
     <string name="next_button">Suivant</string>
     <string name="back_button">Retour</string>
@@ -108,4 +108,5 @@
     <string name="make_default">Définir par défaut</string>
     <string name="history_open">Ouvrir %1$s</string>
     <string name="history_copy">Copier le lien de %1$s</string>
+    <string name="privacy_policy">Politique de confidentialité</string>
 </resources>
