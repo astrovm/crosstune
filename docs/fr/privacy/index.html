@@ -24,11 +24,13 @@
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.style.colorScheme = t; } catch (e) {}
 </script>
 <style>
-  :root { color-scheme: light dark; font: 18px/1.65 system-ui, sans-serif; }
+  :root { color-scheme: light dark; font: 18px/1.65 system-ui, sans-serif; background: light-dark(#f6f4ff, #0e0c1a); color: light-dark(#17142b, #ece9fb); }
+  a { color: light-dark(#3b1fd1, #8f7bff); }
+  a:focus-visible, select:focus-visible { outline: 2px solid light-dark(#3b1fd1, #8f7bff); outline-offset: 3px; }
   body { max-width: 760px; margin: 48px auto; padding: 0 24px; }
   h1, h2 { line-height: 1.2; } a { overflow-wrap: anywhere; }
   h1 { font-size: clamp(1.5rem, 6.5vw, 2.2rem); }
-  .short { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 14px; padding: 4px 22px; margin: 24px 0 36px; }
+  .short { background: light-dark(#ffffff, #18152b); border: 1px solid light-dark(#e3def7, #2a2546); border-radius: 14px; padding: 4px 22px; margin: 24px 0 36px; }
   .short li { margin: 6px 0; }
   footer { margin: 48px 0 24px; }
   footer select { font: inherit; font-size: .9rem; }

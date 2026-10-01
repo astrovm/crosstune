@@ -42,7 +42,6 @@
     ]
   ],
   "works_with": "対応サービス",
-  "services_note": "曲、アルバム、アーティスト、プレイリストを開けます。設定は 1 分ほどで、アプリが手順を案内します。",
   "made_with": "astro が {heart} を込めて作りました",
   "privacy_link": "プライバシーポリシー",
   "language_label": "言語",
