@@ -127,10 +127,13 @@ internal class MainViewModel(
         )
     }
 
-    /** Re-reads what can change outside the app, e.g. after returning from Android's link settings. */
+    /**
+     * Re-reads what can change outside this screen. A share can be handled by another Crosstune
+     * instance that saves the item and finishes, leaving this one with a stale Recent list.
+     */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations()
+        uiState = uiState.withDestinations().copy(history = historyStore.load())
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
     }
 
