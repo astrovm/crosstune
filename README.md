@@ -6,8 +6,8 @@ Someone sends you a link from one music service, but you listen on another. With
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Dreams Come True by S.E.S. resolved from Apple Music, ready to open in YouTube Music" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.png" alt="Destination choices with service icons" width="200">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Settings: default app and which services' links Crosstune opens" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="First-run setup: allowing the links in Android" width="200">
 </p>
 
 ## ⬇️ Install
