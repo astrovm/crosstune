@@ -1,0 +1,1 @@
+Settings now says "Made with ♥ by astro", in your language.
