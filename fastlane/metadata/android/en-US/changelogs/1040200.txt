@@ -1,0 +1,5 @@
+Open, Copy and Share now use the same prepared destination link, with a search fallback when no exact match is found.
+
+Switch apps for the current result or make your choice the default. The app picker shows service icons and puts installed apps first.
+
+Open or copy recent links without replacing the current result. Prepared links are saved for faster reopening, and sharing a link to Crosstune shows it in Recent immediately.
