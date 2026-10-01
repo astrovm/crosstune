@@ -113,4 +113,5 @@
     <string name="history_open">Abrir %1$s</string>
     <string name="history_copy">Copiar link de %1$s</string>
     <string name="privacy_policy">Política de privacidade</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/pt-br/privacy/</string>
 </resources>

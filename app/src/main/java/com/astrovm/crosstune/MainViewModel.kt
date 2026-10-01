@@ -242,17 +242,21 @@ internal class MainViewModel(
                     canRetry = resolution.error.canRetry,
                     link = resolution.link
                 )
-                is Resolution.Resolved -> onResolved(resolution, input)
+                is Resolution.Resolved -> onResolved(resolution)
             }
         }
     }
 
-    private suspend fun onResolved(resolution: Resolution.Resolved, input: LinkInput) {
+    private suspend fun onResolved(resolution: Resolution.Resolved) {
         val history = historyStore.add(HistoryEntry(resolution.link, resolution.metadata))
-        uiState = uiState.copy(isLoading = false, result = resolution.metadata, link = resolution.link, history = history)
-        if (input is LinkInput.ShortLink) {
-            uiState = uiState.copy(linkText = resolution.link.url)
-        }
+        // The box shows the clean link Crosstune works with, e.g. without "?si=" or a short link's redirect.
+        uiState = uiState.copy(
+            isLoading = false,
+            result = resolution.metadata,
+            link = resolution.link,
+            linkText = resolution.link.url,
+            history = history
+        )
         prepareResult()
     }
 

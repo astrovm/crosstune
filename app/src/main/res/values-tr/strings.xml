@@ -113,4 +113,5 @@
     <string name="history_open">%1$s aç</string>
     <string name="history_copy">%1$s bağlantısını kopyala</string>
     <string name="privacy_policy">Gizlilik politikası</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/tr/privacy/</string>
 </resources>

@@ -158,21 +158,6 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { uriHandler.openUri(privacyUrl) }
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.privacy_policy),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
-            }
-            GroupDivider()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -186,6 +171,21 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            GroupDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri(privacyUrl) }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.privacy_policy),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             GroupDivider()
             Row(

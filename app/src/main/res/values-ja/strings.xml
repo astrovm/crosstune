@@ -114,4 +114,5 @@
     <string name="history_open">%1$sを開く</string>
     <string name="history_copy">%1$sのリンクをコピー</string>
     <string name="privacy_policy">プライバシーポリシー</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
 </resources>

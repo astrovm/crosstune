@@ -5,7 +5,6 @@
   "title": "Crosstune: 音楽リンクを、お気に入りのアプリで開きます",
   "description": "どのサービスの音楽リンクでもタップすれば、いつも聴いているアプリで同じ曲が開きます。Android 向けの無料オープンソースアプリです。",
   "tagline": "音楽リンクを、お気に入りのアプリで開きます。",
-  "features_link": "機能",
   "github_label": "GitHub の Crosstune",
   "theme_to_dark": "ダークモードに切り替え",
   "theme_to_light": "ライトモードに切り替え",

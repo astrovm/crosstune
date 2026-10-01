@@ -113,4 +113,5 @@
     <string name="history_open">打开%1$s</string>
     <string name="history_copy">复制%1$s的链接</string>
     <string name="privacy_policy">隐私政策</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/zh-cn/privacy/</string>
 </resources>

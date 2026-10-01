@@ -5,7 +5,6 @@
   "title": "Crosstune：在你喜欢的应用中打开任意音乐链接",
   "description": "点按任意服务的音乐链接，同一首歌就会在你常用的听歌应用中打开。适用于 Android，免费且开源。",
   "tagline": "在你喜欢的应用中打开任意音乐链接。",
-  "features_link": "功能",
   "github_label": "GitHub 上的 Crosstune",
   "theme_to_dark": "切换到深色模式",
   "theme_to_light": "切换到浅色模式",
