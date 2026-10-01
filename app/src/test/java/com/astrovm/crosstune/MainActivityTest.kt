@@ -2357,6 +2357,13 @@ class MainActivityTest {
             "https://www.deezer.com/search/Slow%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
         )
+        val requests = fake.requestedUrls.toList()
+        click(string(R.string.share_search_button))
+        val share = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        assertEquals("https://www.deezer.com/search/Slow%20Artist", share.getStringExtra(Intent.EXTRA_TEXT))
+        click(string(R.string.open_in_deezer))
+        assertEquals("https://www.deezer.com/search/Slow%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals(requests, fake.requestedUrls)
     }
 
     @Test

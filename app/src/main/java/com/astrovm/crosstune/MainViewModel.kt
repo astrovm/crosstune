@@ -344,7 +344,9 @@ internal class MainViewModel(
         uiState.link?.takeIf { (destination as? Destination.Service)?.service == it.service }?.let { return it.url }
         uiState.destinationUrls[destination]?.let { return it }
         if (uiState.isMatching) return null
-        return searchQuery()?.let(destination::searchUrl)
+        return searchQuery()?.let(destination::searchUrl)?.also { url ->
+            uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to url))
+        }
     }
 
     fun clear() {
