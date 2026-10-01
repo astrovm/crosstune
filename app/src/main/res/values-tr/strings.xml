@@ -90,6 +90,8 @@
     <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_button">Paylaş</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>
+    <string name="copy_original_link">%1$s bağlantısını kopyala</string>
+    <string name="share_original_link">%1$s bağlantısını paylaş</string>
     <string name="search_copied_to_clipboard">Arama metni kopyalandı</string>
     <string name="link_copied_to_clipboard">Bağlantı kopyalandı</string>
     <string name="link_settings_helper_title">Yeni bağlantılara izin verin</string>

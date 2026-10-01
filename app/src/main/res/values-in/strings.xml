@@ -90,6 +90,8 @@
     <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_button">Bagikan</string>
     <string name="share_search_link">Bagikan link pencarian</string>
+    <string name="copy_original_link">Salin tautan %1$s</string>
+    <string name="share_original_link">Bagikan tautan %1$s</string>
     <string name="search_copied_to_clipboard">Teks pencarian disalin</string>
     <string name="link_copied_to_clipboard">Link disalin</string>
     <string name="link_settings_helper_title">Izinkan link baru</string>

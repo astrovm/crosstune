@@ -28,6 +28,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
+import android.service.chooser.ChooserAction
 import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
@@ -340,6 +341,56 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
         composeRule.onNode(hasText(string(R.string.open_in_spotify)) and hasAnyAncestor(isDialog())).assertDoesNotExist()
         composeRule.onNode(hasText(string(R.string.open_in_deezer)) and hasAnyAncestor(isDialog())).assertExists()
+    }
+
+    private fun shareChooser(): Intent {
+        click(string(R.string.share_search_button))
+        return nextStartedActivity()!!.also { assertEquals(Intent.ACTION_CHOOSER, it.action) }
+    }
+
+    private fun Intent.customActions(): List<ChooserAction> =
+        getParcelableArrayExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, ChooserAction::class.java).orEmpty().toList()
+
+    @Test
+    fun theShareSheetOffersToCopyOrShareTheOriginalLinkInstead() {
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        resolveTyped()
+
+        val (copy, share) = shareChooser().customActions()
+        val spotify = string(R.string.service_spotify)
+        assertEquals(string(R.string.copy_original_link, spotify), copy.label)
+        assertEquals(string(R.string.share_original_link, spotify), share.label)
+        val original = "https://open.spotify.com/track/$TRACK_ID"
+
+        CopyLinkReceiver().onReceive(app, shadowOf(copy.action).savedIntent)
+        assertEquals(original, app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+
+        val shareOriginal = shadowOf(share.action).savedIntent
+        assertEquals(Intent.ACTION_CHOOSER, shareOriginal.action)
+        val shared = shareOriginal.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        assertEquals(original, shared.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
+    @Test
+    fun noOriginalLinkActionsWhenSharingTheOriginalItself() {
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        respondWithTrack("Mine", "Artist · Song")
+        launch()
+        resolveTyped()
+        assertEquals(emptyList<ChooserAction>(), shareChooser().customActions())
+
+        // A copy request without a link does nothing.
+        CopyLinkReceiver().onReceive(app, Intent(app, CopyLinkReceiver::class.java))
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun beforeAndroid14TheShareSheetHasNoExtraActions() {
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        resolveTyped()
+        assertFalse(shareChooser().hasExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS))
     }
 
     @Test

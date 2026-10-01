@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -7,15 +8,18 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.service.chooser.ChooserAction
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -244,11 +248,43 @@ class MainActivity : ComponentActivity() {
 
     private fun shareSearch() {
         val url = viewModel.destinationUrl() ?: return
+        val chooser = shareChooser(url)
+        val source = viewModel.uiState.link?.service
+        val original = viewModel.originalUrl()?.takeIf { it != url }
+        if (source != null && original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original, getString(source.labelRes)))
+        }
+        startActivity(chooser)
+    }
+
+    private fun shareChooser(url: String): Intent {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
         }
-        startActivity(Intent.createChooser(shareIntent, getString(R.string.share_search_link)))
+        return Intent.createChooser(shareIntent, getString(R.string.share_search_link))
+    }
+
+    /**
+     * Share sheet buttons for the link the song came from, for a friend who uses that service:
+     * one copies it, the other shares it instead of the converted link.
+     */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun originalLinkActions(original: String, service: String): Array<ChooserAction> {
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val copy = Intent(this, CopyLinkReceiver::class.java).putExtra(Intent.EXTRA_TEXT, original)
+        return arrayOf(
+            ChooserAction.Builder(
+                Icon.createWithResource(this, R.drawable.ic_content_copy),
+                getString(R.string.copy_original_link, service),
+                PendingIntent.getBroadcast(this, 0, copy, flags)
+            ).build(),
+            ChooserAction.Builder(
+                Icon.createWithResource(this, R.drawable.ic_share),
+                getString(R.string.share_original_link, service),
+                PendingIntent.getActivity(this, 0, shareChooser(original), flags)
+            ).build()
+        )
     }
 
     private fun openAppLinkSettings() {

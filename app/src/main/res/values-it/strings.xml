@@ -91,6 +91,8 @@
     <string name="copy_search_action">Copia testo di ricerca</string>
     <string name="share_search_button">Condividi</string>
     <string name="share_search_link">Condividi link di ricerca</string>
+    <string name="copy_original_link">Copia link di %1$s</string>
+    <string name="share_original_link">Condividi link di %1$s</string>
     <string name="search_copied_to_clipboard">Testo di ricerca copiato</string>
     <string name="link_copied_to_clipboard">Link copiato</string>
     <string name="link_settings_helper_title">Consenti i nuovi link</string>

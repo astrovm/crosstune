@@ -424,6 +424,9 @@ internal class MainViewModel(
         }
     }
 
+    /** The link the result came from, as Crosstune would share it. */
+    fun originalUrl(): String? = uiState.link?.url?.forSharing()
+
     fun clear() {
         job?.cancel()
         lastRequest = null

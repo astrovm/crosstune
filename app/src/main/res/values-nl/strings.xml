@@ -90,6 +90,8 @@
     <string name="copy_search_action">Zoektekst kopiëren</string>
     <string name="share_search_button">Delen</string>
     <string name="share_search_link">Zoeklink delen</string>
+    <string name="copy_original_link">%1$s-link kopiëren</string>
+    <string name="share_original_link">%1$s-link delen</string>
     <string name="search_copied_to_clipboard">Zoektekst gekopieerd</string>
     <string name="link_copied_to_clipboard">Link gekopieerd</string>
     <string name="link_settings_helper_title">Nieuwe links toestaan</string>

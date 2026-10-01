@@ -90,6 +90,8 @@
     <string name="copy_search_action">复制搜索文字</string>
     <string name="share_search_button">分享</string>
     <string name="share_search_link">分享搜索链接</string>
+    <string name="copy_original_link">复制 %1$s 链接</string>
+    <string name="share_original_link">分享 %1$s 链接</string>
     <string name="search_copied_to_clipboard">已复制搜索文字</string>
     <string name="link_copied_to_clipboard">已复制链接</string>
     <string name="link_settings_helper_title">允许打开新链接</string>

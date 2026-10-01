@@ -114,9 +114,9 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     ) {
         AnimatedContent(targetState = step, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "setup") { shown ->
             Column {
-                if (shown != null) StepProgress(steps.indexOf(shown) + 1, steps.size)
+                if (shown == null) return@Column Welcome()
+                StepProgress(steps.indexOf(shown) + 1, steps.size)
                 when (shown) {
-                    null -> Welcome()
                     SetupStep.DESTINATION -> DestinationStep(state, actions)
                     SetupStep.SOURCES -> SourcesStep(state, actions)
                     SetupStep.APPS -> AppsStep(appsToFix, state, actions)
