@@ -45,6 +45,7 @@
     <string name="setup_step">ステップ %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune で開くリンクは？</string>
     <string name="setup_sources_body">リンクをよく受け取るサービスを選んでください。</string>
+    <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
     <string name="setup_destination_body">聴いているアプリを選んでください。あとから変更できます。</string>
     <string name="setup_allow_title">リンクを許可</string>

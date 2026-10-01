@@ -44,6 +44,7 @@
     <string name="setup_step">Etapa %1$d de %2$d</string>
     <string name="setup_sources_title">Quais links o Crosstune deve abrir?</string>
     <string name="setup_sources_body">Escolha os serviços dos quais você recebe links.</string>
+    <string name="setup_sources_listening_note">Você ouve no %1$s, então os links dele já abrem lá.</string>
     <string name="setup_destination_title">Onde você ouve música?</string>
     <string name="setup_destination_body">Escolha o app que você usa para ouvir. Você pode mudar depois.</string>
     <string name="setup_allow_title">Permitir os links</string>

@@ -35,6 +35,8 @@ internal data class UiState(
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
     val showDestinationPicker: Boolean = false,
+    /** A service the picker leaves out: the one the link came from, when opening it there would just go back. */
+    val pickerHides: MusicService? = null,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
@@ -48,6 +50,8 @@ internal data class UiState(
      * settings; null before Android 12, which can't tell.
      */
     val blockingApps: Set<MusicService>? = null,
+    /** Installed music apps that claim links Crosstune intercepts, blocking or not; null before Android 12. */
+    val claimingApps: Set<MusicService>? = null,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
@@ -117,6 +121,7 @@ internal class MainViewModel(
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
         val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
+        val claiming = interception.claimingApps(intercepted)
         return copy(
             defaultDestination = destinationStore.defaultDestination(),
             destinations = destinations,
@@ -126,7 +131,8 @@ internal class MainViewModel(
             hasDefault = destinationStore.hasDefault(),
             installed = interception.installedServices(),
             unapprovedHosts = interception.unapprovedHosts(),
-            blockingApps = interception.blockingApps(intercepted)
+            blockingApps = claiming?.filterValues { it }?.keys,
+            claimingApps = claiming?.keys
         )
     }
 
@@ -269,10 +275,15 @@ internal class MainViewModel(
     }
 
     private suspend fun prepareResult() {
+        // A link shared from the app the user listens in would only open back in that app, so ask
+        // where else it should go instead.
+        val ownService = uiState.link?.service?.takeIf {
+            uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
+        }
         // Incoming links without a chosen destination must not search the default before asking.
-        if (pendingOpen && (uiState.askEachTime || !uiState.setupComplete)) {
+        if (pendingOpen && (uiState.askEachTime || !uiState.setupComplete || ownService != null)) {
             pendingOpen = false
-            uiState = uiState.copy(showDestinationPicker = true)
+            uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService)
             return
         }
         prepareDestination(uiState.resultDestination)

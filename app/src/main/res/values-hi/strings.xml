@@ -44,6 +44,7 @@
     <string name="setup_step">चरण %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune कौन-से लिंक खोले?</string>
     <string name="setup_sources_body">वे सेवाएँ चुनें जिनके लिंक आपको मिलते हैं।</string>
+    <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
     <string name="setup_destination_body">वह ऐप्लिकेशन चुनें जिसमें आप सुनते हैं। इसे बाद में बदला जा सकता है।</string>
     <string name="setup_allow_title">लिंक की अनुमति दें</string>

@@ -719,7 +719,8 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                         }
                     }
                 }
-                state.destinations.installedFirst(state.installed).forEach { destination ->
+                val hidden = state.pickerHides?.let(Destination::Service)
+                state.destinations.filter { it != hidden }.installedFirst(state.installed).forEach { destination ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { onPick(destination) }.padding(vertical = 10.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,

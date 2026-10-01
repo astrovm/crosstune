@@ -11,6 +11,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
@@ -319,6 +322,24 @@ class MainActivityTest {
             "https://www.youtube.com/results?search_query=Song%20%26%20Dance%20The%20Band",
             started.dataString
         )
+    }
+
+    @Test
+    fun linkSharedFromTheAppTheUserListensInAsksWhereElseToOpenIt() {
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        respondWithTrack("Mine", "Artist · Song")
+        launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+            }
+        )
+
+        // Opening it in Spotify would only go straight back to Spotify.
+        waitForText(string(R.string.picker_title))
+        assertNull(nextStartedActivity())
+        composeRule.onNode(hasText(string(R.string.open_in_spotify)) and hasAnyAncestor(isDialog())).assertDoesNotExist()
+        composeRule.onNode(hasText(string(R.string.open_in_deezer)) and hasAnyAncestor(isDialog())).assertExists()
     }
 
     @Test
@@ -2038,6 +2059,12 @@ class MainActivityTest {
         assertFalse(prefs().getBoolean("setup_complete", true))
 
         click(string(R.string.setup_get_started))
+        // No built-in default: a destination has to be picked before moving on.
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
+        click(string(R.string.target_deezer))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+
+        click(string(R.string.next_button))
         toggleRow(string(R.string.target_youtube))
         toggleRow(string(R.string.service_spotify))
         toggleRow(string(R.string.service_spotify))
@@ -2045,12 +2072,6 @@ class MainActivityTest {
             setOf(MusicService.YOUTUBE),
             MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
         )
-
-        click(string(R.string.next_button))
-        // No built-in default: a destination has to be picked before moving on.
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
-        click(string(R.string.target_deezer))
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
 
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_allowed))
@@ -2166,12 +2187,9 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_step, 1, 4))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_allow_step_tick))
-        // Stopping the app has its own step, so the allow step no longer carries that task.
-        assertTextAbsent(string(R.string.setup_apps_title))
-        click(string(R.string.next_button))
 
-        assertTextShown(string(R.string.setup_step, 4, 4))
+        // Android won't let Crosstune take links the app verified, so stopping it comes before allowing them.
+        assertTextShown(string(R.string.setup_step, 3, 4))
         assertTextShown(string(R.string.setup_apps_title))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
@@ -2187,6 +2205,9 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.setup_still_opens))
         assertTextShown(string(R.string.service_spotify))
 
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_step, 4, 4))
+        assertTextShown(string(R.string.setup_allow_step_tick))
         click(string(R.string.setup_finish))
         assertTrue(prefs().getBoolean("setup_complete", false))
     }
@@ -2218,9 +2239,8 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        click(string(R.string.next_button))
 
-        assertTextShown(string(R.string.setup_step, 4, 4))
+        assertTextShown(string(R.string.setup_step, 3, 4))
         assertTextShown(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         // Android can't say whether the app still takes the links, so there is nothing to mark.
         assertTextAbsent(string(R.string.setup_still_opens))
@@ -2236,24 +2256,69 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_welcome_title))
 
         click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
         click(string(R.string.target_youtube_music))
+        click(string(R.string.next_button))
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_allow_none))
         assertTextAbsent(string(R.string.open_link_settings_button))
     }
 
     @Test
-    fun setupListsInstalledAppsFirst() {
+    fun setupListsInstalledAppsFirstWhenPickingWhereToListen() {
         freshInstall()
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
         launch()
         click(string(R.string.setup_get_started))
 
-        val rows = composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes()
+        val rows = composeRule.onAllNodes(isSelectable()).fetchSemanticsNodes()
         val firstLabel = rows.first().config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString { it.text }
         assertEquals("${string(R.string.target_soundcloud)}, ${string(R.string.setup_installed)}", firstLabel)
         assertTextShown(string(R.string.setup_installed))
+    }
+
+    @Test
+    fun setupDoesNotOfferToOpenTheLinksOfTheAppTheUserListensIn() {
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
+        launch()
+        click(string(R.string.setup_get_started))
+        // Crosstune would only hand YouTube Music its own links back.
+        click(string(R.string.target_youtube_music))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+
+        click(string(R.string.next_button))
+        composeRule.onNode(hasText(string(R.string.target_youtube_music)) and isToggleable()).assertDoesNotExist()
+        assertTextShown(string(R.string.setup_sources_listening_note, string(R.string.target_youtube_music)))
+        toggleRow(string(R.string.target_youtube))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+    }
+
+    @Test
+    fun anAppSeenTakingTheLinksIsDroppedOnceItsLinksAreNoLongerOpened() {
+        val youtubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = youtubeMusic })
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            val hosts = LinkInterception.HOSTS.getValue(MusicService.YOUTUBE_MUSIC)
+            hosts.associateWith {
+                if (packageName == youtubeMusic) DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+                else DomainVerificationUserState.DOMAIN_STATE_SELECTED
+            }
+        }
+        freshInstall()
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.SPOTIFY))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+
+        toggleRow(string(R.string.target_youtube_music))
+        assertTextShown(string(R.string.setup_step, 2, 4))
+        // Unticked again: the app no longer gets in the way, so there's nothing to stop.
+        toggleRow(string(R.string.target_youtube_music))
+        assertTextShown(string(R.string.setup_step, 2, 3))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_allow_title))
+        assertTextShown(string(R.string.setup_finish))
     }
 
     @Test
@@ -2503,7 +2568,7 @@ class MainActivityTest {
         freshInstall()
         val activity = launch()
         click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_sources_title))
+        assertTextShown(string(R.string.setup_destination_title))
 
         activity.onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()

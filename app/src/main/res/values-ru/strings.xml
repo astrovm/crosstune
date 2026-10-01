@@ -44,6 +44,7 @@
     <string name="setup_step">Шаг %1$d из %2$d</string>
     <string name="setup_sources_title">Какие ссылки открывать в Crosstune?</string>
     <string name="setup_sources_body">Выберите сервисы, из которых вам присылают ссылки.</string>
+    <string name="setup_sources_listening_note">Вы слушаете в %1$s, поэтому его ссылки и так открываются там.</string>
     <string name="setup_destination_title">Где вы слушаете музыку?</string>
     <string name="setup_destination_body">Выберите приложение для прослушивания. Позже его можно сменить.</string>
     <string name="setup_allow_title">Разрешите ссылки</string>

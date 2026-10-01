@@ -170,6 +170,16 @@ class LinkInterceptionTest {
     }
 
     @Test
+    fun anAppWithLinkHandlingOffStillClaimsTheLinksButDoesNotBlockThem() {
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { false }) {
+            mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        assertEquals(mapOf(MusicService.SPOTIFY to false), interception.claimingApps(setOf(MusicService.SPOTIFY)))
+        assertEquals(emptyMap<MusicService, Boolean>(), interception.claimingApps(setOf(MusicService.TIDAL)))
+    }
+
+    @Test
     fun blockingAppsAreUnknownWithoutTheSystemService() {
         installApp(MusicService.SPOTIFY)
         assertNull(interception.blockingApps(setOf(MusicService.SPOTIFY)))
