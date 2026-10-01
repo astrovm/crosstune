@@ -49,6 +49,31 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun cachedDestinationsRoundTripWithoutReorderingOrRestoringClearedHistory() {
+        preferences.edit { remove("history") }
+        val first = entry(1)
+        val second = entry(2)
+        store.add(first)
+        store.add(second)
+        val exact = PreparedLink("https://music.youtube.com/watch?v=remembered", exact = true, matchingEnabled = true)
+        val search = PreparedLink("player://search/Title%201", exact = false, matchingEnabled = false)
+        store.remember(first.link.url, "YOUTUBE_MUSIC", exact)
+        store.remember(first.link.url, "custom:player", search)
+        assertEquals(listOf(second, first.copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to exact, "custom:player" to search))), HistoryStore(preferences).load())
+        store.clear()
+        assertTrue(store.remember(first.link.url, "YOUTUBE_MUSIC", exact).isEmpty())
+        assertTrue(store.load().isEmpty())
+    }
+
+    @Test
+    fun corruptCachedDestinationsDoNotLoseTheHistoryEntry() {
+        preferences.edit {
+            putString("history", """[{"type":"TRACK","id":"1","title":"Kept","destinations":{"bad":"text","blank":{"url":""},"good":{"url":"https://example.com/search","exact":false,"matchingEnabled":true}}}]""")
+        }
+        assertEquals(mapOf("good" to PreparedLink("https://example.com/search", false, true)), store.load().single().destinationLinks)
+    }
+
+    @Test
     fun clearRemovesEverything() {
         store.add(entry(1))
         store.clear()

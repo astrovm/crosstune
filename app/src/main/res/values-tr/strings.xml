@@ -104,4 +104,8 @@
     <string name="error_service_unavailable">Servis yanıt vermiyor. Biraz sonra tekrar deneyin.</string>
     <string name="error_no_app_to_open">Yüklü hiçbir uygulama bu bağlantıyı açamıyor.</string>
     <string name="error_metadata_unavailable">Bu bağlantının ayrıntıları okunamadı.</string>
+    <string name="search_in_destination">%1$s içinde ara</string>
+    <string name="make_default">Varsayılan yap</string>
+    <string name="history_open">%1$s aç</string>
+    <string name="history_copy">%1$s bağlantısını kopyala</string>
 </resources>

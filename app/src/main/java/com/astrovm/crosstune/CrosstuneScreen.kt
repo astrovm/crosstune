@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,7 +59,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -87,6 +93,8 @@ internal data class ScreenActions(
     val onOpenOriginal: () -> Unit = {},
     val onDismissPicker: () -> Unit = {},
     val onTargetChange: (Destination) -> Unit = {},
+    val onResultTargetChange: (Destination) -> Unit = {},
+    val onMakeDefault: () -> Unit = {},
     val onInterceptChange: (MusicService, Boolean) -> Unit = { _, _ -> },
     val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
@@ -98,6 +106,8 @@ internal data class ScreenActions(
     val onCopyLink: () -> Unit = {},
     val onShareSearch: () -> Unit = {},
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
+    val onHistoryOpen: (HistoryEntry) -> Unit = {},
+    val onHistoryCopy: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
     val onOpenAppLinkSettings: (MusicService) -> Unit = {},
@@ -201,7 +211,7 @@ internal fun Page(
 @Composable
 private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
     if (state.showDestinationPicker) {
-        DestinationPicker(state.destinations, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
+        DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
 
     Page(
@@ -226,14 +236,20 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(bottom = 16.dp))
 
         LinkField(state, actions)
-        DefaultDestinationMenu(
-            destinations = state.destinations,
-            selected = state.defaultDestination,
-            onSelect = actions.onTargetChange,
-            modifier = Modifier.padding(top = 8.dp)
-        )
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            DefaultDestinationMenu(
+                destinations = state.destinations,
+                selected = if (state.result == null) state.defaultDestination else state.resultDestination,
+                onSelect = if (state.result == null) actions.onTargetChange else actions.onResultTargetChange,
+                installed = state.installed,
+                modifier = Modifier.weight(1f)
+            )
+            if (state.result != null && state.resultDestination != state.defaultDestination) {
+                TextButton(onClick = actions.onMakeDefault) { Text(stringResource(R.string.make_default)) }
+            }
+        }
         StatusSection(state, actions)
-        state.result?.let { ResultCard(it, state.link, state.resultDestination, !state.isMatching, actions) }
+        state.result?.let { ResultCard(it, state.link, state.resultDestination, state.destinationUrls[state.resultDestination], !state.isMatching, actions) }
 
         if (state.history.isNotEmpty()) {
             HistorySection(state.history, actions)
@@ -261,7 +277,7 @@ internal fun LinkSettingsHelper(actions: ScreenActions, modifier: Modifier = Mod
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 4.dp)
                 )
-                Row(
+                FlowRow(
                     modifier = Modifier.padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -357,7 +373,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp)
-            .height(52.dp)
+            .heightIn(min = 52.dp)
     ) {
         Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge)
     }
@@ -371,7 +387,8 @@ internal fun DefaultDestinationMenu(
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
     /** In settings the row is labelled like the others, with the choice at the end. */
-    label: String? = null
+    label: String? = null,
+    installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -396,19 +413,18 @@ internal fun DefaultDestinationMenu(
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                destinations.forEach { destination ->
+                destinations.installedFirst(installed).forEach { destination ->
                     val isSelected = destination == selected
                     DropdownMenuItem(
                         text = {
-                            Text(
-                                destination.label(),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
+                            Column {
+                                Text(
+                                    destination.label(),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         },
+                        leadingIcon = { DestinationIcon(destination, installed) },
                         onClick = {
                             expanded = false
                             onSelect(destination)
@@ -479,6 +495,7 @@ private fun ResultCard(
     result: MusicMetadata,
     link: MusicLink?,
     destination: Destination,
+    prepared: PreparedLink?,
     destinationReady: Boolean,
     actions: ScreenActions
 ) {
@@ -530,6 +547,7 @@ private fun ResultCard(
                     }
                 }
             }
+            val searchFallback = prepared?.exact == false
             Button(
                 onClick = actions.onOpen,
                 enabled = destinationReady,
@@ -537,11 +555,14 @@ private fun ResultCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 20.dp)
-                    .height(52.dp)
+                    .heightIn(min = 52.dp)
             ) {
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text(destination.openLabel(), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
+                    style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
+                )
             }
             Row(
                 modifier = Modifier
@@ -590,7 +611,7 @@ private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modif
         AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.size(ButtonDefaults.IconSpacing))
         // Long translations wrap to a second line instead of being cut off.
-        Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(label, textAlign = TextAlign.Center)
     }
 }
 
@@ -616,7 +637,7 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
-                Column(modifier = Modifier.padding(start = 16.dp)) {
+                Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
                     Text(
                         text = entry.metadata.title,
                         style = MaterialTheme.typography.bodyLarge,
@@ -637,27 +658,76 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                IconButton(onClick = { actions.onHistoryOpen(entry) }) {
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = stringResource(R.string.history_open, entry.metadata.title))
+                }
+                IconButton(onClick = { actions.onHistoryCopy(entry) }) {
+                    AppIcon(R.drawable.ic_content_copy, contentDescription = stringResource(R.string.history_copy, entry.metadata.title))
+                }
+            }
+        }
+    }
+}
+
+internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
+    sortedBy { if ((it as? Destination.Service)?.service in installed) 0 else 1 }
+
+/** Use installed apps' own icons, with bundled service logos for every other built-in choice. */
+@Composable
+private fun DestinationIcon(destination: Destination, installed: Set<MusicService>) {
+    val context = LocalContext.current
+    val service = (destination as? Destination.Service)?.service
+    val icon = remember(service, installed) {
+        if (service in installed) runCatching {
+            context.packageManager.getApplicationIcon(service!!.packageName).toBitmap(64, 64).asImageBitmap()
+        }.getOrNull() else null
+    }
+    Surface(
+        modifier = Modifier.size(32.dp), shape = MaterialTheme.shapes.small,
+        color = if (destination is Destination.Service) Color.White else MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Image(icon, contentDescription = null, modifier = Modifier.fillMaxSize().testTag("destination-icon:" + destination.key))
+            } else if (destination is Destination.Service) {
+                Image(
+                    painterResource(destination.service.iconRes), contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(4.dp).testTag("destination-icon:" + destination.key)
+                )
+            } else {
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
     }
 }
 
 @Composable
-private fun DestinationPicker(destinations: List<Destination>, onPick: (Destination) -> Unit, onDismiss: () -> Unit) {
+private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, onPick: (Destination) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                destinations.forEach { destination ->
-                    Text(
-                        text = destination.openLabel(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(destination) }
-                            .padding(vertical = 14.dp, horizontal = 4.dp)
-                    )
+                state.result?.let { result ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
+                        CoverArt(result.artworkUrl, loadArtwork, size = 48.dp)
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(result.title, style = MaterialTheme.typography.titleMedium)
+                            Text(listOf(stringResource(result.type.labelRes), result.artist).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                state.destinations.installedFirst(state.installed).forEach { destination ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(destination) }.padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DestinationIcon(destination, state.installed)
+                        Column {
+                            Text(destination.openLabel(), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
                 }
             }
         },

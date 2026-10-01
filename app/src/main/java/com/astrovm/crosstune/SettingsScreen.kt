@@ -63,6 +63,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                 destinations = state.destinations,
                 selected = state.defaultDestination,
                 onSelect = actions.onTargetChange,
+                installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
