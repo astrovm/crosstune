@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
     <string name="settings_behaviour_title">Gedrag</string>
     <string name="setup_welcome_title">Welkom bij Crosstune</string>
-    <string name="setup_welcome_body">Een muzieklink van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent in jouw app.</string>
+    <string name="setup_welcome_body">Een muzieklink van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent in je favoriete app.</string>
     <string name="setup_get_started">Aan de slag</string>
     <string name="next_button">Volgende</string>
     <string name="back_button">Terug</string>

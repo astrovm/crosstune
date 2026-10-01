@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">请输入名称和包含 {query} 的网址。</string>
     <string name="settings_behaviour_title">行为</string>
     <string name="setup_welcome_title">欢迎使用 Crosstune</string>
-    <string name="setup_welcome_body">收到一个音乐服务的链接，但你用的是另一个？点按链接，同一首歌就会在你的应用中打开。</string>
+    <string name="setup_welcome_body">收到一个音乐服务的链接，但你用的是另一个？点按链接，同一首歌就会在你喜欢的应用中打开。</string>
     <string name="setup_get_started">开始使用</string>
     <string name="next_button">下一步</string>
     <string name="back_button">返回</string>

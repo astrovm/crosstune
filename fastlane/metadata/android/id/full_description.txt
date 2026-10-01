@@ -1,6 +1,6 @@
 Buka link musik apa pun di aplikasi favoritmu.
 
-Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lain. Ketuk linknya, dan lagu yang sama terbuka di aplikasimu. Spotify ke YouTube Music, Apple Music ke Deezer, TIDAL ke Spotify: padukan sesukamu. Berfungsi untuk lagu, album, artis, dan playlist.
+Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lain. Ketuk linknya, dan lagu yang sama terbuka di aplikasi favoritmu. Spotify ke YouTube Music, Apple Music ke Deezer, TIDAL ke Spotify: padukan sesukamu. Berfungsi untuk lagu, album, artis, dan playlist.
 
 <b>Fitur</b>
 <ul>

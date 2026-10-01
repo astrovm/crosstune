@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">कोई नाम और {query} वाला URL डालें।</string>
     <string name="settings_behaviour_title">व्यवहार</string>
     <string name="setup_welcome_title">Crosstune में आपका स्वागत है</string>
-    <string name="setup_welcome_body">किसी एक म्यूज़िक सेवा का लिंक मिला, पर आप दूसरी पर सुनते हैं? उस पर टैप करें, वही गाना आपके ऐप्लिकेशन में खुल जाएगा।</string>
+    <string name="setup_welcome_body">किसी एक म्यूज़िक सेवा का लिंक मिला, पर आप दूसरी पर सुनते हैं? उस पर टैप करें, वही गाना आपके पसंदीदा ऐप्लिकेशन में खुल जाएगा।</string>
     <string name="setup_get_started">शुरू करें</string>
     <string name="next_button">आगे</string>
     <string name="back_button">पीछे</string>

@@ -1,6 +1,6 @@
 Ouvrez n'importe quel lien musical dans votre application préférée.
 
-Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un autre. Appuyez sur le lien et le même morceau s'ouvre dans votre application. De Spotify à YouTube Music, d'Apple Music à Deezer, de TIDAL à Spotify : combinez-les comme vous voulez. Fonctionne avec les titres, albums, artistes et playlists.
+Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un autre. Appuyez sur le lien et le même morceau s'ouvre dans votre application préférée. De Spotify à YouTube Music, d'Apple Music à Deezer, de TIDAL à Spotify : combinez-les comme vous voulez. Fonctionne avec les titres, albums, artistes et playlists.
 
 <b>Fonctionnalités</b>
 <ul>

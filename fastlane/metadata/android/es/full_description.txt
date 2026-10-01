@@ -1,6 +1,6 @@
 Abrí cualquier link de música en tu app favorita.
 
-Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. Tocá el link y la misma canción se abre en tu app. De Spotify a YouTube Music, de Apple Music a Deezer, de TIDAL a Spotify: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
+Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. Tocá el link y la misma canción se abre en tu app favorita. De Spotify a YouTube Music, de Apple Music a Deezer, de TIDAL a Spotify: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
 
 <b>Características</b>
 <ul>

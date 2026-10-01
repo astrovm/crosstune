@@ -1,6 +1,6 @@
 Open elke muzieklink in je favoriete app.
 
-Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een andere. Tik op de link en hetzelfde nummer opent in jouw app. Spotify naar YouTube Music, Apple Music naar Deezer, TIDAL naar Spotify: combineer ze zoals je wilt. Werkt met nummers, albums, artiesten en afspeellijsten.
+Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een andere. Tik op de link en hetzelfde nummer opent in je favoriete app. Spotify naar YouTube Music, Apple Music naar Deezer, TIDAL naar Spotify: combineer ze zoals je wilt. Werkt met nummers, albums, artiesten en afspeellijsten.
 
 <b>Functies</b>
 <ul>

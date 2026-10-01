@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Bir ad ve {query} içeren bir URL girin.</string>
     <string name="settings_behaviour_title">Davranış</string>
     <string name="setup_welcome_title">Crosstune\'a hoş geldiniz</string>
-    <string name="setup_welcome_body">Bir müzik servisinden bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Bağlantıya dokunun, aynı şarkı kendi uygulamanızda açılsın.</string>
+    <string name="setup_welcome_body">Bir müzik servisinden bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Bağlantıya dokunun, aynı şarkı favori uygulamanızda açılsın.</string>
     <string name="setup_get_started">Başlayın</string>
     <string name="next_button">İleri</string>
     <string name="back_button">Geri</string>

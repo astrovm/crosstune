@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Saisissez un nom et une URL contenant {query}.</string>
     <string name="settings_behaviour_title">Comportement</string>
     <string name="setup_welcome_title">Bienvenue dans Crosstune</string>
-    <string name="setup_welcome_body">Vous avez reçu un lien d\'un service de musique, mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s\'ouvre dans votre application.</string>
+    <string name="setup_welcome_body">Vous avez reçu un lien d\'un service de musique, mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s\'ouvre dans votre application préférée.</string>
     <string name="setup_get_started">Commencer</string>
     <string name="next_button">Suivant</string>
     <string name="back_button">Retour</string>
