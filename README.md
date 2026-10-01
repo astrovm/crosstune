@@ -118,6 +118,8 @@ It needs these repository secrets:
 
 > Back up the keystore and never replace it. Android only installs an update if it's signed with the same key.
 
+The release APK is reproducible: F-Droid builds the same tag, copies this APK's signature onto its build and ships this APK when they match, so GitHub and F-Droid installs update each other. Google Play installs join them only if Play App Signing uses this same key. To check a release locally, build the tag from a fresh clone and run `apksigcopier compare Crosstune-vX.Y.Z.apk --unsigned app/build/outputs/apk/release/app-release-unsigned.apk`.
+
 Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/android).
 
 The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.

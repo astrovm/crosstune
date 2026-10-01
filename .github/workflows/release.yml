@@ -128,7 +128,10 @@ jobs:
           echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
           out="Crosstune-$TAG.apk"
+          # Keeps Gradle's zip layout, so F-Droid can copy this signature onto its own build of the
+          # tag and ship this APK. Without it apksigner re-pads entries and the builds don't match.
           "$apksigner" sign \
+            --alignment-preserved \
             --ks "$keystore" \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
