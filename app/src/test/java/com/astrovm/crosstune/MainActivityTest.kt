@@ -768,6 +768,17 @@ class MainActivityTest {
     }
 
     @Test
+    fun privacyPolicyOpensPublicPage() {
+        launch()
+        click(string(R.string.settings_button))
+        click(string(R.string.privacy_policy))
+
+        val started = nextStartedActivity()
+        assertEquals(Intent.ACTION_VIEW, started!!.action)
+        assertEquals("https://crosstune.4st.li/privacy/", started.dataString)
+    }
+
+    @Test
     fun acceptedTrackLinkVariantsAllResolveToCanonicalTrack() {
         respondWithTrack("Variant", "Artist · Song")
         launch()

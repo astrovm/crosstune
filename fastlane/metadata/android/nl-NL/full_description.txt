@@ -1,12 +1,12 @@
 Open elke muzieklink in je favoriete app.
 
-Stuurt een vriend je een Spotify-link, maar gebruik jij YouTube Music? Tik erop en hetzelfde nummer opent in YouTube Music. Werkt met nummers, albums, artiesten en afspeellijsten.
+Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een andere. Tik op de link en hetzelfde nummer opent in je favoriete app. Spotify naar YouTube Music, Apple Music naar Deezer, TIDAL naar Spotify: combineer ze zoals je wilt. Werkt met nummers, albums, artiesten en afspeellijsten.
 
 <b>Functies</b>
 <ul>
 <li>Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud en Bandcamp en opent ze in een van die apps of in Amazon Music.</li>
 <li>Stuur elke service ergens anders heen, bijvoorbeeld YouTube-links naar YouTube Music en al het andere naar Apple Music.</li>
-<li>Vraag welke app: kies een app telkens als je op een link tikt of deze deelt.</li>
+<li>Vragen welke app: kies een app telkens als je op een link tikt of deze deelt.</li>
 <li>Exacte match openen: Apple Music, Deezer en YouTube Music kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, Bandcamp het nummer of album, en YouTube het nummer.</li>
 <li>Voeg andere apps en sites met een zoekpagina toe.</li>
 <li>Plak met één tik, open recente links opnieuw, gebruik de tegel in Snelle instellingen of houd het app-icoon lang ingedrukt om een gekopieerde link te openen.</li>

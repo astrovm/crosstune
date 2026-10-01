@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">이름과 {query}가 포함된 URL을 입력하세요.</string>
     <string name="settings_behaviour_title">동작</string>
     <string name="setup_welcome_title">Crosstune에 오신 것을 환영해요</string>
-    <string name="setup_welcome_body">Spotify 링크를 받았는데 YouTube Music을 쓰시나요? 링크를 탭하면 같은 노래가 YouTube Music에서 열려요.</string>
+    <string name="setup_welcome_body">한 음악 서비스의 링크를 받았는데 다른 서비스로 듣나요? 링크를 탭하면 같은 노래가 원하는 앱에서 열려요.</string>
     <string name="setup_get_started">시작하기</string>
     <string name="next_button">다음</string>
     <string name="back_button">뒤로</string>
@@ -108,4 +108,5 @@
     <string name="make_default">기본값으로 설정</string>
     <string name="history_open">%1$s 열기</string>
     <string name="history_copy">%1$s 링크 복사</string>
+    <string name="privacy_policy">개인정보처리방침</string>
 </resources>

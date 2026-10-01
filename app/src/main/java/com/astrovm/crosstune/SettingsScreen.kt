@@ -43,6 +43,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
     var addingCustom by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
+    val privacyUrl = stringResource(R.string.privacy_policy_url)
 
     Page(
         title = stringResource(R.string.settings_title),
@@ -143,6 +144,21 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
 
         SectionHeader(stringResource(R.string.settings_about_title))
         Group {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri(privacyUrl) }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.privacy_policy),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
+            GroupDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

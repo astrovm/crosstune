@@ -1,6 +1,6 @@
 Open any music link in your favorite app.
 
-A friend sends you a Spotify link, but you use YouTube Music? Tap it and the same song opens in YouTube Music. Works with songs, albums, artists and playlists.
+Someone sends you a link from one music service, but you listen on another. Tap the link and the same song opens in your favorite app. Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify: mix them however you like. Works with songs, albums, artists and playlists.
 
 <b>Features</b>
 <ul>

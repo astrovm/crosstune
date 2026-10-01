@@ -44,7 +44,7 @@
     <string name="custom_template_invalid">Enter a name and a URL that contains {query}.</string>
     <string name="settings_behaviour_title">Behavior</string>
     <string name="setup_welcome_title">Welcome to Crosstune</string>
-    <string name="setup_welcome_body">Got a Spotify link but you use YouTube Music? Tap it and the same song opens there.</string>
+    <string name="setup_welcome_body">Got a music link from one service but listen on another? Tap it and the same song opens in your favorite app.</string>
     <string name="setup_get_started">Get started</string>
     <string name="next_button">Next</string>
     <string name="back_button">Back</string>
@@ -110,6 +110,8 @@
     <string name="settings_version">Version</string>
     <string name="made_by">Made by @astrovm</string>
     <string name="github_repo_url" translatable="false">https://github.com/astrovm/crosstune</string>
+    <string name="privacy_policy">Privacy policy</string>
+    <string name="privacy_policy_url" translatable="false">https://crosstune.4st.li/privacy/</string>
 
     <string name="error_invalid_url">This isn\'t a link to a song, album, artist or playlist.</string>
     <string name="error_network">Couldn\'t connect. Check your internet and try again.</string>

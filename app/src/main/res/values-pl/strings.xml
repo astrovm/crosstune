@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Wpisz nazwę i adres URL zawierający {query}.</string>
     <string name="settings_behaviour_title">Działanie</string>
     <string name="setup_welcome_title">Witaj w Crosstune</string>
-    <string name="setup_welcome_body">Dostałeś link do Spotify, a słuchasz w YouTube Music? Kliknij go, a ten sam utwór otworzy się tam.</string>
+    <string name="setup_welcome_body">Masz link z jednego serwisu muzycznego, a słuchasz w innym? Kliknij go, a ten sam utwór otworzy się w ulubionej aplikacji.</string>
     <string name="setup_get_started">Zaczynamy</string>
     <string name="next_button">Dalej</string>
     <string name="back_button">Wstecz</string>
@@ -51,7 +51,7 @@
     <string name="setup_allow_step_open">Kliknij „Otwórz ustawienia linków”.</string>
     <string name="setup_allow_step_add">Kliknij „Dodaj link”.</string>
     <string name="setup_allow_step_tick">Zaznacz wszystkie linki, a potem kliknij „Dodaj”.</string>
-    <string name="setup_apps_title">Wyłącz inne aplikacje</string>
+    <string name="setup_apps_title">Wyłącz linki w innych aplikacjach</string>
     <string name="setup_apps_body">Te aplikacje najpierw otwierają własne linki. W każdej z nich wybierz „W przeglądarce” lub wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="setup_still_opens">Nadal otwiera linki</string>
     <string name="setup_done">Gotowe</string>
@@ -105,7 +105,8 @@
     <string name="error_no_app_to_open">Żadna zainstalowana aplikacja nie otworzy tego linku.</string>
     <string name="error_metadata_unavailable">Nie można odczytać szczegółów tego linku.</string>
     <string name="search_in_destination">Szukaj w %1$s</string>
-    <string name="make_default">Ustaw jako domyślne</string>
+    <string name="make_default">Ustaw jako domyślną</string>
     <string name="history_open">Otwórz %1$s</string>
     <string name="history_copy">Kopiuj link do %1$s</string>
+    <string name="privacy_policy">Polityka prywatności</string>
 </resources>

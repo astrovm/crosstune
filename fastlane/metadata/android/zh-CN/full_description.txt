@@ -1,6 +1,6 @@
 在你喜欢的应用中打开任意音乐链接。
 
-朋友发来 Spotify 链接，但你用的是 YouTube Music？点按链接，同一首歌就会在 YouTube Music 中打开。支持歌曲、专辑、艺人和播放列表。
+有人发来某个音乐服务的链接，但你用的是另一个。点按链接，同一首歌就会在你喜欢的应用中打开。Spotify 到 YouTube Music，Apple Music 到 Deezer，TIDAL 到 Spotify：随你搭配。支持歌曲、专辑、艺人和播放列表。
 
 <b>功能</b>
 <ul>

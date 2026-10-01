@@ -4,7 +4,7 @@
     <string name="spotify_link_label">Muzieklink</string>
     <string name="spotify_link_placeholder">Plak een muzieklink</string>
     <string name="resolve_button">Link omzetten</string>
-    <string name="paste_button">Plak</string>
+    <string name="paste_button">Plakken</string>
     <string name="clear_button">Wissen</string>
     <string name="loading_text">Link opzoeken…</string>
     <string name="default_open_with_label">Opent in</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
     <string name="settings_behaviour_title">Gedrag</string>
     <string name="setup_welcome_title">Welkom bij Crosstune</string>
-    <string name="setup_welcome_body">Een Spotify-link gekregen, maar gebruik je YouTube Music? Tik erop en hetzelfde nummer opent daar.</string>
+    <string name="setup_welcome_body">Een muzieklink van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent in je favoriete app.</string>
     <string name="setup_get_started">Aan de slag</string>
     <string name="next_button">Volgende</string>
     <string name="back_button">Terug</string>
@@ -108,4 +108,5 @@
     <string name="make_default">Als standaard instellen</string>
     <string name="history_open">%1$s openen</string>
     <string name="history_copy">Link voor %1$s kopiëren</string>
+    <string name="privacy_policy">Privacybeleid</string>
 </resources>

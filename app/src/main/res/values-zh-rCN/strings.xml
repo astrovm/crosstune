@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">请输入名称和包含 {query} 的网址。</string>
     <string name="settings_behaviour_title">行为</string>
     <string name="setup_welcome_title">欢迎使用 Crosstune</string>
-    <string name="setup_welcome_body">收到 Spotify 链接，但你用的是 YouTube Music？点按链接，同一首歌就会在 YouTube Music 中打开。</string>
+    <string name="setup_welcome_body">收到一个音乐服务的链接，但你用的是另一个？点按链接，同一首歌就会在你喜欢的应用中打开。</string>
     <string name="setup_get_started">开始使用</string>
     <string name="next_button">下一步</string>
     <string name="back_button">返回</string>
@@ -51,7 +51,7 @@
     <string name="setup_allow_step_open">点按“打开链接设置”。</string>
     <string name="setup_allow_step_add">点按“添加链接”。</string>
     <string name="setup_allow_step_tick">勾选所有链接，然后点按“添加”。</string>
-    <string name="setup_apps_title">停用其他应用</string>
+    <string name="setup_apps_title">阻止其他应用打开链接</string>
     <string name="setup_apps_body">这些应用会优先打开自己的链接。请在每个应用中选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="setup_still_opens">仍会打开链接</string>
     <string name="setup_done">已完成</string>
@@ -99,7 +99,7 @@
 
     <string name="error_invalid_url">这不是歌曲、专辑、艺人或播放列表的链接。</string>
     <string name="error_network">无法连接。请检查网络后重试。</string>
-    <string name="error_not_found">服务找不到此内容，可能是私享或已被删除。</string>
+    <string name="error_not_found">服务找不到此内容，可能是私密内容或已被删除。</string>
     <string name="error_rate_limited">服务繁忙，请稍候再试。</string>
     <string name="error_service_unavailable">服务没有响应，请稍后再试。</string>
     <string name="error_no_app_to_open">没有已安装的应用可以打开此链接。</string>
@@ -108,4 +108,5 @@
     <string name="make_default">设为默认</string>
     <string name="history_open">打开%1$s</string>
     <string name="history_copy">复制%1$s的链接</string>
+    <string name="privacy_policy">隐私政策</string>
 </resources>

@@ -2,7 +2,7 @@
 
 **Open any music link in your favorite app.**
 
-Someone sends you a link from one music service, but you listen on another. With Crosstune, you tap the link and the same song opens in your app. Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify: mix them however you like. Albums, artists and playlists work too.
+Someone sends you a link from one music service, but you listen on another. With Crosstune, you tap the link and the same song opens in your favorite app. Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify: mix them however you like. Albums, artists and playlists work too.
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Dreams Come True by S.E.S. resolved from Apple Music, ready to open in YouTube Music" width="200">
@@ -26,13 +26,13 @@ Setup takes about a minute.
 3. Tap **Open link settings**, then **Add link**, tick all the links and tap **Add**.
 4. If one of those services' apps is installed (Spotify, for example), Crosstune shows a button to its settings. There, choose **In your browser**, or turn off **Open supported links**. Otherwise that app keeps opening its own links.
 
-That's it. Music links you tap now open in your app.
+That's it. Music links you tap now open in your favorite app.
 
 You don't have to set up anything to paste a link into Crosstune or share one to it. That works with every service.
 
 ## How it works
 
-Crosstune reads the link's title and artist from the service it comes from, then searches for them in your app. Links you tap or share open straight away. Links you paste into Crosstune show the song and its cover first.
+Crosstune reads the link's title and artist from the service it comes from, then searches for them in your favorite app. Links you tap or share open straight away. Links you paste into Crosstune show the song and its cover first.
 
 **Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match. Search fallbacks use a **Search in…** button.
 
@@ -111,6 +111,7 @@ The version is set explicitly in `app/build.gradle.kts`: `versionName` is `X.Y.Z
 1. Update `versionName` and `versionCode` in `app/build.gradle.kts`, and add the changelog under `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`. Commit and merge these changes before releasing.
 2. Push a tag with `git tag vX.Y.Z && git push origin vX.Y.Z`, or run **Actions → Release → Run workflow**.
 3. The [Release workflow](.github/workflows/release.yml) runs the CI checks, verifies that the APK's version matches the tag, then signs and publishes `Crosstune-vX.Y.Z.apk`.
+4. For Google Play, download the signed App Bundle `Crosstune-vX.Y.Z.aab` from the workflow run's **Crosstune-vX.Y.Z-play** artifact and upload it in Play Console. It's signed with the same key, which Play uses as the upload key.
 
 It needs these repository secrets:
 

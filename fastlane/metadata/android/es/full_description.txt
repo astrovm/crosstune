@@ -1,6 +1,6 @@
 Abrí cualquier link de música en tu app favorita.
 
-¿Un amigo te pasa un link de Spotify pero vos usás YouTube Music? Tocalo y la misma canción se abre en YouTube Music. Funciona con canciones, álbumes, artistas y playlists.
+Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. Tocá el link y la misma canción se abre en tu app favorita. De Spotify a YouTube Music, de Apple Music a Deezer, de TIDAL a Spotify: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
 
 <b>Características</b>
 <ul>
@@ -15,4 +15,4 @@ Abrí cualquier link de música en tu app favorita.
 </ul>
 
 <b>Privacidad</b>
-Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van también a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp.
+Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp.

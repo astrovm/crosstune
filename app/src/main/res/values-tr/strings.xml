@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Bir ad ve {query} içeren bir URL girin.</string>
     <string name="settings_behaviour_title">Davranış</string>
     <string name="setup_welcome_title">Crosstune\'a hoş geldiniz</string>
-    <string name="setup_welcome_body">Elinizde Spotify bağlantısı var ama YouTube Music mi kullanıyorsunuz? Bağlantıya dokunun, aynı şarkı orada açılsın.</string>
+    <string name="setup_welcome_body">Bir müzik servisinden bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Bağlantıya dokunun, aynı şarkı favori uygulamanızda açılsın.</string>
     <string name="setup_get_started">Başlayın</string>
     <string name="next_button">İleri</string>
     <string name="back_button">Geri</string>
@@ -68,7 +68,7 @@
     <string name="type_playlist">Çalma listesi</string>
 
     <string name="setting_ask_each_time">Hangi uygulamanın kullanılacağını sor</string>
-    <string name="setting_ask_each_time_description">Bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı siz seçin.</string>
+    <string name="setting_ask_each_time_description">Bir bağlantıya her dokunduğunuzda veya paylaştığınızda uygulamayı siz seçin.</string>
     <string name="setting_exact_match">Tam eşleşmeyi aç</string>
     <string name="setting_exact_match_description">Şarkılar, albümler ve sanatçılar için Apple Music, Deezer ve YouTube Music ile, şarkılar ve albümler için Bandcamp ile, şarkılar için YouTube ile çalışır. Diğer uygulamalarda arama yapılır.</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>
@@ -108,4 +108,5 @@
     <string name="make_default">Varsayılan yap</string>
     <string name="history_open">%1$s aç</string>
     <string name="history_copy">%1$s bağlantısını kopyala</string>
+    <string name="privacy_policy">Gizlilik politikası</string>
 </resources>
