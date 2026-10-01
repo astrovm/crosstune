@@ -63,6 +63,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                 destinations = state.destinations,
                 selected = state.defaultDestination,
                 onSelect = actions.onTargetChange,
+                installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
@@ -249,6 +250,7 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
     var name by rememberSaveable { mutableStateOf("") }
     var template by rememberSaveable { mutableStateOf("https://") }
     var invalid by rememberSaveable { mutableStateOf(false) }
+    var sampleQuery by rememberSaveable { mutableStateOf("Cut To The Feeling Carly Rae Jepsen") }
     Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
         OutlinedTextField(
             value = name,
@@ -273,6 +275,22 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
                 .fillMaxWidth()
                 .padding(top = 12.dp)
         )
+        OutlinedTextField(
+            value = sampleQuery,
+            onValueChange = { sampleQuery = it },
+            label = { Text(stringResource(R.string.custom_preview_query)) },
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+        )
+        if (Destination.isValidTemplate(template)) {
+            Text(stringResource(R.string.custom_preview_title), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                Destination.Custom("preview", name, template.trim()).searchUrl(sampleQuery),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
         Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel_button)) }
             TextButton(onClick = { invalid = !onAdd(name, template) }) { Text(stringResource(R.string.add_button)) }

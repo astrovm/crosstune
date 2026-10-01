@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         is Effect.Open -> open(effect)
+                        is Effect.Copy -> copyToClipboard("Crosstune link", effect.url, R.string.link_copied_to_clipboard)
                     }
                 }
             }
@@ -96,6 +97,8 @@ class MainActivity : ComponentActivity() {
                         onOpenOriginal = viewModel::openOriginal,
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onTargetChange = viewModel::selectDefault,
+                        onResultTargetChange = viewModel::selectResultDestination,
+                        onMakeDefault = { viewModel.selectDefault(viewModel.uiState.resultDestination) },
                         onInterceptChange = viewModel::setIntercepted,
                         onRuleChange = viewModel::setRule,
                         onAddCustom = viewModel::addCustomDestination,
@@ -107,6 +110,8 @@ class MainActivity : ComponentActivity() {
                         onCopyLink = ::copyLink,
                         onShareSearch = ::shareSearch,
                         onHistoryEntryClick = viewModel::showHistoryEntry,
+                        onHistoryOpen = viewModel::openHistoryEntry,
+                        onHistoryCopy = viewModel::copyHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
                         onOpenLinkSettings = ::openAppLinkSettings,
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },

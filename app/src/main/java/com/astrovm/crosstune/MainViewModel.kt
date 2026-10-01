@@ -19,11 +19,12 @@ internal data class UiState(
     val isMatching: Boolean = false,
     val result: MusicMetadata? = null,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
-    val destinationUrls: Map<Destination, String> = emptyMap(),
+    val destinationUrls: Map<Destination, PreparedLink> = emptyMap(),
     /** The link [result] came from, or the incoming link that failed, so it can still be opened as is. */
     val link: MusicLink? = null,
     val error: AppError? = null,
     val canRetry: Boolean = false,
+    val selectedDestination: Destination? = null,
     val defaultDestination: Destination = Destination.Service(MusicService.YOUTUBE_MUSIC),
     val destinations: List<Destination> = MusicService.entries.map(Destination::Service),
     /** Per-source destinations; sources without an entry use [defaultDestination]. */
@@ -50,15 +51,16 @@ internal data class UiState(
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
-    /** Where the current result opens: its source's rule, or the default. */
+    /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
-        get() = link?.let { rules[it.service] } ?: defaultDestination
+        get() = selectedDestination ?: link?.let { rules[it.service] } ?: defaultDestination
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
 internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
+    data class Copy(val url: String) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -110,10 +112,12 @@ internal class MainViewModel(
     private var pendingOpen = false
 
     private fun UiState.withDestinations(): UiState {
+        val destinations = destinationStore.allDestinations()
         val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
         return copy(
             defaultDestination = destinationStore.defaultDestination(),
-            destinations = destinationStore.allDestinations(),
+            destinations = destinations,
+            selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
             intercepted = intercepted,
             hasDefault = destinationStore.hasDefault(),
@@ -184,7 +188,10 @@ internal class MainViewModel(
         job?.cancel()
         lastRequest = null
         pendingOpen = false
-        uiState = uiState.copy(result = null, destinationUrls = emptyMap(), link = null, showDestinationPicker = false)
+        uiState = uiState.copy(
+            result = null, destinationUrls = emptyMap(), selectedDestination = null,
+            link = null, showDestinationPicker = false
+        )
         showError(AppError.INVALID_URL)
     }
 
@@ -217,6 +224,7 @@ internal class MainViewModel(
             error = null,
             result = null,
             destinationUrls = emptyMap(),
+            selectedDestination = null,
             link = null,
             showDestinationPicker = false
         )
@@ -264,11 +272,15 @@ internal class MainViewModel(
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
-    fun openResult(destination: Destination = uiState.resultDestination, finishAfterOpen: Boolean = false) {
+    fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
+        val chosen = destination ?: uiState.resultDestination
         pendingOpen = false
-        uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
+        uiState = uiState.copy(
+            showDestinationPicker = false, isMatching = false,
+            selectedDestination = destination ?: uiState.selectedDestination
+        )
         job?.cancel()
-        job = viewModelScope.launch { open(destination, finishAfterOpen) }
+        job = viewModelScope.launch { open(chosen, finishAfterOpen) }
     }
 
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
@@ -284,7 +296,7 @@ internal class MainViewModel(
         uiState.link?.takeIf { it.service == service }?.let { link ->
             return link.url
         }
-        uiState.destinationUrls[destination]?.let { return it }
+        uiState.destinationUrls[destination]?.let { return it.url }
         val exactUrl = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
             matcher.find(service, metadata).also { uiState = uiState.copy(isMatching = false) }
@@ -292,7 +304,7 @@ internal class MainViewModel(
             null
         }
         val url = exactUrl ?: destination.searchUrl(searchQuery(metadata))
-        uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to url))
+        rememberDestination(destination, PreparedLink(url, exactUrl != null, uiState.exactMatch))
         return url
     }
 
@@ -315,7 +327,7 @@ internal class MainViewModel(
         prepareResultDestination()
     }
 
-    fun showHistoryEntry(entry: HistoryEntry) {
+    private fun selectHistoryEntry(entry: HistoryEntry) {
         job?.cancel()
         // The entry replaces whatever was being looked up, including a link from another app.
         lastRequest = null
@@ -325,13 +337,35 @@ internal class MainViewModel(
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
-            destinationUrls = emptyMap(),
+            destinationUrls = uiState.destinations.mapNotNull { destination ->
+                entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }
+                    ?.let { destination to it }
+            }.toMap(),
+            selectedDestination = null,
             link = entry.link,
             error = null,
             canRetry = false,
+            showDestinationPicker = false,
             handlingIncomingLink = false
         )
+    }
+
+    fun showHistoryEntry(entry: HistoryEntry) {
+        selectHistoryEntry(entry)
         prepareResultDestination()
+    }
+
+    fun openHistoryEntry(entry: HistoryEntry) {
+        selectHistoryEntry(entry)
+        openResult()
+    }
+
+    fun copyHistoryEntry(entry: HistoryEntry) {
+        selectHistoryEntry(entry)
+        job = viewModelScope.launch {
+            val url = prepareDestination(uiState.resultDestination) ?: return@launch
+            effectChannel.send(Effect.Copy(url))
+        }
     }
 
     fun clearHistory() {
@@ -344,10 +378,10 @@ internal class MainViewModel(
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
         uiState.link?.takeIf { (destination as? Destination.Service)?.service == it.service }?.let { return it.url }
-        uiState.destinationUrls[destination]?.let { return it }
+        uiState.destinationUrls[destination]?.let { return it.url }
         if (uiState.isMatching) return null
         return searchQuery()?.let(destination::searchUrl)?.also { url ->
-            uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to url))
+            rememberDestination(destination, PreparedLink(url, exact = false, matchingEnabled = uiState.exactMatch))
         }
     }
 
@@ -361,11 +395,22 @@ internal class MainViewModel(
             isMatching = false,
             result = null,
             destinationUrls = emptyMap(),
+            selectedDestination = null,
             link = null,
             error = null,
             showDestinationPicker = false,
             handlingIncomingLink = false
         )
+    }
+
+    private fun rememberDestination(destination: Destination, prepared: PreparedLink) {
+        val history = uiState.link?.let { historyStore.remember(it.url, destination.key, prepared) } ?: uiState.history
+        uiState = uiState.copy(destinationUrls = uiState.destinationUrls + (destination to prepared), history = history)
+    }
+
+    fun selectResultDestination(destination: Destination) {
+        uiState = uiState.copy(selectedDestination = destination)
+        prepareResultDestination()
     }
 
     fun selectDefault(destination: Destination) {

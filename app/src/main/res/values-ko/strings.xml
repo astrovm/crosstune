@@ -104,4 +104,11 @@
     <string name="error_service_unavailable">서비스가 응답하지 않아요. 잠시 후 다시 시도하세요.</string>
     <string name="error_no_app_to_open">이 링크를 열 수 있는 설치된 앱이 없어요.</string>
     <string name="error_metadata_unavailable">이 링크의 정보를 읽을 수 없어요.</string>
+    <string name="search_in_destination">%1$s에서 검색</string>
+    <string name="result_destination_label">이 링크에만 적용</string>
+    <string name="make_default">기본값으로 설정</string>
+    <string name="history_open">%1$s 열기</string>
+    <string name="history_copy">%1$s 링크 복사</string>
+    <string name="custom_preview_query">검색 예시</string>
+    <string name="custom_preview_title">미리보기</string>
 </resources>

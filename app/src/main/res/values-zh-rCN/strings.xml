@@ -104,4 +104,11 @@
     <string name="error_service_unavailable">服务没有响应，请稍后再试。</string>
     <string name="error_no_app_to_open">没有已安装的应用可以打开此链接。</string>
     <string name="error_metadata_unavailable">无法读取此链接的详细信息。</string>
+    <string name="search_in_destination">在%1$s中搜索</string>
+    <string name="result_destination_label">仅用于此链接</string>
+    <string name="make_default">设为默认</string>
+    <string name="history_open">打开%1$s</string>
+    <string name="history_copy">复制%1$s的链接</string>
+    <string name="custom_preview_query">示例搜索</string>
+    <string name="custom_preview_title">预览</string>
 </resources>

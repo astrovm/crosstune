@@ -35,7 +35,9 @@ You don't have to set up anything to paste a link into Crosstune or share one to
 
 Crosstune reads the link's title and artist from the service it comes from, then searches for them in your app. Links you tap or share open straight away. Links you paste into Crosstune show the song and its cover first.
 
-**Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match.
+**Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match. Search fallbacks use a **Search in…** button.
+
+The destination labeled **For this link** applies to the current result. Use **Make default** to keep it for future links; per-source rules remain in Settings. The picker puts installed apps first, shows icons for every service, and includes the current item's title and artist.
 
 ## Features
 
@@ -45,7 +47,8 @@ Crosstune reads the link's title and artist from the service it comes from, then
 - **Ask every time.** Choose the app each time you tap or share a link.
 - **Exact match.** Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
-- **Shortcuts.** Paste with one tap, reopen recent links, use the Quick Settings tile, or long-press the app icon to open a copied link.
+- **Shortcuts.** Paste with one tap, open or copy recent links directly, use the Quick Settings tile, or long-press the app icon to open a copied link. Recent items keep prepared destination links on your device for faster reopening, including after an app restart.
+- **Custom destinations.** Preview a search URL with an editable sample query before saving it.
 
 ## Supported links
 

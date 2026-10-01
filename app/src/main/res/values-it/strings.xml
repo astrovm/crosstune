@@ -105,4 +105,11 @@
     <string name="error_service_unavailable">Il servizio non risponde. Riprova tra un momento.</string>
     <string name="error_no_app_to_open">Nessuna app installata può aprire questo link.</string>
     <string name="error_metadata_unavailable">Impossibile leggere i dettagli di questo link.</string>
+    <string name="search_in_destination">Cerca in %1$s</string>
+    <string name="result_destination_label">Per questo link</string>
+    <string name="make_default">Imposta come predefinito</string>
+    <string name="history_open">Apri %1$s</string>
+    <string name="history_copy">Copia il link di %1$s</string>
+    <string name="custom_preview_query">Ricerca di esempio</string>
+    <string name="custom_preview_title">Anteprima</string>
 </resources>

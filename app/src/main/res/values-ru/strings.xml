@@ -104,4 +104,11 @@
     <string name="error_service_unavailable">Сервис не отвечает. Повторите попытку чуть позже.</string>
     <string name="error_no_app_to_open">Нет установленного приложения, которое может открыть эту ссылку.</string>
     <string name="error_metadata_unavailable">Не удалось получить сведения об этой ссылке.</string>
+    <string name="search_in_destination">Искать в %1$s</string>
+    <string name="result_destination_label">Для этой ссылки</string>
+    <string name="make_default">Сделать по умолчанию</string>
+    <string name="history_open">Открыть %1$s</string>
+    <string name="history_copy">Копировать ссылку на %1$s</string>
+    <string name="custom_preview_query">Пример поиска</string>
+    <string name="custom_preview_title">Предпросмотр</string>
 </resources>

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -82,7 +83,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                 val buttonModifier = Modifier
                     .weight(1f)
                     .widthIn(max = 290.dp)
-                    .height(52.dp)
+                    .heightIn(min = 52.dp)
                 if (step > STEP_WELCOME) {
                     OutlinedButton(onClick = { step-- }, modifier = buttonModifier) {
                         Text(stringResource(R.string.back_button), style = MaterialTheme.typography.labelLarge)
@@ -304,7 +305,7 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 16.dp, bottom = 24.dp)
-            .height(52.dp)
+            .heightIn(min = 52.dp)
     ) {
         AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.size(ButtonDefaults.IconSpacing))

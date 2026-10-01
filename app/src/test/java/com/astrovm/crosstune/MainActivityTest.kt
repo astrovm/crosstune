@@ -107,8 +107,17 @@ class MainActivityTest {
     }
 
     private fun click(text: String) {
-        composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
+        composeRule.onNode(hasText(resultActionText(text)) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
+    }
+
+    /** A prepared search uses the destination-specific Search label; source buttons keep Open. */
+    private fun resultActionText(text: String): String {
+        if (composeRule.onAllNodesWithTextCount(text) > 0) return text
+        val service = MusicService.entries.firstOrNull { string(it.openLabelRes) == text }
+        val custom = DestinationStore(prefs()).customDestinations().firstOrNull { string(R.string.open_in_custom, it.name) == text }
+        val label = service?.let { string(it.labelRes) } ?: custom?.name ?: return text
+        return string(R.string.search_in_destination, label)
     }
 
     /** Picks the default destination from the "Opens in" menu under the link field. */
@@ -154,7 +163,7 @@ class MainActivityTest {
 
     /** Resolved titles also appear in the history list, so any matching node counts. */
     private fun assertTextShown(text: String) {
-        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(text) > 0)
+        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(resultActionText(text)) > 0)
     }
 
     private fun assertTextAbsent(text: String) {
@@ -454,12 +463,14 @@ class MainActivityTest {
         )
 
         chooseDefault(string(R.string.target_youtube))
+        click(string(R.string.make_default))
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube))
         click(string(R.string.open_in_youtube))
         assertEquals("com.google.android.youtube", nextStartedActivity()!!.`package`)
 
         chooseDefault(string(R.string.target_youtube_music))
+        click(string(R.string.make_default))
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube_music))
     }
@@ -1489,7 +1500,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun youtubeMusicLinksAreMatchedBeforeAnyActionAndRecentLinksArePreparedAgain() {
+    fun youtubeMusicLinksArePreparedOnceAndCachedForRecentLinks() {
         prefs().edit().putBoolean("exact_match", true).commit()
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") {
@@ -1534,7 +1545,7 @@ class MainActivityTest {
         waitForDestinationReady()
         click(string(R.string.copy_button))
         assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
-        assertEquals(5, fake.requestedUrls.size)
+        assertEquals(4, fake.requestedUrls.size)
     }
 
     @Test
@@ -2410,6 +2421,118 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.setup_welcome_title))
         assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun resultDestinationIsOneTimeUntilMadeDefaultAndResetsForNewLinks() {
+        respondWithTrack("One time", "Artist · Song")
+        val activity = launch()
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        resolveTyped()
+        assertTextShown(string(R.string.search_in_destination, "YouTube Music"))
+
+        chooseDefault("Apple Music")
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), DestinationStore(prefs()).defaultDestination())
+        assertEquals(Destination.Service(MusicService.APPLE_MUSIC), model.uiState.resultDestination)
+        val destinationBounds = composeRule.onNodeWithTag(DEFAULT_MENU_TAG).fetchSemanticsNode().boundsInRoot
+        val makeDefaultBounds = composeRule.onNodeWithText(string(R.string.make_default)).fetchSemanticsNode().boundsInRoot
+        assertTrue(makeDefaultBounds.left >= destinationBounds.right)
+        assertTrue(makeDefaultBounds.top < destinationBounds.bottom && makeDefaultBounds.bottom > destinationBounds.top)
+        click(string(R.string.make_default))
+        assertEquals(Destination.Service(MusicService.APPLE_MUSIC), DestinationStore(prefs()).defaultDestination())
+        assertTextAbsent(string(R.string.make_default))
+
+        chooseDefault("Spotify")
+        assertEquals(Destination.Service(MusicService.APPLE_MUSIC), DestinationStore(prefs()).defaultDestination())
+        resolveTyped(OTHER_TRACK_ID)
+        assertEquals(Destination.Service(MusicService.APPLE_MUSIC), model.uiState.resultDestination)
+        assertNull(model.uiState.selectedDestination)
+
+        model.setRule(MusicService.SPOTIFY, Destination.Service(MusicService.DEEZER))
+        composeRule.waitForIdle()
+        chooseDefault("YouTube Music")
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).rule(MusicService.SPOTIFY))
+        assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), model.uiState.resultDestination)
+        model.clear()
+        composeRule.waitForIdle()
+        assertNull(model.uiState.selectedDestination)
+    }
+
+    @Test
+    fun historyShortcutsReuseSavedExactLinksAcrossLaunchesAndRespectMatchingPreference() {
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Remember","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
+            } else FakeSpotify.html(request, FakeSpotify.trackPage("Remember", "Artist · Song"))
+        }
+        launch()
+        resolveTyped()
+        waitForDestinationReady()
+        val requests = fake.requestedUrls.size
+        controller!!.pause().stop().destroy()
+        val activity = launch()
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+
+        click(string(R.string.history_copy, "Remember"))
+        assertEquals("https://www.deezer.com/track/123", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.history_open, "Remember"))
+        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals(requests, fake.requestedUrls.size)
+
+        model.setExactMatch(false)
+        composeRule.waitForIdle()
+        click(string(R.string.history_copy, "Remember"))
+        assertEquals("https://www.deezer.com/search/Remember%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(requests, fake.requestedUrls.size)
+        click(string(R.string.history_open, "Remember"))
+        assertEquals("https://www.deezer.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun destinationChoicesShowEveryServiceIconAndPutInstalledAppsFirst() {
+        val installed = MusicService.YOUTUBE
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply {
+            packageName = installed.packageName
+            applicationInfo = android.content.pm.ApplicationInfo().apply {
+                packageName = installed.packageName
+                icon = android.R.drawable.ic_media_play
+            }
+        })
+        shadowOf(app.packageManager).setApplicationIcon(installed.packageName, android.graphics.drawable.ColorDrawable(android.graphics.Color.RED))
+        val custom = DestinationStore(prefs()).addCustom("Player", "player://search/{query}")
+        val choices = listOf(Destination.Service(MusicService.SPOTIFY), custom, Destination.Service(installed))
+        assertEquals(listOf(Destination.Service(installed), Destination.Service(MusicService.SPOTIFY), custom), choices.installedFirst(setOf(installed)))
+        respondWithTrack("Picker summary", "Artist · Song")
+        prefs().edit().putBoolean("ask_each_time", true).commit()
+        launch(trackLink())
+        waitForText(string(R.string.picker_title))
+        assertTextShown("Picker summary")
+        composeRule.onNodeWithTag("destination-icon:YOUTUBE", useUnmergedTree = true).assertExists()
+        MusicService.entries.forEach { service ->
+            composeRule.onNodeWithTag("destination-icon:" + service.name, useUnmergedTree = true).assertExists()
+        }
+        assertTextAbsent(string(R.string.setup_installed))
+        click(string(R.string.cancel_button))
+        assertTextAbsent(string(R.string.picker_title))
+        chooseDefault("Player")
+        assertTextShown(string(R.string.search_in_destination, "Player"))
+    }
+
+    @Test
+    fun customTemplatePreviewEncodesAnEditableSampleBeforeSaving() {
+        launch()
+        click(string(R.string.settings_button))
+        click(string(R.string.add_custom_destination_button))
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
+            .performTextReplacement("https://example.com/search?q={query}")
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_preview_query)))
+            .performTextReplacement("Song & Artist")
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.custom_preview_title))
+        assertTextShown("https://example.com/search?q=Song%20%26%20Artist")
+        assertTrue(DestinationStore(prefs()).customDestinations().isEmpty())
+        click(string(R.string.cancel_button))
     }
 
     // endregion
