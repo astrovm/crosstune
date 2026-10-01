@@ -20,7 +20,7 @@ concurrency:
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
-# Three jobs, so the build's third-party code (Gradle plugins and dependencies) never runs
+# Separate jobs, so the build's third-party code (Gradle plugins and dependencies) never runs
 # where the signing key or a token that can write to the repository is available.
 jobs:
   build:
@@ -173,8 +173,48 @@ jobs:
           path: Crosstune-${{ env.TAG }}.aab
           if-no-files-found: error
 
-  publish:
+  # Rebuilds the commit from scratch with a different JDK and checks that the signed APK's signature
+  # fits it, as F-Droid does before shipping our APK. If it doesn't, F-Droid would skip this version.
+  verify:
     needs: sign
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-disabled: true
+
+      - name: Build unsigned APK
+        run: ./gradlew :app:assembleRelease --no-build-cache
+
+      - name: Download signed APK
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Crosstune-${{ env.TAG }}
+
+      - name: Compare with the signed APK
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q apksigcopier
+          # apksigcopier calls apksigner to check the copied signature.
+          PATH="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1):$PATH"
+          if ! apksigcopier compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
+            echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
+            exit 1
+          fi
+
+  publish:
+    needs: [sign, verify]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
