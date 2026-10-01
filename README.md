@@ -34,9 +34,9 @@ You don't have to set up anything to paste a link into Crosstune or share one to
 
 Crosstune reads the link's title and artist from the service it comes from, then searches for them in your favorite app. Links you tap or share open straight away. Links you paste into Crosstune show the song and its cover first.
 
-**Open the exact match** is enabled by default. Crosstune finds the destination link while processing the source link. **Open**, **Copy** and **Share** all use that same link, or a search link if no exact match is found. When a link needs an app choice, Crosstune shows the picker before looking for a match. Search fallbacks use a **Search in…** button.
+**Open the exact match** is on by default. Crosstune looks up the match while it reads the link, so **Open**, **Copy** and **Share** all use the same link. If there's no confident match, you get a search link and a **Search in…** button. If Crosstune is set to ask which app to use, it asks first and then looks for the match.
 
-The destination menu still says **Opens in**. A change applies to the current result. Use **Make default** to keep it for future links; per-source rules remain in Settings. The picker puts installed apps first, shows icons for every service, and includes the current item's title and artist.
+To open one result somewhere else, change the app under **Opens in**. Tap **Make default** to keep that choice for future links. Rules for each service are in Settings. The app picker lists installed apps first and shows each service's icon.
 
 ## Features
 
@@ -46,7 +46,7 @@ The destination menu still says **Opens in**. A change applies to the current re
 - **Ask every time.** Choose the app each time you tap or share a link.
 - **Exact match.** Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
-- **Shortcuts.** Paste with one tap, open or copy a recent link without replacing what's on screen, use the Quick Settings tile, or long-press the app icon to open a copied link. Recent items keep prepared destination links on your device for faster reopening, including after an app restart.
+- **Shortcuts.** Paste with one tap, open or copy a recent link without leaving the current result, use the Quick Settings tile, or long-press the app icon to open a copied link. Recent links reopen quickly, even after a restart.
 
 ## Supported links
 
