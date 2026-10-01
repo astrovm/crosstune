@@ -63,9 +63,10 @@ jobs:
         with:
           cache-read-only: true
 
-      # The same checks as CI, which also build the minified release APK.
+      # The same checks as CI, which also build the minified release APK, plus the App Bundle
+      # that Google Play needs.
       - name: Test, lint and build
-        run: ./gradlew :app:ci --build-cache
+        run: ./gradlew :app:ci :app:bundleRelease --build-cache
 
       - name: Verify version metadata
         run: |
@@ -83,14 +84,16 @@ jobs:
             exit 1
           fi
 
-      - name: Upload unsigned APK
+      - name: Upload unsigned APK and App Bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: |
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
-  # Runs on a fresh runner with only the APK. The environment can require approval before the
+  # Runs on a fresh runner with only the APK and App Bundle. The environment can require approval before the
   # signing secrets are used; add required reviewers to it under Settings → Environments.
   sign:
     needs: build
@@ -101,12 +104,12 @@ jobs:
     outputs:
       cert_sha256: ${{ steps.sign.outputs.cert_sha256 }}
     steps:
-      - name: Download unsigned APK
+      - name: Download unsigned APK and App Bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: unsigned
 
-      - name: Sign APK
+      - name: Sign APK and App Bundle
         id: sign
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -131,7 +134,17 @@ jobs:
             --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
             --key-pass env:RELEASE_KEY_PASSWORD \
             --out "$out" \
-            app-release-unsigned.apk
+            apk/release/app-release-unsigned.apk
+          # Google Play takes the App Bundle signed with the upload key, which is this same key.
+          jarsigner \
+            -keystore "$keystore" \
+            -storepass:env RELEASE_KEYSTORE_PASSWORD \
+            -keypass:env RELEASE_KEY_PASSWORD \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -signedjar "Crosstune-$TAG.aab" \
+            bundle/release/app-release.aab \
+            "$RELEASE_KEY_ALIAS"
+          jarsigner -verify "Crosstune-$TAG.aab"
           certs="$("$apksigner" verify --print-certs "$out")"
           echo "$certs"
           # apksigner labels the line "Signer #1" or "V3.0 Signer" depending on the signature schemes used.
@@ -147,6 +160,14 @@ jobs:
         with:
           name: Crosstune-${{ env.TAG }}
           path: Crosstune-${{ env.TAG }}.apk
+          if-no-files-found: error
+
+      # Kept as a workflow artifact for uploading to Google Play, not attached to the release.
+      - name: Upload signed App Bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Crosstune-${{ env.TAG }}-play
+          path: Crosstune-${{ env.TAG }}.aab
           if-no-files-found: error
 
   publish:
