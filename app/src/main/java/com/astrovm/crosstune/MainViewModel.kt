@@ -303,6 +303,8 @@ internal class MainViewModel(
         job?.cancel()
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
+        // Returning from the source app must not restart the canceled lookup, even for Open-first.
+        destinationUrl()
         val finishAfterOpen = lastRequest?.second == true
         effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
     }

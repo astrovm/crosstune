@@ -2351,7 +2351,12 @@ class MainActivityTest {
         assertEquals("com.spotify.music", nextStartedActivity()!!.`package`)
         assertNull(nextStartedActivity())
         assertTextAbsent(string(R.string.matching_text))
-        // Cancelling to open the source leaves a usable search fallback for the result.
+        // Opening first must reuse the canceled fallback too, without restarting the matcher.
+        val requestsBeforeFallback = fake.requestedUrls.toList()
+        click(string(R.string.open_in_deezer))
+        assertEquals("https://www.deezer.com/search/Slow%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals(requestsBeforeFallback, fake.requestedUrls)
+        // Copy, Share and another Open keep using the same prepared fallback.
         click(string(R.string.copy_button))
         assertEquals(
             "https://www.deezer.com/search/Slow%20Artist",
