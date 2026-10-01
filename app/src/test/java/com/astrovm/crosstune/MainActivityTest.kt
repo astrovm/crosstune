@@ -758,6 +758,16 @@ class MainActivityTest {
     }
 
     @Test
+    @Config(qualifiers = "es")
+    fun privacyPolicyOpensTheTranslationForTheAppLanguage() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
+
+        assertEquals("https://crosstune.4st.li/es/privacy/", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
     fun madeByLinkOpensRepository() {
         launch()
         click(string(R.string.settings_button))

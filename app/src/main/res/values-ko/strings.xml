@@ -113,4 +113,5 @@
     <string name="history_open">%1$s 열기</string>
     <string name="history_copy">%1$s 링크 복사</string>
     <string name="privacy_policy">개인정보처리방침</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/ko/privacy/</string>
 </resources>

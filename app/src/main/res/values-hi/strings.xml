@@ -113,4 +113,5 @@
     <string name="history_open">%1$s खोलें</string>
     <string name="history_copy">%1$s का लिंक कॉपी करें</string>
     <string name="privacy_policy">गोपनीयता नीति</string>
+    <string name="privacy_policy_url">https://crosstune.4st.li/hi/privacy/</string>
 </resources>
