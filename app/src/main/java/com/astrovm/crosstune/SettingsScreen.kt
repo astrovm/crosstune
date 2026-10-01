@@ -142,6 +142,15 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                 checked = state.exactMatch,
                 onCheckedChange = actions.onExactMatchChange
             )
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_clean_links),
+                description = stringResource(R.string.setting_clean_links_description),
+                checked = state.cleanLinks,
+                onCheckedChange = actions.onCleanLinksChange
+            )
+            GroupDivider()
+            LanguageRow(actions.onLanguageChange)
         }
 
         SectionHeader(stringResource(R.string.settings_about_title))
@@ -202,6 +211,51 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
 
 /** Marks where the heart icon goes in [R.string.made_with_love]. */
 internal const val HEART = "\uFFFC"
+
+/** Picks the app's language, or the phone's with "System default". */
+@Composable
+private fun LanguageRow(onSelect: (String?) -> Unit) {
+    val context = LocalContext.current
+    val current = remember { AppLanguage.current(context) }
+    val systemDefault = stringResource(R.string.language_system_default)
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.setting_language),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
+        Box {
+            Row(
+                modifier = Modifier.clickable { expanded = true },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = current?.let(AppLanguage::displayName) ?: systemDefault,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                (listOf(null) + AppLanguage.tags).forEach { tag ->
+                    DropdownMenuItem(
+                        text = { Text(tag?.let(AppLanguage::displayName) ?: systemDefault) },
+                        onClick = {
+                            expanded = false
+                            onSelect(tag)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 
 /** The installed version, e.g. "1.2.1", or "1.2.1-dev.5" for a build made after a release. */
 @Composable

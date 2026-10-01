@@ -36,7 +36,8 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Ask every time.** Pick the app each time you open a link.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
 - **Shortcuts.** One-tap paste, recent links, a Quick Settings tile, and a long-press shortcut on the app icon.
-- **15 languages.** Follows your phone's language. On Android 13+ you can pick one just for Crosstune.
+- **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
+- **15 languages.** Follows your phone, or pick one in Settings.
 
 ## Supported links
 
@@ -118,5 +119,7 @@ It needs these repository secrets:
 > Back up the keystore and never replace it. Android only installs an update if it's signed with the same key.
 
 Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/android).
+
+The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
 
 </details>

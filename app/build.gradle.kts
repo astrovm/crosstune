@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 1040400
-        versionName = "1.4.4"
+        versionCode = 1050000
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,6 +37,13 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    bundle {
+        // The in-app language picker needs every language on the phone, not only the phone's own.
+        language {
+            enableSplit = false
+        }
     }
 
     androidResources {

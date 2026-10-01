@@ -33,6 +33,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
@@ -760,7 +761,7 @@ class MainActivityTest {
     fun madeByLinkOpensRepository() {
         launch()
         click(string(R.string.settings_button))
-        click(string(R.string.made_with_love, HEART).substringAfter(HEART).trim())
+        composeRule.onNodeWithText(string(R.string.made_with_love, HEART).substringAfter(HEART).trim()).performScrollTo().performClick()
 
         val started = nextStartedActivity()
         assertEquals(Intent.ACTION_VIEW, started!!.action)
@@ -771,7 +772,7 @@ class MainActivityTest {
     fun privacyPolicyOpensPublicPage() {
         launch()
         click(string(R.string.settings_button))
-        click(string(R.string.privacy_policy))
+        composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
 
         val started = nextStartedActivity()
         assertEquals(Intent.ACTION_VIEW, started!!.action)
@@ -1421,6 +1422,46 @@ class MainActivityTest {
         assertEquals("https://www.deezer.com/search/Default%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+    }
+
+    @Test
+    fun trackingIsRemovedFromLinksUntilTurnedOff() {
+        prefs().edit().remove("exact_match").putString("default_target", "APPLE_MUSIC").commit()
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com") {
+                FakeSpotify.html(request,
+                    """{"results":[{"trackName":"Clean","artistName":"Artist","trackViewUrl":"https://music.apple.com/us/album/clean/1?i=2&uo=4"}]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Clean", "Artist · Song"))
+            }
+        }
+        val activity = launch()
+        assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.cleanLinks)
+        resolveTyped()
+        waitForDestinationReady()
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        click(string(R.string.copy_button))
+        assertEquals("https://music.apple.com/us/album/clean/1?i=2", clipboard.primaryClip!!.getItemAt(0).text.toString())
+
+        inSettings { composeRule.onNodeWithText(string(R.string.setting_clean_links)).performScrollTo().performClick() }
+        assertFalse(prefs().getBoolean("clean_links", true))
+        click(string(R.string.copy_button))
+        assertEquals("https://music.apple.com/us/album/clean/1?i=2&uo=4", clipboard.primaryClip!!.getItemAt(0).text.toString())
+    }
+
+    @Test
+    fun languagePickerSetsTheAppLanguageOrFollowsThePhone() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.language_system_default)).performScrollTo().performClick()
+        composeRule.onNodeWithText("Español").performClick()
+        composeRule.waitForIdle()
+        assertEquals("es", AppLanguage.current(app))
+
+        composeRule.onNodeWithText(string(R.string.language_system_default)).performScrollTo().performClick()
+        composeRule.onAllNodesWithText(string(R.string.language_system_default)).onLast().performClick()
+        composeRule.waitForIdle()
+        assertNull(AppLanguage.current(app))
     }
 
     @Test

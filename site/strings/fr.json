@@ -1,0 +1,138 @@
+{
+  "lang": "fr",
+  "og_locale": "fr_FR",
+  "name": "Français",
+  "title": "Crosstune : ouvrez n'importe quel lien musical dans votre application préférée",
+  "description": "Appuyez sur un lien musical de n'importe quel service et le même morceau s'ouvre dans l'application où vous écoutez. Gratuite et open source pour Android.",
+  "tagline": "Ouvrez n'importe quel lien musical dans votre application préférée.",
+  "features_link": "Fonctionnalités",
+  "github_label": "Crosstune sur GitHub",
+  "theme_to_dark": "Passer en mode sombre",
+  "theme_to_light": "Passer en mode clair",
+  "h1": "Ouvrez n'importe quel lien musical dans <em>votre</em> application préférée.",
+  "lede": "Vous avez reçu un lien d'un service mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s'ouvre là où vous écoutez.",
+  "download": "Télécharger pour Android",
+  "note": "Gratuite, open source et sans publicité. Fonctionne sur Android 8 ou version ultérieure.",
+  "alt_home": "Un morceau d'Apple Music prêt à s'ouvrir dans YouTube Music",
+  "alt_picker": "Choix de l'application qui ouvre le lien",
+  "features_h2": "Ce qu'elle fait",
+  "cards": [
+    [
+      "Un geste suffit",
+      "Les liens s'ouvrent directement dans votre application préférée."
+    ],
+    [
+      "Résultat exact",
+      "Les applications compatibles ouvrent le morceau lui-même au lieu d'une recherche."
+    ],
+    [
+      "Vos règles",
+      "Choisissez une application par service, ou laissez-la vous demander à chaque fois."
+    ],
+    [
+      "Toute application",
+      "Ajoutez n'importe quelle application ou site doté d'une page de recherche."
+    ],
+    [
+      "Raccourcis",
+      "Coller d'un geste, liens récents, tuile des réglages rapides."
+    ],
+    [
+      "Privé",
+      "Aucun compte. L'historique reste sur votre téléphone."
+    ]
+  ],
+  "works_with": "Compatible avec",
+  "services_note": "Ouvre les titres, albums, artistes et playlists. La configuration prend environ une minute, et l'application vous guide.",
+  "made_with": "Fait avec {heart} par astro",
+  "privacy_link": "Politique de confidentialité",
+  "language_label": "Langue",
+  "privacy_title": "Politique de confidentialité de Crosstune",
+  "updated": "Dernière mise à jour : 1er octobre 2026",
+  "short_h2": "En bref",
+  "short_items": [
+    "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
+    "Il n'y a pas de serveur Crosstune. Votre historique reste sur votre téléphone.",
+    "Les liens que vous convertissez ne vont qu'aux services de musique concernés.",
+    "Effacez l'historique à tout moment dans l'application."
+  ],
+  "details_h2": "Détails",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune est une application Android développée par astrovm qui ouvre les liens musicaux dans l'application ou le site de musique de votre choix. Cette politique explique quelles informations l'application utilise et où elles vont."
+    ],
+    [
+      "h2",
+      "Aucun compte, aucune publicité, aucune statistique"
+    ],
+    [
+      "p",
+      "Crosstune ne nécessite pas de compte et n'inclut ni publicité, ni statistiques d'utilisation, ni service de rapport de plantage. Le développeur n'exploite aucun serveur qui reçoit vos liens musicaux ou votre historique d'écoute. Crosstune ne vend pas vos informations."
+    ],
+    [
+      "h2",
+      "Informations sur votre appareil"
+    ],
+    [
+      "p",
+      "L'application enregistre vos paramètres et les liens récemment résolus sur votre appareil. Les entrées récentes peuvent inclure le lien source, le titre, l'artiste, l'URL de la pochette et les liens de destination préparés. Ces préférences et cet historique sont exclus des règles de l'application pour la sauvegarde dans le cloud et le transfert entre appareils d'Android."
+    ],
+    [
+      "p",
+      "Crosstune lit un lien que vous collez, que vous partagez avec l'application ou que vous ouvrez via la gestion des liens d'Android. Ses raccourcis du presse-papiers lisent le texte du presse-papiers quand vous les utilisez. Elle vérifie quelles applications musicales compatibles sont installées pour pouvoir les proposer comme destinations. Ces informations restent sur votre appareil."
+    ],
+    [
+      "h2",
+      "Requêtes aux services de musique"
+    ],
+    [
+      "p",
+      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud et Bandcamp."
+    ],
+    [
+      "p",
+      "Quand « Ouvrir le résultat exact » est activé, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube ou Bandcamp. Vous pouvez désactiver cette option dans les Paramètres. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
+    ],
+    [
+      "p",
+      "Comme toute requête sur Internet, ces requêtes communiquent votre adresse IP et les informations habituelles de la requête au service contacté. Ces services peuvent conserver des journaux de requêtes et traiter des informations selon leurs propres politiques de confidentialité. Le développeur ne contrôle pas la façon dont ils traitent ou conservent ces données. Un service de musique peut exiger son propre compte ou abonnement une fois ouvert."
+    ],
+    [
+      "h2",
+      "Autorisations et sécurité"
+    ],
+    [
+      "p",
+      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Elle ne demande pas d'autorisation de localisation, de micro, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous configurez une destination personnalisée, choisissez une adresse HTTPS de confiance."
+    ],
+    [
+      "h2",
+      "Conservation et suppression"
+    ],
+    [
+      "p",
+      "Vous pouvez effacer l'historique récent dans l'application. Effacer le stockage de Crosstune dans les Paramètres d'Android supprime ses paramètres et son historique locaux. Le développeur ne détient sur aucun serveur de compte ni d'historique d'écoute à supprimer. Les requêtes déjà reçues par des services de musique tiers sont soumises aux politiques de conservation et de suppression de ces services."
+    ],
+    [
+      "h2",
+      "Enfants"
+    ],
+    [
+      "p",
+      "Crosstune ne demande pas aux utilisateurs leur âge ni d'informations de profil personnel et ne collecte pas sciemment d'informations personnelles d'enfants sur un serveur exploité par le développeur. Les services de musique liés ont leurs propres conditions d'âge et politiques de confidentialité. Les parents et tuteurs devraient les consulter avant qu'un enfant ne les utilise."
+    ],
+    [
+      "h2",
+      "Contact et modifications"
+    ],
+    [
+      "p",
+      "Pour toute question sur la confidentialité, écrivez à {email}. Si vous envoyez un e-mail au développeur, le service de messagerie traite votre adresse et votre message pour que le développeur puisse répondre. Merci de ne pas inclure d'informations sensibles que vous n'avez pas besoin de partager."
+    ],
+    [
+      "p",
+      "Cette politique peut être mise à jour si le fonctionnement de l'application change. Les mises à jour apparaîtront sur cette page avec une nouvelle date."
+    ]
+  ]
+}

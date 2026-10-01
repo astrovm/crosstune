@@ -72,6 +72,10 @@
     <string name="setting_ask_each_time_description">リンクをタップまたは共有するたびに、アプリを選びます。</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
     <string name="setting_exact_match_description">Apple Music、Deezer、YouTube Music で曲・アルバム・アーティストに、Bandcamp で曲・アルバムに、YouTube で曲に対応します。ほかのアプリでは検索結果が開きます。</string>
+    <string name="setting_clean_links">リンクからトラッキングを削除</string>
+    <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
+    <string name="setting_language">言語</string>
+    <string name="language_system_default">システムのデフォルト</string>
     <string name="matching_text">一致する項目を探しています…</string>
     <string name="picker_title">アプリで開く</string>
     <string name="cancel_button">キャンセル</string>

@@ -1,0 +1,138 @@
+{
+  "lang": "de",
+  "og_locale": "de_DE",
+  "name": "Deutsch",
+  "title": "Crosstune: Öffne jeden Musik-Link in deiner Lieblings-App",
+  "description": "Tippe auf einen Musik-Link von einem beliebigen Dienst, und derselbe Song öffnet sich in der App, in der du hörst. Kostenlos und Open Source für Android.",
+  "tagline": "Öffne jeden Musik-Link in deiner Lieblings-App.",
+  "features_link": "Funktionen",
+  "github_label": "Crosstune auf GitHub",
+  "theme_to_dark": "Zum dunklen Modus wechseln",
+  "theme_to_light": "Zum hellen Modus wechseln",
+  "h1": "Öffne jeden Musik-Link in <em>deiner</em> Lieblings-App.",
+  "lede": "Du hast einen Link von einem Dienst, hörst aber auf einem anderen? Tippe darauf, und derselbe Song öffnet sich dort, wo du hörst.",
+  "download": "Für Android herunterladen",
+  "note": "Kostenlos, Open Source und werbefrei. Läuft ab Android 8.",
+  "alt_home": "Ein Song aus Apple Music, bereit zum Öffnen in YouTube Music",
+  "alt_picker": "Auswahl, welche App den Link öffnet",
+  "features_h2": "Was die App kann",
+  "cards": [
+    [
+      "Tippen und los",
+      "Links öffnen sich direkt in deiner Lieblings-App."
+    ],
+    [
+      "Genauer Treffer",
+      "Unterstützte Apps öffnen den Song selbst statt einer Suche."
+    ],
+    [
+      "Deine Regeln",
+      "Wähle eine App pro Dienst oder lass dich jedes Mal fragen."
+    ],
+    [
+      "Jede App",
+      "Füge jede App oder Website mit Suchseite hinzu."
+    ],
+    [
+      "Kurzbefehle",
+      "Einfügen mit einem Tipp, zuletzt genutzte Links, Schnelleinstellungen-Kachel."
+    ],
+    [
+      "Privat",
+      "Kein Konto. Der Verlauf bleibt auf deinem Handy."
+    ]
+  ],
+  "works_with": "Funktioniert mit",
+  "services_note": "Öffnet Songs, Alben, Künstler und Playlists. Die Einrichtung dauert etwa eine Minute, und die App führt dich durch.",
+  "made_with": "Mit {heart} gemacht von astro",
+  "privacy_link": "Datenschutzerklärung",
+  "language_label": "Sprache",
+  "privacy_title": "Datenschutzerklärung von Crosstune",
+  "updated": "Zuletzt aktualisiert: 1. Oktober 2026",
+  "short_h2": "Kurz gesagt",
+  "short_items": [
+    "Kein Konto, keine Werbung, keine Analysen.",
+    "Es gibt keinen Crosstune-Server. Dein Verlauf bleibt auf deinem Handy.",
+    "Links, die du umwandelst, gehen nur an die beteiligten Musikdienste.",
+    "Lösche den Verlauf jederzeit in der App."
+  ],
+  "details_h2": "Details",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune ist eine Android-App von astrovm, die Musik-Links in der Musik-App oder auf der Website deiner Wahl öffnet. Diese Erklärung beschreibt, welche Informationen die App nutzt und wohin sie gehen."
+    ],
+    [
+      "h2",
+      "Kein Konto, keine Werbung, keine Analysen"
+    ],
+    [
+      "p",
+      "Crosstune braucht kein Konto und enthält weder Werbung noch Analysen oder einen Dienst für Absturzberichte. Der Entwickler betreibt keinen Server, der deine Musik-Links oder deinen Hörverlauf empfängt. Crosstune verkauft deine Daten nicht."
+    ],
+    [
+      "h2",
+      "Informationen auf deinem Gerät"
+    ],
+    [
+      "p",
+      "Die App speichert deine Einstellungen und zuletzt aufgelöste Links auf deinem Gerät. Einträge im Verlauf können den Quell-Link, Titel, Künstler, die Cover-URL und vorbereitete Ziel-Links enthalten. Diese Einstellungen und der Verlauf sind von den Regeln der App für die Android-Cloud-Sicherung und die Geräteübertragung ausgenommen."
+    ],
+    [
+      "p",
+      "Crosstune liest einen Link, den du einfügst, mit der App teilst oder über die Link-Verarbeitung von Android öffnest. Die Zwischenablage-Kurzbefehle lesen den Text in der Zwischenablage, wenn du sie aufrufst. Die App prüft, welche unterstützten Musik-Apps installiert sind, damit sie sie als Ziele anbieten kann. Diese Informationen bleiben auf deinem Gerät."
+    ],
+    [
+      "h2",
+      "Anfragen an Musikdienste"
+    ],
+    [
+      "p",
+      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud und Bandcamp."
+    ],
+    [
+      "p",
+      "Wenn „Genauen Treffer öffnen“ aktiviert ist, sendet die App Titel und Künstler des Eintrags an den Suchdienst des Ziels: Apple Music, Deezer, YouTube Music, YouTube oder Bandcamp. Du kannst diese Option in den Einstellungen deaktivieren. Wenn du ein Ziel öffnest, erhält die gewählte App oder Website den Ziel-Link oder die Suchbegriffe. Eigene Ziele erhalten die Suchbegriffe in der URL-Vorlage, die du einrichtest. Wenn du ein Ergebnis teilst, geht es an die App oder Person, die du auswählst."
+    ],
+    [
+      "p",
+      "Wie andere Internetanfragen geben diese Anfragen deine IP-Adresse und die üblichen Anfrageinformationen an den kontaktierten Dienst weiter. Diese Dienste können Anfrageprotokolle aufbewahren und Informationen nach ihren eigenen Datenschutzrichtlinien verarbeiten. Der Entwickler hat keinen Einfluss darauf, wie sie diese Daten verarbeiten oder aufbewahren. Ein Musikdienst kann nach dem Öffnen ein eigenes Konto oder Abo verlangen."
+    ],
+    [
+      "h2",
+      "Berechtigungen und Sicherheit"
+    ],
+    [
+      "p",
+      "Crosstune nutzt die Internetberechtigung von Android, um Musikinformationen und Cover abzurufen. Die App fragt keine Berechtigungen für Standort, Mikrofon, Kamera, Kontakte oder Werbe-ID an. Integrierte Anfragen an Musikdienste nutzen HTTPS. Wenn du ein eigenes Ziel einrichtest, wähle eine vertrauenswürdige HTTPS-Adresse."
+    ],
+    [
+      "h2",
+      "Speicherdauer und Löschung"
+    ],
+    [
+      "p",
+      "Du kannst den Verlauf in der App löschen. Wenn du den App-Speicher von Crosstune in den Android-Einstellungen löschst, werden die lokalen Einstellungen und der Verlauf entfernt. Der Entwickler hat kein serverseitiges Konto und keine Aufzeichnung deines Hörverlaufs, die gelöscht werden könnte. Für Anfragen, die Musikdienste von Drittanbietern bereits erhalten haben, gelten deren Richtlinien zur Aufbewahrung und Löschung."
+    ],
+    [
+      "h2",
+      "Kinder"
+    ],
+    [
+      "p",
+      "Crosstune fragt Nutzer nicht nach ihrem Alter oder persönlichen Profilangaben und erhebt nicht wissentlich personenbezogene Daten von Kindern auf einem vom Entwickler betriebenen Server. Verknüpfte Musikdienste haben eigene Altersvorgaben und Datenschutzrichtlinien. Eltern und Erziehungsberechtigte sollten diese prüfen, bevor ein Kind sie nutzt."
+    ],
+    [
+      "h2",
+      "Kontakt und Änderungen"
+    ],
+    [
+      "p",
+      "Bei Fragen zum Datenschutz schreib an {email}. Wenn du dem Entwickler eine E-Mail schickst, verarbeitet der E-Mail-Dienst deine Adresse und Nachricht, damit der Entwickler antworten kann. Bitte schick keine sensiblen Informationen mit, die du nicht teilen musst."
+    ],
+    [
+      "p",
+      "Diese Erklärung kann aktualisiert werden, wenn sich das Verhalten der App ändert. Änderungen erscheinen auf dieser Seite mit neuem Datum."
+    ]
+  ]
+}

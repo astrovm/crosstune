@@ -3,19 +3,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crosstune Privacy Policy</title>
-<link rel="icon" href="../img/icon.png">
+<link rel="icon" href="/img/icon.png">
+<link rel="alternate" hreflang="en" href="https://crosstune.4st.li/privacy/">
+<link rel="alternate" hreflang="es-AR" href="https://crosstune.4st.li/es/privacy/">
+<link rel="alternate" hreflang="pt-BR" href="https://crosstune.4st.li/pt-br/privacy/">
+<link rel="alternate" hreflang="de" href="https://crosstune.4st.li/de/privacy/">
+<link rel="alternate" hreflang="fr" href="https://crosstune.4st.li/fr/privacy/">
+<link rel="alternate" hreflang="it" href="https://crosstune.4st.li/it/privacy/">
+<link rel="alternate" hreflang="nl" href="https://crosstune.4st.li/nl/privacy/">
+<link rel="alternate" hreflang="pl" href="https://crosstune.4st.li/pl/privacy/">
+<link rel="alternate" hreflang="ru" href="https://crosstune.4st.li/ru/privacy/">
+<link rel="alternate" hreflang="tr" href="https://crosstune.4st.li/tr/privacy/">
+<link rel="alternate" hreflang="id" href="https://crosstune.4st.li/id/privacy/">
+<link rel="alternate" hreflang="hi" href="https://crosstune.4st.li/hi/privacy/">
+<link rel="alternate" hreflang="ja" href="https://crosstune.4st.li/ja/privacy/">
+<link rel="alternate" hreflang="ko" href="https://crosstune.4st.li/ko/privacy/">
+<link rel="alternate" hreflang="zh-CN" href="https://crosstune.4st.li/zh-cn/privacy/">
+<link rel="alternate" hreflang="x-default" href="https://crosstune.4st.li/privacy/">
 <script>
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.style.colorScheme = t; } catch (e) {}
 </script>
 <style>
   :root { color-scheme: light dark; font: 18px/1.65 system-ui, sans-serif; }
   body { max-width: 760px; margin: 48px auto; padding: 0 24px; }
-  h1, h2 { line-height: 1.2; } a { overflow-wrap: anywhere; }
+  h1, h2 { line-height: 1.2; hyphens: auto; overflow-wrap: break-word; } a { overflow-wrap: anywhere; }
+  h1 { font-size: clamp(1.7rem, 7vw, 2.2rem); }
   .short { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 14px; padding: 4px 22px; margin: 24px 0 36px; }
   .short li { margin: 6px 0; }
+  footer { margin: 48px 0 24px; }
+  footer select { font: inherit; font-size: .9rem; }
 </style>
 <main>
-<p><a href="../">← Crosstune</a></p>
+<p><a href="/">← Crosstune</a></p>
 <h1>Crosstune Privacy Policy</h1>
 <p>Last updated: October 1, 2026</p>
 <div class="short">
@@ -48,4 +67,25 @@
 <p>For privacy questions, contact <a href="mailto:~@4st.li">~@4st.li</a>. If you email the developer, the email service processes your address and message so the developer can respond. Please don't include sensitive information you don't need to share.</p>
 <p>This policy may be updated when the app's behavior changes. Updates will appear on this page with a revised date.</p>
 </main>
+<footer> <select class="language" aria-label="Language" onchange="pickLanguage(this.value)"><option value="/privacy/" selected>English</option><option value="/es/privacy/">Español</option><option value="/pt-br/privacy/">Português (Brasil)</option><option value="/de/privacy/">Deutsch</option><option value="/fr/privacy/">Français</option><option value="/it/privacy/">Italiano</option><option value="/nl/privacy/">Nederlands</option><option value="/pl/privacy/">Polski</option><option value="/ru/privacy/">Русский</option><option value="/tr/privacy/">Türkçe</option><option value="/id/privacy/">Bahasa Indonesia</option><option value="/hi/privacy/">हिन्दी</option><option value="/ja/privacy/">日本語</option><option value="/ko/privacy/">한국어</option><option value="/zh-cn/privacy/">简体中文</option></select></footer>
+<script>
+  function pickLanguage(url) {
+    try { localStorage.setItem("language", url.split("/")[1] && url.split("/")[1] !== "privacy" ? url.split("/")[1] : "en"); } catch (e) {}
+    location.href = url;
+  }
+  (function () {
+    if ("en" !== "en") return;
+    let saved = null;
+    try { saved = localStorage.getItem("language"); } catch (e) {}
+    if (saved === "en") return;
+    if (saved) { location.replace("/" + saved + "/" + "privacy/"); return; }
+    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/"};
+    for (const wanted of navigator.languages || [navigator.language]) {
+      const tag = wanted.toLowerCase();
+      const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
+      if (match === "/") return;
+      if (match) { location.replace(match + "privacy/"); return; }
+    }
+  })();
+</script>
 </html>

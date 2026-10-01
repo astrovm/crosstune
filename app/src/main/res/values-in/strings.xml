@@ -71,6 +71,10 @@
     <string name="setting_ask_each_time_description">Pilih aplikasi setiap kali kamu mengetuk atau membagikan link.</string>
     <string name="setting_exact_match">Buka yang persis sama</string>
     <string name="setting_exact_match_description">Berfungsi dengan Apple Music, Deezer, dan YouTube Music untuk lagu, album, dan artis, dengan Bandcamp untuk lagu dan album, serta dengan YouTube untuk lagu. Aplikasi lain membuka hasil pencarian.</string>
+    <string name="setting_clean_links">Hapus pelacakan dari link</string>
+    <string name="setting_clean_links_description">Membuang bagian pelacak seperti ?si= atau utm_ dari link yang kamu buka, salin, atau bagikan.</string>
+    <string name="setting_language">Bahasa</string>
+    <string name="language_system_default">Default sistem</string>
     <string name="matching_text">Mencari yang persis sama…</string>
     <string name="picker_title">Buka dengan</string>
     <string name="cancel_button">Batal</string>

@@ -1,0 +1,138 @@
+{
+  "lang": "en",
+  "og_locale": "en_US",
+  "name": "English",
+  "title": "Crosstune: open any music link in your favorite app",
+  "description": "Tap a music link from any service and the same song opens in the app you listen in. Free and open source for Android.",
+  "tagline": "Open any music link in your favorite app.",
+  "features_link": "Features",
+  "github_label": "Crosstune on GitHub",
+  "theme_to_dark": "Switch to dark mode",
+  "theme_to_light": "Switch to light mode",
+  "h1": "Open any music link in <em>your</em> favorite app.",
+  "lede": "Got a link from one service but listen on another? Tap it and the same song opens where you listen.",
+  "download": "Download for Android",
+  "note": "Free, open source and ad-free. Works on Android 8 or newer.",
+  "alt_home": "A song from Apple Music ready to open in YouTube Music",
+  "alt_picker": "Choosing which app opens the link",
+  "features_h2": "What it does",
+  "cards": [
+    [
+      "Tap and go",
+      "Links open straight in your favorite app."
+    ],
+    [
+      "Exact match",
+      "Supported apps open the song itself instead of a search."
+    ],
+    [
+      "Your rules",
+      "Pick an app per service, or ask each time."
+    ],
+    [
+      "Any app",
+      "Add any app or site with a search page."
+    ],
+    [
+      "Shortcuts",
+      "One-tap paste, recent links, Quick Settings tile."
+    ],
+    [
+      "Private",
+      "No account. History stays on your phone."
+    ]
+  ],
+  "works_with": "Works with",
+  "services_note": "Opens songs, albums, artists and playlists. Setup takes about a minute, and the app walks you through it.",
+  "made_with": "Made with {heart} by astro",
+  "privacy_link": "Privacy policy",
+  "language_label": "Language",
+  "privacy_title": "Crosstune Privacy Policy",
+  "updated": "Last updated: October 1, 2026",
+  "short_h2": "In short",
+  "short_items": [
+    "No account, ads or analytics.",
+    "There's no Crosstune server. Your history stays on your phone.",
+    "Links you convert go only to the music services involved.",
+    "Clear history anytime in the app."
+  ],
+  "details_h2": "Details",
+  "privacy_body": [
+    [
+      "p",
+      "Crosstune is an Android app developed by astrovm that opens music links in the music app or website you choose. This policy explains what information the app uses and where it goes."
+    ],
+    [
+      "h2",
+      "No account, advertising, or analytics"
+    ],
+    [
+      "p",
+      "Crosstune does not require an account and does not include advertising, analytics, or a crash-reporting service. The developer does not operate a server that receives your music links or listening history. Crosstune does not sell your information."
+    ],
+    [
+      "h2",
+      "Information on your device"
+    ],
+    [
+      "p",
+      "The app stores your settings and recent resolved links on your device. Recent entries can include the source link, title, artist, artwork URL, and prepared destination links. These preferences and history are excluded from the app's Android cloud-backup and device-transfer rules."
+    ],
+    [
+      "p",
+      "Crosstune reads a link you paste, share to it, or open through Android link handling. Its clipboard shortcuts read clipboard text when you invoke them. It checks which supported music apps are installed so it can offer them as destinations. That information stays on your device."
+    ],
+    [
+      "h2",
+      "Requests to music services"
+    ],
+    [
+      "p",
+      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, and Bandcamp."
+    ],
+    [
+      "p",
+      "When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, or Bandcamp. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select."
+    ],
+    [
+      "p",
+      "Like other internet requests, these requests expose your IP address and normal request information to the contacted service. Those services may retain request logs and process information under their own privacy policies. The developer doesn't control how they process or keep that data. A music service may require its own account or subscription after you open it."
+    ],
+    [
+      "h2",
+      "Permissions and security"
+    ],
+    [
+      "p",
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It does not request location, microphone, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
+    ],
+    [
+      "h2",
+      "Retention and deletion"
+    ],
+    [
+      "p",
+      "You can clear recent history in the app. Clearing Crosstune's app storage in Android Settings removes its local settings and history. The developer holds no server-side account or listening-history record to delete. Requests already received by third-party music services are subject to those services' retention and deletion policies."
+    ],
+    [
+      "h2",
+      "Children"
+    ],
+    [
+      "p",
+      "Crosstune does not ask users for their age or personal profile information and does not knowingly collect children's personal information on a developer-operated server. Linked music services have their own age requirements and privacy policies. Parents and guardians should review those before a child uses them."
+    ],
+    [
+      "h2",
+      "Contact and changes"
+    ],
+    [
+      "p",
+      "For privacy questions, contact {email}. If you email the developer, the email service processes your address and message so the developer can respond. Please don't include sensitive information you don't need to share."
+    ],
+    [
+      "p",
+      "This policy may be updated when the app's behavior changes. Updates will appear on this page with a revised date."
+    ]
+  ]
+}
