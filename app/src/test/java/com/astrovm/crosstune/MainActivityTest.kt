@@ -550,7 +550,8 @@ class MainActivityTest {
         click(string(R.string.paste_button))
         waitForText("Pasted Song")
 
-        composeRule.onNode(hasSetTextAction()).assert(hasText("https://open.spotify.com/track/$TRACK_ID?si=x"))
+        // The box swaps the pasted text for the clean link, without "?si=".
+        composeRule.onNode(hasSetTextAction()).assert(hasText("https://open.spotify.com/track/$TRACK_ID", substring = false))
         assertResultShown()
         assertNull(shadowOf(app).peekNextStartedActivity())
         assertFalse(activity.isFinishing)
