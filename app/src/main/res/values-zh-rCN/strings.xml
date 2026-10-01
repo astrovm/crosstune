@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">打开链接设置</string>
     <string name="dismiss_button">关闭</string>
     <string name="settings_version">版本</string>
-    <string name="made_by">作者：@astrovm</string>
+    <string name="made_with_love">由 astro 用 %1$s 制作</string>
 
     <string name="error_invalid_url">这不是歌曲、专辑、艺人或播放列表的链接。</string>
     <string name="error_network">无法连接。请检查网络后重试。</string>

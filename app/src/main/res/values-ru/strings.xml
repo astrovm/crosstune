@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Открыть настройки ссылок</string>
     <string name="dismiss_button">Закрыть</string>
     <string name="settings_version">Версия</string>
-    <string name="made_by">Автор: @astrovm</string>
+    <string name="made_with_love">Сделано с %1$s, astro</string>
 
     <string name="error_invalid_url">Это не ссылка на песню, альбом, исполнителя или плейлист.</string>
     <string name="error_network">Не удалось подключиться. Проверьте интернет и повторите попытку.</string>

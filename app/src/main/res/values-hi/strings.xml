@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">लिंक सेटिंग खोलें</string>
     <string name="dismiss_button">बंद करें</string>
     <string name="settings_version">वर्शन</string>
-    <string name="made_by">@astrovm द्वारा बनाया गया</string>
+    <string name="made_with_love">astro ने %1$s से बनाया</string>
 
     <string name="error_invalid_url">यह किसी गाने, एल्बम, कलाकार या प्लेलिस्ट का लिंक नहीं है।</string>
     <string name="error_network">कनेक्ट नहीं हो सका। अपना इंटरनेट जाँचकर फिर कोशिश करें।</string>

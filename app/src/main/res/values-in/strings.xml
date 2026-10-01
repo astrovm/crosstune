@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Buka setelan link</string>
     <string name="dismiss_button">Tutup</string>
     <string name="settings_version">Versi</string>
-    <string name="made_by">Dibuat oleh @astrovm</string>
+    <string name="made_with_love">Dibuat dengan %1$s oleh astro</string>
 
     <string name="error_invalid_url">Ini bukan link lagu, album, artis, atau playlist.</string>
     <string name="error_network">Tidak bisa terhubung. Periksa koneksi internet dan coba lagi.</string>

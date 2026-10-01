@@ -108,7 +108,8 @@
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
     <string name="settings_version">Version</string>
-    <string name="made_by">Made by @astrovm</string>
+    <!-- %1$s is where the heart icon goes. -->
+    <string name="made_with_love">Made with %1$s by astro</string>
     <string name="github_repo_url" translatable="false">https://github.com/astrovm/crosstune</string>
     <string name="privacy_policy">Privacy policy</string>
     <string name="privacy_policy_url" translatable="false">https://crosstune.4st.li/privacy/</string>

@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Otwórz ustawienia linków</string>
     <string name="dismiss_button">Odrzuć</string>
     <string name="settings_version">Wersja</string>
-    <string name="made_by">Autor: @astrovm</string>
+    <string name="made_with_love">Stworzone z %1$s przez astro</string>
 
     <string name="error_invalid_url">To nie jest link do utworu, albumu, wykonawcy ani playlisty.</string>
     <string name="error_network">Nie można się połączyć. Sprawdź internet i spróbuj ponownie.</string>
