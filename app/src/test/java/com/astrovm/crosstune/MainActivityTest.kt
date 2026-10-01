@@ -1623,6 +1623,32 @@ class MainActivityTest {
     }
 
     @Test
+    fun recentPicksUpAShareSavedByAnotherInstanceWhenTheScreenReturns() {
+        respondWithTrack("Already There", "Artist · Song")
+        launch()
+        resolveTyped()
+        assertTextShown("Already There")
+
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(
+                    MusicService.SPOTIFY,
+                    ItemType.TRACK,
+                    OTHER_TRACK_ID,
+                    "https://open.spotify.com/track/$OTHER_TRACK_ID"
+                ),
+                MusicMetadata("Shared Song", "Artist")
+            )
+        )
+        assertTextAbsent("Shared Song")
+
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+
+        assertTextShown("Shared Song")
+    }
+
+    @Test
     fun historyRemembersResultsAcrossLaunchesAndCanBeCleared() {
         fake.handler = { request ->
             val title = if (request.url.pathSegments.last() == TRACK_ID) "First Song" else "Second Song"
