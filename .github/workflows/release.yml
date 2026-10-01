@@ -75,6 +75,13 @@ jobs:
             echo "::error::APK versionName is '$actual', expected '$expected'"
             exit 1
           fi
+          [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+) ]]
+          expected_code=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 10000 + 10#${BASH_REMATCH[3]} * 100))
+          actual_code="$(jq -r '.elements[0].versionCode' app/build/outputs/apk/release/output-metadata.json)"
+          if [[ "$actual_code" != "$expected_code" ]]; then
+            echo "::error::APK versionCode is '$actual_code', expected '$expected_code'"
+            exit 1
+          fi
 
       - name: Upload unsigned APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
