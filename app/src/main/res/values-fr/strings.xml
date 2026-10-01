@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Ouvrir les paramètres des liens</string>
     <string name="dismiss_button">Ignorer</string>
     <string name="settings_version">Version</string>
-    <string name="made_by">Créé par @astrovm</string>
+    <string name="made_with_love">Fait avec %1$s par astro</string>
 
     <string name="error_invalid_url">Ce lien ne mène pas à un titre, un album, un artiste ni une playlist.</string>
     <string name="error_network">Connexion impossible. Vérifiez votre connexion Internet et réessayez.</string>

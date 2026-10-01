@@ -96,7 +96,7 @@
     <string name="open_link_settings_button">リンク設定を開く</string>
     <string name="dismiss_button">閉じる</string>
     <string name="settings_version">バージョン</string>
-    <string name="made_by">作者: @astrovm</string>
+    <string name="made_with_love">astro が %1$s を込めて作りました</string>
 
     <string name="error_invalid_url">曲、アルバム、アーティスト、プレイリストのリンクではありません。</string>
     <string name="error_network">接続できませんでした。インターネットの接続を確認して、もう一度お試しください。</string>

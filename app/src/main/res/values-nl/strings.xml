@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Linkinstellingen openen</string>
     <string name="dismiss_button">Sluiten</string>
     <string name="settings_version">Versie</string>
-    <string name="made_by">Gemaakt door @astrovm</string>
+    <string name="made_with_love">Gemaakt met %1$s door astro</string>
 
     <string name="error_invalid_url">Dit is geen link naar een nummer, album, artiest of afspeellijst.</string>
     <string name="error_network">Geen verbinding. Controleer je internet en probeer het opnieuw.</string>

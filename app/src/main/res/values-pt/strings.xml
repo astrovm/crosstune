@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">Abrir config. de links</string>
     <string name="dismiss_button">Dispensar</string>
     <string name="settings_version">Versão</string>
-    <string name="made_by">Feito por @astrovm</string>
+    <string name="made_with_love">Feito com %1$s por astro</string>
 
     <string name="error_invalid_url">Este não é um link de música, álbum, artista ou playlist.</string>
     <string name="error_network">Não foi possível conectar. Verifique sua internet e tente de novo.</string>

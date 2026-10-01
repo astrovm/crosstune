@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
@@ -184,16 +186,22 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.made_by),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f)
+                val (before, after) = stringResource(R.string.made_with_love, HEART).split(HEART).map { it.trim() }
+                if (before.isNotEmpty()) Text(before, style = MaterialTheme.typography.bodyLarge)
+                Image(
+                    painterResource(R.drawable.ic_heart),
+                    contentDescription = null,
+                    modifier = Modifier.padding(horizontal = 4.dp).size(16.dp)
                 )
+                Text(after, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
     }
 }
+
+/** Marks where the heart icon goes in [R.string.made_with_love]. */
+internal const val HEART = "\uFFFC"
 
 /** The installed version, e.g. "1.2.1", or "1.2.1-dev.5" for a build made after a release. */
 @Composable

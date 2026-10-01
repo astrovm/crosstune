@@ -95,7 +95,7 @@
     <string name="open_link_settings_button">링크 설정 열기</string>
     <string name="dismiss_button">닫기</string>
     <string name="settings_version">버전</string>
-    <string name="made_by">제작: @astrovm</string>
+    <string name="made_with_love">astro가 %1$s을 담아 만들었어요</string>
 
     <string name="error_invalid_url">노래, 앨범, 아티스트, 플레이리스트 링크가 아니에요.</string>
     <string name="error_network">연결할 수 없어요. 인터넷 연결을 확인하고 다시 시도하세요.</string>
