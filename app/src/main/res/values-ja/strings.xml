@@ -109,6 +109,4 @@
     <string name="make_default">デフォルトに設定</string>
     <string name="history_open">%1$sを開く</string>
     <string name="history_copy">%1$sのリンクをコピー</string>
-    <string name="custom_preview_query">検索例</string>
-    <string name="custom_preview_title">プレビュー</string>
 </resources>

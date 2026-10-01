@@ -108,6 +108,4 @@
     <string name="make_default">Als standaard instellen</string>
     <string name="history_open">%1$s openen</string>
     <string name="history_copy">Link voor %1$s kopiëren</string>
-    <string name="custom_preview_query">Voorbeeldzoekopdracht</string>
-    <string name="custom_preview_title">Voorbeeld</string>
 </resources>

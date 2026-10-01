@@ -108,6 +108,4 @@
     <string name="make_default">Сделать по умолчанию</string>
     <string name="history_open">Открыть %1$s</string>
     <string name="history_copy">Копировать ссылку на %1$s</string>
-    <string name="custom_preview_query">Пример поиска</string>
-    <string name="custom_preview_title">Предпросмотр</string>
 </resources>

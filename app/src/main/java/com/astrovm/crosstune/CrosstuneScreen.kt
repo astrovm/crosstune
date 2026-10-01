@@ -391,15 +391,14 @@ internal fun DefaultDestinationMenu(
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
-    FlowRow(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (label != null) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 14.dp, bottom = 14.dp, end = 8.dp))
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         } else {
             Text(
                 text = stringResource(R.string.default_open_with_label),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 14.dp, bottom = 14.dp, end = 8.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Box {

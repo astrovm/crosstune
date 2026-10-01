@@ -108,6 +108,4 @@
     <string name="make_default">Usar como padrão</string>
     <string name="history_open">Abrir %1$s</string>
     <string name="history_copy">Copiar link de %1$s</string>
-    <string name="custom_preview_query">Busca de exemplo</string>
-    <string name="custom_preview_title">Prévia</string>
 </resources>

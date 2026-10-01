@@ -108,6 +108,4 @@
     <string name="make_default">Jadikan default</string>
     <string name="history_open">Buka %1$s</string>
     <string name="history_copy">Salin tautan untuk %1$s</string>
-    <string name="custom_preview_query">Contoh pencarian</string>
-    <string name="custom_preview_title">Pratinjau</string>
 </resources>

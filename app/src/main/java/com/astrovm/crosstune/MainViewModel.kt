@@ -356,16 +356,34 @@ internal class MainViewModel(
     }
 
     fun openHistoryEntry(entry: HistoryEntry) {
-        selectHistoryEntry(entry)
-        openResult()
+        viewModelScope.launch {
+            val destination = destinationFor(entry)
+            val url = urlForHistory(entry, destination) ?: return@launch
+            val service = (destination as? Destination.Service)?.service
+            effectChannel.send(Effect.Open(url, service?.packageName, finishAfterOpen = false))
+        }
     }
 
     fun copyHistoryEntry(entry: HistoryEntry) {
-        selectHistoryEntry(entry)
-        job = viewModelScope.launch {
-            val url = prepareDestination(uiState.resultDestination) ?: return@launch
+        viewModelScope.launch {
+            val url = urlForHistory(entry, destinationFor(entry)) ?: return@launch
             effectChannel.send(Effect.Copy(url))
         }
+    }
+
+    /** Recent Open and Copy use the saved default, not whatever result is on screen. */
+    private fun destinationFor(entry: HistoryEntry): Destination =
+        uiState.rules[entry.link.service] ?: uiState.defaultDestination
+
+    private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
+        val service = (destination as? Destination.Service)?.service
+        if (service == entry.link.service) return entry.link.url
+        entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url }
+        val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
+        val url = exactUrl ?: destination.searchUrl(searchQuery(entry.metadata))
+        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, uiState.exactMatch))
+        uiState = uiState.copy(history = history)
+        return url
     }
 
     fun clearHistory() {

@@ -108,6 +108,4 @@
     <string name="make_default">Ustaw jako domyślne</string>
     <string name="history_open">Otwórz %1$s</string>
     <string name="history_copy">Kopiuj link do %1$s</string>
-    <string name="custom_preview_query">Przykładowe wyszukiwanie</string>
-    <string name="custom_preview_title">Podgląd</string>
 </resources>

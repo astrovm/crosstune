@@ -108,6 +108,4 @@
     <string name="make_default">Varsayılan yap</string>
     <string name="history_open">%1$s aç</string>
     <string name="history_copy">%1$s bağlantısını kopyala</string>
-    <string name="custom_preview_query">Örnek arama</string>
-    <string name="custom_preview_title">Önizleme</string>
 </resources>

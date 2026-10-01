@@ -108,6 +108,4 @@
     <string name="make_default">设为默认</string>
     <string name="history_open">打开%1$s</string>
     <string name="history_copy">复制%1$s的链接</string>
-    <string name="custom_preview_query">示例搜索</string>
-    <string name="custom_preview_title">预览</string>
 </resources>

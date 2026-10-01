@@ -47,8 +47,7 @@ The destination menu still says **Opens in**. A change applies to the current re
 - **Ask every time.** Choose the app each time you tap or share a link.
 - **Exact match.** Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.
 - **Any app or site.** Add your own, as long as it has a search page. Write `{query}` where the song name goes, like `https://example.com/search?q={query}`.
-- **Shortcuts.** Paste with one tap, open or copy recent links directly, use the Quick Settings tile, or long-press the app icon to open a copied link. Recent items keep prepared destination links on your device for faster reopening, including after an app restart.
-- **Custom destinations.** Preview a search URL with an editable sample query before saving it.
+- **Shortcuts.** Paste with one tap, open or copy a recent link without replacing what's on screen, use the Quick Settings tile, or long-press the app icon to open a copied link. Recent items keep prepared destination links on your device for faster reopening, including after an app restart.
 
 ## Supported links
 

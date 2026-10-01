@@ -108,6 +108,4 @@
     <string name="make_default">डिफ़ॉल्ट बनाएँ</string>
     <string name="history_open">%1$s खोलें</string>
     <string name="history_copy">%1$s का लिंक कॉपी करें</string>
-    <string name="custom_preview_query">खोज का उदाहरण</string>
-    <string name="custom_preview_title">पूर्वावलोकन</string>
 </resources>

@@ -122,6 +122,4 @@
     <string name="make_default">Make default</string>
     <string name="history_open">Open %1$s</string>
     <string name="history_copy">Copy link for %1$s</string>
-    <string name="custom_preview_query">Sample search</string>
-    <string name="custom_preview_title">Preview</string>
 </resources>

@@ -2479,6 +2479,8 @@ class MainActivityTest {
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
         assertEquals(requests, fake.requestedUrls.size)
+        assertEquals("", model.uiState.linkText)
+        assertNull(model.uiState.result)
 
         model.setExactMatch(false)
         composeRule.waitForIdle()
@@ -2487,6 +2489,20 @@ class MainActivityTest {
         assertEquals(requests, fake.requestedUrls.size)
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://www.deezer.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
+        assertNull(model.uiState.result)
+
+        model.setExactMatch(true)
+        model.selectDefault(Destination.Service(MusicService.SPOTIFY))
+        composeRule.waitForIdle()
+        click(string(R.string.history_open, "Remember"))
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        assertEquals("", model.uiState.linkText)
+
+        model.selectDefault(Destination.Service(MusicService.TIDAL))
+        composeRule.waitForIdle()
+        click(string(R.string.history_copy, "Remember"))
+        assertEquals("https://listen.tidal.com/search?q=Remember%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertNull(model.uiState.result)
     }
 
     @Test
@@ -2517,22 +2533,6 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.picker_title))
         chooseDefault("Player")
         assertTextShown(string(R.string.search_in_destination, "Player"))
-    }
-
-    @Test
-    fun customTemplatePreviewEncodesAnEditableSampleBeforeSaving() {
-        launch()
-        click(string(R.string.settings_button))
-        click(string(R.string.add_custom_destination_button))
-        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
-            .performTextReplacement("https://example.com/search?q={query}")
-        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_preview_query)))
-            .performTextReplacement("Song & Artist")
-        composeRule.waitForIdle()
-        assertTextShown(string(R.string.custom_preview_title))
-        assertTextShown("https://example.com/search?q=Song%20%26%20Artist")
-        assertTrue(DestinationStore(prefs()).customDestinations().isEmpty())
-        click(string(R.string.cancel_button))
     }
 
     // endregion

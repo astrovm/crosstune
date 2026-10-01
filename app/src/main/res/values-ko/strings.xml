@@ -108,6 +108,4 @@
     <string name="make_default">기본값으로 설정</string>
     <string name="history_open">%1$s 열기</string>
     <string name="history_copy">%1$s 링크 복사</string>
-    <string name="custom_preview_query">검색 예시</string>
-    <string name="custom_preview_title">미리보기</string>
 </resources>
