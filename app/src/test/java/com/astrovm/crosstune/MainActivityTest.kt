@@ -2293,6 +2293,8 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_not_allowed))
         // Android lists every service's links, so setup names the ones to select.
         assertTextShown("open.spotify.com, spotify.link, www.spotify.link")
+        // An app Crosstune can't see may keep them; Android names it next to the link.
+        assertTextShown(string(R.string.setup_allow_taken_hint))
 
         // Returning from Android's settings refreshes the status; short links still need allowing.
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)

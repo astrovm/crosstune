@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Estas apps pueden abrir los mismos links. Tocá una para elegir si los abre ella.</string>
     <string name="link_owner_opens_them">Los abre ella</string>
     <string name="link_owner_lets_crosstune">Deja que los abra Crosstune</string>
+    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app: Android muestra cuál al lado del link. En la configuración de esa app, desactivá “Abrir vínculos admitidos”.</string>
 </resources>

@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Эти приложения могут открывать те же ссылки. Нажмите на приложение, чтобы выбрать, открывает ли оно их само.</string>
     <string name="link_owner_opens_them">Открывает их само</string>
     <string name="link_owner_lets_crosstune">Отдаёт их Crosstune</string>
+    <string name="setup_allow_taken_hint">Не получается отметить ссылку? Её занимает другое приложение: Android показывает какое рядом со ссылкой. В его настройках отключите «Открывать поддерживаемые ссылки».</string>
 </resources>

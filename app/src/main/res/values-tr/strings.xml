@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Bu uygulamalar aynı bağlantıları açabilir. Bağlantıları kendisinin açıp açmayacağını seçmek için birine dokun.</string>
     <string name="link_owner_opens_them">Kendisi açıyor</string>
     <string name="link_owner_lets_crosstune">Crosstune\'un açmasına izin veriyor</string>
+    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış: Android hangisi olduğunu bağlantının yanında gösterir. O uygulamanın ayarlarında “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
 </resources>

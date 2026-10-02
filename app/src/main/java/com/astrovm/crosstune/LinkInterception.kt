@@ -77,7 +77,7 @@ internal class LinkInterception(private val context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         val wanted = sources.flatMap { HOSTS[it].orEmpty() }
-        val candidates = (installedServices().map { it.packageName } + appsOpening(wanted)).distinct()
+        val candidates = (installedServices().map { it.packageName } + installedOtherApps() + appsOpening(wanted)).distinct()
         return candidates.mapNotNull { packageName ->
             val state = try {
                 manager.getDomainVerificationUserState(packageName)
@@ -94,6 +94,11 @@ internal class LinkInterception(private val context: Context) {
     /** Installed apps whose services' links Crosstune opens, for when Android can't say which really take them. */
     fun installedSourceApps(sources: Set<MusicService>): List<LinkApp> =
         MusicService.entries.filter { it in sources && it in installedServices() }.map { appFor(it.packageName) }
+
+    /** Apps in [OTHER_LINK_APPS] that are installed. */
+    private fun installedOtherApps(): List<String> = OTHER_LINK_APPS.filter { packageName ->
+        runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
+    }
 
     /** Other apps with a link filter for any of [hosts]; whether they verified them is checked separately. */
     private fun appsOpening(hosts: List<String>): Set<String> = hosts.flatMap { host ->
@@ -115,6 +120,17 @@ internal class LinkInterception(private val context: Context) {
 
     companion object {
         const val ALIAS_PREFIX = "com.astrovm.crosstune.intercept."
+
+        /**
+         * Apps known to verify a service's links without being that service's app, which a search
+         * by link can miss when they only list some paths. Keep in sync with the manifest's queries.
+         */
+        private val OTHER_LINK_APPS = listOf(
+            "com.google.android.apps.youtube.producer", // YouTube Create
+            "com.google.android.apps.youtube.creator", // YouTube Studio
+            "com.google.android.apps.youtube.kids", // YouTube Kids
+            "com.google.android.apps.youtube.unplugged" // YouTube TV
+        )
 
         /** Every web host each source's alias declares in the manifest; a service is allowed once all are. */
         val HOSTS = mapOf(

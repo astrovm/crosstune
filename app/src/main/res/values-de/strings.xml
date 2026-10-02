@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Diese Apps können dieselben Links öffnen. Tippe auf eine, um festzulegen, ob sie sie selbst öffnet.</string>
     <string name="link_owner_opens_them">Öffnet sie selbst</string>
     <string name="link_owner_lets_crosstune">Lässt Crosstune sie öffnen</string>
+    <string name="setup_allow_taken_hint">Ein Link lässt sich nicht ankreuzen? Eine andere App hat ihn: Android zeigt neben dem Link, welche. Deaktiviere in deren Einstellungen „Unterstützte Links öffnen“.</string>
 </resources>
