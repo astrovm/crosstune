@@ -28,6 +28,13 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // A debug build that installs next to the released app, named "Crosstune Dev".
+        create("dev") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            matchingFallbacks += listOf("debug")
+        }
     }
 
     compileOptions {

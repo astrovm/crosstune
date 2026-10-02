@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The dev build's copy of main/res/xml/shortcuts.xml, pointing at its own package. Keep the two in sync. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_open_link"
+        android:shortcutId="open_copied_link"
+        android:shortcutLongLabel="@string/shortcut_paste_long"
+        android:shortcutShortLabel="@string/shortcut_paste_short">
+        <intent
+            android:action="com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
+            android:targetClass="com.astrovm.crosstune.PasteFromClipboard"
+            android:targetPackage="com.astrovm.crosstune.dev" />
+    </shortcut>
+
+    <!-- Share sheet targets that open a shared link in one app; AppShortcuts publishes them. -->
+    <share-target android:targetClass="com.astrovm.crosstune.MainActivity">
+        <data android:mimeType="text/plain" />
+        <category android:name="com.astrovm.crosstune.category.OPEN_IN" />
+    </share-target>
+</shortcuts>
