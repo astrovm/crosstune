@@ -13,6 +13,8 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onLast
@@ -2080,12 +2082,12 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         assertTextAbsent(string(R.string.link_settings_helper_title))
 
-        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).performClick()
+        sourceSwitch(string(R.string.target_youtube)).performClick()
         composeRule.waitForIdle()
 
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
         assertTextShown(string(R.string.link_settings_helper_title))
-        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).performClick()
+        sourceSwitch(string(R.string.target_youtube)).performClick()
         composeRule.waitForIdle()
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
         // Turning a source off doesn't hide an unanswered permission hint.
@@ -2102,12 +2104,16 @@ class MainActivityTest {
         // Where a service's links go only shows once Crosstune opens them.
         assertTextAbsent(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
         toggleRow(string(R.string.target_youtube))
+        // The list only says where links go when it isn't the default; the menu is on YouTube's own page.
+        assertTextAbsent(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
+        openSource(string(R.string.target_youtube))
         composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
             .performClick()
         composeRule.waitForIdle()
-        // Apple Music is also a source row; the dropdown item is the last match.
         composeRule.onAllNodes(hasText(string(R.string.target_apple_music))).onLast().performClick()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
+        click(string(R.string.back_button))
         assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
         click(string(R.string.back_button))
         controller!!.pause().stop().destroy()
@@ -2127,6 +2133,7 @@ class MainActivityTest {
         DestinationStore(prefs()).setRule(MusicService.SPOTIFY, Destination.Service(MusicService.DEEZER))
         launch()
         click(string(R.string.settings_button))
+        openSource(string(R.string.service_spotify))
 
         click(string(R.string.rule_opens_in, "Deezer"))
         click(string(R.string.rule_default, "YouTube Music"))
@@ -2205,20 +2212,22 @@ class MainActivityTest {
         respondWithTrack("Web Song", "Artist · Song")
         launch()
         click(string(R.string.settings_button))
-        assertTextShown("yewtu.be")
-
-        click("Invidious")
+        // The site is on Invidious's own page, not repeated in the list.
+        assertTextAbsent(string(R.string.frontend_site_on, "yewtu.be"))
+        openSource("Invidious")
+        click(string(R.string.frontend_site_on, "yewtu.be"))
         composeRule.onNode(hasSetTextAction()).performTextReplacement("not a site")
         click(string(R.string.save_button))
         assertTextShown(string(R.string.frontend_address_invalid))
         composeRule.onNode(hasSetTextAction()).performTextReplacement("inv.example.org")
         click(string(R.string.save_button))
-        assertTextShown("inv.example.org")
+        assertTextShown(string(R.string.frontend_site_on, "inv.example.org"))
 
         // Cancelling keeps the site.
-        click("Invidious")
+        click(string(R.string.frontend_site_on, "inv.example.org"))
         click(string(R.string.cancel_button))
-        assertTextShown("inv.example.org")
+        assertTextShown(string(R.string.frontend_site_on, "inv.example.org"))
+        click(string(R.string.back_button))
         click(string(R.string.back_button))
 
         chooseDefault("Invidious")
@@ -2227,6 +2236,66 @@ class MainActivityTest {
         val opened = nextStartedActivity()!!
         assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
         assertNull(opened.`package`)
+    }
+
+    @Test
+    fun invidiousAndPipedAreSourcesOfTheirOwnInSetupAndSettings() {
+        var states = emptyMap<String, Int>()
+        FakeDomainVerification.install(app) { states }
+        freshInstall()
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+
+        // Listening in YouTube hides YouTube, but not its frontends.
+        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).assertDoesNotExist()
+        toggleRow("Invidious")
+        assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
+        assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
+        click(string(R.string.next_button))
+        assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
+        assertTextShown(string(R.string.setup_allow_taken_hint))
+        click(string(R.string.setup_finish))
+
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.setup_not_allowed))
+        states = Frontend.INVIDIOUS.sites.associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        toggleRow("Piped")
+        assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
+    }
+
+    @Test
+    fun invidiousLinksCanOpenSomewhereElseThanYouTubes() {
+        LinkInterception(app).setEnabled(Frontend.INVIDIOUS, true)
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        click(string(R.string.settings_button))
+        openSource("Invidious")
+        // Without a rule of its own, Invidious follows YouTube's, here the default.
+        composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.service_spotify))).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.rule_opens_in, "Spotify"))
+        assertEquals(Destination.Service(MusicService.SPOTIFY), DestinationStore(prefs()).rule(Frontend.INVIDIOUS))
+        click(string(R.string.back_button))
+        controller!!.pause().stop().destroy()
+
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+        }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://yewtu.be/watch?v=4NRXx6U8ABQ")))
+        waitUntil { activity.isFinishing }
+        assertEquals(MusicService.SPOTIFY.packageName, nextStartedActivity()!!.`package`)
+
+        // Piped's links still go where YouTube's do.
+        assertNull(DestinationStore(prefs()).rule(Frontend.PIPED))
     }
 
     @Test
@@ -2304,8 +2373,18 @@ class MainActivityTest {
         prefs().edit().clear().commit()
     }
 
+    /** A checkbox row in setup, or a source's switch in settings, which is labelled with its name. */
+    private fun sourceSwitch(label: String) = composeRule.onNode((hasText(label) or hasContentDescription(label)) and isToggleable())
+
+    /** Opens a source's own page from the list in settings. */
+    private fun openSource(label: String) {
+        // Not the default app's menu, which may show the same name.
+        composeRule.onAllNodes(hasText(label) and hasClickAction() and !isToggleable() and !hasTestTag(DEFAULT_MENU_TAG)).onFirst().performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun toggleRow(label: String) {
-        composeRule.onNode(hasText(label) and isToggleable()).performClick()
+        sourceSwitch(label).performClick()
         composeRule.waitForIdle()
     }
 
@@ -2430,12 +2509,15 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
         assertTextShown(string(R.string.setup_not_allowed))
+        openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        click(string(R.string.back_button))
         assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
@@ -2446,9 +2528,11 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         click(string(R.string.settings_button))
+        sourceSwitch(string(R.string.target_youtube_music)).assertIsNotEnabled()
+        openSource(string(R.string.target_youtube_music))
         val note = string(R.string.setup_sources_listening_note, string(R.string.target_youtube_music))
         assertTextShown(note)
-        composeRule.onNode(hasText(string(R.string.target_youtube_music)) and isToggleable()).assertIsNotEnabled()
+        sourceSwitch(string(R.string.source_open_links)).assertIsNotEnabled()
 
         // Sent to Spotify instead, its links are worth opening.
         composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))).performClick()
@@ -2456,7 +2540,7 @@ class MainActivityTest {
         composeRule.onAllNodes(hasText(string(R.string.service_spotify))).onLast().performClick()
         composeRule.waitForIdle()
         assertTextAbsent(note)
-        toggleRow(string(R.string.target_youtube_music))
+        toggleRow(string(R.string.source_open_links))
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
 
         // Back to the default, they'd only return to YouTube Music, so Crosstune stops opening them.
@@ -2466,6 +2550,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
         assertTextShown(note)
+        click(string(R.string.back_button))
 
         // Making an opened service the default stops opening its links too.
         toggleRow(string(R.string.service_spotify))
@@ -2554,6 +2639,9 @@ class MainActivityTest {
         LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
         launch()
         click(string(R.string.settings_button))
+        // Not in the main list: each source's page shows the apps that can open its links.
+        assertTextAbsent(string(R.string.settings_link_owners_title))
+        openSource(string(R.string.target_youtube))
         assertTextShown(string(R.string.settings_link_owners_title))
         assertTextShown(string(R.string.link_owner_opens_them))
 

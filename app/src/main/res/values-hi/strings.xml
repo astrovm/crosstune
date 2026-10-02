@@ -130,4 +130,6 @@
     <string name="frontend_address_title">%1$s का पता</string>
     <string name="save_button">सेव करें</string>
     <string name="frontend_address_invalid">कोई वेब पता डालें, जैसे yewtu.be</string>
+    <string name="frontend_site_on">वीडियो %1$s पर खोलता है</string>
+    <string name="source_open_links">ये लिंक Crosstune में खोलें</string>
 </resources>

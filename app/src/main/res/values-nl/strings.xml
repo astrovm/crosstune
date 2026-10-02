@@ -130,4 +130,6 @@
     <string name="frontend_address_title">Adres van %1$s</string>
     <string name="save_button">Opslaan</string>
     <string name="frontend_address_invalid">Voer een webadres in, zoals yewtu.be</string>
+    <string name="frontend_site_on">Opent video\'s op %1$s</string>
+    <string name="source_open_links">Deze links openen in Crosstune</string>
 </resources>

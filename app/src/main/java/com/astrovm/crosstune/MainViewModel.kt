@@ -29,7 +29,13 @@ internal data class UiState(
     val destinations: List<Destination> = MusicService.entries.map(Destination::Service),
     /** Per-source destinations; sources without an entry use [defaultDestination]. */
     val rules: Map<MusicService, Destination> = emptyMap(),
+    /** Per-frontend destinations for links from Invidious's or Piped's sites; without one, YouTube's rule or the default applies. */
+    val frontendRules: Map<Frontend, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
+    /** Web frontends, like Invidious, whose popular sites' links Crosstune opens: sources of their own. */
+    val frontendSources: Set<Frontend> = emptySet(),
+    /** Each one's sites Android doesn't let Crosstune open yet; null before Android 12. */
+    val unapprovedFrontendHosts: Map<Frontend, List<String>>? = null,
     val askEachTime: Boolean = false,
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
@@ -52,6 +58,8 @@ internal data class UiState(
     val blockingApps: Set<LinkApp>? = null,
     /** Installed apps that claim links Crosstune intercepts, blocking or not; null before Android 12. */
     val claimingApps: Set<LinkApp>? = null,
+    /** For every source, by [Destination.key], installed apps that claim its links and whether each still opens them. */
+    val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>? = null,
     /** The intercepted services' own installed apps, which may take their links when Android can't say. */
     val installedSourceApps: List<LinkApp> = emptyList(),
     /** Set while handling a link from another app, which takes priority over setup. */
@@ -74,9 +82,20 @@ internal data class UiState(
             (listOfNotNull((defaultDestination as? Destination.Service)?.service) + MusicService.entries.filter { it in installed }).distinct()
         }
 
+    /** Whether Crosstune opens any links at all. */
+    val interceptsAnything: Boolean get() = intercepted.isNotEmpty() || frontendSources.isNotEmpty()
+
+    /** Whether some link Crosstune is set to open isn't allowed yet; false before Android 12, which can't tell. */
+    val someLinksNotAllowed: Boolean
+        get() = intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
+            frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
+
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
-        get() = selectedDestination ?: link?.let { rules[it.service] } ?: defaultDestination
+        get() = selectedDestination ?: link?.let(::ruleFor) ?: defaultDestination
+
+    /** Where links like [link] go unless changed for one result: their frontend's rule, then their service's. */
+    fun ruleFor(link: MusicLink): Destination? = link.frontend?.let { frontendRules[it] } ?: rules[link.service]
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
@@ -138,18 +157,23 @@ internal class MainViewModel(
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
         val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
-        val claiming = interception.claimingApps(intercepted)
+        val frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet()
+        val claiming = interception.claimingApps(intercepted, frontendSources)
         return copy(
             defaultDestination = destinationStore.defaultDestination(),
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
+            frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend)?.let { frontend to it } }.toMap(),
             intercepted = intercepted,
+            frontendSources = frontendSources,
+            unapprovedFrontendHosts = interception.unapprovedFrontendHosts(),
             hasDefault = destinationStore.hasDefault(),
             installed = interception.installedServices(),
             unapprovedHosts = interception.unapprovedHosts(),
             blockingApps = claiming?.filterValues { it }?.keys,
             claimingApps = claiming?.keys,
+            claimingAppsBySource = interception.claimingAppsBySource(),
             installedSourceApps = interception.installedSourceApps(intercepted)
         )
     }
@@ -419,7 +443,7 @@ internal class MainViewModel(
 
     /** Recent Open and Copy use the saved default, not whatever result is on screen. */
     private fun destinationFor(entry: HistoryEntry): Destination =
-        uiState.rules[entry.link.service] ?: uiState.defaultDestination
+        uiState.ruleFor(entry.link) ?: uiState.defaultDestination
 
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = destination.matchService
@@ -520,6 +544,16 @@ internal class MainViewModel(
             interception.setEnabled(source, false)
         }
         refreshSystemState()
+    }
+
+    fun setFrontendRule(frontend: Frontend, destination: Destination?) {
+        destinationStore.setRule(frontend, destination)
+        refreshSystemState()
+    }
+
+    fun setFrontendIntercepted(frontend: Frontend, enabled: Boolean) {
+        interception.setEnabled(frontend, enabled)
+        uiState = uiState.withDestinations().copy(showLinkSettingsHelper = enabled || uiState.showLinkSettingsHelper)
     }
 
     fun setIntercepted(source: MusicService, enabled: Boolean) {

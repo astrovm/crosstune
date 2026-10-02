@@ -11,7 +11,9 @@ internal data class MusicLink(
     val url: String,
     val region: String? = null,
     /** Came from a frontend such as Invidious or Piped; [url] is still the service's own. */
-    val viaFrontend: Boolean = false
+    val viaFrontend: Boolean = false,
+    /** Which one, when it came from one of its popular sites, so its own rule can apply. */
+    val frontend: Frontend? = null
 )
 
 /** What a pasted or shared piece of text points at. */
@@ -22,11 +24,7 @@ internal sealed interface LinkInput {
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
 internal object MusicLinks {
-    /** Popular Invidious and Piped sites; YouTube's link alias in the manifest takes them too. */
-    val FRONTEND_SITES = listOf(
-        "yewtu.be", "inv.nadeko.net", "invidious.nerdvpn.de", "invidious.f5.si", "invidious.tiekoetter.com",
-        "yt.chocolatemoo53.com", "piped.video", "piped.yt", "piped.adminforge.de", "piped.privacy.com.de", "piped.leptons.xyz"
-    )
+    private val frontendSites = Frontend.SOURCES.flatMap { it.sites }.toSet()
 
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
     private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
@@ -112,7 +110,7 @@ internal object MusicLinks {
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
-            segments == listOf("watch") || host in FRONTEND_SITES -> frontendVideo(url, segments)
+            segments == listOf("watch") || host in frontendSites -> frontendVideo(url, segments)
             else -> null
         }
     }
@@ -149,7 +147,8 @@ internal object MusicLinks {
             segments.size == 2 && segments[0] in setOf("shorts", "live", "embed") -> segments[1]
             else -> null
         }
-        return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true)
+        val frontend = Frontend.SOURCES.firstOrNull { url.host in it.sites }
+        return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true, frontend = frontend)
     }
 
     private fun youtube(service: MusicService, id: String): MusicLink? {

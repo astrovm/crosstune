@@ -244,6 +244,16 @@ private fun SourcesStep(state: UiState, actions: ScreenActions) {
                     label = stringResource(source.labelRes)
                 )
             }
+        // Invidious and Piped are sources of their own, whichever app the user listens in.
+        Frontend.SOURCES.forEach { frontend ->
+            GroupDivider()
+            val checked = frontend in state.frontendSources
+            ChoiceRow(
+                modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) { actions.onFrontendInterceptChange(frontend, it) },
+                control = { Checkbox(checked = checked, onCheckedChange = null) },
+                label = frontend.label
+            )
+        }
     }
     if (listening != null && listening.canBeSource) {
         Text(
@@ -305,9 +315,34 @@ private fun StatusTag(done: Boolean, doneText: String, todoText: String) {
     )
 }
 
+/**
+ * One source's links: whether Android lets Crosstune open them, from Android 12, which can tell,
+ * and which still need ticking, since Android lists every source's links together.
+ */
+@Composable
+private fun AllowRow(label: String, unapproved: List<String>?, allHosts: List<String>) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            if (unapproved != null) {
+                StatusTag(unapproved.isEmpty(), stringResource(R.string.setup_allowed), stringResource(R.string.setup_not_allowed))
+            }
+        }
+        val hosts = unapproved ?: allHosts
+        if (hosts.isNotEmpty()) {
+            Text(
+                text = hosts.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
 @Composable
 private fun AllowStep(state: UiState, actions: ScreenActions) {
-    if (state.intercepted.isEmpty()) {
+    if (!state.interceptsAnything) {
         StepHeader(R.string.setup_allow_title, R.string.setup_allow_none)
         return
     }
@@ -334,34 +369,15 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
     Group {
         MusicService.entries.filter { it in state.intercepted }.forEachIndexed { index, source ->
             if (index > 0) GroupDivider()
-            // Android 12+ reports each domain's state; older versions can't, so no status is shown.
-            val unapproved = state.unapprovedHosts?.let { it[source].orEmpty() }
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(source.labelRes),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (unapproved != null) {
-                        StatusTag(unapproved.isEmpty(), stringResource(R.string.setup_allowed), stringResource(R.string.setup_not_allowed))
-                    }
-                }
-                // Android lists every service's links, so name the ones still to tick for this one.
-                val hosts = unapproved ?: LinkInterception.HOSTS[source].orEmpty()
-                if (hosts.isNotEmpty()) {
-                    Text(
-                        text = hosts.joinToString(", "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-                }
-            }
+            AllowRow(stringResource(source.labelRes), state.unapprovedHosts?.let { it[source].orEmpty() }, LinkInterception.HOSTS[source].orEmpty())
+        }
+        Frontend.SOURCES.filter { it in state.frontendSources }.forEachIndexed { index, frontend ->
+            if (index > 0 || state.intercepted.isNotEmpty()) GroupDivider()
+            AllowRow(frontend.label, state.unapprovedFrontendHosts?.let { it[frontend].orEmpty() }, frontend.sites)
         }
     }
     // Some apps that keep links can't be found, but Android names them next to each link it greys out.
-    if (state.intercepted.any { state.unapprovedHosts?.get(it).orEmpty().isNotEmpty() }) {
+    if (state.someLinksNotAllowed) {
         Text(
             text = stringResource(R.string.setup_allow_taken_hint),
             style = MaterialTheme.typography.bodyMedium,

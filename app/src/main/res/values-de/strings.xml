@@ -123,11 +123,13 @@
     <string name="copy_link_button">Link kopieren</string>
     <string name="share_link_button">Link teilen</string>
     <string name="settings_link_owners_title">Apps mit diesen Links</string>
-    <string name="settings_link_owners_description">Diese Apps können dieselben Links öffnen. Tippe auf eine, um festzulegen, ob sie sie selbst öffnet.</string>
+    <string name="settings_link_owners_description">Diese Apps können dieselben Links öffnen. Tippe auf eine, um festzulegen, ob sie die Links selbst öffnet.</string>
     <string name="link_owner_opens_them">Öffnet sie selbst</string>
     <string name="link_owner_lets_crosstune">Lässt Crosstune sie öffnen</string>
     <string name="setup_allow_taken_hint">Ein Link lässt sich nicht ankreuzen? Eine andere App hat ihn: Android zeigt neben dem Link, welche. Deaktiviere in deren Einstellungen „Unterstützte Links öffnen“.</string>
     <string name="frontend_address_title">%1$s-Adresse</string>
     <string name="save_button">Speichern</string>
     <string name="frontend_address_invalid">Gib eine Webadresse ein, z. B. yewtu.be</string>
+    <string name="frontend_site_on">Öffnet Videos auf %1$s</string>
+    <string name="source_open_links">Diese Links in Crosstune öffnen</string>
 </resources>

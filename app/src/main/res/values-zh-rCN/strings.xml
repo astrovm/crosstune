@@ -130,4 +130,6 @@
     <string name="frontend_address_title">%1$s 地址</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">请输入网址，例如 yewtu.be</string>
+    <string name="frontend_site_on">在 %1$s 上打开视频</string>
+    <string name="source_open_links">在 Crosstune 中打开这些链接</string>
 </resources>

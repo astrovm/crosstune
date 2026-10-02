@@ -73,6 +73,36 @@ class LinkInterceptionTest {
     }
 
     @Test
+    fun invidiousAndPipedSitesAreSourcesOfTheirOwn() {
+        for ((frontend, link) in mapOf(
+            Frontend.INVIDIOUS to "https://yewtu.be/watch?v=4NRXx6U8ABQ",
+            Frontend.PIPED to "https://piped.video/shorts/4NRXx6U8ABQ"
+        )) {
+            assertFalse(link, handledByCrosstune(link))
+            interception.setEnabled(frontend, true)
+            assertTrue(interception.isEnabled(frontend))
+            assertTrue(link, handledByCrosstune(link))
+            // YouTube's own links stay off.
+            assertFalse(handledByCrosstune("https://youtu.be/4NRXx6U8ABQ"))
+            interception.setEnabled(frontend, false)
+        }
+        Frontend.SOURCES.forEach { frontend ->
+            val component = ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${frontend.name}")
+            val declared = shadowOf(app.packageManager).getIntentFiltersForActivity(component)
+                .flatMap { filter -> (0 until filter.countDataAuthorities()).map { filter.getDataAuthority(it).host } }
+            assertEquals(frontend.name, declared.sorted(), frontend.sites.sorted())
+        }
+    }
+
+    @Test
+    fun eachFrontendsSitesAreAllowedSeparately() {
+        FakeDomainVerification.install(app) { mapOf("yewtu.be" to DomainVerificationUserState.DOMAIN_STATE_SELECTED) }
+        val unapproved = interception.unapprovedFrontendHosts()!!
+        assertEquals(Frontend.INVIDIOUS.sites - "yewtu.be", unapproved[Frontend.INVIDIOUS])
+        assertEquals(Frontend.PIPED.sites, unapproved[Frontend.PIPED])
+    }
+
+    @Test
     fun aServiceIsAllowedOnlyOnceAllItsHostsAre() {
         var states: Map<String, Int>? = mapOf(
             "open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED,
