@@ -85,12 +85,16 @@ internal class DestinationStore(
     fun allDestinations(): List<Destination> =
         MusicService.entries.map(Destination::Service) + frontends() + customDestinations()
 
-    private fun frontends(): List<Destination.Alternative> = Frontend.entries.mapNotNull { frontend ->
-        val packageName = frontend.packageName
-        when {
-            packageName == null -> Destination.Alternative(frontend, instance(frontend))
-            isInstalled(packageName) -> Destination.Alternative(frontend)
-            else -> null
+    private fun frontends(): List<Destination.Alternative> {
+        // Some apps, like NewPipe, are frontends for several services; Android is asked about each once.
+        val installed = mutableMapOf<String, Boolean>()
+        return Frontend.entries.mapNotNull { frontend ->
+            val packageName = frontend.packageName
+            when {
+                packageName == null -> Destination.Alternative(frontend, instance(frontend))
+                installed.getOrPut(packageName) { isInstalled(packageName) } -> Destination.Alternative(frontend)
+                else -> null
+            }
         }
     }
 
@@ -127,18 +131,23 @@ internal class DestinationStore(
         }
     }
 
-    fun defaultDestination(): Destination =
-        find(preferences.getString(KEY_DEFAULT, null)) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
+    /**
+     * Each lookup takes [all] destinations, asking Android which frontend apps are installed unless
+     * given, so reading every choice at once can share one list.
+     */
+    fun defaultDestination(all: List<Destination> = allDestinations()): Destination =
+        find(preferences.getString(KEY_DEFAULT, null), all) ?: Destination.Service(MusicService.YOUTUBE_MUSIC)
 
     /** False until the user picks a default, e.g. during first-run setup. */
-    fun hasDefault(): Boolean = find(preferences.getString(KEY_DEFAULT, null)) != null
+    fun hasDefault(all: List<Destination> = allDestinations()): Boolean = find(preferences.getString(KEY_DEFAULT, null), all) != null
 
     fun setDefault(destination: Destination) {
         preferences.edit { putString(KEY_DEFAULT, destination.key) }
     }
 
     /** The destination chosen for links from [source], or null to use the default. */
-    fun rule(source: MusicService): Destination? = find(preferences.getString(ruleKey(source), null))
+    fun rule(source: MusicService, all: List<Destination> = allDestinations()): Destination? =
+        find(preferences.getString(ruleKey(source), null), all)
 
     fun setRule(source: MusicService, destination: Destination?) {
         preferences.edit {
@@ -146,7 +155,7 @@ internal class DestinationStore(
         }
     }
 
-    private fun find(key: String?): Destination? = key?.let { wanted -> allDestinations().firstOrNull { it.key == wanted } }
+    private fun find(key: String?, all: List<Destination>): Destination? = key?.let { wanted -> all.firstOrNull { it.key == wanted } }
 
     private fun saveCustom(list: List<Destination.Custom>) {
         val array = JSONArray()
@@ -157,7 +166,8 @@ internal class DestinationStore(
     private fun ruleKey(source: MusicService) = "rule_${source.name}"
 
     /** The destination chosen for links from [frontend]'s sites, or null to use YouTube's. */
-    fun rule(frontend: Frontend): Destination? = find(preferences.getString(frontendRuleKey(frontend), null))
+    fun rule(frontend: Frontend, all: List<Destination> = allDestinations()): Destination? =
+        find(preferences.getString(frontendRuleKey(frontend), null), all)
 
     fun setRule(frontend: Frontend, destination: Destination?) {
         preferences.edit {

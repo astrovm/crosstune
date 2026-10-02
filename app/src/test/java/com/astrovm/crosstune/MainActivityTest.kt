@@ -47,6 +47,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
 import okhttp3.Request
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -67,6 +68,7 @@ import org.robolectric.shadows.ShadowToast
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2000dp")
@@ -82,6 +84,8 @@ class MainActivityTest {
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
+        // What Android says about apps and links is read as the screen asks, so each step sees it.
+        MainActivity.systemDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
         prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
     }
@@ -90,6 +94,7 @@ class MainActivityTest {
     fun tearDown() {
         runCatching { controller?.pause()?.stop()?.destroy() }
         MainActivity.httpClientFactory = ::httpClient
+        MainActivity.systemDispatcher = Dispatchers.Default
     }
 
     // region helpers
@@ -1020,7 +1025,7 @@ class MainActivityTest {
     @Test
     fun acceptedTrackLinkVariantsAllResolveToCanonicalTrack() {
         respondWithTrack("Variant", "Artist · Song")
-        launch()
+        val activity = launch()
         val accepted = listOf(
             "https://spotify.com/track/$TRACK_ID",
             "HTTPS://OPEN.SPOTIFY.COM/track/$TRACK_ID",
@@ -1038,7 +1043,10 @@ class MainActivityTest {
             click(string(R.string.resolve_button))
             // "Variant" stays in the history list, so wait for the result card itself.
             waitForResult()
-            assertEquals(input, listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+            assertEquals(input, "https://open.spotify.com/track/$TRACK_ID", ViewModelProvider(activity)[MainViewModel::class.java].uiState.link?.url)
+            // Only the first is looked up; the rest are the same song, already in Recent.
+            val looked = if (input == accepted.first()) listOf("https://open.spotify.com/track/$TRACK_ID") else emptyList()
+            assertEquals(input, looked, fake.requestedUrls)
             assertTextAbsent(string(R.string.error_invalid_url))
             click(string(R.string.clear_button))
             assertResultAbsent()
@@ -1660,7 +1668,8 @@ class MainActivityTest {
         click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/search/Default%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
-        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
+        // The song comes from Recent, and a search link needs no lookup.
+        assertEquals(emptyList<String>(), fake.requestedUrls)
     }
 
     @Test
@@ -1912,7 +1921,8 @@ class MainActivityTest {
 
         fake.handler = { request -> FakeSpotify.html(request, "", code = 404) }
         launch()
-        typeUrl(TRACK_ID)
+        // Another song: the first is in Recent now, so it wouldn't be looked up.
+        typeUrl(OTHER_TRACK_ID)
         click(string(R.string.resolve_button))
         waitForText(string(R.string.error_not_found))
         assertTextAbsent(string(R.string.retry_button))
@@ -2339,8 +2349,9 @@ class MainActivityTest {
         val opened = nextStartedActivity()!!
         assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
         assertEquals("https://www.youtube.com/watch?v=jNQXAC9IVRw", opened.dataString)
-        // Only YouTube Music was asked; the video wasn't looked up.
-        assertEquals(1, fake.requestedUrls.size)
+        // YouTube Music was asked. The video's own lookup runs alongside, so a music video waits once,
+        // and is dropped once it isn't music.
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") })
     }
 
     @Test
@@ -2530,7 +2541,9 @@ class MainActivityTest {
         )
 
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_allowed))
+        // YouTube's links are allowed already, so only the others are listed.
+        assertTextAbsent(LinkInterception.HOSTS.getValue(MusicService.YOUTUBE).joinToString(", "))
+        assertTextShown(LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).joinToString(", "))
         click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
@@ -2558,7 +2571,7 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_not_allowed))
+        assertTextShown(string(R.string.service_spotify))
         // Android lists every service's links, so setup names the ones to select.
         assertTextShown("open.spotify.com, spotify.link, www.spotify.link")
         // An app Crosstune can't see may keep them; Android names it next to the link.
@@ -2568,14 +2581,14 @@ class MainActivityTest {
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_not_allowed))
         assertTextShown("spotify.link, www.spotify.link")
 
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY)
             .associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_allowed))
+        // All allowed: the row goes, rather than staying with an "Allowed" label.
+        assertTextAbsent(string(R.string.service_spotify))
         assertTextAbsent("spotify.link, www.spotify.link")
     }
 
@@ -2600,7 +2613,7 @@ class MainActivityTest {
         assertTextShown(notice)
         click(string(R.string.fix_button))
         // The guide shows what to choose, then opens the app's own settings.
-        assertTextShown(string(R.string.setup_apps_stop_title, string(R.string.service_spotify)))
+        assertTextShown(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
@@ -2761,13 +2774,13 @@ class MainActivityTest {
         // One app at a time, in name order: YouTube first, then YouTube Create.
         assertTextShown(string(R.string.setup_apps_title))
         assertTextShown(string(R.string.setup_apps_progress, 1, 2))
-        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube"))
+        assertTextShown(string(R.string.open_app_link_settings_button, "YouTube"))
         youtubeAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
 
         assertTextShown(string(R.string.setup_apps_progress, 2, 2))
-        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube Create"))
+        assertTextShown(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
@@ -2777,7 +2790,6 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
         assertTextAbsent(string(R.string.setup_still_opens))
-        assertTextAbsent(string(R.string.setup_apps_body))
     }
 
     @Test
@@ -2840,8 +2852,9 @@ class MainActivityTest {
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
 
-        // The only app, so its status is on its card, with no list repeating it.
-        assertTextShown(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
+        // The only app, so its name and status are on its card, with no list repeating it.
+        assertEquals(1, composeRule.onAllNodesWithText(string(R.string.service_spotify)).fetchSemanticsNodes().size)
+        assertTextShown(string(R.string.setup_apps_stop_body))
         assertTextAbsent(string(R.string.setup_fixed))
 
         // Fixed in Android's settings: the card makes way for the all-set line.
@@ -2849,8 +2862,7 @@ class MainActivityTest {
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
-        // Nothing left in the way, so the line saying Spotify opens the links goes too.
-        assertTextAbsent(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
+        assertTextAbsent(string(R.string.service_spotify))
         assertTextAbsent(string(R.string.setup_still_opens))
 
         click(string(R.string.next_button))
@@ -3330,6 +3342,319 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.picker_title))
         chooseDefault("Player")
         assertTextShown(string(R.string.search_in_destination, "Player"))
+    }
+
+    // endregion
+
+    // region speed
+
+    /** Spotify's app is installed and keeps its links, which Crosstune is set to open. */
+    private fun spotifyAppInTheWay(allowsLinks: () -> Boolean = { true }) {
+        val spotify = MusicService.SPOTIFY.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != spotify || allowsLinks() }) {
+            mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+    }
+
+    @Test
+    fun nothingIsFlaggedUntilAndroidHasBeenAskedAwayFromTheScreen() {
+        val android = QueueDispatcher()
+        MainActivity.systemDispatcher = android
+        spotifyAppInTheWay()
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        launch()
+
+        // The screen is up while Android is still to be asked, with no notice yet rather than a wrong one.
+        assertTextShown(string(R.string.resolve_button))
+        assertTextAbsent(string(R.string.notice_app_still_opens, "Spotify"))
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        // Share sheet targets wait for the installed apps too, rather than drop out for a moment.
+        assertTrue(dynamicShortcuts().isEmpty())
+
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.notice_app_still_opens, "Spotify"))
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+    }
+
+    @Test
+    fun comingBackKeepsTheNoticesUntilAndroidAnswersAndTheLatestAnswerWins() {
+        val android = QueueDispatcher()
+        MainActivity.systemDispatcher = android
+        var spotifyKeepsLinks = true
+        spotifyAppInTheWay { spotifyKeepsLinks }
+        val notice = string(R.string.notice_app_still_opens, "Spotify")
+        launch()
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextShown(notice)
+
+        // The user turns the app's links off in Android's settings and comes back.
+        spotifyKeepsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        // Until Android answers the notice stays, rather than disappear and come back.
+        assertTextShown(notice)
+
+        // Coming back again before that answer: the newer look is the one that counts.
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        android.runLast()
+        composeRule.waitForIdle()
+        assertTextAbsent(notice)
+
+        // The older look finishing last, with a different answer, changes nothing.
+        spotifyKeepsLinks = true
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextAbsent(notice)
+    }
+
+    @Test
+    fun recentClearedWhileAndroidIsAskedStaysCleared() {
+        val android = QueueDispatcher()
+        MainActivity.systemDispatcher = android
+        respondWithTrack("Cleared Song", "Artist · Song")
+        val activity = launch()
+        android.runAll()
+        resolveTyped()
+        click(string(R.string.clear_button))
+        assertTextShown(string(R.string.clear_history_button))
+
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        // Recent is cleared after it was read with the rest, but before that answer arrives.
+        FakeDomainVerification.install(app) {
+            if (model.uiState.history.isNotEmpty()) model.clearHistory()
+            emptyMap()
+        }
+        controller!!.pause().resume()
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextAbsent("Cleared Song")
+        assertTrue(model.uiState.history.isEmpty())
+    }
+
+    @Test
+    fun setupWaitsForWhatAndroidSaysBeforeShowingAStep() {
+        val android = QueueDispatcher()
+        MainActivity.systemDispatcher = android
+        prefs().edit().putBoolean("setup_complete", false).putString("default_target", "DEEZER").commit()
+        launch()
+
+        // The welcome page doesn't depend on it.
+        composeRule.onNodeWithText(string(R.string.setup_get_started)).assertIsEnabled().performClick()
+        composeRule.waitForIdle()
+        // Which steps come next, and what they show, does.
+        assertTextAbsent(string(R.string.setup_destination_title))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.back_button)).assertIsNotEnabled()
+
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_destination_title))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+    }
+
+    @Test
+    fun aMusicVideoIsLookedUpWhileYouTubeMusicIsAskedAboutIt() {
+        val lookedUp = CountDownLatch(1)
+        val answeredWhileLookingUp = AtomicBoolean(false)
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                // YouTube Music only answers once the video is being looked up too.
+                answeredWhileLookingUp.set(lookedUp.await(TIMEOUT_MS, TimeUnit.MILLISECONDS))
+                FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
+            } else {
+                lookedUp.countDown()
+                FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+            }
+        }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=4NRXx6U8ABQ")))
+        waitUntil { activity.isFinishing }
+        assertTrue(answeredWhileLookingUp.get())
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
+    }
+
+    @Test
+    fun aVideoThatIsntMusicOpensAsIsEvenWhenItsLookupAnswersFirst() {
+        val lookedUp = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") {
+                lookedUp.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_UGC"}}""")
+            } else {
+                FakeSpotify.html(request, """{"title":"How to tie a tie","author_name":"Someone"}""").also { lookedUp.countDown() }
+            }
+        }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
+        assertEquals("https://www.youtube.com/watch?v=jNQXAC9IVRw", opened.dataString)
+        // What the lookup found is neither shown nor kept.
+        assertNull(ViewModelProvider(activity)[MainViewModel::class.java].uiState.result)
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun aSongAlreadyInRecentShowsRightAwayWithoutLookingItUpAgain() {
+        fake.handler = { request ->
+            val title = if (request.url.pathSegments.last() == TRACK_ID) "First Song" else "Second Song"
+            FakeSpotify.html(request, FakeSpotify.trackPage(title, "Artist · Song"))
+        }
+        launch()
+        resolveTyped(TRACK_ID)
+        click(string(R.string.clear_button))
+        resolveTyped(OTHER_TRACK_ID)
+        click(string(R.string.clear_button))
+        val requests = fake.requestedUrls.size
+        fake.handler = { throw IOException("offline") }
+
+        // The same song, shared with tracking added, is the same link once cleaned up.
+        typeUrl("https://open.spotify.com/track/$TRACK_ID?si=abc")
+        click(string(R.string.resolve_button))
+        assertResultShown()
+        assertTextShown("First Song")
+        assertEquals(requests, fake.requestedUrls.size)
+        // It moves to the top of Recent, as if looked up again.
+        assertEquals(listOf(TRACK_ID, OTHER_TRACK_ID), HistoryStore(prefs()).load().map { it.link.id })
+    }
+
+    @Test
+    fun aSongAlreadyInRecentOpensItsSavedMatchFromAnotherApp() {
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Again","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
+            } else FakeSpotify.html(request, FakeSpotify.trackPage("Again", "Artist · Song"))
+        }
+        launch()
+        resolveTyped()
+        waitForDestinationReady()
+        controller!!.pause().stop().destroy()
+        val requests = fake.requestedUrls.size
+
+        val activity = launch(trackLink())
+        waitUntil { activity.isFinishing }
+        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals(requests, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun aSearchPageSavedWhenMatchingFailedIsMatchedAgainWhenTheSongComesBack() {
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        var deezerDown = true
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                if (deezerDown) throw IOException("flaky network")
+                FakeSpotify.html(request, """{"data":[{"title":"Again","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
+            } else FakeSpotify.html(request, FakeSpotify.trackPage("Again", "Artist · Song"))
+        }
+        launch()
+        resolveTyped()
+        waitForDestinationReady()
+        // Matching failed, so the song is saved with Deezer's search page.
+        assertEquals(false, HistoryStore(prefs()).load().single().destinationLinks["DEEZER"]?.exact)
+        controller!!.pause().stop().destroy()
+
+        // Shared again once the network is back, it opens the song itself rather than the search.
+        deezerDown = false
+        val activity = launch(trackLink())
+        waitUntil { activity.isFinishing }
+        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertEquals(true, HistoryStore(prefs()).load().single().destinationLinks["DEEZER"]?.exact)
+    }
+
+    @Test
+    fun aSearchPageSavedWithMatchingOffIsStillReused() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        respondWithTrack("Again", "Artist · Song")
+        launch()
+        resolveTyped()
+        waitForDestinationReady()
+        controller!!.pause().stop().destroy()
+        val requests = fake.requestedUrls.size
+        fake.handler = { throw IOException("offline") }
+
+        val activity = launch(trackLink())
+        waitUntil { activity.isFinishing }
+        assertEquals(HistoryStore(prefs()).load().single().destinationLinks.getValue("DEEZER").url, nextStartedActivity()!!.dataString)
+        assertEquals(requests, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun movingAWebFrontendToAnotherSiteOpensSavedSongsThere() {
+        prefs().edit().putString("default_target", "frontend:INVIDIOUS").commit()
+        respondWithTrack("Again", "Artist · Song")
+        val first = launch()
+        resolveTyped()
+        waitForDestinationReady()
+        val other = HistoryEntry(
+            MusicLink(MusicService.SPOTIFY, ItemType.TRACK, OTHER_TRACK_ID, "https://open.spotify.com/track/$OTHER_TRACK_ID"),
+            MusicMetadata("Other", "Artist"),
+            mapOf("YOUTUBE_MUSIC" to PreparedLink("https://music.youtube.com/watch?v=kept", exact = true, matchingEnabled = false))
+        )
+        HistoryStore(prefs()).remember(TRACK_ID.let { "https://open.spotify.com/track/$it" }, "YOUTUBE_MUSIC", other.destinationLinks.getValue("YOUTUBE_MUSIC"))
+        assertTrue(HistoryStore(prefs()).load().single().destinationLinks.getValue("frontend:INVIDIOUS").url.startsWith("https://yewtu.be/"))
+
+        composeRule.runOnIdle { assertTrue(ViewModelProvider(first)[MainViewModel::class.java].setFrontendInstance(Frontend.INVIDIOUS, "https://inv.example.org")) }
+        composeRule.waitForIdle()
+        // Links saved for other destinations stay; the open song's Invidious link is made again on the new site.
+        val saved = HistoryStore(prefs()).load().single().destinationLinks
+        assertEquals("https://music.youtube.com/watch?v=kept", saved.getValue("YOUTUBE_MUSIC").url)
+        saved["frontend:INVIDIOUS"]?.let { assertTrue(it.url, it.url.startsWith("https://inv.example.org/")) }
+        controller!!.pause().stop().destroy()
+
+        // A browser to open the new site in.
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Main"), browserFilter())
+        val activity = launch(trackLink())
+        waitUntil { activity.isFinishing }
+        assertTrue(nextStartedActivity()!!.dataString!!.startsWith("https://inv.example.org/"))
+    }
+
+    @Test
+    fun thePickerWaitsForTheInstalledAppsItListsFirst() {
+        val android = QueueDispatcher()
+        MainActivity.systemDispatcher = android
+        prefs().edit().putBoolean("ask_each_time", true).commit()
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                MusicMetadata("Saved Song", "Artist")
+            )
+        )
+        launch(trackLink())
+
+        // The song comes from Recent at once, but its rows would move once Android says what's installed.
+        assertTextAbsent(string(R.string.picker_title))
+        android.runAll()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.picker_title))
+    }
+
+    @Test
+    fun aShortLinkIsStillFollowedWhenWhereItLeadsIsInRecent() {
+        fake.handler = { request ->
+            if (request.url.host == "spotify.link") {
+                FakeSpotify.html(request, "", finalUrl = "https://open.spotify.com/track/$TRACK_ID")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Renamed Song", "Artist · Song"))
+            }
+        }
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),
+                MusicMetadata("Old Name", "Artist")
+            )
+        )
+        launch()
+        typeUrl("https://spotify.link/AbCdEf")
+        click(string(R.string.resolve_button))
+        waitForText("Renamed Song")
+        assertEquals(listOf("https://spotify.link/AbCdEf", "https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
     }
 
     // endregion

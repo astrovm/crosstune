@@ -53,10 +53,8 @@
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
     <string name="setup_apps_title">ほかのアプリのリンクをオフにする</string>
-    <string name="setup_apps_body">これらのアプリが Crosstune より先にリンクを開いてしまいます。1 つずつオフにしてください。</string>
     <string name="setup_still_opens">まだリンクを開く</string>
     <string name="setup_done">完了</string>
-    <string name="setup_allowed">許可済み</string>
     <string name="setup_not_allowed">未許可</string>
     <string name="open_in_apple_music">Apple Music で開く</string>
     <string name="open_in_deezer">Deezer で開く</string>
@@ -138,13 +136,11 @@
     <string name="setting_only_music_videos_note">アプリに送られるのは音楽動画だけです。その他はいつもどおり開きます。</string>
     <string name="guide_may_differ">お使いのスマートフォンでは少し違って見えることがあります。</string>
     <string name="setup_allow_progress">%2$d 件中 %1$d 件のリンクを許可済み</string>
-    <string name="setup_apps_stop_title">%1$s を止める</string>
-    <string name="setup_apps_stop_body">ボタンをタップして「ブラウザで開く」を選んでください。スイッチが表示される場合は「対応リンクを開く」をオフにしてください。</string>
+    <string name="setup_apps_stop_body">「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_apps_progress">アプリ %1$d / %2$d</string>
     <string name="setup_apps_all_done">完了しました。これらのリンクは Crosstune で開くようになりました。</string>
     <string name="setup_skip_for_now">後で</string>
     <string name="setup_fixed">解決済み</string>
-    <string name="setup_apps_body_one">%1$s が Crosstune より先にこれらのリンクを開いてしまいます。</string>
     <string name="choose_app_button">アプリを選ぶ</string>
     <string name="make_default_named">%1$s をデフォルトにする</string>
 </resources>

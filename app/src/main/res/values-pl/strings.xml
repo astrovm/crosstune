@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Kliknij „Dodaj link”.</string>
     <string name="setup_allow_step_tick">Zaznacz wszystkie linki, a potem kliknij „Dodaj”.</string>
     <string name="setup_apps_title">Wyłącz linki w innych aplikacjach</string>
-    <string name="setup_apps_body">Te aplikacje otwierają linki przed Crosstune. Wyłącz je po kolei.</string>
     <string name="setup_still_opens">Nadal otwiera linki</string>
     <string name="setup_done">Gotowe</string>
-    <string name="setup_allowed">Dozwolone</string>
     <string name="setup_not_allowed">Jeszcze niedozwolone</string>
     <string name="open_in_apple_music">Otwórz w Apple Music</string>
     <string name="open_in_deezer">Otwórz w Deezer</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">Do Twojej aplikacji trafiają tylko teledyski. Inne filmy otwierają się jak zwykle.</string>
     <string name="guide_may_differ">Na Twoim telefonie może to wyglądać trochę inaczej.</string>
     <string name="setup_allow_progress">Dozwolone linki: %1$d z %2$d</string>
-    <string name="setup_apps_stop_title">Zatrzymaj %1$s</string>
-    <string name="setup_apps_stop_body">Kliknij przycisk i wybierz „W przeglądarce”. Jeśli widzisz przełącznik, wyłącz „Otwieraj obsługiwane linki”.</string>
+    <string name="setup_apps_stop_body">Wybierz „W przeglądarce” albo wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
     <string name="setup_apps_all_done">Gotowe. Te linki otwierają się teraz w Crosstune.</string>
     <string name="setup_skip_for_now">Nie teraz</string>
     <string name="setup_fixed">Naprawione</string>
-    <string name="setup_apps_body_one">%1$s otwiera te linki przed Crosstune.</string>
     <string name="choose_app_button">Wybierz aplikację</string>
     <string name="make_default_named">Ustaw %1$s jako domyślną</string>
 </resources>

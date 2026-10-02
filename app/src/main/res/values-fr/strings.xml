@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Appuyez sur Ajouter un lien.</string>
     <string name="setup_allow_step_tick">Cochez tous les liens, puis appuyez sur Ajouter.</string>
     <string name="setup_apps_title">Désactiver les liens des autres applications</string>
-    <string name="setup_apps_body">Ces applications ouvrent les liens avant Crosstune. Désactivez-les une par une.</string>
     <string name="setup_still_opens">Ouvre encore les liens</string>
     <string name="setup_done">Terminé</string>
-    <string name="setup_allowed">Autorisé</string>
     <string name="setup_not_allowed">Pas encore autorisé</string>
     <string name="open_in_apple_music">Ouvrir dans Apple Music</string>
     <string name="open_in_deezer">Ouvrir dans Deezer</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">Seules les vidéos musicales vont dans votre application. Les autres s’ouvrent comme d’habitude.</string>
     <string name="guide_may_differ">Votre téléphone peut être un peu différent.</string>
     <string name="setup_allow_progress">%1$d liens autorisés sur %2$d</string>
-    <string name="setup_apps_stop_title">Arrêter %1$s</string>
-    <string name="setup_apps_stop_body">Touchez le bouton, puis choisissez « Dans votre navigateur ». Si vous voyez un bouton bascule, désactivez « Ouvrir les liens compatibles ».</string>
+    <string name="setup_apps_stop_body">Choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="setup_apps_progress">Application %1$d sur %2$d</string>
     <string name="setup_apps_all_done">C’est fait. Ces liens s’ouvrent maintenant dans Crosstune.</string>
     <string name="setup_skip_for_now">Plus tard</string>
     <string name="setup_fixed">Réglé</string>
-    <string name="setup_apps_body_one">%1$s ouvre ces liens avant Crosstune.</string>
     <string name="choose_app_button">Choisir l’application</string>
     <string name="make_default_named">Définir %1$s par défaut</string>
 </resources>
