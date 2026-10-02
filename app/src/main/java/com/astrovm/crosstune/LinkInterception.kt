@@ -2,11 +2,13 @@ package com.astrovm.crosstune
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.verify.domain.DomainVerificationManager
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.core.net.toUri
 
 /**
  * Turns interception of each source service's links on or off, and reports what Android allows.
@@ -14,6 +16,9 @@ import androidx.annotation.RequiresApi
  * services during setup. Android's "Open by default" settings still list every alias's domains,
  * enabled or not, so setup names the ones to select for each service.
  */
+/** An installed app, by package and the name the user knows it by. */
+internal data class LinkApp(val packageName: String, val label: String)
+
 internal class LinkInterception(private val context: Context) {
 
     fun isEnabled(service: MusicService): Boolean =
@@ -55,34 +60,54 @@ internal class LinkInterception(private val context: Context) {
     }
 
     /**
-     * Installed music apps that still open links Crosstune is set to intercept. A domain an app
-     * has verified goes to that app before any app the user allows, so Crosstune only gets the
-     * link once "Open supported links" is turned off in that app's own settings. Null before
-     * Android 12, which can't say.
+     * Installed apps that still open links Crosstune is set to intercept. A domain an app has
+     * verified goes to that app before any app the user allows, so Crosstune only gets the link
+     * once "Open supported links" is turned off in that app's own settings. Null before Android 12,
+     * which can't say.
      */
-    fun blockingApps(sources: Set<MusicService>): Set<MusicService>? =
+    fun blockingApps(sources: Set<MusicService>): Set<LinkApp>? =
         claimingApps(sources)?.filterValues { it }?.keys
 
     /**
-     * Installed music apps that claim links Crosstune is set to intercept, each with whether it
-     * still opens them, i.e. hasn't had "Open supported links" turned off. Null before Android 12,
-     * which can't say.
+     * Installed apps that claim links Crosstune is set to intercept, each with whether it still
+     * opens them, i.e. hasn't had "Open supported links" turned off. Not just the services' own
+     * apps: e.g. YouTube Create also claims YouTube's links. Null before Android 12, which can't say.
      */
-    fun claimingApps(sources: Set<MusicService>): Map<MusicService, Boolean>? {
+    fun claimingApps(sources: Set<MusicService>): Map<LinkApp, Boolean>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         val wanted = sources.flatMap { HOSTS[it].orEmpty() }
-        return installedServices().mapNotNull { app ->
+        val candidates = (installedServices().map { it.packageName } + appsOpening(wanted)).distinct()
+        return candidates.mapNotNull { packageName ->
             val state = try {
-                manager.getDomainVerificationUserState(app.packageName)
+                manager.getDomainVerificationUserState(packageName)
             } catch (_: PackageManager.NameNotFoundException) {
                 null
             } ?: return@mapNotNull null
             val claims = state.hostToStateMap.any { (host, hostState) ->
                 hostState != DomainVerificationUserState.DOMAIN_STATE_NONE && wanted.any { covers(it, host) }
             }
-            if (claims) app to state.isLinkHandlingAllowed else null
-        }.toMap()
+            if (claims) appFor(packageName) to state.isLinkHandlingAllowed else null
+        }.sortedBy { it.first.label.lowercase() }.toMap()
+    }
+
+    /** Installed apps whose services' links Crosstune opens, for when Android can't say which really take them. */
+    fun installedSourceApps(sources: Set<MusicService>): List<LinkApp> =
+        MusicService.entries.filter { it in sources && it in installedServices() }.map { appFor(it.packageName) }
+
+    /** Other apps with a link filter for any of [hosts]; whether they verified them is checked separately. */
+    private fun appsOpening(hosts: List<String>): Set<String> = hosts.flatMap { host ->
+        // A wildcard host's own apps are found through a made-up subdomain.
+        val uri = "https://${host.replace("*.", "any.")}/".toUri()
+        val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL).map { it.activityInfo.packageName }
+    }.filter { it != context.packageName }.toSet()
+
+    /** The app's name as the launcher shows it, or its package name if it's just been uninstalled. */
+    private fun appFor(packageName: String): LinkApp {
+        val pm = context.packageManager
+        val label = runCatching { pm.getApplicationInfo(packageName, 0).loadLabel(pm).toString() }.getOrDefault(packageName)
+        return LinkApp(packageName, label)
     }
 
     private fun component(service: MusicService) =

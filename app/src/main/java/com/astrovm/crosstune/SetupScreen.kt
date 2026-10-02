@@ -368,7 +368,7 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
  * shrink under the user's finger.
  */
 @Composable
-private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenActions) {
+private fun AppsStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
     StepHeader(R.string.setup_apps_title, R.string.setup_apps_body)
     Group {
         apps.forEachIndexed { index, app ->
@@ -377,7 +377,7 @@ private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenAc
             Column(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stringResource(app.labelRes),
+                        text = app.label,
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f)
                     )
@@ -387,7 +387,7 @@ private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenAc
                     }
                 }
                 TextButton(onClick = { actions.onOpenAppLinkSettings(app) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
+                    Text(stringResource(R.string.open_app_link_settings_button, app.label))
                 }
             }
         }
@@ -401,15 +401,14 @@ private fun AppsStep(apps: List<MusicService>, state: UiState, actions: ScreenAc
  * links Crosstune opens, since Android can't say which really do.
  */
 @Composable
-private fun appsToStop(state: UiState): List<MusicService> {
+private fun appsToStop(state: UiState): List<LinkApp> {
     var seen by rememberSaveable { mutableStateOf("") }
-    val blocking = state.blockingApps
-        ?: return MusicService.entries.filter { it in state.installed && it in state.intercepted }
+    val blocking = state.blockingApps ?: return state.installedSourceApps
     val claiming = state.claimingApps.orEmpty()
     val known = seen.split(',').filter { it.isNotEmpty() }
-    val all = (known + blocking.map { it.name }).distinct()
+    val all = (known + blocking.map { it.packageName }).distinct()
     SideEffect { if (all.size != known.size) seen = all.joinToString(",") }
-    return MusicService.entries.filter { it.name in all && it in claiming }
+    return claiming.filter { it.packageName in all }
 }
 
 @Preview(showBackground = true)

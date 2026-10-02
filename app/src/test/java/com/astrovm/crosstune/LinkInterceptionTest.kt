@@ -110,8 +110,10 @@ class LinkInterceptionTest {
         assertEquals(setOf(MusicService.TIDAL), interception.installedServices())
     }
 
+    private fun linkApp(service: MusicService) = LinkApp(service.packageName, app.getString(service.labelRes))
+
     private fun installApp(service: MusicService) =
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = service.packageName })
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, app.getString(service.labelRes)))
 
     @Test
     fun anInstalledAppThatVerifiedTheLinksBlocksThem() {
@@ -126,9 +128,9 @@ class LinkInterceptionTest {
         }
 
         val sources = setOf(MusicService.SPOTIFY, MusicService.TIDAL)
-        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(sources))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.blockingApps(sources))
         // A service Crosstune isn't intercepting is none of its business.
-        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.TIDAL)))
+        assertEquals(emptySet<LinkApp>(), interception.blockingApps(setOf(MusicService.TIDAL)))
     }
 
     @Test
@@ -138,7 +140,7 @@ class LinkInterceptionTest {
             mapOf("www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
 
-        assertEquals(setOf(MusicService.YOUTUBE_MUSIC), interception.blockingApps(setOf(MusicService.YOUTUBE)))
+        assertEquals(setOf(linkApp(MusicService.YOUTUBE_MUSIC)), interception.blockingApps(setOf(MusicService.YOUTUBE)))
     }
 
     @Test
@@ -147,13 +149,13 @@ class LinkInterceptionTest {
         FakeDomainVerification.installPerPackage(app) {
             mapOf("artist.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
-        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.BANDCAMP)))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.blockingApps(setOf(MusicService.BANDCAMP)))
 
         FakeDomainVerification.installPerPackage(app) {
             mapOf("*.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
-        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.BANDCAMP)))
-        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.DEEZER)))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.blockingApps(setOf(MusicService.BANDCAMP)))
+        assertEquals(emptySet<LinkApp>(), interception.blockingApps(setOf(MusicService.DEEZER)))
     }
 
     @Test
@@ -163,10 +165,10 @@ class LinkInterceptionTest {
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { allowed }) {
             mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
-        assertEquals(setOf(MusicService.SPOTIFY), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.blockingApps(setOf(MusicService.SPOTIFY)))
 
         allowed = false
-        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+        assertEquals(emptySet<LinkApp>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
     }
 
     @Test
@@ -175,8 +177,8 @@ class LinkInterceptionTest {
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { false }) {
             mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
-        assertEquals(mapOf(MusicService.SPOTIFY to false), interception.claimingApps(setOf(MusicService.SPOTIFY)))
-        assertEquals(emptyMap<MusicService, Boolean>(), interception.claimingApps(setOf(MusicService.TIDAL)))
+        assertEquals(mapOf(linkApp(MusicService.SPOTIFY) to false), interception.claimingApps(setOf(MusicService.SPOTIFY)))
+        assertEquals(emptyMap<LinkApp, Boolean>(), interception.claimingApps(setOf(MusicService.TIDAL)))
     }
 
     @Test
@@ -195,6 +197,6 @@ class LinkInterceptionTest {
     fun anAppTheSystemDoesNotShowIsNotBlocking() {
         installApp(MusicService.SPOTIFY)
         FakeDomainVerification.installPerPackage(app) { null }
-        assertEquals(emptySet<MusicService>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
+        assertEquals(emptySet<LinkApp>(), interception.blockingApps(setOf(MusicService.SPOTIFY)))
     }
 }
