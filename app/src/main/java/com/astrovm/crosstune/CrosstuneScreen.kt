@@ -119,7 +119,7 @@ internal data class ScreenActions(
     val onForgetClearedHistory: () -> Unit = {},
     val onCancelHandoff: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
-    val onOpenAppLinkSettings: (MusicService) -> Unit = {},
+    val onOpenAppLinkSettings: (LinkApp) -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
@@ -360,9 +360,9 @@ internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllow
             onDismiss = actions.onDismissLinkSettingsHelper
         )
     }
-    MusicService.entries.filter { it in state.blockingApps.orEmpty() }.forEach { app ->
+    state.blockingApps.orEmpty().forEach { app ->
         NoticeStrip(
-            stringResource(R.string.notice_app_still_opens, stringResource(app.labelRes)),
+            stringResource(R.string.notice_app_still_opens, app.label),
             stringResource(R.string.fix_button),
             { actions.onOpenAppLinkSettings(app) }
         )

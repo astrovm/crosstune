@@ -2312,7 +2312,7 @@ class MainActivityTest {
     @Test
     fun anInstalledAppThatStillTakesTheLinksIsFlaggedAndOpensItsOwnSettings() {
         val spotify = MusicService.SPOTIFY.packageName
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
         var appAllowsLinks = true
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != spotify || appAllowsLinks }) { packageName ->
             val approved = DomainVerificationUserState.DOMAIN_STATE_VERIFIED
@@ -2421,7 +2421,7 @@ class MainActivityTest {
     @Test
     fun noBlockingNoticeForAppsCrosstuneDoesNotIntercept() {
         val spotify = MusicService.SPOTIFY.packageName
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
         FakeDomainVerification.installPerPackage(app) {
             mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
@@ -2429,10 +2429,49 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.notice_app_still_opens, string(R.string.service_spotify)))
     }
 
+    @Test
+    fun setupFindsAnyAppThatKeepsTheLinksNotJustMusicApps() {
+        // Like YouTube Create, which verifies YouTube's links though Crosstune doesn't know it.
+        val creator = "com.example.youtube.create"
+        shadowOf(app.packageManager).installPackage(installedApp(creator, "YouTube Create"))
+        installActivity(
+            ComponentName(creator, "$creator.LinkActivity"),
+            IntentFilter(Intent.ACTION_VIEW).apply {
+                addCategory(Intent.CATEGORY_DEFAULT)
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addDataScheme("https")
+                addDataAuthority("youtube.com", null)
+            }
+        )
+        var appAllowsLinks = true
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != creator || appAllowsLinks }) { packageName ->
+            if (packageName == creator) mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else emptyMap()
+        }
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE_MUSIC))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+
+        assertTextShown(string(R.string.setup_apps_title))
+        assertTextShown("YouTube Create")
+        assertTextShown(string(R.string.setup_still_opens))
+        click(string(R.string.open_app_link_settings_button, "YouTube Create"))
+        assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
+
+        appAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_done))
+    }
+
     /** Setup as if Spotify were picked and its app installed and claiming the links; returns a way to change its switch. */
     private fun setupWithSpotifyAppInTheWay(): (Boolean) -> Unit {
         val spotify = MusicService.SPOTIFY.packageName
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = spotify })
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
         var appAllowsLinks = true
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != spotify || appAllowsLinks }) {
             LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_VERIFIED }
@@ -2496,7 +2535,7 @@ class MainActivityTest {
     @Test
     @Config(sdk = [30])
     fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
