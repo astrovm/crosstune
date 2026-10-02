@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">사용할 앱 매번 묻기</string>
     <string name="setting_ask_each_time_description">링크를 탭하거나 공유할 때마다 앱을 선택해요.</string>
     <string name="setting_exact_match">정확한 항목 열기</string>
-    <string name="setting_exact_match_description">Apple Music, Deezer, YouTube Music에서 노래, 앨범, 아티스트에, Bandcamp에서 노래와 앨범에, YouTube에서 노래에 사용할 수 있어요. 다른 앱은 검색 결과가 열려요.</string>
+    <string name="setting_exact_match_description">앱이 지원하면 해당 곡을 바로 열고, 아니면 검색해요.</string>
     <string name="setting_clean_links">링크에서 추적 정보 제거</string>
     <string name="setting_clean_links_description">열거나 복사하거나 공유하는 링크에서 ?si=, utm_ 같은 추적 정보를 지워요.</string>
     <string name="setting_language">언어</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">복사한 링크 열기</string>
     <string name="shortcut_paste_long">복사한 음악 링크 열기</string>
     <string name="error_clipboard_empty">먼저 음악 링크를 복사하세요.</string>
-    <string name="copy_button">복사</string>
     <string name="copy_search_action">검색어 복사</string>
-    <string name="share_search_button">공유</string>
     <string name="share_search_link">검색 링크 공유</string>
-    <string name="copy_original_link">%1$s 링크 복사</string>
-    <string name="share_original_link">%1$s 링크 공유</string>
+    <string name="copy_service_link">%1$s 링크 복사</string>
+    <string name="share_service_link">%1$s 링크 공유</string>
     <string name="search_copied_to_clipboard">검색어를 복사했어요</string>
     <string name="link_copied_to_clipboard">링크를 복사했어요</string>
     <string name="link_settings_helper_title">새 링크 허용</string>
-    <string name="link_settings_helper_body">링크 설정 열기를 탭하고 링크 추가를 탭한 다음 모든 링크를 선택하세요.</string>
-    <string name="blocking_apps_title">아직 링크를 여는 앱</string>
-    <string name="blocking_apps_body">각 앱에서 “브라우저에서”를 선택하거나 “지원되는 링크 열기”를 끄세요.</string>
     <string name="open_app_link_settings_button">%1$s 설정 열기</string>
     <string name="open_link_settings_button">링크 설정 열기</string>
     <string name="dismiss_button">닫기</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">%1$s 링크 복사</string>
     <string name="privacy_policy">개인정보처리방침</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ko/privacy/</string>
+    <string name="handoff_opening">%1$s에서 여는 중…</string>
+    <string name="notice_links_not_allowed">아직 Crosstune에서 열리지 않는 링크가 있어요</string>
+    <string name="allow_button">허용</string>
+    <string name="notice_app_still_opens">%1$s 앱이 아직 자체 링크를 열어요</string>
+    <string name="fix_button">해결</string>
+    <string name="history_cleared">기록을 지웠어요</string>
+    <string name="undo_button">실행취소</string>
+    <string name="empty_hint">아무 앱에서나 음악 링크를 탭하거나 Crosstune으로 공유하세요.</string>
+    <string name="copy_link_button">링크 복사</string>
+    <string name="share_link_button">링크 공유</string>
 </resources>

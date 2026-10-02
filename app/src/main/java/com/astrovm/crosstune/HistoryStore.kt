@@ -42,6 +42,10 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         preferences.edit { remove(KEY_HISTORY) }
     }
 
+    /** Saves [entries] in place of whatever is stored, e.g. to undo clearing. */
+    fun replace(entries: List<HistoryEntry>): List<HistoryEntry> =
+        entries.take(MAX_ENTRIES).also(::save)
+
     private fun save(entries: List<HistoryEntry>) {
         val array = JSONArray()
         entries.forEach { entry ->

@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">Tanya aplikasi yang dipakai</string>
     <string name="setting_ask_each_time_description">Pilih aplikasi setiap kali kamu mengetuk atau membagikan link.</string>
     <string name="setting_exact_match">Buka yang persis sama</string>
-    <string name="setting_exact_match_description">Berfungsi dengan Apple Music, Deezer, dan YouTube Music untuk lagu, album, dan artis, dengan Bandcamp untuk lagu dan album, serta dengan YouTube untuk lagu. Aplikasi lain membuka hasil pencarian.</string>
+    <string name="setting_exact_match_description">Membuka lagunya langsung jika aplikasinya mendukung. Jika tidak, mencarinya.</string>
     <string name="setting_clean_links">Hapus pelacakan dari link</string>
     <string name="setting_clean_links_description">Membuang bagian pelacak seperti ?si= atau utm_ dari link yang kamu buka, salin, atau bagikan.</string>
     <string name="setting_language">Bahasa</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">Buka link disalin</string>
     <string name="shortcut_paste_long">Buka link musik yang disalin</string>
     <string name="error_clipboard_empty">Salin link musik dulu.</string>
-    <string name="copy_button">Salin</string>
     <string name="copy_search_action">Salin teks pencarian</string>
-    <string name="share_search_button">Bagikan</string>
     <string name="share_search_link">Bagikan link pencarian</string>
-    <string name="copy_original_link">Salin tautan %1$s</string>
-    <string name="share_original_link">Bagikan tautan %1$s</string>
+    <string name="copy_service_link">Salin tautan %1$s</string>
+    <string name="share_service_link">Bagikan tautan %1$s</string>
     <string name="search_copied_to_clipboard">Teks pencarian disalin</string>
     <string name="link_copied_to_clipboard">Link disalin</string>
     <string name="link_settings_helper_title">Izinkan link baru</string>
-    <string name="link_settings_helper_body">Ketuk Buka setelan link, lalu Tambahkan link, dan centang semua link.</string>
-    <string name="blocking_apps_title">Aplikasi ini masih membuka link</string>
-    <string name="blocking_apps_body">Di setiap aplikasi, pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="open_app_link_settings_button">Buka setelan %1$s</string>
     <string name="open_link_settings_button">Buka setelan link</string>
     <string name="dismiss_button">Tutup</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">Salin link untuk %1$s</string>
     <string name="privacy_policy">Kebijakan privasi</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/id/privacy/</string>
+    <string name="handoff_opening">Membuka di %1$s…</string>
+    <string name="notice_links_not_allowed">Beberapa tautan belum bisa dibuka di Crosstune</string>
+    <string name="allow_button">Izinkan</string>
+    <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
+    <string name="fix_button">Perbaiki</string>
+    <string name="history_cleared">Riwayat dihapus</string>
+    <string name="undo_button">Urungkan</string>
+    <string name="empty_hint">Ketuk tautan musik di aplikasi apa pun, atau bagikan ke Crosstune.</string>
+    <string name="copy_link_button">Salin tautan</string>
+    <string name="share_link_button">Bagikan tautan</string>
 </resources>

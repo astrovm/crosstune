@@ -1,7 +1,7 @@
-Select a link in any app and pick Crosstune from the menu to open it.
+Open a selected link from the text menu, see recent songs on the app icon, and share links straight to an app.
 
-Long-press the Crosstune icon for your latest songs, and share links straight to an app from the share sheet.
+Clearer setup and a lighter home screen: tapping a link shows just where it's going, and Settings shows which links aren't allowed yet.
 
-When you share a converted link, you can also copy or share the original one.
+Sharing a converted link can also copy or share the original one.
 
-Setup is clearer: pick where you listen first, and stop other apps before allowing the links. A link shared from the app you listen in no longer opens straight back there.
+Clearing history can be undone, and covers show right away.

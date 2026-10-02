@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">Спрашивать, где открыть</string>
     <string name="setting_ask_each_time_description">Выбирать приложение при каждом нажатии на ссылку или отправке.</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
-    <string name="setting_exact_match_description">Работает в Apple Music, Deezer и YouTube Music для песен, альбомов и исполнителей, в Bandcamp для песен и альбомов, а в YouTube — для песен. В остальных приложениях откроется поиск.</string>
+    <string name="setting_exact_match_description">Открывает сам трек, если приложение это поддерживает. Иначе — поиск.</string>
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
     <string name="setting_clean_links_description">Удаляет метки отслеживания вроде ?si= или utm_ из ссылок, которые вы открываете, копируете или отправляете.</string>
     <string name="setting_language">Язык</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">Открыть ссылку</string>
     <string name="shortcut_paste_long">Открыть скопированную ссылку</string>
     <string name="error_clipboard_empty">Сначала скопируйте музыкальную ссылку.</string>
-    <string name="copy_button">Копировать</string>
     <string name="copy_search_action">Копировать текст поиска</string>
-    <string name="share_search_button">Поделиться</string>
     <string name="share_search_link">Поделиться ссылкой на поиск</string>
-    <string name="copy_original_link">Копировать ссылку %1$s</string>
-    <string name="share_original_link">Поделиться ссылкой %1$s</string>
+    <string name="copy_service_link">Копировать ссылку %1$s</string>
+    <string name="share_service_link">Поделиться ссылкой %1$s</string>
     <string name="search_copied_to_clipboard">Текст поиска скопирован</string>
     <string name="link_copied_to_clipboard">Ссылка скопирована</string>
     <string name="link_settings_helper_title">Разрешите новые ссылки</string>
-    <string name="link_settings_helper_body">Нажмите «Открыть настройки ссылок», затем «Добавить ссылку» и отметьте все ссылки.</string>
-    <string name="blocking_apps_title">Эти приложения всё ещё открывают ссылки</string>
-    <string name="blocking_apps_body">В каждом выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
     <string name="open_app_link_settings_button">Настройки %1$s</string>
     <string name="open_link_settings_button">Открыть настройки ссылок</string>
     <string name="dismiss_button">Закрыть</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">Копировать ссылку на %1$s</string>
     <string name="privacy_policy">Политика конфиденциальности</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ru/privacy/</string>
+    <string name="handoff_opening">Открываем в %1$s…</string>
+    <string name="notice_links_not_allowed">Некоторые ссылки пока не открываются в Crosstune</string>
+    <string name="allow_button">Разрешить</string>
+    <string name="notice_app_still_opens">%1$s всё ещё открывает свои ссылки</string>
+    <string name="fix_button">Исправить</string>
+    <string name="history_cleared">История очищена</string>
+    <string name="undo_button">Отменить</string>
+    <string name="empty_hint">Нажмите на музыкальную ссылку в любом приложении или поделитесь ей с Crosstune.</string>
+    <string name="copy_link_button">Копировать ссылку</string>
+    <string name="share_link_button">Поделиться ссылкой</string>
 </resources>
