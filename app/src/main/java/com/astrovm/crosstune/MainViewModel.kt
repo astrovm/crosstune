@@ -393,8 +393,6 @@ internal class MainViewModel(
         job?.cancel()
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
-        // Returning from the source app must not restart the canceled lookup, even for Open-first.
-        destinationUrl()
         val finishAfterOpen = lastRequest?.second == true
         effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
     }
@@ -497,11 +495,8 @@ internal class MainViewModel(
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
         uiState.link?.takeIf { destination.matchService == it.service }?.let { return destination.adapt(it.url) }
-        uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
-        if (uiState.isMatching) return null
-        return searchQuery()?.let(destination::searchUrl)?.also { url ->
-            rememberDestination(destination, PreparedLink(url, exact = false, matchingEnabled = uiState.exactMatch))
-        }
+        // Every shown result has its link prepared before Copy and Share are enabled.
+        return uiState.destinationUrls[destination]?.url?.forSharing()
     }
 
     /** The link the result came from, as Crosstune would share it. */

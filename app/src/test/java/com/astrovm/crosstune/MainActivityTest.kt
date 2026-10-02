@@ -2010,7 +2010,7 @@ class MainActivityTest {
         val activity = launch()
         resolveTyped()
 
-        click(string(R.string.open_in_spotify))
+        openInTheAppItCameFrom()
 
         val opened = nextStartedActivity()!!
         assertEquals("com.spotify.music", opened.`package`)
@@ -2042,7 +2042,7 @@ class MainActivityTest {
         launch()
         resolveTyped()
 
-        click(string(R.string.open_in_spotify))
+        openInTheAppItCameFrom()
 
         val opened = nextStartedActivity()!!
         assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
@@ -2064,7 +2064,7 @@ class MainActivityTest {
         launch()
         resolveTyped()
 
-        click(string(R.string.open_in_spotify))
+        openInTheAppItCameFrom()
 
         val opened = nextStartedActivity()!!
         assertEquals(Intent.ACTION_CHOOSER, opened.action)
@@ -2429,6 +2429,12 @@ class MainActivityTest {
 
     /** A checkbox row in setup, or a source's switch in settings, which is labelled with its name. */
     private fun sourceSwitch(label: String) = composeRule.onNode((hasText(label) or hasContentDescription(label)) and isToggleable())
+
+    /** The result opens in its own service when picked from the Open button's arrow. */
+    private fun openInTheAppItCameFrom() {
+        chooseDefault(string(R.string.service_spotify))
+        click(string(R.string.open_in_spotify))
+    }
 
     /** A guide's Done button, not the "Done" status beside a finished app. */
     private fun clickDoneButton() {
@@ -3124,32 +3130,15 @@ class MainActivityTest {
         resolveTyped()
 
         waitForText(string(R.string.matching_text))
-        click(string(R.string.open_in_spotify))
+        openInTheAppItCameFrom()
         release.countDown()
         Thread.sleep(200L)
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals("com.spotify.music", nextStartedActivity()!!.`package`)
+        // The late Deezer match doesn't open a second app.
         assertNull(nextStartedActivity())
         assertTextAbsent(string(R.string.matching_text))
-        // Opening first must reuse the canceled fallback too, without restarting the matcher.
-        val requestsBeforeFallback = fake.requestedUrls.toList()
-        click(string(R.string.open_in_deezer))
-        assertEquals("https://www.deezer.com/search/Slow%20Artist", nextStartedActivity()!!.dataString)
-        assertEquals(requestsBeforeFallback, fake.requestedUrls)
-        // Copy, Share and another Open keep using the same prepared fallback.
-        click(string(R.string.copy_link_button))
-        assertEquals(
-            "https://www.deezer.com/search/Slow%20Artist",
-            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
-        )
-        val requests = fake.requestedUrls.toList()
-        click(string(R.string.share_link_button))
-        val share = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
-        assertEquals("https://www.deezer.com/search/Slow%20Artist", share.getStringExtra(Intent.EXTRA_TEXT))
-        click(string(R.string.open_in_deezer))
-        assertEquals("https://www.deezer.com/search/Slow%20Artist", nextStartedActivity()!!.dataString)
-        assertEquals(requests, fake.requestedUrls)
     }
 
     @Test
@@ -3165,7 +3154,7 @@ class MainActivityTest {
 
         click("Remembered")
         assertTextAbsent(string(R.string.retry_button))
-        click(string(R.string.open_in_spotify))
+        openInTheAppItCameFrom()
 
         assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
         assertFalse(activity.isFinishing)

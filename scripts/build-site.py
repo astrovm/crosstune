@@ -32,6 +32,8 @@ SERVICES = [
     ("Apple Music", "applemusic"), ("Deezer", "deezer"), ("TIDAL", "tidal"),
     ("SoundCloud", "soundcloud"), ("Bandcamp", "bandcamp"), ("Amazon Music", "amazonmusic"),
 ]
+# Web frontends with no logo of their own: their first letter on a tile, as in the app (Frontend.color).
+FRONTENDS = [("Invidious", "#2E8FE0"), ("Piped", "#E5482F")]
 
 
 def services():
@@ -43,6 +45,12 @@ def services():
         path = re.search(r'android:pathData="([^"]+)"', xml).group(1)
         fill = "currentColor" if color == "#000000" else color
         items.append(f'            <li title="{name}"><svg viewBox="0 0 24 24" role="img" aria-label="{name}"><path fill="{fill}" d="{path}"/></svg></li>')
+    for name, color in FRONTENDS:
+        items.append(
+            f'            <li title="{name}"><svg viewBox="0 0 24 24" role="img" aria-label="{name}">'
+            f'<rect width="24" height="24" rx="6" fill="{color}"/>'
+            f'<text x="12" y="17" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#fff">{name[0]}</text></svg></li>'
+        )
     return "\n".join(items)
 
 

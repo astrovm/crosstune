@@ -37,6 +37,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -77,7 +79,10 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     // System back steps back like the Back button instead of leaving setup.
     BackHandler(enabled = current > 0, onBack = back)
 
+    // A step that was scrolled down mustn't leave the next one scrolled too.
+    val scroll = key(position) { rememberScrollState() }
     Page(
+        scrollState = scroll,
         title = null,
         bottomBar = {
             Row(
