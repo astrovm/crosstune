@@ -8,15 +8,38 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** Where Crosstune can send an item: a built-in service, or a user-defined URL template. */
+/**
+ * Where Crosstune can send an item: a built-in service, an alternative frontend for one, or a
+ * user-defined URL template.
+ */
 internal sealed class Destination {
     abstract val key: String
 
     abstract fun searchUrl(query: String): String
 
+    /** The service whose links this destination opens, so its exact match can be looked up. */
+    open val matchService: MusicService? get() = null
+
+    /** The app to open links in, or null to let Android pick, e.g. a browser. */
+    open val packageName: String? get() = null
+
+    /** Turns a link to [matchService] into one this destination opens. */
+    open fun adapt(url: String): String = url
+
     data class Service(val service: MusicService) : Destination() {
         override val key: String get() = service.name
         override fun searchUrl(query: String) = service.searchUrl(query)
+        override val matchService: MusicService get() = service
+        override val packageName: String get() = service.packageName
+    }
+
+    /** [instance] is the site a web frontend opens on, e.g. "https://yewtu.be"; null for apps. */
+    data class Alternative(val frontend: Frontend, val instance: String? = null) : Destination() {
+        override val key: String get() = FRONTEND_PREFIX + frontend.name
+        override fun searchUrl(query: String) = adapt(frontend.via.searchUrl(query))
+        override val matchService: MusicService get() = frontend.via
+        override val packageName: String? get() = frontend.packageName
+        override fun adapt(url: String): String = instance?.let { frontend.onSite(url, it) } ?: url
     }
 
     /** [template] is any URL containing [QUERY_PLACEHOLDER], e.g. "https://example.com/search?q={query}". */
@@ -28,6 +51,7 @@ internal sealed class Destination {
     companion object {
         const val QUERY_PLACEHOLDER = "{query}"
         const val CUSTOM_PREFIX = "custom:"
+        const val FRONTEND_PREFIX = "frontend:"
 
         /** A template needs the placeholder and a URI scheme so Android can route it to an app or browser. */
         fun isValidTemplate(template: String): Boolean {
@@ -37,8 +61,14 @@ internal sealed class Destination {
     }
 }
 
-/** Persists the default destination, per-source rules and custom destinations. */
-internal class DestinationStore(private val preferences: SharedPreferences) {
+/**
+ * Persists the default destination, per-source rules, custom destinations and the sites web
+ * frontends open on. Frontend apps are offered only while [isInstalled].
+ */
+internal class DestinationStore(
+    private val preferences: SharedPreferences,
+    private val isInstalled: (String) -> Boolean = { true }
+) {
 
     fun customDestinations(): List<Destination.Custom> {
         val stored = preferences.getString(KEY_CUSTOM, null) ?: return emptyList()
@@ -53,7 +83,29 @@ internal class DestinationStore(private val preferences: SharedPreferences) {
     }
 
     fun allDestinations(): List<Destination> =
-        MusicService.entries.map(Destination::Service) + customDestinations()
+        MusicService.entries.map(Destination::Service) + frontends() + customDestinations()
+
+    private fun frontends(): List<Destination.Alternative> = Frontend.entries.mapNotNull { frontend ->
+        val packageName = frontend.packageName
+        when {
+            packageName == null -> Destination.Alternative(frontend, instance(frontend))
+            isInstalled(packageName) -> Destination.Alternative(frontend)
+            else -> null
+        }
+    }
+
+    /** The site a web frontend opens on: the user's choice, or a public one to start with. */
+    fun instance(frontend: Frontend): String? =
+        preferences.getString(instanceKey(frontend), null) ?: frontend.defaultInstance
+
+    /** Saves [address] as the site [frontend] opens on; false if it isn't a web address. */
+    fun setInstance(frontend: Frontend, address: String): Boolean {
+        val instance = Frontend.instanceOf(address) ?: return false
+        preferences.edit { putString(instanceKey(frontend), instance) }
+        return true
+    }
+
+    private fun instanceKey(frontend: Frontend) = "frontend_instance_${frontend.name}"
 
     fun addCustom(name: String, template: String): Destination.Custom {
         val custom = Destination.Custom(UUID.randomUUID().toString(), name.trim(), template.trim())

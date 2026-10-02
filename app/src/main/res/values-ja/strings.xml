@@ -128,4 +128,7 @@
     <string name="link_owner_opens_them">自分で開く</string>
     <string name="link_owner_lets_crosstune">Crosstune に任せる</string>
     <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。どのアプリかはリンクの横に表示されます。そのアプリの設定で「対応リンクを開く」をオフにしてください。</string>
+    <string name="frontend_address_title">%1$s のアドレス</string>
+    <string name="save_button">保存</string>
+    <string name="frontend_address_invalid">yewtu.be のようなウェブアドレスを入力してください</string>
 </resources>

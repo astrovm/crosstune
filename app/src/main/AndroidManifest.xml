@@ -23,6 +23,17 @@
         <package android:name="com.google.android.apps.youtube.creator" />
         <package android:name="com.google.android.apps.youtube.kids" />
         <package android:name="com.google.android.apps.youtube.unplugged" />
+        <!-- Frontend apps Crosstune can open things in (Frontend). -->
+        <package android:name="org.schabi.newpipe" />
+        <package android:name="InfinityLoop1309.NewPipeEnhanced" />
+        <package android:name="org.polymorphicshade.tubular" />
+        <package android:name="com.github.libretube" />
+        <package android:name="com.futo.platformplayer" />
+        <package android:name="com.metrolist.music" />
+        <package android:name="com.dd3boh.outertune" />
+        <package android:name="com.zionhuang.music" />
+        <package android:name="it.fast4x.rimusic" />
+        <package android:name="oss.krtirtho.spotube" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />

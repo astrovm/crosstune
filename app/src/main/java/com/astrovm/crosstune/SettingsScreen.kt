@@ -100,6 +100,11 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             description = stringResource(R.string.settings_custom_description)
         )
         Group {
+            // Invidious and Piped, each on a site the user can change.
+            state.destinations.filterIsInstance<Destination.Alternative>().filter { it.instance != null }.forEach { web ->
+                FrontendSiteRow(web, onChange = { address -> actions.onFrontendInstanceChange(web.frontend, address) })
+                GroupDivider()
+            }
             state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
                 Row(
                     modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -239,6 +244,53 @@ private fun LinkOwnerRow(app: LinkApp, opensThem: Boolean, onClick: () -> Unit) 
             )
         }
         AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** A web frontend and the site it opens on; tapping it edits the site in place, like adding a custom site. */
+@Composable
+private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> Boolean) {
+    var editing by rememberSaveable { mutableStateOf(false) }
+    if (!editing) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { editing = true }
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(web.frontend.label, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    web.instance.orEmpty().removePrefix("https://"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(20.dp))
+        }
+        return
+    }
+    var address by rememberSaveable { mutableStateOf(web.instance.orEmpty()) }
+    var invalid by rememberSaveable { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
+        OutlinedTextField(
+            value = address,
+            onValueChange = { address = it; invalid = false },
+            label = { Text(stringResource(R.string.frontend_address_title, web.frontend.label)) },
+            supportingText = { if (invalid) Text(stringResource(R.string.frontend_address_invalid)) },
+            isError = invalid,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { editing = false }) { Text(stringResource(R.string.cancel_button)) }
+            TextButton(onClick = { if (onChange(address)) editing = false else invalid = true }) {
+                Text(stringResource(R.string.save_button))
+            }
+        }
     }
 }
 

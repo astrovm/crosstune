@@ -96,9 +96,10 @@ internal class LinkInterception(private val context: Context) {
         MusicService.entries.filter { it in sources && it in installedServices() }.map { appFor(it.packageName) }
 
     /** Apps in [OTHER_LINK_APPS] that are installed. */
-    private fun installedOtherApps(): List<String> = OTHER_LINK_APPS.filter { packageName ->
+    private fun installedOtherApps(): List<String> = OTHER_LINK_APPS.filter(::isInstalled)
+
+    fun isInstalled(packageName: String): Boolean =
         runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
-    }
 
     /** Other apps with a link filter for any of [hosts]; whether they verified them is checked separately. */
     private fun appsOpening(hosts: List<String>): Set<String> = hosts.flatMap { host ->

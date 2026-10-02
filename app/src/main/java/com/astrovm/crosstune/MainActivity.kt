@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                         onRuleChange = viewModel::setRule,
                         onAddCustom = viewModel::addCustomDestination,
                         onRemoveCustom = viewModel::removeCustomDestination,
+                        onFrontendInstanceChange = viewModel::setFrontendInstance,
                         onCompleteSetup = viewModel::completeSetup,
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,

@@ -97,7 +97,7 @@ internal class MainViewModel(
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
-    private val destinationStore = DestinationStore(preferences)
+    private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
     init {
         migrateExistingInstall()
@@ -300,7 +300,8 @@ internal class MainViewModel(
     private suspend fun prepareResult() {
         // A link shared from the app the user listens in would only open back in that app, so ask
         // where else it should go instead.
-        val ownService = uiState.link?.service?.takeIf {
+        // A frontend's link, e.g. Invidious's, is worth opening in the service's own app.
+        val ownService = uiState.link?.takeUnless { it.viaFrontend }?.service?.takeIf {
             uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
         }
         // Incoming links without a chosen destination must not search the default before asking.
@@ -331,16 +332,15 @@ internal class MainViewModel(
 
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
         val url = prepareDestination(destination) ?: return
-        val service = (destination as? Destination.Service)?.service
-        effectChannel.send(Effect.Open(url, service?.packageName, finishAfterOpen))
+        effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {
         val metadata = uiState.result ?: return null
-        val service = (destination as? Destination.Service)?.service
-        // The link already belongs to the destination: open it as is instead of searching.
+        val service = destination.matchService
+        // The link already belongs to the destination's service: open it as is instead of searching.
         uiState.link?.takeIf { it.service == service }?.let { link ->
-            return link.url
+            return destination.adapt(link.url)
         }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) {
@@ -349,7 +349,7 @@ internal class MainViewModel(
         } else {
             null
         }
-        val url = exactUrl ?: destination.searchUrl(searchQuery(metadata))
+        val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
         rememberDestination(destination, PreparedLink(url, exactUrl != null, uiState.exactMatch))
         return url.forSharing()
     }
@@ -406,8 +406,7 @@ internal class MainViewModel(
         viewModelScope.launch {
             val destination = destinationFor(entry)
             val url = urlForHistory(entry, destination) ?: return@launch
-            val service = (destination as? Destination.Service)?.service
-            effectChannel.send(Effect.Open(url, service?.packageName, finishAfterOpen = false))
+            effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
         }
     }
 
@@ -423,11 +422,11 @@ internal class MainViewModel(
         uiState.rules[entry.link.service] ?: uiState.defaultDestination
 
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
-        val service = (destination as? Destination.Service)?.service
-        if (service == entry.link.service) return entry.link.url
+        val service = destination.matchService
+        if (service == entry.link.service) return destination.adapt(entry.link.url)
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
-        val url = exactUrl ?: destination.searchUrl(searchQuery(entry.metadata))
+        val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))
         val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, uiState.exactMatch))
         uiState = uiState.copy(history = history)
         return url.forSharing()
@@ -465,7 +464,7 @@ internal class MainViewModel(
 
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
-        uiState.link?.takeIf { (destination as? Destination.Service)?.service == it.service }?.let { return it.url }
+        uiState.link?.takeIf { destination.matchService == it.service }?.let { return destination.adapt(it.url) }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         if (uiState.isMatching) return null
         return searchQuery()?.let(destination::searchUrl)?.also { url ->
@@ -533,6 +532,13 @@ internal class MainViewModel(
         if (name.isBlank() || !Destination.isValidTemplate(template)) return false
         destinationStore.addCustom(name, template)
         uiState = uiState.withDestinations()
+        return true
+    }
+
+    /** Moves a web frontend to another site; false if [address] isn't a web address. */
+    fun setFrontendInstance(frontend: Frontend, address: String): Boolean {
+        if (!destinationStore.setInstance(frontend, address)) return false
+        refreshSystemState()
         return true
     }
 

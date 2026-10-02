@@ -127,4 +127,7 @@
     <string name="link_owner_opens_them">Otwiera je sama</string>
     <string name="link_owner_lets_crosstune">Pozwala otwierać je Crosstune</string>
     <string name="setup_allow_taken_hint">Nie możesz zaznaczyć linku? Ma go inna aplikacja: Android pokazuje obok linku, która. W jej ustawieniach wyłącz „Otwieraj obsługiwane linki”.</string>
+    <string name="frontend_address_title">Adres %1$s</string>
+    <string name="save_button">Zapisz</string>
+    <string name="frontend_address_invalid">Wpisz adres strony, np. yewtu.be</string>
 </resources>

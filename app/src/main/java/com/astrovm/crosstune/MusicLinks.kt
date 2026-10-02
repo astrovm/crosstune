@@ -9,7 +9,9 @@ internal data class MusicLink(
     val type: ItemType,
     val id: String,
     val url: String,
-    val region: String? = null
+    val region: String? = null,
+    /** Came from a frontend such as Invidious or Piped; [url] is still the service's own. */
+    val viaFrontend: Boolean = false
 )
 
 /** What a pasted or shared piece of text points at. */
@@ -102,6 +104,8 @@ internal object MusicLinks {
             host == "soundcloud.com" || host == "www.soundcloud.com" || host == "m.soundcloud.com" ->
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
+            // Invidious and Piped, on any of their many sites, use YouTube's own watch links.
+            segments == listOf("watch") -> url.queryParameter("v")?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true)
             else -> null
         }
     }

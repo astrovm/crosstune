@@ -39,6 +39,21 @@ class MusicLinksTest {
     }
 
     @Test
+    fun invidiousAndPipedLinksOnAnySiteAreYouTubeVideos() {
+        val id = "4NRXx6U8ABQ"
+        listOf("https://yewtu.be/watch?v=$id&t=5", "https://piped.example.org/watch?v=$id").forEach { url ->
+            val parsed = link(url)!!
+            assertEquals(url, MusicService.YOUTUBE, parsed.service)
+            assertEquals("https://www.youtube.com/watch?v=$id", parsed.url)
+            assertEquals(true, parsed.viaFrontend)
+        }
+        // Only a video's watch page counts, and only with a real video ID.
+        assertNull(link("https://yewtu.be/watch?v=short"))
+        assertNull(link("https://yewtu.be/channel/$id"))
+        assertEquals(false, link("https://www.youtube.com/watch?v=$id")!!.viaFrontend)
+    }
+
+    @Test
     fun appleMusicSongsAlbumsArtistsAndPlaylists() {
         assertLink(
             "https://music.apple.com/AR/song/cut-to-the-feeling/1445304939",

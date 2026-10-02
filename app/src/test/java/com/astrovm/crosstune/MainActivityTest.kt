@@ -2175,6 +2175,79 @@ class MainActivityTest {
     }
 
     @Test
+    fun anInstalledFrontendAppIsOfferedAndOpensTheYouTubeLinkInIt() {
+        val newPipe = "org.schabi.newpipe"
+        shadowOf(app.packageManager).installPackage(installedApp(newPipe, "NewPipe"))
+        shadowOf(app.packageManager).setApplicationIcon(newPipe, android.graphics.drawable.ColorDrawable(android.graphics.Color.RED))
+        respondWithTrack("Frontend Song", "Artist · Song")
+        launch()
+        // Apps that aren't installed aren't offered.
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent("LibreTube")
+        composeRule.onNodeWithTag("destination-icon:frontend:NEWPIPE", useUnmergedTree = true).assertExists()
+        composeRule.onAllNodesWithText("NewPipe").onLast().performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.back_button))
+
+        resolveTyped()
+        click(string(R.string.search_in_destination, "NewPipe"))
+        val opened = nextStartedActivity()!!
+        assertEquals(newPipe, opened.`package`)
+        assertEquals("https://www.youtube.com/results?search_query=Frontend%20Song%20Artist", opened.dataString)
+    }
+
+    @Test
+    fun webFrontendsOpenOnASiteTheUserCanChange() {
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        respondWithTrack("Web Song", "Artist · Song")
+        launch()
+        click(string(R.string.settings_button))
+        assertTextShown("yewtu.be")
+
+        click("Invidious")
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("not a site")
+        click(string(R.string.save_button))
+        assertTextShown(string(R.string.frontend_address_invalid))
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("inv.example.org")
+        click(string(R.string.save_button))
+        assertTextShown("inv.example.org")
+
+        // Cancelling keeps the site.
+        click("Invidious")
+        click(string(R.string.cancel_button))
+        assertTextShown("inv.example.org")
+        click(string(R.string.back_button))
+
+        chooseDefault("Invidious")
+        resolveTyped()
+        click(string(R.string.search_in_destination, "Invidious"))
+        val opened = nextStartedActivity()!!
+        assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
+        assertNull(opened.`package`)
+    }
+
+    @Test
+    fun anInvidiousLinkOpensStraightInYouTubeWhereTheUserListens() {
+        prefs().edit().putString("default_target", "YOUTUBE").commit()
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+        }
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://yewtu.be/watch?v=4NRXx6U8ABQ")
+            }
+        )
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
+        assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", opened.dataString)
+    }
+
+    @Test
     fun customDestinationWithAnAppSchemeOpensDirectly() {
         DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
         respondWithTrack("Scheme", "Artist · Song")
