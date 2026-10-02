@@ -131,4 +131,6 @@
     <string name="frontend_address_title">%1$s のアドレス</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">yewtu.be のようなウェブアドレスを入力してください</string>
+    <string name="frontend_site_on">%1$s で動画を開く</string>
+    <string name="source_open_links">これらのリンクを Crosstune で開く</string>
 </resources>

@@ -131,4 +131,6 @@
     <string name="frontend_address_title">Indirizzo di %1$s</string>
     <string name="save_button">Salva</string>
     <string name="frontend_address_invalid">Inserisci un indirizzo web, come yewtu.be</string>
+    <string name="frontend_site_on">Apre i video su %1$s</string>
+    <string name="source_open_links">Apri questi link in Crosstune</string>
 </resources>

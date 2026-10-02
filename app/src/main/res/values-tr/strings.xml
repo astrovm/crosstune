@@ -130,4 +130,6 @@
     <string name="frontend_address_title">%1$s adresi</string>
     <string name="save_button">Kaydet</string>
     <string name="frontend_address_invalid">Bir web adresi gir, örneğin yewtu.be</string>
+    <string name="frontend_site_on">Videoları %1$s üzerinde açar</string>
+    <string name="source_open_links">Bu bağlantıları Crosstune\'da aç</string>
 </resources>

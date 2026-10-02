@@ -29,6 +29,8 @@ internal data class UiState(
     val destinations: List<Destination> = MusicService.entries.map(Destination::Service),
     /** Per-source destinations; sources without an entry use [defaultDestination]. */
     val rules: Map<MusicService, Destination> = emptyMap(),
+    /** Per-frontend destinations for links from Invidious's or Piped's sites; without one, YouTube's rule or the default applies. */
+    val frontendRules: Map<Frontend, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
     /** Web frontends, like Invidious, whose popular sites' links Crosstune opens: sources of their own. */
     val frontendSources: Set<Frontend> = emptySet(),
@@ -88,7 +90,10 @@ internal data class UiState(
 
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
-        get() = selectedDestination ?: link?.let { rules[it.service] } ?: defaultDestination
+        get() = selectedDestination ?: link?.let(::ruleFor) ?: defaultDestination
+
+    /** Where links like [link] go unless changed for one result: their frontend's rule, then their service's. */
+    fun ruleFor(link: MusicLink): Destination? = link.frontend?.let { frontendRules[it] } ?: rules[link.service]
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
@@ -157,6 +162,7 @@ internal class MainViewModel(
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
+            frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend)?.let { frontend to it } }.toMap(),
             intercepted = intercepted,
             frontendSources = frontendSources,
             unapprovedFrontendHosts = interception.unapprovedFrontendHosts(),
@@ -434,7 +440,7 @@ internal class MainViewModel(
 
     /** Recent Open and Copy use the saved default, not whatever result is on screen. */
     private fun destinationFor(entry: HistoryEntry): Destination =
-        uiState.rules[entry.link.service] ?: uiState.defaultDestination
+        uiState.ruleFor(entry.link) ?: uiState.defaultDestination
 
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = destination.matchService
@@ -534,6 +540,11 @@ internal class MainViewModel(
         if (destination == null && interception.isEnabled(source) && source == uiState.listeningService()) {
             interception.setEnabled(source, false)
         }
+        refreshSystemState()
+    }
+
+    fun setFrontendRule(frontend: Frontend, destination: Destination?) {
+        destinationStore.setRule(frontend, destination)
         refreshSystemState()
     }
 

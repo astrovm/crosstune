@@ -101,6 +101,7 @@ internal data class ScreenActions(
     val onMakeDefault: () -> Unit = {},
     val onInterceptChange: (MusicService, Boolean) -> Unit = { _, _ -> },
     val onFrontendInterceptChange: (Frontend, Boolean) -> Unit = { _, _ -> },
+    val onFrontendRuleChange: (Frontend, Destination?) -> Unit = { _, _ -> },
     val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
     val onRemoveCustom: (Destination.Custom) -> Unit = {},

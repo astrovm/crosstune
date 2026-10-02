@@ -63,6 +63,8 @@ class DestinationStoreTest {
 
         store.setDefault(invidious)
         store.setRule(MusicService.YOUTUBE, invidious)
+        store.setRule(Frontend.PIPED, invidious)
+        assertEquals(invidious, store.rule(Frontend.PIPED))
         store.setRule(MusicService.SPOTIFY, deezer)
         assertEquals(invidious, store.defaultDestination())
         assertEquals(invidious, store.rule(MusicService.YOUTUBE))
@@ -72,6 +74,10 @@ class DestinationStoreTest {
         assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), store.defaultDestination())
         assertNull(store.rule(MusicService.YOUTUBE))
         assertEquals(deezer, store.rule(MusicService.SPOTIFY))
+        assertNull(store.rule(Frontend.PIPED))
+        store.setRule(Frontend.PIPED, deezer)
+        store.setRule(Frontend.PIPED, null)
+        assertNull(store.rule(Frontend.PIPED))
 
         store.setRule(MusicService.SPOTIFY, null)
         assertNull(store.rule(MusicService.SPOTIFY))

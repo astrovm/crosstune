@@ -121,6 +121,9 @@ internal class DestinationStore(
             MusicService.entries.forEach { service ->
                 if (preferences.getString(ruleKey(service), null) == custom.key) remove(ruleKey(service))
             }
+            Frontend.SOURCES.forEach { frontend ->
+                if (preferences.getString(frontendRuleKey(frontend), null) == custom.key) remove(frontendRuleKey(frontend))
+            }
         }
     }
 
@@ -152,6 +155,17 @@ internal class DestinationStore(
     }
 
     private fun ruleKey(source: MusicService) = "rule_${source.name}"
+
+    /** The destination chosen for links from [frontend]'s sites, or null to use YouTube's. */
+    fun rule(frontend: Frontend): Destination? = find(preferences.getString(frontendRuleKey(frontend), null))
+
+    fun setRule(frontend: Frontend, destination: Destination?) {
+        preferences.edit {
+            if (destination == null) remove(frontendRuleKey(frontend)) else putString(frontendRuleKey(frontend), destination.key)
+        }
+    }
+
+    private fun frontendRuleKey(frontend: Frontend) = "rule_frontend_${frontend.name}"
 
     private companion object {
         // Kept from when the default could only be a built-in service, so existing choices carry over.

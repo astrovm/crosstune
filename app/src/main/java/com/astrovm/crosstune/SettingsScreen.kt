@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -43,6 +46,11 @@ import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 @Composable
 internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
     var addingCustom by rememberSaveable { mutableStateOf(false) }
+    var openSource by rememberSaveable { mutableStateOf<String?>(null) }
+    val sources = sourceSettings(state, actions)
+    sources.firstOrNull { it.key == openSource }?.let { item ->
+        return SourcePage(item, state.destinations, actions, onBack = { openSource = null })
+    }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
@@ -74,13 +82,9 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             description = stringResource(R.string.settings_links_description)
         )
         Group {
-            MusicService.entries.filter { it.canBeSource }.forEachIndexed { index, source ->
+            sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
-                SourceRow(source, state, actions)
-            }
-            Frontend.SOURCES.forEach { frontend ->
-                GroupDivider()
-                FrontendSourceRow(frontend, state, actions)
+                SourceSummaryRow(item, onOpen = { openSource = item.key })
             }
         }
 
@@ -104,11 +108,6 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             description = stringResource(R.string.settings_custom_description)
         )
         Group {
-            // Invidious and Piped, each on a site the user can change.
-            state.destinations.filterIsInstance<Destination.Alternative>().filter { it.instance != null }.forEach { web ->
-                FrontendSiteRow(web, onChange = { address -> actions.onFrontendInstanceChange(web.frontend, address) })
-                GroupDivider()
-            }
             state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
                 Row(
                     modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
@@ -251,7 +250,7 @@ private fun LinkOwnerRow(app: LinkApp, opensThem: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** A web frontend and the site it opens on; tapping it edits the site in place, like adding a custom site. */
+/** "Opens videos on yewtu.be": the site a web frontend opens on; tapping it edits the site in place. */
 @Composable
 private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> Boolean) {
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -260,18 +259,16 @@ private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> 
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { editing = true }
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(web.frontend.label, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    web.instance.orEmpty().removePrefix("https://"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(
+                stringResource(R.string.frontend_site_on, web.instance.orEmpty().removePrefix("https://")),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(18.dp))
         }
         return
     }
@@ -358,61 +355,138 @@ private fun appVersion(): String {
  * and, once on or given its own app, where they go. The app the user listens in can't be turned on
  * while its links would just go back to it.
  */
+/** Everything Settings offers for one source of links: a service, or a web frontend's sites. */
+private class SourceSettings(
+    val key: String,
+    val label: String,
+    val on: Boolean,
+    /** The app the user listens in, which can't be turned on while its links would just go back to it. */
+    val locked: Boolean,
+    val listeningNote: String?,
+    val notAllowed: Boolean,
+    val rule: Destination?,
+    /** Where its links go without a rule of their own. */
+    val fallback: Destination,
+    val onToggle: (Boolean) -> Unit,
+    val onRule: (Destination?) -> Unit,
+    /** For web frontends, the site they open videos on when picked as where to open things. */
+    val site: Destination.Alternative? = null,
+    val onSite: (String) -> Boolean = { false }
+)
+
 @Composable
-private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActions) {
-    val intercepted = source in state.intercepted
-    val rule = state.rules[source]
-    val listeningHere = source == state.listeningService() && rule == null
-    // Already on from before the rule existed: it can still be turned off.
-    val locked = listeningHere && !intercepted
-    val notAllowed = intercepted && state.unapprovedHosts?.get(source).orEmpty().isNotEmpty()
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Row(
+private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceSettings> {
+    val services = MusicService.entries.filter { it.canBeSource }.map { source ->
+        val intercepted = source in state.intercepted
+        val rule = state.rules[source]
+        val listeningHere = source == state.listeningService() && rule == null
+        val label = stringResource(source.labelRes)
+        SourceSettings(
+            key = source.name,
+            label = label,
+            on = intercepted,
+            // Already on from before the rule existed: it can still be turned off.
+            locked = listeningHere && !intercepted,
+            listeningNote = if (listeningHere) stringResource(R.string.setup_sources_listening_note, label) else null,
+            notAllowed = intercepted && state.unapprovedHosts?.get(source).orEmpty().isNotEmpty(),
+            rule = rule,
+            fallback = state.defaultDestination,
+            onToggle = { actions.onInterceptChange(source, it) },
+            onRule = { actions.onRuleChange(source, it) }
+        )
+    }
+    val frontends = Frontend.SOURCES.map { frontend ->
+        val on = frontend in state.frontendSources
+        SourceSettings(
+            key = Destination.FRONTEND_PREFIX + frontend.name,
+            label = frontend.label,
+            on = on,
+            locked = false,
+            listeningNote = null,
+            notAllowed = on && state.unapprovedFrontendHosts?.get(frontend).orEmpty().isNotEmpty(),
+            rule = state.frontendRules[frontend],
+            // Without a rule of its own, its videos go where YouTube's do.
+            fallback = state.rules[MusicService.YOUTUBE] ?: state.defaultDestination,
+            onToggle = { actions.onFrontendInterceptChange(frontend, it) },
+            onRule = { actions.onFrontendRuleChange(frontend, it) },
+            site = state.destinations.filterIsInstance<Destination.Alternative>().firstOrNull { it.frontend == frontend },
+            onSite = { actions.onFrontendInstanceChange(frontend, it) }
+        )
+    }
+    return services + frontends
+}
+
+/**
+ * One source in the list: its name, what needs attention or where its links go, and its switch.
+ * Tapping the name opens the rest of its options.
+ */
+@Composable
+private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(end = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .toggleable(value = intercepted, enabled = !locked, role = Role.Switch) { actions.onInterceptChange(source, it) }
-                .heightIn(min = 48.dp)
-                .padding(start = 20.dp, end = 20.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f)
+                .clickable(onClick = onOpen)
+                .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
         ) {
-            Text(
-                text = stringResource(source.labelRes),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(checked = intercepted, onCheckedChange = null, enabled = !locked)
+            Text(item.label, style = MaterialTheme.typography.bodyLarge)
+            if (item.notAllowed) {
+                Text(
+                    stringResource(R.string.setup_not_allowed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else if (item.on) {
+                Text(
+                    stringResource(R.string.rule_opens_in, item.rule?.label() ?: stringResource(R.string.rule_default, item.fallback.label())),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-        if (listeningHere) {
-            Text(
-                text = stringResource(R.string.setup_sources_listening_note, stringResource(source.labelRes)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
-            )
-        }
-        if (notAllowed) NotAllowedRow(actions)
-        // Where its links go only matters once they come to Crosstune, or for the app the user listens in.
-        if (intercepted || rule != null || listeningHere) RuleMenu(source, rule, state, actions)
+        Switch(
+            checked = item.on,
+            onCheckedChange = item.onToggle,
+            enabled = !item.locked,
+            modifier = Modifier.semantics { contentDescription = item.label }
+        )
     }
 }
 
-/** A web frontend's links, e.g. Invidious's: on or off, and whether Android lets Crosstune open them yet. Their videos go where YouTube's do. */
+/** One source's own page: whether Crosstune opens its links, whether Android lets it, where they go and, for web frontends, their site. */
 @Composable
-private fun FrontendSourceRow(frontend: Frontend, state: UiState, actions: ScreenActions) {
-    val on = frontend in state.frontendSources
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .toggleable(value = on, role = Role.Switch) { actions.onFrontendInterceptChange(frontend, it) }
-                .heightIn(min = 48.dp)
-                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = frontend.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Switch(checked = on, onCheckedChange = null)
+private fun SourcePage(item: SourceSettings, destinations: List<Destination>, actions: ScreenActions, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    Page(
+        title = item.label,
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
         }
-        if (on && state.unapprovedFrontendHosts?.get(frontend).orEmpty().isNotEmpty()) NotAllowedRow(actions)
+    ) {
+        Group(modifier = Modifier.padding(top = 8.dp)) {
+            SettingSwitch(
+                label = stringResource(R.string.source_open_links),
+                description = item.listeningNote ?: stringResource(R.string.settings_links_description),
+                checked = item.on,
+                onCheckedChange = item.onToggle,
+                enabled = !item.locked
+            )
+            if (item.notAllowed) NotAllowedRow(actions)
+            GroupDivider()
+            RuleMenu(item.rule, item.fallback, destinations, item.onRule)
+            item.site?.let { site ->
+                GroupDivider()
+                FrontendSiteRow(site, item.onSite)
+            }
+        }
     }
 }
 
@@ -430,9 +504,9 @@ private fun NotAllowedRow(actions: ScreenActions) {
 }
 
 @Composable
-private fun RuleMenu(source: MusicService, rule: Destination?, state: UiState, actions: ScreenActions) {
+private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: List<Destination>, onChange: (Destination?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val defaultLabel = stringResource(R.string.rule_default, state.defaultDestination.label())
+    val defaultLabel = stringResource(R.string.rule_default, fallback.label())
     Box(modifier = Modifier.padding(start = 8.dp)) {
         TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
             Text(
@@ -452,15 +526,15 @@ private fun RuleMenu(source: MusicService, rule: Destination?, state: UiState, a
                 text = { Text(defaultLabel) },
                 onClick = {
                     expanded = false
-                    actions.onRuleChange(source, null)
+                    onChange(null)
                 }
             )
-            state.destinations.forEach { destination ->
+            destinations.forEach { destination ->
                 DropdownMenuItem(
                     text = { Text(destination.label()) },
                     onClick = {
                         expanded = false
-                        actions.onRuleChange(source, destination)
+                        onChange(destination)
                     }
                 )
             }

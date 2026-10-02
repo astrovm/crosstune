@@ -11,7 +11,9 @@ internal data class MusicLink(
     val url: String,
     val region: String? = null,
     /** Came from a frontend such as Invidious or Piped; [url] is still the service's own. */
-    val viaFrontend: Boolean = false
+    val viaFrontend: Boolean = false,
+    /** Which one, when it came from one of its popular sites, so its own rule can apply. */
+    val frontend: Frontend? = null
 )
 
 /** What a pasted or shared piece of text points at. */
@@ -145,7 +147,8 @@ internal object MusicLinks {
             segments.size == 2 && segments[0] in setOf("shorts", "live", "embed") -> segments[1]
             else -> null
         }
-        return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true)
+        val frontend = Frontend.SOURCES.firstOrNull { url.host in it.sites }
+        return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true, frontend = frontend)
     }
 
     private fun youtube(service: MusicService, id: String): MusicLink? {
