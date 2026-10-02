@@ -158,6 +158,61 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" android:host="bandcamp.com" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="yewtu.be" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="inv.nadeko.net" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="invidious.nerdvpn.de" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="invidious.f5.si" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="invidious.tiekoetter.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="yt.chocolatemoo53.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="piped.video" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="piped.yt" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="piped.adminforge.de" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="piped.privacy.com.de" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="piped.leptons.xyz" />
+        </intent>
     </queries>
 
     <application
@@ -293,6 +348,25 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
+            </intent-filter>
+            <!-- Popular Invidious and Piped sites, which use YouTube's watch links (MusicLinks). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="yewtu.be" />
+                <data android:host="inv.nadeko.net" />
+                <data android:host="invidious.nerdvpn.de" />
+                <data android:host="invidious.f5.si" />
+                <data android:host="invidious.tiekoetter.com" />
+                <data android:host="yt.chocolatemoo53.com" />
+                <data android:host="piped.video" />
+                <data android:host="piped.yt" />
+                <data android:host="piped.adminforge.de" />
+                <data android:host="piped.privacy.com.de" />
+                <data android:host="piped.leptons.xyz" />
+                <data android:pathPrefix="/watch" />
             </intent-filter>
         </activity-alias>
 

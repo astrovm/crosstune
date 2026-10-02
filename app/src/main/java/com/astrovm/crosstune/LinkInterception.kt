@@ -137,7 +137,7 @@ internal class LinkInterception(private val context: Context) {
         val HOSTS = mapOf(
             MusicService.SPOTIFY to listOf("open.spotify.com", "spotify.link", "www.spotify.link"),
             MusicService.YOUTUBE_MUSIC to listOf("music.youtube.com"),
-            MusicService.YOUTUBE to listOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"),
+            MusicService.YOUTUBE to listOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be") + MusicLinks.FRONTEND_SITES,
             MusicService.APPLE_MUSIC to listOf("music.apple.com", "geo.music.apple.com"),
             MusicService.DEEZER to listOf(
                 "deezer.com", "www.deezer.com", "link.deezer.com", "deezer.page.link", "dzr.page.link"

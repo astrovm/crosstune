@@ -14,10 +14,15 @@ internal enum class Frontend(
     val defaultInstance: String? = null
 ) {
     NEWPIPE("NewPipe", MusicService.YOUTUBE, packageName = "org.schabi.newpipe"),
+    NEWPIPE_SOUNDCLOUD("NewPipe · SoundCloud", MusicService.SOUNDCLOUD, packageName = "org.schabi.newpipe"),
+    NEWPIPE_BANDCAMP("NewPipe · Bandcamp", MusicService.BANDCAMP, packageName = "org.schabi.newpipe"),
     PIPEPIPE("PipePipe", MusicService.YOUTUBE, packageName = "InfinityLoop1309.NewPipeEnhanced"),
     TUBULAR("Tubular", MusicService.YOUTUBE, packageName = "org.polymorphicshade.tubular"),
+    TUBULAR_SOUNDCLOUD("Tubular · SoundCloud", MusicService.SOUNDCLOUD, packageName = "org.polymorphicshade.tubular"),
+    TUBULAR_BANDCAMP("Tubular · Bandcamp", MusicService.BANDCAMP, packageName = "org.polymorphicshade.tubular"),
     LIBRETUBE("LibreTube", MusicService.YOUTUBE, packageName = "com.github.libretube"),
     GRAYJAY("Grayjay", MusicService.YOUTUBE, packageName = "com.futo.platformplayer"),
+    GRAYJAY_SOUNDCLOUD("Grayjay · SoundCloud", MusicService.SOUNDCLOUD, packageName = "com.futo.platformplayer"),
     METROLIST("Metrolist", MusicService.YOUTUBE_MUSIC, packageName = "com.metrolist.music"),
     OUTERTUNE("OuterTune", MusicService.YOUTUBE_MUSIC, packageName = "com.dd3boh.outertune"),
     INNERTUNE("InnerTune", MusicService.YOUTUBE_MUSIC, packageName = "com.zionhuang.music"),

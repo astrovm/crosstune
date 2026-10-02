@@ -47,6 +47,11 @@ class MusicLinksTest {
             assertEquals("https://www.youtube.com/watch?v=$id", parsed.url)
             assertEquals(true, parsed.viaFrontend)
         }
+        // The popular sites' other video paths count too, but not on any site.
+        assertEquals("https://www.youtube.com/watch?v=$id", link("https://inv.nadeko.net/shorts/$id")!!.url)
+        assertEquals("https://www.youtube.com/watch?v=$id", link("https://piped.video/embed/$id")!!.url)
+        assertNull(link("https://example.org/embed/$id"))
+        assertNull(link("https://piped.video/playlist?list=PL1"))
         // Only a video's watch page counts, and only with a real video ID.
         assertNull(link("https://yewtu.be/watch?v=short"))
         assertNull(link("https://yewtu.be/channel/$id"))
