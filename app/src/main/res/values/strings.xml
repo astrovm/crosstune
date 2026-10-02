@@ -143,4 +143,7 @@
     <string name="link_owner_opens_them">Opens them itself</string>
     <string name="link_owner_lets_crosstune">Lets Crosstune open them</string>
     <string name="setup_allow_taken_hint">Can\'t tick a link? Another app has it: Android shows which one next to the link. In that app\'s settings, turn off “Open supported links”.</string>
+    <string name="frontend_address_title">%1$s address</string>
+    <string name="save_button">Save</string>
+    <string name="frontend_address_invalid">Enter a web address, like yewtu.be</string>
 </resources>

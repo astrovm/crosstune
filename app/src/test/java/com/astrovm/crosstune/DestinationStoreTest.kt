@@ -20,6 +20,29 @@ class DestinationStoreTest {
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
+    fun frontendAppsAreOfferedOnlyWhenInstalledAndWebFrontendsOnTheirSite() {
+        val onlyNewPipe = DestinationStore(preferences) { it == "org.schabi.newpipe" }
+        val alternatives = onlyNewPipe.allDestinations().filterIsInstance<Destination.Alternative>()
+        assertEquals(
+            listOf(
+                Destination.Alternative(Frontend.NEWPIPE),
+                Destination.Alternative(Frontend.INVIDIOUS, "https://yewtu.be"),
+                Destination.Alternative(Frontend.PIPED, "https://piped.video")
+            ),
+            alternatives
+        )
+
+        assertTrue(onlyNewPipe.setInstance(Frontend.INVIDIOUS, " inv.example.org/feed/popular "))
+        assertEquals("https://inv.example.org", onlyNewPipe.instance(Frontend.INVIDIOUS))
+        assertFalse(onlyNewPipe.setInstance(Frontend.INVIDIOUS, "not a site"))
+        assertEquals("https://inv.example.org", onlyNewPipe.instance(Frontend.INVIDIOUS))
+
+        // A chosen frontend survives as the default by its key.
+        onlyNewPipe.setDefault(Destination.Alternative(Frontend.NEWPIPE))
+        assertEquals(Destination.Alternative(Frontend.NEWPIPE), onlyNewPipe.defaultDestination())
+    }
+
+    @Test
     fun defaultsToYouTubeMusicAndKeepsTheOldPreferenceFormat() {
         assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), store.defaultDestination())
         // Older versions stored the service name under the same key.
@@ -33,7 +56,7 @@ class DestinationStoreTest {
     fun customDestinationsCanBeDefaultsAndRulesUntilRemoved() {
         val invidious = store.addCustom("  Invidious ", " https://yewtu.be/search?q={query} ")
         assertEquals("Invidious", invidious.name)
-        assertEquals(MusicService.entries.map(Destination::Service) + invidious, store.allDestinations())
+        assertEquals(MusicService.entries.map(Destination::Service) + invidious, store.allDestinations().filterNot { it is Destination.Alternative })
 
         store.setDefault(invidious)
         store.setRule(MusicService.YOUTUBE, invidious)

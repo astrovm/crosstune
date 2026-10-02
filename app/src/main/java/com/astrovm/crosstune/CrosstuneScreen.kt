@@ -103,6 +103,7 @@ internal data class ScreenActions(
     val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
     val onRemoveCustom: (Destination.Custom) -> Unit = {},
+    val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
@@ -152,15 +153,17 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
 @Composable
 internal fun Destination.label(): String =
-    if (this is Destination.Service) stringResource(service.labelRes) else (this as Destination.Custom).name
+    if (this is Destination.Service) {
+        stringResource(service.labelRes)
+    } else if (this is Destination.Alternative) {
+        frontend.label
+    } else {
+        (this as Destination.Custom).name
+    }
 
 @Composable
 internal fun Destination.openLabel(): String =
-    if (this is Destination.Service) {
-        stringResource(service.openLabelRes)
-    } else {
-        stringResource(R.string.open_in_custom, (this as Destination.Custom).name)
-    }
+    if (this is Destination.Service) stringResource(service.openLabelRes) else stringResource(R.string.open_in_custom, label())
 
 /** Page scaffold shared by every screen: a flat top bar (none when [title] is null) and a centered, scrollable column. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -758,18 +761,18 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
     }
 }
 
+/** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
-    sortedBy { if ((it as? Destination.Service)?.service in installed) 0 else 1 }
+    sortedBy { if ((it as? Destination.Service)?.service in installed || (it is Destination.Alternative && it.packageName != null)) 0 else 1 }
 
 /** Use installed apps' own icons, with bundled service logos for every other built-in choice. */
 @Composable
 private fun DestinationIcon(destination: Destination, installed: Set<MusicService>) {
     val context = LocalContext.current
-    val service = (destination as? Destination.Service)?.service
-    val icon = remember(service, installed) {
-        if (service in installed) runCatching {
-            context.packageManager.getApplicationIcon(service!!.packageName).toBitmap(64, 64).asImageBitmap()
-        }.getOrNull() else null
+    // A service's app may not be installed; a frontend app is only offered once it is.
+    val app = destination.packageName?.takeIf { destination !is Destination.Service || destination.service in installed }
+    val icon = remember(app) {
+        app?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(64, 64).asImageBitmap() }.getOrNull() }
     }
     Surface(
         modifier = Modifier.size(32.dp), shape = MaterialTheme.shapes.small,
