@@ -137,4 +137,10 @@
     <string name="setup_sources_music">Musik</string>
     <string name="setup_sources_videos">Videos</string>
     <string name="setting_only_music_videos_note">Nur Musikvideos gehen an deine App. Andere öffnen sich wie gewohnt.</string>
+    <string name="guide_may_differ">Auf deinem Handy kann es etwas anders aussehen.</string>
+    <string name="setup_allow_progress">%1$d von %2$d Links zugelassen</string>
+    <string name="setup_apps_stop_title">%1$s stoppen</string>
+    <string name="setup_apps_stop_body">Tippe auf den Button und wähle „Im Browser“.</string>
+    <string name="setup_apps_progress">App %1$d von %2$d</string>
+    <string name="setup_apps_all_done">Fertig. Diese Apps behalten die Links nicht mehr.</string>
 </resources>

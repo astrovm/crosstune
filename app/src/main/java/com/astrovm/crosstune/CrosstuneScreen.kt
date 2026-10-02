@@ -125,6 +125,10 @@ internal data class ScreenActions(
     val onCancelHandoff: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
     val onOpenAppLinkSettings: (LinkApp) -> Unit = {},
+    /** Shows how to allow the links, step by step; the screen hosts it, so it's set there. */
+    val onShowAllowGuide: () -> Unit = {},
+    /** Shows how to stop the apps that keep the links, one at a time. */
+    val onShowAppsGuide: () -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
@@ -144,13 +148,56 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             actions.onSettingsLeft()
         }
     }
+    var guide by rememberSaveable { mutableStateOf<String?>(null) }
+    var openSource by rememberSaveable { mutableStateOf<String?>(null) }
+    val guided = actions.copy(onShowAllowGuide = { guide = GUIDE_ALLOW }, onShowAppsGuide = { guide = GUIDE_APPS })
     // A link from another app is handled right away; setup waits for the next regular launch.
     if (!state.setupComplete && !state.handlingIncomingLink) {
         SetupScreen(state, actions)
+    } else if (guide != null && !state.handingOff) {
+        GuidePage(guide == GUIDE_ALLOW, state, actions, onDone = { guide = null })
     } else if (showSettings) {
-        SettingsScreen(state, actions, onBack = { showSettings = false })
+        SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
     } else {
-        MainScreen(state, actions, onOpenSettings = { showSettings = true })
+        MainScreen(state, guided, onOpenSettings = { showSettings = true })
+    }
+}
+
+private const val GUIDE_ALLOW = "allow"
+private const val GUIDE_APPS = "apps"
+
+/** The setup guides on their own, opened from a notice or settings, with a way back once done. */
+@Composable
+private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, onDone: () -> Unit) {
+    BackHandler(onBack = onDone)
+    Page(
+        title = stringResource(if (allow) R.string.setup_allow_title else R.string.setup_apps_title),
+        navigationIcon = {
+            IconButton(onClick = onDone) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        }
+    ) {
+        if (allow) {
+            AllowLinksGuide(state, actions)
+        } else {
+            Text(
+                text = stringResource(R.string.setup_apps_body),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+            )
+            StopAppsGuide(appsToStop(state), state.blockingApps, actions.onOpenAppLinkSettings)
+        }
+        FilledTonalButton(
+            onClick = onDone,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp)
+                .heightIn(min = 52.dp)
+        ) {
+            Text(stringResource(R.string.setup_done), style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
@@ -356,22 +403,19 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
 internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
     // Settings marks each service that isn't allowed yet instead.
     val allow = stringResource(R.string.allow_button)
+    // Each opens the matching guide, which shows exactly what to tap in Android's settings.
     if (state.unapprovedHosts != null) {
         if (includeNotAllowed && state.someLinksNotAllowed) {
-            NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onOpenLinkSettings)
+            NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide)
         }
     } else if (state.showLinkSettingsHelper) {
         NoticeStrip(
-            stringResource(R.string.link_settings_helper_title), allow, actions.onOpenLinkSettings,
+            stringResource(R.string.link_settings_helper_title), allow, actions.onShowAllowGuide,
             onDismiss = actions.onDismissLinkSettingsHelper
         )
     }
     state.blockingApps.orEmpty().forEach { app ->
-        NoticeStrip(
-            stringResource(R.string.notice_app_still_opens, app.label),
-            stringResource(R.string.fix_button),
-            { actions.onOpenAppLinkSettings(app) }
-        )
+        NoticeStrip(stringResource(R.string.notice_app_still_opens, app.label), stringResource(R.string.fix_button), actions.onShowAppsGuide)
     }
 }
 

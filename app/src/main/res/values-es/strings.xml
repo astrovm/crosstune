@@ -137,4 +137,10 @@
     <string name="setup_sources_music">Música</string>
     <string name="setup_sources_videos">Videos</string>
     <string name="setting_only_music_videos_note">Solo los videos de música van a tu app. Los demás se abren como siempre.</string>
+    <string name="guide_may_differ">Tu teléfono puede verse un poco distinto.</string>
+    <string name="setup_allow_progress">%1$d de %2$d links permitidos</string>
+    <string name="setup_apps_stop_title">Frená %1$s</string>
+    <string name="setup_apps_stop_body">Tocá el botón y elegí “En un navegador”.</string>
+    <string name="setup_apps_progress">App %1$d de %2$d</string>
+    <string name="setup_apps_all_done">Listo. Estas apps ya no se quedan con los links.</string>
 </resources>

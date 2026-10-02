@@ -137,4 +137,10 @@
     <string name="setup_sources_music">Muziek</string>
     <string name="setup_sources_videos">Video\'s</string>
     <string name="setting_only_music_videos_note">Alleen muziekvideo\'s gaan naar je app. Andere openen zoals altijd.</string>
+    <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
+    <string name="setup_allow_progress">%1$d van %2$d links toegestaan</string>
+    <string name="setup_apps_stop_title">%1$s stoppen</string>
+    <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’.</string>
+    <string name="setup_apps_progress">App %1$d van %2$d</string>
+    <string name="setup_apps_all_done">Klaar. Deze apps houden de links niet meer vast.</string>
 </resources>

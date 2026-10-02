@@ -137,4 +137,10 @@
     <string name="setup_sources_music">음악</string>
     <string name="setup_sources_videos">동영상</string>
     <string name="setting_only_music_videos_note">음악 동영상만 앱으로 보내요. 다른 동영상은 평소처럼 열려요.</string>
+    <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
+    <string name="setup_allow_progress">링크 %2$d개 중 %1$d개 허용됨</string>
+    <string name="setup_apps_stop_title">%1$s 멈추기</string>
+    <string name="setup_apps_stop_body">버튼을 탭한 다음 \'브라우저에서\'를 선택하세요.</string>
+    <string name="setup_apps_progress">앱 %1$d/%2$d</string>
+    <string name="setup_apps_all_done">완료했어요. 이제 이 앱들은 링크를 가져가지 않아요.</string>
 </resources>

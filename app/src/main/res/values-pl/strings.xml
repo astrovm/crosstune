@@ -137,4 +137,10 @@
     <string name="setup_sources_music">Muzyka</string>
     <string name="setup_sources_videos">Filmy</string>
     <string name="setting_only_music_videos_note">Do Twojej aplikacji trafiają tylko teledyski. Inne filmy otwierają się jak zwykle.</string>
+    <string name="guide_may_differ">Na Twoim telefonie może to wyglądać trochę inaczej.</string>
+    <string name="setup_allow_progress">Dozwolone linki: %1$d z %2$d</string>
+    <string name="setup_apps_stop_title">Zatrzymaj %1$s</string>
+    <string name="setup_apps_stop_body">Kliknij przycisk i wybierz „W przeglądarce”.</string>
+    <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
+    <string name="setup_apps_all_done">Gotowe. Te aplikacje nie przejmują już linków.</string>
 </resources>

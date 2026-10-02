@@ -137,4 +137,10 @@
     <string name="setup_sources_music">Musik</string>
     <string name="setup_sources_videos">Video</string>
     <string name="setting_only_music_videos_note">Hanya video musik yang masuk ke aplikasimu. Video lain terbuka seperti biasa.</string>
+    <string name="guide_may_differ">Tampilan di ponselmu mungkin sedikit berbeda.</string>
+    <string name="setup_allow_progress">%1$d dari %2$d tautan diizinkan</string>
+    <string name="setup_apps_stop_title">Hentikan %1$s</string>
+    <string name="setup_apps_stop_body">Ketuk tombolnya, lalu pilih “Di browser”.</string>
+    <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
+    <string name="setup_apps_all_done">Beres. Aplikasi ini tidak lagi mengambil tautannya.</string>
 </resources>

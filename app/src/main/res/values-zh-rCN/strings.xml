@@ -137,4 +137,10 @@
     <string name="setup_sources_music">音乐</string>
     <string name="setup_sources_videos">视频</string>
     <string name="setting_only_music_videos_note">只有音乐视频会发送到你的应用，其他视频照常打开。</string>
+    <string name="guide_may_differ">你的手机界面可能略有不同。</string>
+    <string name="setup_allow_progress">已允许 %1$d/%2$d 个链接</string>
+    <string name="setup_apps_stop_title">停止 %1$s</string>
+    <string name="setup_apps_stop_body">点按按钮，然后选择“在浏览器中”。</string>
+    <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
+    <string name="setup_apps_all_done">完成了。这些应用不再占用这些链接。</string>
 </resources>

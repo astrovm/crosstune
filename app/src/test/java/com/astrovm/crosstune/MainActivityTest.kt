@@ -240,6 +240,7 @@ class MainActivityTest {
     fun openLinkSettingsOpensOpenByDefaultScreen() {
         val activity = launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -254,6 +255,7 @@ class MainActivityTest {
     fun openLinkSettingsUsesAppDetailsBeforeAndroid12() {
         launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStartedActivity()!!.action)
     }
@@ -284,6 +286,7 @@ class MainActivityTest {
         )
         launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -2428,6 +2431,12 @@ class MainActivityTest {
     /** A checkbox row in setup, or a source's switch in settings, which is labelled with its name. */
     private fun sourceSwitch(label: String) = composeRule.onNode((hasText(label) or hasContentDescription(label)) and isToggleable())
 
+    /** A guide's Done button, not the "Done" status beside a finished app. */
+    private fun clickDoneButton() {
+        composeRule.onAllNodes(hasText(string(R.string.setup_done)) and hasClickAction()).onFirst().performClick()
+        composeRule.waitForIdle()
+    }
+
     /** Opens a source's own page from the list in settings. */
     private fun openSource(label: String) {
         // Not the default app's menu, which may show the same name.
@@ -2563,14 +2572,19 @@ class MainActivityTest {
         val notice = string(R.string.notice_app_still_opens, string(R.string.service_spotify))
         assertTextShown(notice)
         click(string(R.string.fix_button))
+        // The guide shows what to choose, then opens the app's own settings.
+        assertTextShown(string(R.string.setup_apps_stop_title, string(R.string.service_spotify)))
+        click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:$spotify"), started.data)
 
-        // Back from Android's settings with the app's link handling off, the notice is gone.
+        // Back from Android's settings with the app's link handling off, the guide says so and the notice is gone.
         appAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_apps_all_done))
+        clickDoneButton()
         assertTextAbsent(notice)
     }
 
@@ -2583,7 +2597,11 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.allow_button))
+        // The guide shows what to tap, and how many links are allowed so far.
+        assertTextShown(string(R.string.setup_allow_progress, 0, 3))
+        click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        clickDoneButton()
 
         // Settings marks the service itself rather than repeating the notice.
         click(string(R.string.settings_button))
@@ -2591,11 +2609,15 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_not_allowed))
         openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_allow_progress, 3, 3))
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        clickDoneButton()
         assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.setup_not_allowed))
@@ -2683,9 +2705,20 @@ class MainActivityTest {
                 addDataAuthority("youtube.com", null)
             }
         )
+        // YouTube's own app is in the way too.
+        val youtube = MusicService.YOUTUBE.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
         var appAllowsLinks = true
-        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != creator || appAllowsLinks }) { packageName ->
-            if (packageName == creator) mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else emptyMap()
+        var youtubeAllowsLinks = true
+        FakeDomainVerification.installPerPackage(
+            app,
+            linkHandlingAllowed = { (it != creator || appAllowsLinks) && (it != youtube || youtubeAllowsLinks) }
+        ) { packageName ->
+            if (packageName == creator || packageName == youtube) {
+                mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+            } else {
+                emptyMap()
+            }
         }
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
@@ -2696,8 +2729,16 @@ class MainActivityTest {
         click(string(R.string.next_button))
         click(string(R.string.next_button))
 
+        // One app at a time, in name order: YouTube first, then YouTube Create.
         assertTextShown(string(R.string.setup_apps_title))
-        assertTextShown("YouTube Create")
+        assertTextShown(string(R.string.setup_apps_progress, 1, 2))
+        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube"))
+        youtubeAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+
+        assertTextShown(string(R.string.setup_apps_progress, 2, 2))
+        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube Create"))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
@@ -2705,7 +2746,8 @@ class MainActivityTest {
         appAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_done))
+        assertTextShown(string(R.string.setup_apps_all_done))
+        assertTextAbsent(string(R.string.setup_still_opens))
     }
 
     @Test

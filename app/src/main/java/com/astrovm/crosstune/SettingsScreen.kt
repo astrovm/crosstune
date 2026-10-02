@@ -44,12 +44,18 @@ import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 @Composable
-internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
+internal fun SettingsScreen(
+    state: UiState,
+    actions: ScreenActions,
+    onBack: () -> Unit,
+    // Kept by the caller, so coming back from a guide returns to the same source's page.
+    openSource: String? = null,
+    onOpenSource: (String?) -> Unit = {}
+) {
     var addingCustom by rememberSaveable { mutableStateOf(false) }
-    var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val sources = sourceSettings(state, actions)
     sources.firstOrNull { it.key == openSource }?.let { item ->
-        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { openSource = null })
+        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
     }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
@@ -84,7 +90,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
         Group {
             sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
-                SourceSummaryRow(item, onOpen = { openSource = item.key })
+                SourceSummaryRow(item, onOpen = { onOpenSource(item.key) })
             }
         }
 
@@ -524,7 +530,7 @@ private fun NotAllowedRow(actions: ScreenActions) {
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.weight(1f)
         )
-        TextButton(onClick = actions.onOpenLinkSettings) { Text(stringResource(R.string.allow_button)) }
+        TextButton(onClick = actions.onShowAllowGuide) { Text(stringResource(R.string.allow_button)) }
     }
 }
 
