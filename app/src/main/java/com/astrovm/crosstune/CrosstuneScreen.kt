@@ -100,6 +100,7 @@ internal data class ScreenActions(
     val onResultTargetChange: (Destination) -> Unit = {},
     val onMakeDefault: () -> Unit = {},
     val onInterceptChange: (MusicService, Boolean) -> Unit = { _, _ -> },
+    val onFrontendInterceptChange: (Frontend, Boolean) -> Unit = { _, _ -> },
     val onRuleChange: (MusicService, Destination?) -> Unit = { _, _ -> },
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
     val onRemoveCustom: (Destination.Custom) -> Unit = {},
@@ -351,10 +352,9 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
 @Composable
 internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
     // Settings marks each service that isn't allowed yet instead.
-    val unapproved = state.unapprovedHosts.takeIf { includeNotAllowed }
     val allow = stringResource(R.string.allow_button)
     if (state.unapprovedHosts != null) {
-        if (unapproved != null && state.intercepted.any { unapproved[it].orEmpty().isNotEmpty() }) {
+        if (includeNotAllowed && state.someLinksNotAllowed) {
             NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onOpenLinkSettings)
         }
     } else if (state.showLinkSettingsHelper) {

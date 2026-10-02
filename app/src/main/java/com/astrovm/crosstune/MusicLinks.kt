@@ -22,11 +22,7 @@ internal sealed interface LinkInput {
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
 internal object MusicLinks {
-    /** Popular Invidious and Piped sites; YouTube's link alias in the manifest takes them too. */
-    val FRONTEND_SITES = listOf(
-        "yewtu.be", "inv.nadeko.net", "invidious.nerdvpn.de", "invidious.f5.si", "invidious.tiekoetter.com",
-        "yt.chocolatemoo53.com", "piped.video", "piped.yt", "piped.adminforge.de", "piped.privacy.com.de", "piped.leptons.xyz"
-    )
+    private val frontendSites = Frontend.SOURCES.flatMap { it.sites }.toSet()
 
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
     private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
@@ -112,7 +108,7 @@ internal object MusicLinks {
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
-            segments == listOf("watch") || host in FRONTEND_SITES -> frontendVideo(url, segments)
+            segments == listOf("watch") || host in frontendSites -> frontendVideo(url, segments)
             else -> null
         }
     }

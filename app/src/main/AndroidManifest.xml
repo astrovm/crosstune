@@ -349,7 +349,15 @@
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
             </intent-filter>
-            <!-- Popular Invidious and Piped sites, which use YouTube's watch links (MusicLinks). -->
+        </activity-alias>
+
+        <!-- Popular Invidious sites: a source of their own (Frontend.sites). -->
+        <activity-alias
+            android:name=".intercept.INVIDIOUS"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            tools:ignore="AppLinkWarning">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -361,12 +369,34 @@
                 <data android:host="invidious.f5.si" />
                 <data android:host="invidious.tiekoetter.com" />
                 <data android:host="yt.chocolatemoo53.com" />
+                <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/shorts/" />
+                <data android:pathPrefix="/live/" />
+                <data android:pathPrefix="/embed/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Popular Piped sites: a source of their own (Frontend.sites). -->
+        <activity-alias
+            android:name=".intercept.PIPED"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            tools:ignore="AppLinkWarning">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
                 <data android:host="piped.video" />
                 <data android:host="piped.yt" />
                 <data android:host="piped.adminforge.de" />
                 <data android:host="piped.privacy.com.de" />
                 <data android:host="piped.leptons.xyz" />
                 <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/shorts/" />
+                <data android:pathPrefix="/live/" />
+                <data android:pathPrefix="/embed/" />
             </intent-filter>
         </activity-alias>
 

@@ -21,17 +21,25 @@ internal data class LinkApp(val packageName: String, val label: String)
 
 internal class LinkInterception(private val context: Context) {
 
-    fun isEnabled(service: MusicService): Boolean =
-        context.packageManager.getComponentEnabledSetting(component(service)) ==
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    fun isEnabled(service: MusicService): Boolean = isEnabled(component(service.name))
 
-    fun setEnabled(service: MusicService, enabled: Boolean) {
+    fun setEnabled(service: MusicService, enabled: Boolean) = setEnabled(component(service.name), enabled)
+
+    /** Whether Crosstune opens tapped links from [frontend]'s popular sites, which have their own alias. */
+    fun isEnabled(frontend: Frontend): Boolean = isEnabled(component(frontend.name))
+
+    fun setEnabled(frontend: Frontend, enabled: Boolean) = setEnabled(component(frontend.name), enabled)
+
+    private fun isEnabled(component: ComponentName): Boolean =
+        context.packageManager.getComponentEnabledSetting(component) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+    private fun setEnabled(component: ComponentName, enabled: Boolean) {
         val state = if (enabled) {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         } else {
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         }
-        context.packageManager.setComponentEnabledSetting(component(service), state, PackageManager.DONT_KILL_APP)
+        context.packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
     }
 
     /** Services whose app is installed, so setup can suggest them first. */
@@ -48,15 +56,24 @@ internal class LinkInterception(private val context: Context) {
      * The hosts of each source the user hasn't allowed Crosstune to open yet, empty once all are,
      * or null before Android 12, which has no way to ask.
      */
-    fun unapprovedHosts(): Map<MusicService, List<String>>? {
+    fun unapprovedHosts(): Map<MusicService, List<String>>? =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) null else ownHostStates()?.let(::unapprovedFrom)
+
+    /** Like [unapprovedHosts], for each web frontend's sites. */
+    fun unapprovedFrontendHosts(): Map<Frontend, List<String>>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val states = ownHostStates() ?: return null
+        return Frontend.SOURCES.associateWith { frontend -> frontend.sites.filter { notAllowed(states, it) } }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun ownHostStates(): Map<String, Int>? {
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
-        val state = try {
-            manager.getDomainVerificationUserState(context.packageName)
+        return try {
+            manager.getDomainVerificationUserState(context.packageName)?.hostToStateMap
         } catch (_: PackageManager.NameNotFoundException) {
             null
-        } ?: return null
-        return unapprovedFrom(state.hostToStateMap)
+        }
     }
 
     /**
@@ -65,18 +82,18 @@ internal class LinkInterception(private val context: Context) {
      * once "Open supported links" is turned off in that app's own settings. Null before Android 12,
      * which can't say.
      */
-    fun blockingApps(sources: Set<MusicService>): Set<LinkApp>? =
-        claimingApps(sources)?.filterValues { it }?.keys
+    fun blockingApps(sources: Set<MusicService>, frontends: Set<Frontend> = emptySet()): Set<LinkApp>? =
+        claimingApps(sources, frontends)?.filterValues { it }?.keys
 
     /**
      * Installed apps that claim links Crosstune is set to intercept, each with whether it still
      * opens them, i.e. hasn't had "Open supported links" turned off. Not just the services' own
      * apps: e.g. YouTube Create also claims YouTube's links. Null before Android 12, which can't say.
      */
-    fun claimingApps(sources: Set<MusicService>): Map<LinkApp, Boolean>? {
+    fun claimingApps(sources: Set<MusicService>, frontends: Set<Frontend> = emptySet()): Map<LinkApp, Boolean>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
-        val wanted = sources.flatMap { HOSTS[it].orEmpty() }
+        val wanted = sources.flatMap { HOSTS[it].orEmpty() } + frontends.flatMap { it.sites }
         val candidates = (installedServices().map { it.packageName } + installedOtherApps() + appsOpening(wanted)).distinct()
         return candidates.mapNotNull { packageName ->
             val state = try {
@@ -116,11 +133,11 @@ internal class LinkInterception(private val context: Context) {
         return LinkApp(packageName, label)
     }
 
-    private fun component(service: MusicService) =
-        ComponentName(context.packageName, "$ALIAS_PREFIX${service.name}")
+    private fun component(alias: String) = ComponentName(context.packageName, "$ALIAS_PREFIX$alias")
 
     companion object {
         const val ALIAS_PREFIX = "com.astrovm.crosstune.intercept."
+
 
         /**
          * Apps known to verify a service's links without being that service's app, which a search
@@ -137,7 +154,7 @@ internal class LinkInterception(private val context: Context) {
         val HOSTS = mapOf(
             MusicService.SPOTIFY to listOf("open.spotify.com", "spotify.link", "www.spotify.link"),
             MusicService.YOUTUBE_MUSIC to listOf("music.youtube.com"),
-            MusicService.YOUTUBE to listOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be") + MusicLinks.FRONTEND_SITES,
+            MusicService.YOUTUBE to listOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"),
             MusicService.APPLE_MUSIC to listOf("music.apple.com", "geo.music.apple.com"),
             MusicService.DEEZER to listOf(
                 "deezer.com", "www.deezer.com", "link.deezer.com", "deezer.page.link", "dzr.page.link"
@@ -159,11 +176,10 @@ internal class LinkInterception(private val context: Context) {
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =
-            HOSTS.mapValues { (_, hosts) ->
-                hosts.filter { host ->
-                    (hostStates[host] ?: DomainVerificationUserState.DOMAIN_STATE_NONE) ==
-                        DomainVerificationUserState.DOMAIN_STATE_NONE
-                }
-            }
+            HOSTS.mapValues { (_, hosts) -> hosts.filter { notAllowed(hostStates, it) } }
+
+        @RequiresApi(Build.VERSION_CODES.S)
+        private fun notAllowed(hostStates: Map<String, Int>, host: String): Boolean =
+            (hostStates[host] ?: DomainVerificationUserState.DOMAIN_STATE_NONE) == DomainVerificationUserState.DOMAIN_STATE_NONE
     }
 }

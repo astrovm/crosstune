@@ -78,6 +78,10 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                 if (index > 0) GroupDivider()
                 SourceRow(source, state, actions)
             }
+            Frontend.SOURCES.forEach { frontend ->
+                GroupDivider()
+                FrontendSourceRow(frontend, state, actions)
+            }
         }
 
         // Kept here even once they let Crosstune open the links, so the choice can be undone.
@@ -386,19 +390,42 @@ private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActio
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
             )
         }
-        if (notAllowed) {
-            Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.setup_not_allowed),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = actions.onOpenLinkSettings) { Text(stringResource(R.string.allow_button)) }
-            }
-        }
+        if (notAllowed) NotAllowedRow(actions)
         // Where its links go only matters once they come to Crosstune, or for the app the user listens in.
         if (intercepted || rule != null || listeningHere) RuleMenu(source, rule, state, actions)
+    }
+}
+
+/** A web frontend's links, e.g. Invidious's: on or off, and whether Android lets Crosstune open them yet. Their videos go where YouTube's do. */
+@Composable
+private fun FrontendSourceRow(frontend: Frontend, state: UiState, actions: ScreenActions) {
+    val on = frontend in state.frontendSources
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(value = on, role = Role.Switch) { actions.onFrontendInterceptChange(frontend, it) }
+                .heightIn(min = 48.dp)
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = frontend.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Switch(checked = on, onCheckedChange = null)
+        }
+        if (on && state.unapprovedFrontendHosts?.get(frontend).orEmpty().isNotEmpty()) NotAllowedRow(actions)
+    }
+}
+
+@Composable
+private fun NotAllowedRow(actions: ScreenActions) {
+    Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.setup_not_allowed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = actions.onOpenLinkSettings) { Text(stringResource(R.string.allow_button)) }
     }
 }
 

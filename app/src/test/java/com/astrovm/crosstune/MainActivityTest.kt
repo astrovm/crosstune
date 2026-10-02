@@ -2207,7 +2207,8 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         assertTextShown("yewtu.be")
 
-        click("Invidious")
+        // Invidious is also a source row; its site is edited from the row showing the address.
+        click("yewtu.be")
         composeRule.onNode(hasSetTextAction()).performTextReplacement("not a site")
         click(string(R.string.save_button))
         assertTextShown(string(R.string.frontend_address_invalid))
@@ -2216,7 +2217,7 @@ class MainActivityTest {
         assertTextShown("inv.example.org")
 
         // Cancelling keeps the site.
-        click("Invidious")
+        click("inv.example.org")
         click(string(R.string.cancel_button))
         assertTextShown("inv.example.org")
         click(string(R.string.back_button))
@@ -2227,6 +2228,38 @@ class MainActivityTest {
         val opened = nextStartedActivity()!!
         assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
         assertNull(opened.`package`)
+    }
+
+    @Test
+    fun invidiousAndPipedAreSourcesOfTheirOwnInSetupAndSettings() {
+        var states = emptyMap<String, Int>()
+        FakeDomainVerification.install(app) { states }
+        freshInstall()
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+
+        // Listening in YouTube hides YouTube, but not its frontends.
+        composeRule.onNode(hasText(string(R.string.target_youtube)) and isToggleable()).assertDoesNotExist()
+        toggleRow("Invidious")
+        assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
+        assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
+        click(string(R.string.next_button))
+        assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
+        assertTextShown(string(R.string.setup_allow_taken_hint))
+        click(string(R.string.setup_finish))
+
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.setup_not_allowed))
+        states = Frontend.INVIDIOUS.sites.associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        toggleRow("Piped")
+        assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
     }
 
     @Test

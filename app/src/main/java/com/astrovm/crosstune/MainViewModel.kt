@@ -30,6 +30,10 @@ internal data class UiState(
     /** Per-source destinations; sources without an entry use [defaultDestination]. */
     val rules: Map<MusicService, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
+    /** Web frontends, like Invidious, whose popular sites' links Crosstune opens: sources of their own. */
+    val frontendSources: Set<Frontend> = emptySet(),
+    /** Each one's sites Android doesn't let Crosstune open yet; null before Android 12. */
+    val unapprovedFrontendHosts: Map<Frontend, List<String>>? = null,
     val askEachTime: Boolean = false,
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
@@ -73,6 +77,14 @@ internal data class UiState(
         } else {
             (listOfNotNull((defaultDestination as? Destination.Service)?.service) + MusicService.entries.filter { it in installed }).distinct()
         }
+
+    /** Whether Crosstune opens any links at all. */
+    val interceptsAnything: Boolean get() = intercepted.isNotEmpty() || frontendSources.isNotEmpty()
+
+    /** Whether some link Crosstune is set to open isn't allowed yet; false before Android 12, which can't tell. */
+    val someLinksNotAllowed: Boolean
+        get() = intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
+            frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
 
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
@@ -138,13 +150,16 @@ internal class MainViewModel(
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
         val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
-        val claiming = interception.claimingApps(intercepted)
+        val frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet()
+        val claiming = interception.claimingApps(intercepted, frontendSources)
         return copy(
             defaultDestination = destinationStore.defaultDestination(),
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
             intercepted = intercepted,
+            frontendSources = frontendSources,
+            unapprovedFrontendHosts = interception.unapprovedFrontendHosts(),
             hasDefault = destinationStore.hasDefault(),
             installed = interception.installedServices(),
             unapprovedHosts = interception.unapprovedHosts(),
@@ -520,6 +535,11 @@ internal class MainViewModel(
             interception.setEnabled(source, false)
         }
         refreshSystemState()
+    }
+
+    fun setFrontendIntercepted(frontend: Frontend, enabled: Boolean) {
+        interception.setEnabled(frontend, enabled)
+        uiState = uiState.withDestinations().copy(showLinkSettingsHelper = enabled || uiState.showLinkSettingsHelper)
     }
 
     fun setIntercepted(source: MusicService, enabled: Boolean) {

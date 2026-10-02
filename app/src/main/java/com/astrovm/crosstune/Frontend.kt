@@ -11,7 +11,9 @@ internal enum class Frontend(
     val label: String,
     val via: MusicService,
     val packageName: String? = null,
-    val defaultInstance: String? = null
+    val defaultInstance: String? = null,
+    /** For web frontends, popular sites whose links Crosstune can open when tapped, each frontend its own source. */
+    val sites: List<String> = emptyList()
 ) {
     NEWPIPE("NewPipe", MusicService.YOUTUBE, packageName = "org.schabi.newpipe"),
     NEWPIPE_SOUNDCLOUD("NewPipe · SoundCloud", MusicService.SOUNDCLOUD, packageName = "org.schabi.newpipe"),
@@ -28,8 +30,16 @@ internal enum class Frontend(
     INNERTUNE("InnerTune", MusicService.YOUTUBE_MUSIC, packageName = "com.zionhuang.music"),
     RIMUSIC("RiMusic", MusicService.YOUTUBE_MUSIC, packageName = "it.fast4x.rimusic"),
     SPOTUBE("Spotube", MusicService.SPOTIFY, packageName = "oss.krtirtho.spotube"),
-    INVIDIOUS("Invidious", MusicService.YOUTUBE, defaultInstance = "https://yewtu.be"),
-    PIPED("Piped", MusicService.YOUTUBE, defaultInstance = "https://piped.video");
+    INVIDIOUS(
+        "Invidious", MusicService.YOUTUBE, defaultInstance = "https://yewtu.be",
+        sites = listOf(
+            "yewtu.be", "inv.nadeko.net", "invidious.nerdvpn.de", "invidious.f5.si", "invidious.tiekoetter.com", "yt.chocolatemoo53.com"
+        )
+    ),
+    PIPED(
+        "Piped", MusicService.YOUTUBE, defaultInstance = "https://piped.video",
+        sites = listOf("piped.video", "piped.yt", "piped.adminforge.de", "piped.privacy.com.de", "piped.leptons.xyz")
+    );
 
     /**
      * The same YouTube page on [instance]. Both frontends copy YouTube's paths, except that
@@ -46,6 +56,9 @@ internal enum class Frontend(
     }
 
     companion object {
+        /** The web frontends whose links Crosstune can open when tapped. */
+        val SOURCES = entries.filter { it.sites.isNotEmpty() }
+
         /** "yewtu.be" or "https://yewtu.be/feed" both mean "https://yewtu.be"; null if it isn't a web address. */
         fun instanceOf(address: String): String? {
             val trimmed = address.trim()
