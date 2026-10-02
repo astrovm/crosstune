@@ -7,7 +7,6 @@
     <string name="paste_button">Einfügen</string>
     <string name="clear_button">Leeren</string>
     <string name="loading_text">Link wird gesucht…</string>
-    <string name="default_open_with_label">Öffnet in</string>
     <string name="open_in_youtube_music">In YouTube Music öffnen</string>
     <string name="open_in_youtube">In YouTube öffnen</string>
     <string name="open_in_spotify">In Spotify öffnen</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Keine installierte App kann diesen Link öffnen.</string>
     <string name="error_metadata_unavailable">Die Details dieses Links konnten nicht gelesen werden.</string>
     <string name="search_in_destination">In %1$s suchen</string>
-    <string name="make_default">Als Standard festlegen</string>
     <string name="history_open">%1$s öffnen</string>
     <string name="history_copy">Link für %1$s kopieren</string>
     <string name="privacy_policy">Datenschutzerklärung</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Tippe auf den Button und wähle „Im Browser“.</string>
     <string name="setup_apps_progress">App %1$d von %2$d</string>
     <string name="setup_apps_all_done">Fertig. Diese Apps behalten die Links nicht mehr.</string>
+    <string name="choose_app_button">App wählen</string>
+    <string name="make_default_named">%1$s als Standard festlegen</string>
 </resources>

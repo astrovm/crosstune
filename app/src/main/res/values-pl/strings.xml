@@ -7,7 +7,6 @@
     <string name="paste_button">Wklej</string>
     <string name="clear_button">Wyczyść</string>
     <string name="loading_text">Sprawdzanie linku…</string>
-    <string name="default_open_with_label">Otwiera się w</string>
     <string name="open_in_youtube_music">Otwórz w YouTube Music</string>
     <string name="open_in_youtube">Otwórz w YouTube</string>
     <string name="open_in_spotify">Otwórz w Spotify</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Żadna zainstalowana aplikacja nie otworzy tego linku.</string>
     <string name="error_metadata_unavailable">Nie można odczytać szczegółów tego linku.</string>
     <string name="search_in_destination">Szukaj w %1$s</string>
-    <string name="make_default">Ustaw jako domyślną</string>
     <string name="history_open">Otwórz %1$s</string>
     <string name="history_copy">Kopiuj link do %1$s</string>
     <string name="privacy_policy">Polityka prywatności</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Kliknij przycisk i wybierz „W przeglądarce”.</string>
     <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
     <string name="setup_apps_all_done">Gotowe. Te aplikacje nie przejmują już linków.</string>
+    <string name="choose_app_button">Wybierz aplikację</string>
+    <string name="make_default_named">Ustaw %1$s jako domyślną</string>
 </resources>

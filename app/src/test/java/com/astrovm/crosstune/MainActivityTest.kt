@@ -670,14 +670,14 @@ class MainActivityTest {
         )
 
         chooseDefault(string(R.string.target_youtube))
-        click(string(R.string.make_default))
+        click(string(R.string.make_default_named, string(R.string.target_youtube)))
         assertEquals("YOUTUBE", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube))
         click(string(R.string.open_in_youtube))
         assertEquals("com.google.android.youtube", nextStartedActivity()!!.`package`)
 
         chooseDefault(string(R.string.target_youtube_music))
-        click(string(R.string.make_default))
+        click(string(R.string.make_default_named, string(R.string.target_youtube_music)))
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         assertTextShown(string(R.string.open_in_youtube_music))
     }
@@ -1511,7 +1511,6 @@ class MainActivityTest {
         )
         for ((label, destination) in expected) {
             chooseDefault(string(label))
-            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(label)))
             click(string(MusicService.entries.first { it.labelRes == label }.openLabelRes))
             val opened = nextStartedActivity()!!
             assertEquals(destination.first, opened.`package`)
@@ -3206,13 +3205,13 @@ class MainActivityTest {
         chooseDefault("Apple Music")
         assertEquals(Destination.Service(MusicService.YOUTUBE_MUSIC), DestinationStore(prefs()).defaultDestination())
         assertEquals(Destination.Service(MusicService.APPLE_MUSIC), model.uiState.resultDestination)
-        val destinationBounds = composeRule.onNodeWithTag(DEFAULT_MENU_TAG).fetchSemanticsNode().boundsInRoot
-        val makeDefaultBounds = composeRule.onNodeWithText(string(R.string.make_default)).fetchSemanticsNode().boundsInRoot
-        assertTrue(makeDefaultBounds.left >= destinationBounds.right)
-        assertTrue(makeDefaultBounds.top < destinationBounds.bottom && makeDefaultBounds.bottom > destinationBounds.top)
-        click(string(R.string.make_default))
+        // Offered right under the Open button, which already shows the app.
+        val openBounds = composeRule.onNodeWithTag(DEFAULT_MENU_TAG).fetchSemanticsNode().boundsInRoot
+        val makeDefault = string(R.string.make_default_named, "Apple Music")
+        assertTrue(composeRule.onNodeWithText(makeDefault).fetchSemanticsNode().boundsInRoot.top >= openBounds.bottom)
+        click(makeDefault)
         assertEquals(Destination.Service(MusicService.APPLE_MUSIC), DestinationStore(prefs()).defaultDestination())
-        assertTextAbsent(string(R.string.make_default))
+        assertTextAbsent(makeDefault)
 
         chooseDefault("Spotify")
         assertEquals(Destination.Service(MusicService.APPLE_MUSIC), DestinationStore(prefs()).defaultDestination())

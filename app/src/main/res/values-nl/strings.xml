@@ -7,7 +7,6 @@
     <string name="paste_button">Plakken</string>
     <string name="clear_button">Wissen</string>
     <string name="loading_text">Link opzoeken…</string>
-    <string name="default_open_with_label">Opent in</string>
     <string name="open_in_youtube_music">Openen in YouTube Music</string>
     <string name="open_in_youtube">Openen in YouTube</string>
     <string name="open_in_spotify">Openen in Spotify</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Geen geïnstalleerde app kan deze link openen.</string>
     <string name="error_metadata_unavailable">De gegevens van deze link kunnen niet worden gelezen.</string>
     <string name="search_in_destination">Zoeken in %1$s</string>
-    <string name="make_default">Als standaard instellen</string>
     <string name="history_open">%1$s openen</string>
     <string name="history_copy">Link voor %1$s kopiëren</string>
     <string name="privacy_policy">Privacybeleid</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
     <string name="setup_apps_all_done">Klaar. Deze apps houden de links niet meer vast.</string>
+    <string name="choose_app_button">App kiezen</string>
+    <string name="make_default_named">%1$s als standaard instellen</string>
 </resources>

@@ -7,7 +7,6 @@
     <string name="paste_button">पेस्ट करें</string>
     <string name="clear_button">मिटाएँ</string>
     <string name="loading_text">लिंक खोजा जा रहा है…</string>
-    <string name="default_open_with_label">इसमें खुलेगा</string>
     <string name="open_in_youtube_music">YouTube Music में खोलें</string>
     <string name="open_in_youtube">YouTube में खोलें</string>
     <string name="open_in_spotify">Spotify में खोलें</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">कोई भी इंस्टॉल किया ऐप्लिकेशन इस लिंक को नहीं खोल सकता।</string>
     <string name="error_metadata_unavailable">इस लिंक की जानकारी नहीं पढ़ी जा सकी।</string>
     <string name="search_in_destination">%1$s में खोजें</string>
-    <string name="make_default">डिफ़ॉल्ट बनाएँ</string>
     <string name="history_open">%1$s खोलें</string>
     <string name="history_copy">%1$s का लिंक कॉपी करें</string>
     <string name="privacy_policy">गोपनीयता नीति</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">बटन पर टैप करें, फिर “ब्राउज़र में” चुनें।</string>
     <string name="setup_apps_progress">ऐप %1$d / %2$d</string>
     <string name="setup_apps_all_done">हो गया। ये ऐप अब लिंक अपने पास नहीं रखते।</string>
+    <string name="choose_app_button">ऐप चुनें</string>
+    <string name="make_default_named">%1$s को डिफ़ॉल्ट बनाएं</string>
 </resources>

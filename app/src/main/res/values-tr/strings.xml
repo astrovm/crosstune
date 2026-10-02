@@ -7,7 +7,6 @@
     <string name="paste_button">Yapıştır</string>
     <string name="clear_button">Temizle</string>
     <string name="loading_text">Bağlantı aranıyor…</string>
-    <string name="default_open_with_label">Açılacağı yer</string>
     <string name="open_in_youtube_music">YouTube Music\'te aç</string>
     <string name="open_in_youtube">YouTube\'da aç</string>
     <string name="open_in_spotify">Spotify\'da aç</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Yüklü hiçbir uygulama bu bağlantıyı açamıyor.</string>
     <string name="error_metadata_unavailable">Bu bağlantının ayrıntıları okunamadı.</string>
     <string name="search_in_destination">%1$s içinde ara</string>
-    <string name="make_default">Varsayılan yap</string>
     <string name="history_open">%1$s aç</string>
     <string name="history_copy">%1$s bağlantısını kopyala</string>
     <string name="privacy_policy">Gizlilik politikası</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Düğmeye dokun, ardından “Tarayıcıda” seçeneğini seç.</string>
     <string name="setup_apps_progress">Uygulama %1$d / %2$d</string>
     <string name="setup_apps_all_done">Tamam. Bu uygulamalar artık bağlantıları almıyor.</string>
+    <string name="choose_app_button">Uygulama seç</string>
+    <string name="make_default_named">%1$s varsayılan olsun</string>
 </resources>

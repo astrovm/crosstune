@@ -7,7 +7,6 @@
     <string name="paste_button">粘贴</string>
     <string name="clear_button">清除</string>
     <string name="loading_text">正在查找链接…</string>
-    <string name="default_open_with_label">打开方式</string>
     <string name="open_in_youtube_music">在 YouTube Music 中打开</string>
     <string name="open_in_youtube">在 YouTube 中打开</string>
     <string name="open_in_spotify">在 Spotify 中打开</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">没有已安装的应用可以打开此链接。</string>
     <string name="error_metadata_unavailable">无法读取此链接的详细信息。</string>
     <string name="search_in_destination">在%1$s中搜索</string>
-    <string name="make_default">设为默认</string>
     <string name="history_open">打开%1$s</string>
     <string name="history_copy">复制%1$s的链接</string>
     <string name="privacy_policy">隐私政策</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">点按按钮，然后选择“在浏览器中”。</string>
     <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
     <string name="setup_apps_all_done">完成了。这些应用不再占用这些链接。</string>
+    <string name="choose_app_button">选择应用</string>
+    <string name="make_default_named">将 %1$s 设为默认</string>
 </resources>

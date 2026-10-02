@@ -7,7 +7,6 @@
     <string name="paste_button">Tempel</string>
     <string name="clear_button">Hapus</string>
     <string name="loading_text">Mencari link…</string>
-    <string name="default_open_with_label">Dibuka di</string>
     <string name="open_in_youtube_music">Buka di YouTube Music</string>
     <string name="open_in_youtube">Buka di YouTube</string>
     <string name="open_in_spotify">Buka di Spotify</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Tidak ada aplikasi terinstal yang bisa membuka link ini.</string>
     <string name="error_metadata_unavailable">Tidak bisa membaca detail link ini.</string>
     <string name="search_in_destination">Cari di %1$s</string>
-    <string name="make_default">Jadikan default</string>
     <string name="history_open">Buka %1$s</string>
     <string name="history_copy">Salin link untuk %1$s</string>
     <string name="privacy_policy">Kebijakan privasi</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Ketuk tombolnya, lalu pilih “Di browser”.</string>
     <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
     <string name="setup_apps_all_done">Beres. Aplikasi ini tidak lagi mengambil tautannya.</string>
+    <string name="choose_app_button">Pilih aplikasi</string>
+    <string name="make_default_named">Jadikan %1$s default</string>
 </resources>

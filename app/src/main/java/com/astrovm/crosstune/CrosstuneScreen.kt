@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -510,28 +512,19 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Opens in YouTube Music ▾": where a result opens, or, labelled in settings, the default. */
+/** "Open links in   YouTube Music ▾": the default app, in settings. */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
     onSelect: (Destination) -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
-    /** In settings the row is labelled like the others, with the choice at the end. */
-    label: String? = null,
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (label != null) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        } else {
-            Text(
-                text = stringResource(R.string.default_open_with_label),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
                 DestinationIcon(selected, installed, size = 20.dp)
@@ -677,35 +670,37 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     }
                 }
             }
-            // Changing it here only changes this result; the default lives in settings.
-            Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                DefaultDestinationMenu(
-                    destinations = state.destinations,
-                    selected = destination,
-                    onSelect = actions.onResultTargetChange,
-                    installed = state.installed,
-                    modifier = Modifier.weight(1f)
-                )
-                if (destination != state.defaultDestination) {
-                    TextButton(onClick = actions.onMakeDefault) { Text(stringResource(R.string.make_default)) }
-                }
-            }
             val searchFallback = prepared?.exact == false
-            Button(
-                onClick = actions.onOpen,
-                enabled = destinationReady,
-                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            // One split button: the main part opens it, the arrow picks another app for just this result.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .heightIn(min = 52.dp)
+                    .padding(top = 20.dp)
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                DestinationIcon(destination, state.installed, size = 24.dp)
-                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text(
-                    if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
-                    style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
-                )
+                Button(
+                    onClick = actions.onOpen,
+                    enabled = destinationReady,
+                    shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 52.dp)
+                ) {
+                    DestinationIcon(destination, state.installed, size = 24.dp)
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(
+                        if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
+                        style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
+                    )
+                }
+                DestinationMenuButton(state, actions)
+            }
+            if (destination != state.defaultDestination) {
+                TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(stringResource(R.string.make_default_named, destination.label()))
+                }
             }
             Row(
                 modifier = Modifier
@@ -743,6 +738,43 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 ) {
                     Text(stringResource(link.service.openLabelRes))
                 }
+            }
+        }
+    }
+}
+
+/** The split button's arrow: lists the apps to open this result in instead. */
+@Composable
+private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Button(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            modifier = Modifier
+                .fillMaxHeight()
+                .testTag(DEFAULT_MENU_TAG)
+        ) {
+            AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.choose_app_button))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            state.destinations.installedFirst(state.installed).forEach { destination ->
+                val isSelected = destination == state.resultDestination
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            destination.label(),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    leadingIcon = { DestinationIcon(destination, state.installed) },
+                    onClick = {
+                        expanded = false
+                        actions.onResultTargetChange(destination)
+                    },
+                    modifier = Modifier.semantics { this.selected = isSelected }
+                )
             }
         }
     }
