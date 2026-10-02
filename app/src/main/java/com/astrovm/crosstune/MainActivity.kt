@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -312,9 +313,25 @@ class MainActivity : ComponentActivity() {
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_share),
                 getString(R.string.share_service_link, service),
-                PendingIntent.getActivity(this, 0, shareChooser(original), flags)
+                PendingIntent.getActivity(this, 0, shareChooser(original), flags, startFromShareSheet())
             ).build()
         )
+    }
+
+    /**
+     * Lets the share sheet start an activity for Crosstune. Since Android 15, Android only uses the
+     * creator's permission to start one when the creator opts in, and some phones' own share sheets
+     * don't lend theirs, so without this the share action silently does nothing there.
+     */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun startFromShareSheet(): Bundle {
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+        } else {
+            @Suppress("DEPRECATION")
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+        }
+        return ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(mode).toBundle()
     }
 
     private fun openAppLinkSettings() {

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityOptions
 import android.app.Application
 import android.content.ClipData
 import androidx.compose.ui.test.hasTestTag
@@ -388,6 +389,12 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_CHOOSER, shareOriginal.action)
         val shared = shareOriginal.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         assertEquals(original, shared.getStringExtra(Intent.EXTRA_TEXT))
+        // Crosstune lets the share sheet start it, since some phones' share sheets don't lend their own permission.
+        val options = shadowOf(share.action).options!!
+        assertEquals(
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS,
+            options.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
+        )
     }
 
     @Test

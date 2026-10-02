@@ -1,1 +1,2 @@
+Share Spotify link (and the like) in the share sheet works again on phones with their own share sheet.
 Clearer steps for turning off other apps' links: the guide no longer shows YouTube for every app, says the same thing whichever way your phone asks, and says Skip for now until there's nothing left to do.
