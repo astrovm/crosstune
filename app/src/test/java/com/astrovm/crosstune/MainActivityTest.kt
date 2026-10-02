@@ -2104,8 +2104,8 @@ class MainActivityTest {
         // Where a service's links go only shows once Crosstune opens them.
         assertTextAbsent(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
         toggleRow(string(R.string.target_youtube))
-        // Once on, the list says where they go; the menu is on YouTube's own page.
-        assertTextShown(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
+        // The list only says where links go when it isn't the default; the menu is on YouTube's own page.
+        assertTextAbsent(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
         openSource(string(R.string.target_youtube))
         composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
             .performClick()

@@ -442,9 +442,10 @@ private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
-            } else if (item.on) {
+            } else if (item.on && item.rule != null) {
+                // Only when it differs from the default, so the list stays quiet.
                 Text(
-                    stringResource(R.string.rule_opens_in, item.rule?.label() ?: stringResource(R.string.rule_default, item.fallback.label())),
+                    stringResource(R.string.rule_opens_in, item.rule.label()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
