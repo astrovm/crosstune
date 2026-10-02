@@ -415,6 +415,17 @@ internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
+    // First, so coming back from Android's settings shows the result without scrolling.
+    state.unapprovedHosts?.let { unapproved ->
+        val sources = MusicService.entries.filter { it in state.intercepted }
+        val frontends = Frontend.SOURCES.filter { it in state.frontendSources }
+        val total = sources.sumOf { LinkInterception.HOSTS[it].orEmpty().size } + frontends.sumOf { it.sites.size }
+        val missing = sources.sumOf { unapproved[it].orEmpty().size } +
+            frontends.sumOf { state.unapprovedFrontendHosts?.get(it).orEmpty().size }
+        Box(modifier = Modifier.padding(bottom = 16.dp)) {
+            StatusTag(missing == 0, stringResource(R.string.setup_allow_progress, total - missing, total), stringResource(R.string.setup_allow_progress, total - missing, total))
+        }
+    }
     NumberedStep(1, stringResource(R.string.setup_allow_step_open))
     FilledTonalButton(
         onClick = actions.onOpenLinkSettings,
@@ -432,16 +443,6 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
     GuideShot(R.drawable.guide_add_link, Modifier.padding(vertical = 12.dp))
     NumberedStep(3, stringResource(R.string.setup_allow_step_tick))
     GuideShot(R.drawable.guide_tick_links, Modifier.padding(vertical = 12.dp))
-    state.unapprovedHosts?.let { unapproved ->
-        val sources = MusicService.entries.filter { it in state.intercepted }
-        val frontends = Frontend.SOURCES.filter { it in state.frontendSources }
-        val total = sources.sumOf { LinkInterception.HOSTS[it].orEmpty().size } + frontends.sumOf { it.sites.size }
-        val missing = sources.sumOf { unapproved[it].orEmpty().size } +
-            frontends.sumOf { state.unapprovedFrontendHosts?.get(it).orEmpty().size }
-        Box(modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)) {
-            StatusTag(missing == 0, stringResource(R.string.setup_allow_progress, total - missing, total), stringResource(R.string.setup_allow_progress, total - missing, total))
-        }
-    }
     Group {
         MusicService.entries.filter { it in state.intercepted }.forEachIndexed { index, source ->
             if (index > 0) GroupDivider()
