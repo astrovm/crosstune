@@ -7,11 +7,15 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal data class UiState(
     val linkText: String = "",
@@ -64,6 +68,11 @@ internal data class UiState(
     val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>? = null,
     /** The intercepted services' own installed apps, which may take their links when Android can't say. */
     val installedSourceApps: List<LinkApp> = emptyList(),
+    /**
+     * False until Android has first been asked about installed apps and links, which takes a moment.
+     * Until then the fields above don't flag anything, so nothing is shown as a problem before it's known.
+     */
+    val systemStateKnown: Boolean = true,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
     /**
@@ -114,7 +123,9 @@ internal class MainViewModel(
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
-    val artwork: ArtworkLoader
+    val artwork: ArtworkLoader,
+    /** Where Android is asked about apps and links: many slow calls that mustn't hold up the screen. */
+    private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -124,6 +135,10 @@ internal class MainViewModel(
         migrateExistingInstall()
     }
 
+    /** The last look at what Android says about apps and links, null until the first one finishes. */
+    private var linkState: LinkState? = null
+    private var systemJob: Job? = null
+
     var uiState by mutableStateOf(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
@@ -132,7 +147,8 @@ internal class MainViewModel(
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
-            setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
+            setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
+            systemStateKnown = false
         ).withDestinations()
     )
         private set
@@ -157,27 +173,38 @@ internal class MainViewModel(
     private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
     private var pendingOpen = false
 
+    /**
+     * The user's choices and which sources Crosstune opens, which are quick to read, so anything
+     * reading them right after a change sees it. What Android says about other apps and links comes
+     * from the last look at it, see [loadSystemState].
+     */
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
-        val intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet()
-        val frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet()
-        val claiming = interception.claimingApps(intercepted, frontendSources)
         return copy(
-            defaultDestination = destinationStore.defaultDestination(),
+            defaultDestination = destinationStore.defaultDestination(destinations),
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
-            rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source)?.let { source to it } }.toMap(),
-            frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend)?.let { frontend to it } }.toMap(),
-            intercepted = intercepted,
-            frontendSources = frontendSources,
-            unapprovedFrontendHosts = interception.unapprovedFrontendHosts(),
-            hasDefault = destinationStore.hasDefault(),
-            installed = interception.installedServices(),
-            unapprovedHosts = interception.unapprovedHosts(),
+            rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source, destinations)?.let { source to it } }.toMap(),
+            frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend, destinations)?.let { frontend to it } }.toMap(),
+            intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet(),
+            frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet(),
+            hasDefault = destinationStore.hasDefault(destinations)
+        ).withLinkState()
+    }
+
+    /** What Android last said about apps and links, as it concerns the sources Crosstune opens now. */
+    private fun UiState.withLinkState(): UiState {
+        val state = linkState ?: return this
+        val claiming = state.claimingApps(intercepted, frontendSources)
+        return copy(
+            systemStateKnown = true,
+            installed = state.serviceApps.keys,
+            unapprovedHosts = state.unapprovedHosts,
+            unapprovedFrontendHosts = state.unapprovedFrontendHosts,
             blockingApps = claiming?.filterValues { it }?.keys,
             claimingApps = claiming?.keys,
-            claimingAppsBySource = interception.claimingAppsBySource(),
-            installedSourceApps = interception.installedSourceApps(intercepted)
+            claimingAppsBySource = state.claimingAppsBySource,
+            installedSourceApps = state.installedSourceApps(intercepted)
         )
     }
 
@@ -187,8 +214,27 @@ internal class MainViewModel(
      */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations().copy(history = historyStore.load())
+        uiState = uiState.withDestinations()
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
+        loadSystemState()
+    }
+
+    /**
+     * Asks Android about installed apps and links, and reloads Recent, away from the main thread:
+     * it takes long enough to hold up the screen every time the app comes back. Until it's done
+     * the screen keeps what it had. A newer look replaces one still running, so an older answer
+     * never overwrites it.
+     */
+    private fun loadSystemState() {
+        systemJob?.cancel()
+        val history = uiState.history
+        systemJob = viewModelScope.launch {
+            val (stored, state) = withContext(systemDispatcher) { historyStore.load() to interception.linkState() }
+            linkState = state
+            // Anything looked up or cleared meanwhile is newer than what was read.
+            val unchanged = uiState.history === history
+            uiState = uiState.withLinkState().let { if (unchanged) it.copy(history = stored) else it }
+        }
     }
 
     fun completeSetup() {
@@ -289,13 +335,23 @@ internal class MainViewModel(
             link = null,
             showDestinationPicker = false
         )
+        // A link already in Recent is shown from there rather than looked up again. A short link's
+        // target isn't known until it's followed, so it's always looked up.
+        val link = (input as? LinkInput.Link)?.link
+        // The link as parsed is kept, since Recent doesn't save which frontend's site it came from.
+        val saved = link?.let { wanted -> uiState.history.firstOrNull { it.link.url == wanted.url }?.copy(link = wanted) }
         job = viewModelScope.launch {
             // A video from another app that isn't music, like a tutorial, opens as it would without Crosstune.
-            val video = (input as? LinkInput.Link)?.link?.takeIf {
+            val video = link?.takeIf {
                 openWhenReady && destination == null && uiState.onlyMusicVideos && it.service == MusicService.YOUTUBE
             }
-            if (video != null && matcher.isMusicVideo(video.id) == false) return@launch openAsIs(video)
-            when (val resolution = resolver.resolve(input)) {
+            // Looked up while asking whether it's music, so a music video costs one wait, not two.
+            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: resolver.resolve(input) }
+            if (video != null && matcher.isMusicVideo(video.id) == false) {
+                lookup.cancel()
+                return@launch openAsIs(video)
+            }
+            when (val resolution = lookup.await()) {
                 is Resolution.Failed -> uiState = uiState.copy(
                     isLoading = false,
                     error = resolution.error,
@@ -303,23 +359,34 @@ internal class MainViewModel(
                     link = resolution.link,
                     handingOff = false
                 )
-                is Resolution.Resolved -> onResolved(resolution)
+                // A search page saved while exact matching was on means matching failed that time,
+                // e.g. on a flaky network, so a new request for the link tries it again.
+                is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
             }
         }
     }
 
-    private suspend fun onResolved(resolution: Resolution.Resolved) {
-        val history = historyStore.add(HistoryEntry(resolution.link, resolution.metadata))
+    /** [prepared] are the links already found for it, when it came from Recent. */
+    private suspend fun onResolved(resolution: Resolution.Resolved, prepared: Map<String, PreparedLink>) {
+        val entry = HistoryEntry(resolution.link, resolution.metadata, prepared)
+        val history = historyStore.add(entry)
         // The box shows the clean link Crosstune works with, e.g. without "?si=" or a short link's redirect.
         uiState = uiState.copy(
             isLoading = false,
             result = resolution.metadata,
             link = resolution.link,
             linkText = resolution.link.url,
+            destinationUrls = savedDestinations(entry),
             history = history
         )
         prepareResult()
     }
+
+    /** The links saved with [entry] that are still good: found with exact matching as it's set now. */
+    private fun savedDestinations(entry: HistoryEntry): Map<Destination, PreparedLink> =
+        uiState.destinations.mapNotNull { destination ->
+            entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { destination to it }
+        }.toMap()
 
     /** A destination or exact-match preference change prepares the current result again. */
     private fun prepareResultDestination() {
@@ -413,10 +480,7 @@ internal class MainViewModel(
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
-            destinationUrls = uiState.destinations.mapNotNull { destination ->
-                entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }
-                    ?.let { destination to it }
-            }.toMap(),
+            destinationUrls = savedDestinations(entry),
             selectedDestination = null,
             link = entry.link,
             error = null,
@@ -561,6 +625,7 @@ internal class MainViewModel(
         MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
             .forEach { interception.setEnabled(it, true) }
         uiState = uiState.withDestinations().copy(showLinkSettingsHelper = true)
+        loadSystemState()
     }
 
     fun setFrontendRule(frontend: Frontend, destination: Destination?) {
@@ -571,12 +636,14 @@ internal class MainViewModel(
     fun setFrontendIntercepted(frontend: Frontend, enabled: Boolean) {
         interception.setEnabled(frontend, enabled)
         uiState = uiState.withDestinations().copy(showLinkSettingsHelper = enabled || uiState.showLinkSettingsHelper)
+        loadSystemState()
     }
 
     fun setIntercepted(source: MusicService, enabled: Boolean) {
         interception.setEnabled(source, enabled)
         // Android still has to be told to let Crosstune open the newly added domains.
         uiState = uiState.withDestinations().copy(showLinkSettingsHelper = enabled || uiState.showLinkSettingsHelper)
+        loadSystemState()
     }
 
     fun addCustomDestination(name: String, template: String): Boolean {
@@ -589,6 +656,8 @@ internal class MainViewModel(
     /** Moves a web frontend to another site; false if [address] isn't a web address. */
     fun setFrontendInstance(frontend: Frontend, address: String): Boolean {
         if (!destinationStore.setInstance(frontend, address)) return false
+        // Links saved for it point at the old site, which the user may have left because it's down.
+        uiState = uiState.copy(history = historyStore.forget(Destination.Alternative(frontend).key))
         refreshSystemState()
         return true
     }

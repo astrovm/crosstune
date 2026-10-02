@@ -30,8 +30,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
@@ -47,7 +50,8 @@ class MainActivity : ComponentActivity() {
                     ExactMatcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
-                    ArtworkLoader(client, cacheDir = File(cacheDir, "artwork"))
+                    ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
+                    systemDispatcher
                 )
             }
         }
@@ -67,6 +71,10 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = ::httpClient
+
+        /** Where Android is asked about apps and links; tests run it in step with the screen. */
+        @VisibleForTesting
+        internal var systemDispatcher: CoroutineDispatcher = Dispatchers.Default
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,9 +95,14 @@ class MainActivity : ComponentActivity() {
                 // Android limits how often a background app may change shortcuts, so only while shown.
                 // Converted links saved on an entry don't change its shortcut, so they don't restart it.
                 snapshotFlow {
-                    val recent = viewModel.uiState.history.take(AppShortcuts.MAX_RECENT).map { it.copy(destinationLinks = emptyMap()) }
-                    recent to viewModel.uiState.shareTargets
+                    val state = viewModel.uiState
+                    // Share targets are the installed apps, so they wait for those to be known
+                    // rather than drop out for a moment and come back.
+                    if (!state.systemStateKnown) return@snapshotFlow null
+                    val recent = state.history.take(AppShortcuts.MAX_RECENT).map { it.copy(destinationLinks = emptyMap()) }
+                    recent to state.shareTargets
                 }
+                    .filterNotNull()
                     .distinctUntilChanged()
                     .collectLatest { (recent, targets) -> shortcuts.update(recent, targets) }
             }

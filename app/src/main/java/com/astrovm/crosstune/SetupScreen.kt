@@ -81,7 +81,10 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     val skipped = { position: Int -> steps.getOrNull(position - 1) == SetupStep.APPS && appsToFix.isEmpty() }
     val current = position
     val step = if (current == 0) null else steps[current - 1]
-    val back = { position = (current - 1).let { if (skipped(it)) it - 1 else it } }
+    // Which steps are skipped, and what they show, depends on what Android says about other apps
+    // and links, so a step restored before that's known waits for it.
+    val ready = step == null || state.systemStateKnown
+    val back = { if (ready) position = (current - 1).let { if (skipped(it)) it - 1 else it } }
     // System back steps back like the Back button instead of leaving setup.
     BackHandler(enabled = current > 0, onBack = back)
 
@@ -103,7 +106,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     .widthIn(max = 290.dp)
                     .heightIn(min = 52.dp)
                 if (step != null) {
-                    OutlinedButton(onClick = back, modifier = buttonModifier) {
+                    OutlinedButton(onClick = back, enabled = ready, modifier = buttonModifier) {
                         Text(stringResource(R.string.back_button), style = MaterialTheme.typography.labelLarge)
                     }
                 }
@@ -113,7 +116,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                         if (isLast) actions.onCompleteSetup() else position = (current + 1).let { if (skipped(it)) it + 1 else it }
                     },
                     // There's no built-in default any more, so one has to be picked.
-                    enabled = step != SetupStep.DESTINATION || state.hasDefault,
+                    enabled = ready && (step != SetupStep.DESTINATION || state.hasDefault),
                     modifier = buttonModifier
                 ) {
                     Text(
@@ -134,6 +137,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
             Column {
                 if (shown == null) return@Column Welcome()
                 StepProgress(steps.indexOf(shown) + 1, steps.size)
+                if (!state.systemStateKnown) return@Column
                 when (shown) {
                     SetupStep.DESTINATION -> DestinationStep(state, actions)
                     SetupStep.SOURCES -> SourcesStep(state, actions)
