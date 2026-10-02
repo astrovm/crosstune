@@ -80,6 +80,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 internal const val RESULT_TAG = "result"
@@ -532,6 +534,8 @@ internal fun DefaultDestinationMenu(
         }
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+                DestinationIcon(selected, installed, size = 20.dp)
+                Spacer(Modifier.size(8.dp))
                 Text(selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
@@ -696,7 +700,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     .padding(top = 4.dp)
                     .heightIn(min = 52.dp)
             ) {
-                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                DestinationIcon(destination, state.installed, size = 24.dp)
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))
                 Text(
                     if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
@@ -812,30 +816,36 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
     sortedBy { if ((it as? Destination.Service)?.service in installed || (it is Destination.Alternative && it.packageName != null)) 0 else 1 }
 
-/** Use installed apps' own icons, with bundled service logos for every other built-in choice. */
+/**
+ * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
+ * with no logo of their own (Invidious, Piped, custom ones), their first letter on a colored tile.
+ */
 @Composable
-private fun DestinationIcon(destination: Destination, installed: Set<MusicService>) {
+internal fun DestinationIcon(destination: Destination, installed: Set<MusicService>, size: Dp = 32.dp) {
     val context = LocalContext.current
     // A service's app may not be installed; a frontend app is only offered once it is.
     val app = destination.packageName?.takeIf { destination !is Destination.Service || destination.service in installed }
     val icon = remember(app) {
-        app?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(64, 64).asImageBitmap() }.getOrNull() }
+        app?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
     }
-    Surface(
-        modifier = Modifier.size(32.dp), shape = MaterialTheme.shapes.small,
-        color = if (destination is Destination.Service) Color.White else MaterialTheme.colorScheme.surfaceContainerHighest
-    ) {
+    val tag = Modifier.testTag("destination-icon:" + destination.key)
+    if (icon != null) {
+        Image(icon, contentDescription = null, modifier = tag.size(size).clip(MaterialTheme.shapes.small))
+        return
+    }
+    if (destination is Destination.Service) {
+        Surface(modifier = Modifier.size(size), shape = MaterialTheme.shapes.small, color = Color.White) {
+            Image(painterResource(destination.service.iconRes), contentDescription = null, modifier = tag.fillMaxSize().padding(size / 8))
+        }
+        return
+    }
+    val (letter, background) = when (destination) {
+        is Destination.Alternative -> destination.frontend.label.take(1) to (destination.frontend.color?.let(::Color) ?: MaterialTheme.colorScheme.primary)
+        else -> destination.label().take(1) to MaterialTheme.colorScheme.tertiary
+    }
+    Surface(modifier = tag.size(size), shape = MaterialTheme.shapes.small, color = background, contentColor = Color.White) {
         Box(contentAlignment = Alignment.Center) {
-            if (icon != null) {
-                Image(icon, contentDescription = null, modifier = Modifier.fillMaxSize().testTag("destination-icon:" + destination.key))
-            } else if (destination is Destination.Service) {
-                Image(
-                    painterResource(destination.service.iconRes), contentDescription = null,
-                    modifier = Modifier.fillMaxSize().padding(4.dp).testTag("destination-icon:" + destination.key)
-                )
-            } else {
-                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
-            }
+            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size.value * 0.5f).sp)
         }
     }
 }

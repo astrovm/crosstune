@@ -13,7 +13,9 @@ internal enum class Frontend(
     val packageName: String? = null,
     val defaultInstance: String? = null,
     /** For web frontends, popular sites whose links Crosstune can open when tapped, each frontend its own source. */
-    val sites: List<String> = emptyList()
+    val sites: List<String> = emptyList(),
+    /** Brand color for its letter tile, for web frontends with no app icon. */
+    val color: Long? = null
 ) {
     NEWPIPE("NewPipe", MusicService.YOUTUBE, packageName = "org.schabi.newpipe"),
     NEWPIPE_SOUNDCLOUD("NewPipe · SoundCloud", MusicService.SOUNDCLOUD, packageName = "org.schabi.newpipe"),
@@ -31,13 +33,13 @@ internal enum class Frontend(
     RIMUSIC("RiMusic", MusicService.YOUTUBE_MUSIC, packageName = "it.fast4x.rimusic"),
     SPOTUBE("Spotube", MusicService.SPOTIFY, packageName = "oss.krtirtho.spotube"),
     INVIDIOUS(
-        "Invidious", MusicService.YOUTUBE, defaultInstance = "https://yewtu.be",
+        "Invidious", MusicService.YOUTUBE, defaultInstance = "https://yewtu.be", color = 0xFF2E8FE0,
         sites = listOf(
             "yewtu.be", "inv.nadeko.net", "invidious.nerdvpn.de", "invidious.f5.si", "invidious.tiekoetter.com", "yt.chocolatemoo53.com"
         )
     ),
     PIPED(
-        "Piped", MusicService.YOUTUBE, defaultInstance = "https://piped.video",
+        "Piped", MusicService.YOUTUBE, defaultInstance = "https://piped.video", color = 0xFFE5482F,
         sites = listOf("piped.video", "piped.yt", "piped.adminforge.de", "piped.privacy.com.de", "piped.leptons.xyz")
     );
 

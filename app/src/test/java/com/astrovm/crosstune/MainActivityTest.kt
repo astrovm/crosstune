@@ -3297,9 +3297,12 @@ class MainActivityTest {
         waitForText(string(R.string.picker_title))
         assertTextShown("Picker summary")
         composeRule.onNodeWithTag("destination-icon:YOUTUBE", useUnmergedTree = true).assertExists()
+        // Each service's icon is in the picker; the screen behind may show some too.
         MusicService.entries.forEach { service ->
-            composeRule.onNodeWithTag("destination-icon:" + service.name, useUnmergedTree = true).assertExists()
+            assertTrue(service.name, composeRule.onAllNodesWithTag("destination-icon:" + service.name, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         }
+        // Sites with no logo get a letter tile.
+        assertTrue(composeRule.onAllNodesWithTag("destination-icon:frontend:INVIDIOUS", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTextAbsent(string(R.string.setup_installed))
         click(string(R.string.cancel_button))
         assertTextAbsent(string(R.string.picker_title))

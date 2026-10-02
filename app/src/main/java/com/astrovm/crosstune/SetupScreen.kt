@@ -206,7 +206,13 @@ private fun <T> List<T>.installedFirst(installed: Set<MusicService>, service: (T
     sortedByDescending { service(it) in installed }
 
 @Composable
-private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label: String, tag: @Composable () -> Unit = {}) {
+private fun ChoiceRow(
+    modifier: Modifier,
+    control: @Composable () -> Unit,
+    label: String,
+    tag: @Composable () -> Unit = {},
+    icon: (@Composable () -> Unit)? = null
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -214,6 +220,10 @@ private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label
         verticalAlignment = Alignment.CenterVertically
     ) {
         control()
+        icon?.let {
+            Spacer(Modifier.size(12.dp))
+            it()
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
@@ -245,7 +255,9 @@ private fun SourcesStep(state: UiState, actions: ScreenActions) {
         MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
             .forEachIndexed { index, source ->
                 if (index > 0) GroupDivider()
-                SourceChoice(stringResource(source.labelRes), source in state.intercepted) { actions.onInterceptChange(source, it) }
+                SourceChoice(stringResource(source.labelRes), Destination.Service(source), state.installed, source in state.intercepted) {
+                    actions.onInterceptChange(source, it)
+                }
             }
     }
     if (listening != null && listening.canBeSource) {
@@ -260,14 +272,19 @@ private fun SourcesStep(state: UiState, actions: ScreenActions) {
     SetupGroupTitle(R.string.setup_sources_videos)
     Group {
         if (listening != MusicService.YOUTUBE) {
-            SourceChoice(stringResource(R.string.target_youtube), MusicService.YOUTUBE in state.intercepted) {
+            SourceChoice(
+                stringResource(R.string.target_youtube), Destination.Service(MusicService.YOUTUBE), state.installed,
+                MusicService.YOUTUBE in state.intercepted
+            ) {
                 actions.onInterceptChange(MusicService.YOUTUBE, it)
             }
             GroupDivider()
         }
         Frontend.SOURCES.forEachIndexed { index, frontend ->
             if (index > 0) GroupDivider()
-            SourceChoice(frontend.label, frontend in state.frontendSources) { actions.onFrontendInterceptChange(frontend, it) }
+            SourceChoice(frontend.label, Destination.Alternative(frontend), state.installed, frontend in state.frontendSources) {
+                actions.onFrontendInterceptChange(frontend, it)
+            }
         }
     }
     Text(
@@ -289,11 +306,12 @@ private fun SetupGroupTitle(title: Int) {
 }
 
 @Composable
-private fun SourceChoice(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SourceChoice(label: String, icon: Destination, installed: Set<MusicService>, checked: Boolean, onChange: (Boolean) -> Unit) {
     ChoiceRow(
         modifier = Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange),
         control = { Checkbox(checked = checked, onCheckedChange = null) },
-        label = label
+        label = label,
+        icon = { DestinationIcon(icon, installed) }
     )
 }
 
@@ -310,7 +328,8 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
                     modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) { actions.onTargetChange(destination) },
                     control = { RadioButton(selected = selected, onClick = null) },
                     label = destination.label(),
-                    tag = { InstalledTag((destination as? Destination.Service)?.service, state.installed) }
+                    tag = { InstalledTag((destination as? Destination.Service)?.service, state.installed) },
+                    icon = { DestinationIcon(destination, state.installed) }
                 )
             }
     }
