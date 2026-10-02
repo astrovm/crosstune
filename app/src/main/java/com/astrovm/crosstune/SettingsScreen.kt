@@ -80,6 +80,21 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             }
         }
 
+        // Kept here even once they let Crosstune open the links, so the choice can be undone.
+        val owners = state.claimingApps.orEmpty()
+        if (owners.isNotEmpty()) {
+            SectionHeader(
+                title = stringResource(R.string.settings_link_owners_title),
+                description = stringResource(R.string.settings_link_owners_description)
+            )
+            Group {
+                owners.forEachIndexed { index, app ->
+                    if (index > 0) GroupDivider()
+                    LinkOwnerRow(app, opensThem = app in state.blockingApps.orEmpty(), onClick = { actions.onOpenAppLinkSettings(app) })
+                }
+            }
+        }
+
         SectionHeader(
             title = stringResource(R.string.settings_custom_title),
             description = stringResource(R.string.settings_custom_description)
@@ -203,6 +218,27 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun LinkOwnerRow(app: LinkApp, opensThem: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(app.label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = stringResource(if (opensThem) R.string.link_owner_opens_them else R.string.link_owner_lets_crosstune),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
     }
 }
 

@@ -122,4 +122,8 @@
     <string name="empty_hint">Tocá un link de música en cualquier app, o compartilo con Crosstune.</string>
     <string name="copy_link_button">Copiar link</string>
     <string name="share_link_button">Compartir link</string>
+    <string name="settings_link_owners_title">Apps con estos links</string>
+    <string name="settings_link_owners_description">Estas apps pueden abrir los mismos links. Tocá una para elegir si los abre ella.</string>
+    <string name="link_owner_opens_them">Los abre ella</string>
+    <string name="link_owner_lets_crosstune">Deja que los abra Crosstune</string>
 </resources>

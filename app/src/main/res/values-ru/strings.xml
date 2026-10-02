@@ -122,4 +122,8 @@
     <string name="empty_hint">Нажмите на музыкальную ссылку в любом приложении или поделитесь ей с Crosstune.</string>
     <string name="copy_link_button">Копировать ссылку</string>
     <string name="share_link_button">Поделиться ссылкой</string>
+    <string name="settings_link_owners_title">Приложения с этими ссылками</string>
+    <string name="settings_link_owners_description">Эти приложения могут открывать те же ссылки. Нажмите на приложение, чтобы выбрать, открывает ли оно их само.</string>
+    <string name="link_owner_opens_them">Открывает их само</string>
+    <string name="link_owner_lets_crosstune">Отдаёт их Crosstune</string>
 </resources>

@@ -122,4 +122,8 @@
     <string name="empty_hint">아무 앱에서나 음악 링크를 탭하거나 Crosstune으로 공유하세요.</string>
     <string name="copy_link_button">링크 복사</string>
     <string name="share_link_button">링크 공유</string>
+    <string name="settings_link_owners_title">이 링크를 여는 앱</string>
+    <string name="settings_link_owners_description">이 앱들도 같은 링크를 열 수 있어요. 탭해서 앱이 직접 열지 선택하세요.</string>
+    <string name="link_owner_opens_them">직접 열어요</string>
+    <string name="link_owner_lets_crosstune">Crosstune이 열게 해요</string>
 </resources>

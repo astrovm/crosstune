@@ -122,4 +122,8 @@
     <string name="empty_hint">किसी भी ऐप में संगीत लिंक पर टैप करें, या उसे Crosstune पर शेयर करें।</string>
     <string name="copy_link_button">लिंक कॉपी करें</string>
     <string name="share_link_button">लिंक शेयर करें</string>
+    <string name="settings_link_owners_title">इन लिंक वाले ऐप</string>
+    <string name="settings_link_owners_description">ये ऐप भी यही लिंक खोल सकते हैं। किसी पर टैप करके चुनें कि वह उन्हें खुद खोले या नहीं।</string>
+    <string name="link_owner_opens_them">इन्हें खुद खोलता है</string>
+    <string name="link_owner_lets_crosstune">Crosstune को खोलने देता है</string>
 </resources>

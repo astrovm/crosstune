@@ -2468,6 +2468,29 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_done))
     }
 
+    @Test
+    fun settingsKeepsAppsWithTheLinksListedSoTheirChoiceCanBeUndone() {
+        val youtube = MusicService.YOUTUBE.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
+        var appAllowsLinks = true
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != youtube || appAllowsLinks }) { packageName ->
+            if (packageName == youtube) mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else emptyMap()
+        }
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
+        launch()
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.settings_link_owners_title))
+        assertTextShown(string(R.string.link_owner_opens_them))
+
+        // Given up to Crosstune, it stays listed, so it can be given back.
+        appAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.link_owner_lets_crosstune))
+        click(string(R.string.link_owner_lets_crosstune))
+        assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
+    }
+
     /** Setup as if Spotify were picked and its app installed and claiming the links; returns a way to change its switch. */
     private fun setupWithSpotifyAppInTheWay(): (Boolean) -> Unit {
         val spotify = MusicService.SPOTIFY.packageName

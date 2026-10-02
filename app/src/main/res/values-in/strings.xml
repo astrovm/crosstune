@@ -122,4 +122,8 @@
     <string name="empty_hint">Ketuk tautan musik di aplikasi apa pun, atau bagikan ke Crosstune.</string>
     <string name="copy_link_button">Salin tautan</string>
     <string name="share_link_button">Bagikan tautan</string>
+    <string name="settings_link_owners_title">Aplikasi dengan tautan ini</string>
+    <string name="settings_link_owners_description">Aplikasi ini bisa membuka tautan yang sama. Ketuk salah satunya untuk memilih apakah aplikasi itu membukanya sendiri.</string>
+    <string name="link_owner_opens_them">Membukanya sendiri</string>
+    <string name="link_owner_lets_crosstune">Membiarkan Crosstune membukanya</string>
 </resources>

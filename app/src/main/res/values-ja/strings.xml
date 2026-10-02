@@ -123,4 +123,8 @@
     <string name="empty_hint">どのアプリでも音楽リンクをタップするか、Crosstune に共有してください。</string>
     <string name="copy_link_button">リンクをコピー</string>
     <string name="share_link_button">リンクを共有</string>
+    <string name="settings_link_owners_title">これらのリンクを開くアプリ</string>
+    <string name="settings_link_owners_description">これらのアプリも同じリンクを開けます。タップして、そのアプリで開くかどうかを選べます。</string>
+    <string name="link_owner_opens_them">自分で開く</string>
+    <string name="link_owner_lets_crosstune">Crosstune に任せる</string>
 </resources>

@@ -122,4 +122,8 @@
     <string name="empty_hint">在任意应用中点按音乐链接，或将其分享给 Crosstune。</string>
     <string name="copy_link_button">复制链接</string>
     <string name="share_link_button">分享链接</string>
+    <string name="settings_link_owners_title">可打开这些链接的应用</string>
+    <string name="settings_link_owners_description">这些应用也能打开相同的链接。点按某个应用，选择是否由它自己打开。</string>
+    <string name="link_owner_opens_them">自己打开</string>
+    <string name="link_owner_lets_crosstune">交给 Crosstune 打开</string>
 </resources>

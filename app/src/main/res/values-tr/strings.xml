@@ -122,4 +122,8 @@
     <string name="empty_hint">Herhangi bir uygulamada bir müzik bağlantısına dokun ya da Crosstune ile paylaş.</string>
     <string name="copy_link_button">Bağlantıyı kopyala</string>
     <string name="share_link_button">Bağlantıyı paylaş</string>
+    <string name="settings_link_owners_title">Bu bağlantılara sahip uygulamalar</string>
+    <string name="settings_link_owners_description">Bu uygulamalar aynı bağlantıları açabilir. Bağlantıları kendisinin açıp açmayacağını seçmek için birine dokun.</string>
+    <string name="link_owner_opens_them">Kendisi açıyor</string>
+    <string name="link_owner_lets_crosstune">Crosstune\'un açmasına izin veriyor</string>
 </resources>
