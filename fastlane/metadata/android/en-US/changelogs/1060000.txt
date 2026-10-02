@@ -1,9 +1,9 @@
+New setup that guides you with screenshots, with music services ticked for you.
+
+YouTube links only go to your app when they're music.
+
+Open songs in NewPipe, Metrolist and other frontends, or on Invidious and Piped.
+
 Open a selected link from the text menu, see recent songs on the app icon, and share links straight to an app.
 
-Clearer setup and a lighter home screen: tapping a link shows just where it's going, and Settings shows which links aren't allowed yet.
-
-Sharing a converted link can also copy or share the original one.
-
-Clearing history can be undone, and covers show right away.
-
-Open songs in NewPipe, LibreTube, Metrolist and other frontends, or on Invidious and Piped.
+App icons everywhere, a simpler home screen, and history you can undo.
