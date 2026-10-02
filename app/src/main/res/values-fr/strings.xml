@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Ces applications peuvent ouvrir les mêmes liens. Touchez-en une pour choisir si elle les ouvre elle-même.</string>
     <string name="link_owner_opens_them">Les ouvre elle-même</string>
     <string name="link_owner_lets_crosstune">Laisse Crosstune les ouvrir</string>
+    <string name="setup_allow_taken_hint">Impossible de cocher un lien ? Une autre application l’a : Android indique laquelle à côté du lien. Dans ses paramètres, désactivez « Ouvrir les liens compatibles ».</string>
 </resources>

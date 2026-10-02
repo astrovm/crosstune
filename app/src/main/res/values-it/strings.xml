@@ -127,4 +127,5 @@
     <string name="settings_link_owners_description">Queste app possono aprire gli stessi link. Toccane una per scegliere se li apre lei.</string>
     <string name="link_owner_opens_them">Li apre lei</string>
     <string name="link_owner_lets_crosstune">Lascia che li apra Crosstune</string>
+    <string name="setup_allow_taken_hint">Non riesci a spuntare un link? Ce l\'ha un\'altra app: Android mostra quale accanto al link. Nelle impostazioni di quell\'app, disattiva “Apri link supportati”.</string>
 </resources>

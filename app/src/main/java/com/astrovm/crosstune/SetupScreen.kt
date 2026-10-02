@@ -360,6 +360,15 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
             }
         }
     }
+    // Some apps that keep links can't be found, but Android names them next to each link it greys out.
+    if (state.intercepted.any { state.unapprovedHosts?.get(it).orEmpty().isNotEmpty() }) {
+        Text(
+            text = stringResource(R.string.setup_allow_taken_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
+        )
+    }
 }
 
 /**

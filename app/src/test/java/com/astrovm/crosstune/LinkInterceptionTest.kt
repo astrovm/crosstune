@@ -182,6 +182,17 @@ class LinkInterceptionTest {
     }
 
     @Test
+    fun knownAppsThatKeepAServicesLinksAreFoundEvenWithoutAMatchingLinkFilter() {
+        // YouTube Create verifies youtube.com but only declares some of its paths.
+        val create = "com.google.android.apps.youtube.producer"
+        shadowOf(app.packageManager).installPackage(installedApp(create, "YouTube Create"))
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            if (packageName == create) mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else null
+        }
+        assertEquals(setOf(LinkApp(create, "YouTube Create")), interception.blockingApps(setOf(MusicService.YOUTUBE)))
+    }
+
+    @Test
     fun blockingAppsAreUnknownWithoutTheSystemService() {
         installApp(MusicService.SPOTIFY)
         assertNull(interception.blockingApps(setOf(MusicService.SPOTIFY)))

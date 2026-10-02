@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">ये ऐप भी यही लिंक खोल सकते हैं। किसी पर टैप करके चुनें कि वह उन्हें खुद खोले या नहीं।</string>
     <string name="link_owner_opens_them">इन्हें खुद खोलता है</string>
     <string name="link_owner_lets_crosstune">Crosstune को खोलने देता है</string>
+    <string name="setup_allow_taken_hint">कोई लिंक टिक नहीं हो रहा? वह किसी और ऐप के पास है: Android लिंक के पास बताता है कि कौन-सा। उस ऐप की सेटिंग में “समर्थित लिंक खोलें” बंद करें।</string>
 </resources>

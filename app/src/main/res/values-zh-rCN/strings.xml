@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">这些应用也能打开相同的链接。点按某个应用，选择是否由它自己打开。</string>
     <string name="link_owner_opens_them">自己打开</string>
     <string name="link_owner_lets_crosstune">交给 Crosstune 打开</string>
+    <string name="setup_allow_taken_hint">无法勾选某个链接？说明它已被其他应用占用：Android 会在链接旁显示是哪个应用。请在该应用的设置中关闭“打开支持的链接”。</string>
 </resources>

@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Deze apps kunnen dezelfde links openen. Tik op een app om te kiezen of hij ze zelf opent.</string>
     <string name="link_owner_opens_them">Opent ze zelf</string>
     <string name="link_owner_lets_crosstune">Laat Crosstune ze openen</string>
+    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem: Android toont welke naast de link. Zet in de instellingen van die app ‘Ondersteunde links openen’ uit.</string>
 </resources>

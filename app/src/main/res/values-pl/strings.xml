@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Te aplikacje mogą otwierać te same linki. Kliknij jedną, aby wybrać, czy ma je otwierać sama.</string>
     <string name="link_owner_opens_them">Otwiera je sama</string>
     <string name="link_owner_lets_crosstune">Pozwala otwierać je Crosstune</string>
+    <string name="setup_allow_taken_hint">Nie możesz zaznaczyć linku? Ma go inna aplikacja: Android pokazuje obok linku, która. W jej ustawieniach wyłącz „Otwieraj obsługiwane linki”.</string>
 </resources>

@@ -142,4 +142,5 @@
     <string name="settings_link_owners_description">These apps can open the same links. Tap one to choose whether it opens them itself.</string>
     <string name="link_owner_opens_them">Opens them itself</string>
     <string name="link_owner_lets_crosstune">Lets Crosstune open them</string>
+    <string name="setup_allow_taken_hint">Can\'t tick a link? Another app has it: Android shows which one next to the link. In that app\'s settings, turn off “Open supported links”.</string>
 </resources>

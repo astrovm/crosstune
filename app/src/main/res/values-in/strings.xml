@@ -126,4 +126,5 @@
     <string name="settings_link_owners_description">Aplikasi ini bisa membuka tautan yang sama. Ketuk salah satunya untuk memilih apakah aplikasi itu membukanya sendiri.</string>
     <string name="link_owner_opens_them">Membukanya sendiri</string>
     <string name="link_owner_lets_crosstune">Membiarkan Crosstune membukanya</string>
+    <string name="setup_allow_taken_hint">Tidak bisa mencentang tautan? Aplikasi lain memakainya: Android menunjukkan aplikasinya di samping tautan. Di setelan aplikasi itu, nonaktifkan “Buka link yang didukung”.</string>
 </resources>
