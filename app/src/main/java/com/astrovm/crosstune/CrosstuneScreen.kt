@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -80,6 +82,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
 internal const val RESULT_TAG = "result"
@@ -508,30 +512,23 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Opens in YouTube Music ▾": where a result opens, or, labelled in settings, the default. */
+/** "Open links in   YouTube Music ▾": the default app, in settings. */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
     onSelect: (Destination) -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
-    /** In settings the row is labelled like the others, with the choice at the end. */
-    label: String? = null,
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (label != null) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        } else {
-            Text(
-                text = stringResource(R.string.default_open_with_label),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+                DestinationIcon(selected, installed, size = 20.dp)
+                Spacer(Modifier.size(8.dp))
                 Text(selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
@@ -673,35 +670,37 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     }
                 }
             }
-            // Changing it here only changes this result; the default lives in settings.
-            Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                DefaultDestinationMenu(
-                    destinations = state.destinations,
-                    selected = destination,
-                    onSelect = actions.onResultTargetChange,
-                    installed = state.installed,
-                    modifier = Modifier.weight(1f)
-                )
-                if (destination != state.defaultDestination) {
-                    TextButton(onClick = actions.onMakeDefault) { Text(stringResource(R.string.make_default)) }
-                }
-            }
             val searchFallback = prepared?.exact == false
-            Button(
-                onClick = actions.onOpen,
-                enabled = destinationReady,
-                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            // One split button: the main part opens it, the arrow picks another app for just this result.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .heightIn(min = 52.dp)
+                    .padding(top = 20.dp)
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text(
-                    if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
-                    style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
-                )
+                Button(
+                    onClick = actions.onOpen,
+                    enabled = destinationReady,
+                    shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 52.dp)
+                ) {
+                    DestinationIcon(destination, state.installed, size = 24.dp)
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(
+                        if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
+                        style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
+                    )
+                }
+                DestinationMenuButton(state, actions)
+            }
+            if (destination != state.defaultDestination) {
+                TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(stringResource(R.string.make_default_named, destination.label()))
+                }
             }
             Row(
                 modifier = Modifier
@@ -739,6 +738,43 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 ) {
                     Text(stringResource(link.service.openLabelRes))
                 }
+            }
+        }
+    }
+}
+
+/** The split button's arrow: lists the apps to open this result in instead. */
+@Composable
+private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Button(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            modifier = Modifier
+                .fillMaxHeight()
+                .testTag(DEFAULT_MENU_TAG)
+        ) {
+            AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.choose_app_button))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            state.destinations.installedFirst(state.installed).forEach { destination ->
+                val isSelected = destination == state.resultDestination
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            destination.label(),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    leadingIcon = { DestinationIcon(destination, state.installed) },
+                    onClick = {
+                        expanded = false
+                        actions.onResultTargetChange(destination)
+                    },
+                    modifier = Modifier.semantics { this.selected = isSelected }
+                )
             }
         }
     }
@@ -812,30 +848,36 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
     sortedBy { if ((it as? Destination.Service)?.service in installed || (it is Destination.Alternative && it.packageName != null)) 0 else 1 }
 
-/** Use installed apps' own icons, with bundled service logos for every other built-in choice. */
+/**
+ * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
+ * with no logo of their own (Invidious, Piped, custom ones), their first letter on a colored tile.
+ */
 @Composable
-private fun DestinationIcon(destination: Destination, installed: Set<MusicService>) {
+internal fun DestinationIcon(destination: Destination, installed: Set<MusicService>, size: Dp = 32.dp) {
     val context = LocalContext.current
     // A service's app may not be installed; a frontend app is only offered once it is.
     val app = destination.packageName?.takeIf { destination !is Destination.Service || destination.service in installed }
     val icon = remember(app) {
-        app?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(64, 64).asImageBitmap() }.getOrNull() }
+        app?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
     }
-    Surface(
-        modifier = Modifier.size(32.dp), shape = MaterialTheme.shapes.small,
-        color = if (destination is Destination.Service) Color.White else MaterialTheme.colorScheme.surfaceContainerHighest
-    ) {
+    val tag = Modifier.testTag("destination-icon:" + destination.key)
+    if (icon != null) {
+        Image(icon, contentDescription = null, modifier = tag.size(size).clip(MaterialTheme.shapes.small))
+        return
+    }
+    if (destination is Destination.Service) {
+        Surface(modifier = Modifier.size(size), shape = MaterialTheme.shapes.small, color = Color.White) {
+            Image(painterResource(destination.service.iconRes), contentDescription = null, modifier = tag.fillMaxSize().padding(size / 8))
+        }
+        return
+    }
+    val (letter, background) = when (destination) {
+        is Destination.Alternative -> destination.frontend.label.take(1) to (destination.frontend.color?.let(::Color) ?: MaterialTheme.colorScheme.primary)
+        else -> destination.label().take(1) to MaterialTheme.colorScheme.tertiary
+    }
+    Surface(modifier = tag.size(size), shape = MaterialTheme.shapes.small, color = background, contentColor = Color.White) {
         Box(contentAlignment = Alignment.Center) {
-            if (icon != null) {
-                Image(icon, contentDescription = null, modifier = Modifier.fillMaxSize().testTag("destination-icon:" + destination.key))
-            } else if (destination is Destination.Service) {
-                Image(
-                    painterResource(destination.service.iconRes), contentDescription = null,
-                    modifier = Modifier.fillMaxSize().padding(4.dp).testTag("destination-icon:" + destination.key)
-                )
-            } else {
-                AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
-            }
+            Text(letter.uppercase(), style = MaterialTheme.typography.titleMedium, fontSize = (size.value * 0.5f).sp)
         }
     }
 }

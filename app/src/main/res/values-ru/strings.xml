@@ -7,7 +7,6 @@
     <string name="paste_button">Вставить</string>
     <string name="clear_button">Очистить</string>
     <string name="loading_text">Обрабатываем ссылку…</string>
-    <string name="default_open_with_label">Откроется в</string>
     <string name="open_in_youtube_music">Открыть в YouTube Music</string>
     <string name="open_in_youtube">Открыть в YouTube</string>
     <string name="open_in_spotify">Открыть в Spotify</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Нет установленного приложения, которое может открыть эту ссылку.</string>
     <string name="error_metadata_unavailable">Не удалось получить сведения об этой ссылке.</string>
     <string name="search_in_destination">Искать в %1$s</string>
-    <string name="make_default">Сделать по умолчанию</string>
     <string name="history_open">Открыть %1$s</string>
     <string name="history_copy">Копировать ссылку на %1$s</string>
     <string name="privacy_policy">Политика конфиденциальности</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Нажмите кнопку и выберите «В браузере».</string>
     <string name="setup_apps_progress">Приложение %1$d из %2$d</string>
     <string name="setup_apps_all_done">Готово. Эти приложения больше не забирают ссылки.</string>
+    <string name="choose_app_button">Выбрать приложение</string>
+    <string name="make_default_named">Сделать %1$s основным</string>
 </resources>

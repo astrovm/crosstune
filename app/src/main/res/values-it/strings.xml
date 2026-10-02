@@ -8,7 +8,6 @@
     <string name="paste_button">Incolla</string>
     <string name="clear_button">Cancella</string>
     <string name="loading_text">Ricerca del link in corso…</string>
-    <string name="default_open_with_label">Si apre in</string>
     <string name="open_in_youtube_music">Apri in YouTube Music</string>
     <string name="open_in_youtube">Apri in YouTube</string>
     <string name="open_in_spotify">Apri in Spotify</string>
@@ -108,7 +107,6 @@
     <string name="error_no_app_to_open">Nessuna app installata può aprire questo link.</string>
     <string name="error_metadata_unavailable">Impossibile leggere i dettagli di questo link.</string>
     <string name="search_in_destination">Cerca in %1$s</string>
-    <string name="make_default">Imposta come predefinita</string>
     <string name="history_open">Apri %1$s</string>
     <string name="history_copy">Copia il link di %1$s</string>
     <string name="privacy_policy">Informativa sulla privacy</string>
@@ -144,4 +142,6 @@
     <string name="setup_apps_stop_body">Tocca il pulsante e scegli “Nel browser”.</string>
     <string name="setup_apps_progress">App %1$d di %2$d</string>
     <string name="setup_apps_all_done">Fatto. Queste app non tengono più i link.</string>
+    <string name="choose_app_button">Scegli app</string>
+    <string name="make_default_named">Imposta %1$s come predefinita</string>
 </resources>

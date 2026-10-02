@@ -7,7 +7,6 @@
     <string name="paste_button">Coller</string>
     <string name="clear_button">Effacer</string>
     <string name="loading_text">Recherche du lien…</string>
-    <string name="default_open_with_label">Ouvre dans</string>
     <string name="open_in_youtube_music">Ouvrir dans YouTube Music</string>
     <string name="open_in_youtube">Ouvrir dans YouTube</string>
     <string name="open_in_spotify">Ouvrir dans Spotify</string>
@@ -107,7 +106,6 @@
     <string name="error_no_app_to_open">Aucune application installée ne peut ouvrir ce lien.</string>
     <string name="error_metadata_unavailable">Impossible de lire les détails de ce lien.</string>
     <string name="search_in_destination">Rechercher dans %1$s</string>
-    <string name="make_default">Définir par défaut</string>
     <string name="history_open">Ouvrir %1$s</string>
     <string name="history_copy">Copier le lien de %1$s</string>
     <string name="privacy_policy">Politique de confidentialité</string>
@@ -143,4 +141,6 @@
     <string name="setup_apps_stop_body">Touchez le bouton, puis choisissez « Dans votre navigateur ».</string>
     <string name="setup_apps_progress">Application %1$d sur %2$d</string>
     <string name="setup_apps_all_done">C’est fait. Ces applications ne gardent plus les liens.</string>
+    <string name="choose_app_button">Choisir l’application</string>
+    <string name="make_default_named">Définir %1$s par défaut</string>
 </resources>

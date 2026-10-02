@@ -55,7 +55,7 @@ internal fun SettingsScreen(
     var addingCustom by rememberSaveable { mutableStateOf(false) }
     val sources = sourceSettings(state, actions)
     sources.firstOrNull { it.key == openSource }?.let { item ->
-        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
+        return SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
     }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
@@ -90,7 +90,7 @@ internal fun SettingsScreen(
         Group {
             sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
-                SourceSummaryRow(item, onOpen = { onOpenSource(item.key) })
+                SourceSummaryRow(item, state.installed, onOpen = { onOpenSource(item.key) })
             }
         }
 
@@ -350,6 +350,8 @@ private fun appVersion(): String {
 /** Everything Settings offers for one source of links: a service, or a web frontend's sites. */
 private class SourceSettings(
     val key: String,
+    /** Whose icon it shows. */
+    val icon: Destination,
     val label: String,
     val on: Boolean,
     /** The app the user listens in, which can't be turned on while its links would just go back to it. */
@@ -377,6 +379,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
         val label = stringResource(source.labelRes)
         SourceSettings(
             key = source.name,
+            icon = Destination.Service(source),
             label = label,
             on = intercepted,
             // Already on from before the rule existed: it can still be turned off.
@@ -394,6 +397,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
         val on = frontend in state.frontendSources
         SourceSettings(
             key = Destination.FRONTEND_PREFIX + frontend.name,
+            icon = Destination.Alternative(frontend),
             label = frontend.label,
             on = on,
             locked = false,
@@ -417,7 +421,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
  * Tapping the name opens the rest of its options.
  */
 @Composable
-private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
+private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -425,12 +429,15 @@ private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
             .padding(end = 20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onOpen)
-                .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
+                .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            DestinationIcon(item.icon, installed)
+            Column(modifier = Modifier.padding(start = 16.dp)) {
             Text(item.label, style = MaterialTheme.typography.bodyLarge)
             if (item.notAllowed) {
                 Text(
@@ -445,6 +452,7 @@ private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
             }
         }
         Switch(
@@ -464,6 +472,7 @@ private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
 private fun SourcePage(
     item: SourceSettings,
     destinations: List<Destination>,
+    installed: Set<MusicService>,
     claimingApps: Map<String, Map<LinkApp, Boolean>>,
     onlyMusicVideos: Boolean,
     actions: ScreenActions,
@@ -498,7 +507,7 @@ private fun SourcePage(
                 )
             }
             GroupDivider()
-            RuleMenu(item.rule, item.fallback, destinations, item.onRule)
+            RuleMenu(item.rule, item.fallback, destinations, installed, item.onRule)
             item.site?.let { site ->
                 GroupDivider()
                 FrontendSiteRow(site, item.onSite)
@@ -535,7 +544,7 @@ private fun NotAllowedRow(actions: ScreenActions) {
 }
 
 @Composable
-private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: List<Destination>, onChange: (Destination?) -> Unit) {
+private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: List<Destination>, installed: Set<MusicService>, onChange: (Destination?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val defaultLabel = stringResource(R.string.rule_default, fallback.label())
     Box(modifier = Modifier.padding(start = 8.dp)) {
@@ -563,6 +572,7 @@ private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: Li
             destinations.forEach { destination ->
                 DropdownMenuItem(
                     text = { Text(destination.label()) },
+                    leadingIcon = { DestinationIcon(destination, installed) },
                     onClick = {
                         expanded = false
                         onChange(destination)
