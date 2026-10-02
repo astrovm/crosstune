@@ -398,6 +398,21 @@ class MainActivityTest {
     }
 
     @Test
+    @Config(sdk = [35])
+    fun beforeAndroid16TheShareSheetIsLetStartCrosstuneTheOlderWay() {
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        resolveTyped()
+
+        val share = shareChooser().customActions()[1]
+        @Suppress("DEPRECATION")
+        assertEquals(
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            shadowOf(share.action).options!!.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
+        )
+    }
+
+    @Test
     fun noOriginalLinkActionsWhenSharingTheOriginalItself() {
         prefs().edit().putString("default_target", "SPOTIFY").commit()
         respondWithTrack("Mine", "Artist · Song")
