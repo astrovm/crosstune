@@ -183,6 +183,8 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
             }
         }
     ) {
+        // Both guides show what Android says, so a guide restored before that's known waits for it.
+        if (!state.systemStateKnown) return@Page
         // Leaving with something left to do is skipping it, so the button says so.
         val done = if (allow) {
             AllowLinksGuide(state, actions)
@@ -290,7 +292,9 @@ internal fun Page(
 private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
     // A link from another app on its way out shows just that, not all of Crosstune.
     if (state.handingOff) return Handoff(state, actions)
-    if (state.showDestinationPicker) {
+    // The picker lists installed apps first, so it waits for Android to say which those are rather
+    // than move a row from under the user's finger.
+    if (state.showDestinationPicker && state.systemStateKnown) {
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
     val snackbar = remember { SnackbarHostState() }
@@ -414,6 +418,8 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
  */
 @Composable
 internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
+    // Nothing is known to be wrong until Android has been asked.
+    if (!state.systemStateKnown) return
     // Settings marks each service that isn't allowed yet instead.
     val allow = stringResource(R.string.allow_button)
     // Each opens the matching guide, which shows exactly what to tap in Android's settings.

@@ -38,6 +38,13 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         return updated
     }
 
+    /** Drops the links saved for [destinationKey], e.g. once they point at a site that's no longer used. */
+    fun forget(destinationKey: String): List<HistoryEntry> {
+        val updated = load().map { entry -> entry.copy(destinationLinks = entry.destinationLinks - destinationKey) }
+        save(updated)
+        return updated
+    }
+
     fun clear() {
         preferences.edit { remove(KEY_HISTORY) }
     }

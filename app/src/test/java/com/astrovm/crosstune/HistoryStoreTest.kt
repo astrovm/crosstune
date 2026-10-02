@@ -66,6 +66,21 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun forgettingADestinationDropsOnlyItsLinksFromEveryEntry() {
+        preferences.edit { remove("history") }
+        val site = PreparedLink("https://yewtu.be/search?q=Title", exact = false, matchingEnabled = false)
+        val app = PreparedLink("https://music.youtube.com/watch?v=kept", exact = true, matchingEnabled = true)
+        store.add(entry(1))
+        store.add(entry(2))
+        listOf(entry(1), entry(2)).forEach { store.remember(it.link.url, "frontend:INVIDIOUS", site) }
+        store.remember(entry(1).link.url, "YOUTUBE_MUSIC", app)
+
+        val forgotten = store.forget("frontend:INVIDIOUS")
+        assertEquals(listOf(entry(2), entry(1).copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to app))), forgotten)
+        assertEquals(forgotten, HistoryStore(preferences).load())
+    }
+
+    @Test
     fun corruptCachedDestinationsDoNotLoseTheHistoryEntry() {
         preferences.edit {
             putString("history", """[{"type":"TRACK","id":"1","title":"Kept","destinations":{"bad":"text","blank":{"url":""},"good":{"url":"https://example.com/search","exact":false,"matchingEnabled":true}}}]""")
