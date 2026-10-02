@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlinx.kover")
+    id("androidx.baselineprofile")
 }
 
 android {
@@ -66,6 +67,13 @@ android {
     }
 }
 
+baselineProfile {
+    // One profile for every build, kept in src/main so F-Droid's build of a tag has the same one.
+    mergeIntoMain = true
+    // Builds only use the committed profile. Generating one needs a device, which CI doesn't have.
+    automaticGenerationDuringBuild = false
+}
+
 kover {
     reports {
         variant("debug") {
@@ -97,6 +105,9 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.0")
+    // Installs the baseline profile on first launch when the app store didn't, e.g. F-Droid or a GitHub APK.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
