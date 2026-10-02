@@ -11,4 +11,10 @@
             android:targetClass="com.astrovm.crosstune.PasteFromClipboard"
             android:targetPackage="com.astrovm.crosstune" />
     </shortcut>
+
+    <!-- Share sheet targets that open a shared link in one app; AppShortcuts publishes them. -->
+    <share-target android:targetClass="com.astrovm.crosstune.MainActivity">
+        <data android:mimeType="text/plain" />
+        <category android:name="com.astrovm.crosstune.category.OPEN_IN" />
+    </share-target>
 </shortcuts>

@@ -23,6 +23,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import android.os.Bundle
@@ -391,6 +393,104 @@ class MainActivityTest {
         launch()
         resolveTyped()
         assertFalse(shareChooser().hasExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS))
+    }
+
+    @Test
+    fun selectedTextOpensInTheDefaultApp() {
+        respondWithTrack("Selected", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_PROCESS_TEXT)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_PROCESS_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+        )
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
+    }
+
+    private fun dynamicShortcuts(): List<ShortcutInfo> = app.getSystemService(ShortcutManager::class.java).dynamicShortcuts
+
+    @Test
+    fun recentSongsAreOfferedOnTheLauncherIconUntilHistoryIsCleared() {
+        respondWithTrack("Recent Song", "Artist · Song")
+        launch()
+        resolveTyped("https://open.spotify.com/track/$TRACK_ID")
+
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        val song = dynamicShortcuts().single()
+        assertEquals("Recent Song", song.shortLabel)
+        // Tapping it opens the song like tapping its link, wherever the user listens.
+        assertEquals(Intent.ACTION_VIEW, song.intent!!.action)
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", song.intent!!.dataString)
+
+        click(string(R.string.clear_history_button))
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isEmpty() }
+    }
+
+    @Test
+    fun theShareSheetOffersAppsToOpenLinksInAfterTheRecentSongs() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.TIDAL.packageName })
+        respondWithTrack("No Cover", "Artist · Song")
+        launch()
+        resolveTyped()
+
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 3 }
+        val (song, deezer, tidal) = dynamicShortcuts().sortedBy { it.rank }
+        assertEquals("No Cover", song.shortLabel)
+        assertEquals(listOf("Deezer", "TIDAL"), listOf(deezer.shortLabel, tidal.shortLabel))
+        assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), deezer.categories)
+        // Android drops shortcuts hidden from the launcher, so there they open the copied link.
+        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, deezer.intent!!.action)
+        assertEquals(MainActivity.PASTE_ALIAS, deezer.intent!!.component!!.className)
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun beforeAndroid11ShareSheetTargetsAreNotKeptLongLived() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        launch()
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        assertEquals("Deezer", dynamicShortcuts().single().shortLabel)
+    }
+
+    @Test
+    fun aShareSheetTargetFromTheLauncherOpensTheCopiedLinkInItsApp() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        respondWithTrack("Copied", "Artist · Song")
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
+
+        launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:TIDAL"))
+        controller!!.windowFocusChanged(true)
+        val activity = controller!!.get()
+        waitUntil { activity.isFinishing }
+        assertEquals(MusicService.TIDAL.packageName, nextStartedActivity()!!.`package`)
+    }
+
+    @Test
+    fun aShareSheetTargetOpensTheLinkInItsAppWithoutAsking() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("ask_each_time", true).commit()
+        respondWithTrack("Direct", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+                putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
+            }
+        )
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals(MusicService.DEEZER.packageName, nextStartedActivity()!!.`package`)
+    }
+
+    @Test
+    fun onlyShareSheetTargetIdsNameAnApp() {
+        fun chosen(id: String?) = AppShortcuts.chosenDestination(Intent().putExtra(Intent.EXTRA_SHORTCUT_ID, id))
+        assertEquals(Destination.Service(MusicService.TIDAL), chosen("open_in:TIDAL"))
+        assertNull(chosen("recent:https://open.spotify.com/track/$TRACK_ID"))
+        assertNull(chosen("open_in:NOPE"))
+        assertNull(chosen(null))
     }
 
     @Test
