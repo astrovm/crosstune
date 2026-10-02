@@ -24,6 +24,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun youTubeMusicTellsSongsAndMusicVideosFromOtherVideos() {
+        fun type(type: String) = """{"contents":{"x":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}"""
+        respond(type("OMV"))
+        assertEquals(true, runBlocking { matcher().isMusicVideo("4NRXx6U8ABQ") })
+        assertTrue(fake.requestedUrls.single().startsWith("https://music.youtube.com/youtubei/v1/next"))
+        assertTrue(fake.requestBodies.single().contains("\"videoId\":\"4NRXx6U8ABQ\""))
+        respond(type("ATV"))
+        assertEquals(true, runBlocking { matcher().isMusicVideo("4NRXx6U8ABQ") })
+        respond(type("UGC"))
+        assertEquals(false, runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
+
+        // Nothing to tell from, or no answer: unknown.
+        respond("{}")
+        assertNull(runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
+        respond("not json")
+        assertNull(runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
+        fake.handler = { throw IOException("offline") }
+        assertNull(runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
+    }
+
+    @Test
     fun appleMusicSkipsRemixesAndIgnoresAccentsAndPunctuation() {
         respond(
             """{"results":[

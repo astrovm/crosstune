@@ -240,6 +240,7 @@ class MainActivityTest {
     fun openLinkSettingsOpensOpenByDefaultScreen() {
         val activity = launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -254,6 +255,7 @@ class MainActivityTest {
     fun openLinkSettingsUsesAppDetailsBeforeAndroid12() {
         launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStartedActivity()!!.action)
     }
@@ -284,6 +286,7 @@ class MainActivityTest {
         )
         launch()
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -2243,6 +2246,8 @@ class MainActivityTest {
         var states = emptyMap<String, Int>()
         FakeDomainVerification.install(app) { states }
         freshInstall()
+        // These tests pick sources themselves.
+        prefs().edit().putBoolean("sources_preselected", true).commit()
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
@@ -2296,6 +2301,56 @@ class MainActivityTest {
 
         // Piped's links still go where YouTube's do.
         assertNull(DestinationStore(prefs()).rule(Frontend.PIPED))
+    }
+
+    /** YouTube Music says the video is someone's own upload, not music; nothing else is answered. */
+    private fun respondNotMusic() {
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_UGC"}}""")
+        }
+    }
+
+    @Test
+    fun aYouTubeVideoThatIsntMusicOpensInYouTubeAsUsual() {
+        respondNotMusic()
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals(MusicService.YOUTUBE.packageName, opened.`package`)
+        assertEquals("https://www.youtube.com/watch?v=jNQXAC9IVRw", opened.dataString)
+        // Only YouTube Music was asked; the video wasn't looked up.
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun anInvidiousVideoThatIsntMusicStaysOnItsSite() {
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        respondNotMusic()
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://yewtu.be/watch?v=jNQXAC9IVRw")))
+        waitUntil { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals("https://yewtu.be/watch?v=jNQXAC9IVRw", opened.dataString)
+        assertEquals("com.example.browser", app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName)
+    }
+
+    @Test
+    fun everyVideoGoesToTheUsersAppWhenOnlyMusicIsOff() {
+        respondNotMusic()
+        launch()
+        click(string(R.string.settings_button))
+        openSource(string(R.string.target_youtube))
+        toggleRow(string(R.string.setting_only_music_videos))
+        assertFalse(prefs().getBoolean("only_music_videos", true))
+        click(string(R.string.back_button))
+        click(string(R.string.back_button))
+        controller!!.pause().stop().destroy()
+
+        fake.requestedUrls.clear()
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
+        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.isNotEmpty() }
+        // Straight to looking the video up, without asking YouTube Music first.
+        assertTrue(fake.requestedUrls.none { "youtubei/v1/next" in it })
     }
 
     @Test
@@ -2376,6 +2431,12 @@ class MainActivityTest {
     /** A checkbox row in setup, or a source's switch in settings, which is labelled with its name. */
     private fun sourceSwitch(label: String) = composeRule.onNode((hasText(label) or hasContentDescription(label)) and isToggleable())
 
+    /** A guide's Done button, not the "Done" status beside a finished app. */
+    private fun clickDoneButton() {
+        composeRule.onAllNodes(hasText(string(R.string.setup_done)) and hasClickAction()).onFirst().performClick()
+        composeRule.waitForIdle()
+    }
+
     /** Opens a source's own page from the list in settings. */
     private fun openSource(label: String) {
         // Not the default app's menu, which may show the same name.
@@ -2386,6 +2447,27 @@ class MainActivityTest {
     private fun toggleRow(label: String) {
         sourceSwitch(label).performClick()
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun listeningInAnAppThatIsntASourceTicksEveryMusicService() {
+        freshInstall()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.service_amazon_music))
+        click(string(R.string.next_button))
+        assertEquals(
+            MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE }.toSet(),
+            MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
+        )
+        // Amazon Music has no links to open, so there's nothing to explain.
+        assertTextAbsent(string(R.string.setup_sources_listening_note, string(R.string.service_amazon_music)))
+
+        // Coming back later leaves the user's choices alone.
+        toggleRow(string(R.string.service_spotify))
+        click(string(R.string.back_button))
+        click(string(R.string.next_button))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
 
     @Test
@@ -2405,11 +2487,18 @@ class MainActivityTest {
         composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
 
         click(string(R.string.next_button))
+        // Every music service starts ticked, but the one the user listens in; videos don't.
+        assertEquals(
+            MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != MusicService.DEEZER }.toSet(),
+            MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
+        )
+        assertFalse(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
+        assertTextShown(string(R.string.setting_only_music_videos_note))
         toggleRow(string(R.string.target_youtube))
         toggleRow(string(R.string.service_spotify))
         toggleRow(string(R.string.service_spotify))
         assertEquals(
-            setOf(MusicService.YOUTUBE),
+            MusicService.entries.filter { it.canBeSource && it != MusicService.DEEZER }.toSet(),
             MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
         )
 
@@ -2483,14 +2572,19 @@ class MainActivityTest {
         val notice = string(R.string.notice_app_still_opens, string(R.string.service_spotify))
         assertTextShown(notice)
         click(string(R.string.fix_button))
+        // The guide shows what to choose, then opens the app's own settings.
+        assertTextShown(string(R.string.setup_apps_stop_title, string(R.string.service_spotify)))
+        click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:$spotify"), started.data)
 
-        // Back from Android's settings with the app's link handling off, the notice is gone.
+        // Back from Android's settings with the app's link handling off, the guide says so and the notice is gone.
         appAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_apps_all_done))
+        clickDoneButton()
         assertTextAbsent(notice)
     }
 
@@ -2503,7 +2597,11 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.allow_button))
+        // The guide shows what to tap, and how many links are allowed so far.
+        assertTextShown(string(R.string.setup_allow_progress, 0, 3))
+        click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        clickDoneButton()
 
         // Settings marks the service itself rather than repeating the notice.
         click(string(R.string.settings_button))
@@ -2511,11 +2609,15 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_not_allowed))
         openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
+        click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_allow_progress, 3, 3))
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        clickDoneButton()
         assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.setup_not_allowed))
@@ -2603,9 +2705,20 @@ class MainActivityTest {
                 addDataAuthority("youtube.com", null)
             }
         )
+        // YouTube's own app is in the way too.
+        val youtube = MusicService.YOUTUBE.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
         var appAllowsLinks = true
-        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != creator || appAllowsLinks }) { packageName ->
-            if (packageName == creator) mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else emptyMap()
+        var youtubeAllowsLinks = true
+        FakeDomainVerification.installPerPackage(
+            app,
+            linkHandlingAllowed = { (it != creator || appAllowsLinks) && (it != youtube || youtubeAllowsLinks) }
+        ) { packageName ->
+            if (packageName == creator || packageName == youtube) {
+                mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+            } else {
+                emptyMap()
+            }
         }
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
@@ -2616,8 +2729,16 @@ class MainActivityTest {
         click(string(R.string.next_button))
         click(string(R.string.next_button))
 
+        // One app at a time, in name order: YouTube first, then YouTube Create.
         assertTextShown(string(R.string.setup_apps_title))
-        assertTextShown("YouTube Create")
+        assertTextShown(string(R.string.setup_apps_progress, 1, 2))
+        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube"))
+        youtubeAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+
+        assertTextShown(string(R.string.setup_apps_progress, 2, 2))
+        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube Create"))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
@@ -2625,7 +2746,8 @@ class MainActivityTest {
         appAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_done))
+        assertTextShown(string(R.string.setup_apps_all_done))
+        assertTextAbsent(string(R.string.setup_still_opens))
     }
 
     @Test
@@ -2741,6 +2863,8 @@ class MainActivityTest {
     @Test
     fun setupCanGoBackAndHandlesPickingNoServices() {
         freshInstall()
+        // These tests pick sources themselves.
+        prefs().edit().putBoolean("sources_preselected", true).commit()
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.back_button))
@@ -2796,6 +2920,8 @@ class MainActivityTest {
             }
         }
         freshInstall()
+        // These tests pick sources themselves.
+        prefs().edit().putBoolean("sources_preselected", true).commit()
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.SPOTIFY))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()

@@ -40,6 +40,8 @@ internal data class UiState(
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
+    /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
+    val onlyMusicVideos: Boolean = true,
     val showDestinationPicker: Boolean = false,
     /** A service the picker leaves out: the one the link came from, when opening it there would just go back. */
     val pickerHides: MusicService? = null,
@@ -127,6 +129,7 @@ internal class MainViewModel(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
+            onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false)
@@ -287,6 +290,11 @@ internal class MainViewModel(
             showDestinationPicker = false
         )
         job = viewModelScope.launch {
+            // A video from another app that isn't music, like a tutorial, opens as it would without Crosstune.
+            val video = (input as? LinkInput.Link)?.link?.takeIf {
+                openWhenReady && destination == null && uiState.onlyMusicVideos && it.service == MusicService.YOUTUBE
+            }
+            if (video != null && matcher.isMusicVideo(video.id) == false) return@launch openAsIs(video)
             when (val resolution = resolver.resolve(input)) {
                 is Resolution.Failed -> uiState = uiState.copy(
                     isLoading = false,
@@ -546,6 +554,20 @@ internal class MainViewModel(
         refreshSystemState()
     }
 
+    /**
+     * Ticks every music service the first time setup lists them, but the one the user listens in;
+     * video sources stay off, since most videos aren't music. Changing them later is up to the user.
+     */
+    fun preselectSources() {
+        if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false)) return
+        preferences.edit { putBoolean(KEY_SOURCES_PRESELECTED, true) }
+        if (uiState.interceptsAnything) return
+        val listening = uiState.listeningService()
+        MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
+            .forEach { interception.setEnabled(it, true) }
+        uiState = uiState.withDestinations().copy(showLinkSettingsHelper = true)
+    }
+
     fun setFrontendRule(frontend: Frontend, destination: Destination?) {
         destinationStore.setRule(frontend, destination)
         refreshSystemState()
@@ -592,6 +614,18 @@ internal class MainViewModel(
         prepareResultDestination()
     }
 
+    /** A frontend's video goes back to its site, in a browser; any other to the YouTube app. */
+    private suspend fun openAsIs(video: MusicLink) {
+        pendingOpen = false
+        val packageName = if (video.frontendUrl == null) MusicService.YOUTUBE.packageName else null
+        effectChannel.send(Effect.Open(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true))
+    }
+
+    fun setOnlyMusicVideos(enabled: Boolean) {
+        uiState = uiState.copy(onlyMusicVideos = enabled)
+        preferences.edit { putBoolean(KEY_ONLY_MUSIC_VIDEOS, enabled) }
+    }
+
     fun setCleanLinks(enabled: Boolean) {
         uiState = uiState.copy(cleanLinks = enabled)
         preferences.edit { putBoolean(KEY_CLEAN_LINKS, enabled) }
@@ -615,6 +649,8 @@ internal class MainViewModel(
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
+        private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
+        private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
         private const val KEY_SETUP_COMPLETE = "setup_complete"
 
         /** Preferences only an install from before first-run setup can have. */

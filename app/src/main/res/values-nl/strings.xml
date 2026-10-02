@@ -21,7 +21,7 @@
     <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
-    <string name="settings_links_description">Services die je hier aanzet, openen in Crosstune als je op hun links tikt. Delen of plakken werkt voor alle services.</string>
+    <string name="settings_links_description">Aangetikte links van deze diensten openen in Crosstune. Delen en plakken werken altijd.</string>
     <string name="rule_opens_in">Opent in %1$s</string>
     <string name="rule_default">Standaard (%1$s)</string>
     <string name="settings_custom_title">Andere apps en sites</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
     <string name="settings_behaviour_title">Gedrag</string>
     <string name="setup_welcome_title">Welkom bij Crosstune</string>
-    <string name="setup_welcome_body">Een muzieklink van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent in je favoriete app.</string>
+    <string name="setup_welcome_body">Een muzieklink uit een andere app gekregen? Tik erop en hij opent waar je luistert.</string>
     <string name="setup_get_started">Aan de slag</string>
     <string name="next_button">Volgende</string>
     <string name="back_button">Terug</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
     <string name="setup_apps_title">Andere apps stoppen</string>
-    <string name="setup_apps_body">Deze apps openen eerst hun eigen links. Kies in elke app “In je browser” of zet “Ondersteunde links openen” uit.</string>
+    <string name="setup_apps_body">Deze apps pakken hun links als eerste. Zet in elke app ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_still_opens">Opent nog links</string>
     <string name="setup_done">Klaar</string>
     <string name="setup_allowed">Toegestaan</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">Versie</string>
     <string name="made_with_love">Gemaakt met %1$s door astro</string>
 
-    <string name="error_invalid_url">Dit is geen link naar een nummer, album, artiest of afspeellijst.</string>
+    <string name="error_invalid_url">Dat is geen link naar een nummer, album, artiest of afspeellijst.</string>
     <string name="error_network">Geen verbinding. Controleer je internet en probeer het opnieuw.</string>
     <string name="error_not_found">De service kan dit niet vinden. Het is misschien privé of verwijderd.</string>
     <string name="error_rate_limited">De service is druk bezig. Wacht even en probeer het opnieuw.</string>
@@ -124,12 +124,23 @@
     <string name="share_link_button">Link delen</string>
     <string name="settings_link_owners_title">Apps met deze links</string>
     <string name="settings_link_owners_description">Deze apps kunnen dezelfde links openen. Tik op een app om te kiezen of hij ze zelf opent.</string>
-    <string name="link_owner_opens_them">Opent ze zelf</string>
+    <string name="link_owner_opens_them">Houdt zijn links</string>
     <string name="link_owner_lets_crosstune">Laat Crosstune ze openen</string>
-    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem: Android toont welke naast de link. Zet in de instellingen van die app ‘Ondersteunde links openen’ uit.</string>
+    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem. Zet daar ‘Ondersteunde links openen’ uit.</string>
     <string name="frontend_address_title">Adres van %1$s</string>
     <string name="save_button">Opslaan</string>
     <string name="frontend_address_invalid">Voer een webadres in, zoals yewtu.be</string>
     <string name="frontend_site_on">Opent video\'s op %1$s</string>
-    <string name="source_open_links">Deze links openen in Crosstune</string>
+    <string name="source_open_links">Openen in Crosstune</string>
+    <string name="setting_only_music_videos">Alleen muziekvideo\'s</string>
+    <string name="setting_only_music_videos_description">Andere video\'s openen zoals altijd.</string>
+    <string name="setup_sources_music">Muziek</string>
+    <string name="setup_sources_videos">Video\'s</string>
+    <string name="setting_only_music_videos_note">Alleen muziekvideo\'s gaan naar je app. Andere openen zoals altijd.</string>
+    <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
+    <string name="setup_allow_progress">%1$d van %2$d links toegestaan</string>
+    <string name="setup_apps_stop_title">%1$s stoppen</string>
+    <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’.</string>
+    <string name="setup_apps_progress">App %1$d van %2$d</string>
+    <string name="setup_apps_all_done">Klaar. Deze apps houden de links niet meer vast.</string>
 </resources>

@@ -21,7 +21,7 @@
     <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
-    <string name="settings_links_description">Les services activés ici s\'ouvrent dans Crosstune quand vous appuyez sur leurs liens. Le partage et le collage fonctionnent pour tous.</string>
+    <string name="settings_links_description">Les liens de ces services que vous touchez s’ouvrent dans Crosstune. Partager et coller fonctionnent toujours.</string>
     <string name="rule_opens_in">Ouvre dans : %1$s</string>
     <string name="rule_default">Par défaut (%1$s)</string>
     <string name="settings_custom_title">Autres applications et sites</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Saisissez un nom et une URL contenant {query}.</string>
     <string name="settings_behaviour_title">Comportement</string>
     <string name="setup_welcome_title">Bienvenue dans Crosstune</string>
-    <string name="setup_welcome_body">Vous avez reçu un lien d\'un service de musique, mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s\'ouvre dans votre application préférée.</string>
+    <string name="setup_welcome_body">Un lien musical reçu d’une autre application ? Touchez-le, il s’ouvre là où vous écoutez.</string>
     <string name="setup_get_started">Commencer</string>
     <string name="next_button">Suivant</string>
     <string name="back_button">Retour</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">Appuyez sur Ajouter un lien.</string>
     <string name="setup_allow_step_tick">Cochez tous les liens, puis appuyez sur Ajouter.</string>
     <string name="setup_apps_title">Bloquer les autres applications</string>
-    <string name="setup_apps_body">Ces applications ouvrent d\'abord leurs propres liens. Dans chacune, choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
+    <string name="setup_apps_body">Ces applications prennent leurs liens en premier. Dans chacune, désactivez « Ouvrir les liens compatibles ».</string>
     <string name="setup_still_opens">Ouvre encore les liens</string>
     <string name="setup_done">Terminé</string>
     <string name="setup_allowed">Autorisé</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">Version</string>
     <string name="made_with_love">Fait avec %1$s par astro</string>
 
-    <string name="error_invalid_url">Ce lien ne mène pas à un titre, un album, un artiste ni une playlist.</string>
+    <string name="error_invalid_url">Ce n’est pas un lien vers un morceau, un album, un artiste ou une playlist.</string>
     <string name="error_network">Connexion impossible. Vérifiez votre connexion Internet et réessayez.</string>
     <string name="error_not_found">Le service n\'a pas trouvé ce contenu. Il est peut-être privé ou supprimé.</string>
     <string name="error_rate_limited">Le service est surchargé. Patientez un instant et réessayez.</string>
@@ -124,12 +124,23 @@
     <string name="share_link_button">Partager le lien</string>
     <string name="settings_link_owners_title">Applications avec ces liens</string>
     <string name="settings_link_owners_description">Ces applications peuvent ouvrir les mêmes liens. Touchez-en une pour choisir si elle les ouvre elle-même.</string>
-    <string name="link_owner_opens_them">Les ouvre elle-même</string>
+    <string name="link_owner_opens_them">Garde ses liens</string>
     <string name="link_owner_lets_crosstune">Laisse Crosstune les ouvrir</string>
-    <string name="setup_allow_taken_hint">Impossible de cocher un lien ? Une autre application l’a : Android indique laquelle à côté du lien. Dans ses paramètres, désactivez « Ouvrir les liens compatibles ».</string>
+    <string name="setup_allow_taken_hint">Impossible de cocher un lien ? Une autre application l’a. Désactivez son « Ouvrir les liens compatibles ».</string>
     <string name="frontend_address_title">Adresse de %1$s</string>
     <string name="save_button">Enregistrer</string>
     <string name="frontend_address_invalid">Saisissez une adresse web, comme yewtu.be</string>
     <string name="frontend_site_on">Ouvre les vidéos sur %1$s</string>
-    <string name="source_open_links">Ouvrir ces liens dans Crosstune</string>
+    <string name="source_open_links">Ouvrir dans Crosstune</string>
+    <string name="setting_only_music_videos">Uniquement les vidéos musicales</string>
+    <string name="setting_only_music_videos_description">Les autres vidéos s’ouvrent comme d’habitude.</string>
+    <string name="setup_sources_music">Musique</string>
+    <string name="setup_sources_videos">Vidéos</string>
+    <string name="setting_only_music_videos_note">Seules les vidéos musicales vont dans votre application. Les autres s’ouvrent comme d’habitude.</string>
+    <string name="guide_may_differ">Votre téléphone peut être un peu différent.</string>
+    <string name="setup_allow_progress">%1$d liens autorisés sur %2$d</string>
+    <string name="setup_apps_stop_title">Arrêter %1$s</string>
+    <string name="setup_apps_stop_body">Touchez le bouton, puis choisissez « Dans votre navigateur ».</string>
+    <string name="setup_apps_progress">Application %1$d sur %2$d</string>
+    <string name="setup_apps_all_done">C’est fait. Ces applications ne gardent plus les liens.</string>
 </resources>

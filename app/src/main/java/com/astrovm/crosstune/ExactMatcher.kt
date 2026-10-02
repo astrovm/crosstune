@@ -38,6 +38,25 @@ internal class ExactMatcher(
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
 
+    /**
+     * Whether YouTube Music counts a YouTube video as music: a song or an official music video,
+     * not someone's own upload such as a tutorial. Null when it can't be told, e.g. offline.
+     */
+    suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
+        try {
+            val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
+            val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
+            val type = musicVideoTypeRegex.find(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body).toString())?.groupValues?.get(1)
+            type?.let { it in MUSIC_VIDEO_TYPES }
+        } catch (_: IOException) {
+            null
+        } catch (_: JSONException) {
+            null
+        }
+    }
+
+    private val musicVideoTypeRegex = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
+
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type == ItemType.PLAYLIST) return null
         return withTimeoutOrNull(TIMEOUT_MS) {
@@ -222,6 +241,10 @@ internal class ExactMatcher(
         const val TIMEOUT_MS = 5_000L
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
+        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
+
+        /** Songs (ATV), official music videos (OMV) and label uploads; UGC and podcasts aren't music. */
+        val MUSIC_VIDEO_TYPES = setOf("ATV", "OMV", "OFFICIAL_SOURCE_MUSIC")
         const val YOUTUBE_MUSIC_WATCH_URL = "https://music.youtube.com/watch?v="
         const val YOUTUBE_MUSIC_ALBUM_URL = "https://music.youtube.com/browse/"
         const val YOUTUBE_MUSIC_ARTIST_URL = "https://music.youtube.com/channel/"

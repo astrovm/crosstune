@@ -21,7 +21,7 @@
     <string name="settings_default_label">링크를 열 앱</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
-    <string name="settings_links_description">여기서 켠 서비스의 링크는 탭하면 Crosstune에서 열려요. 공유하거나 붙여넣는 링크는 모든 서비스에서 사용할 수 있어요.</string>
+    <string name="settings_links_description">여기 서비스의 링크를 탭하면 Crosstune에서 열려요. 공유와 붙여넣기는 항상 돼요.</string>
     <string name="rule_opens_in">%1$s에서 열기</string>
     <string name="rule_default">기본값(%1$s)</string>
     <string name="settings_custom_title">다른 앱 및 사이트</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">이름과 {query}가 포함된 URL을 입력하세요.</string>
     <string name="settings_behaviour_title">동작</string>
     <string name="setup_welcome_title">Crosstune에 오신 것을 환영해요</string>
-    <string name="setup_welcome_body">한 음악 서비스의 링크를 받았는데 다른 서비스로 듣나요? 링크를 탭하면 같은 노래가 원하는 앱에서 열려요.</string>
+    <string name="setup_welcome_body">다른 앱에서 음악 링크를 받았나요? 탭하면 평소 듣는 앱에서 열려요.</string>
     <string name="setup_get_started">시작하기</string>
     <string name="next_button">다음</string>
     <string name="back_button">뒤로</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">링크 추가를 탭하세요.</string>
     <string name="setup_allow_step_tick">모든 링크를 선택한 다음 추가를 탭하세요.</string>
     <string name="setup_apps_title">다른 앱 차단</string>
-    <string name="setup_apps_body">이 앱들은 자체 링크를 먼저 열어요. 각 앱에서 “브라우저에서”를 선택하거나 “지원되는 링크 열기”를 끄세요.</string>
+    <string name="setup_apps_body">이 앱들이 먼저 자기 링크를 가져가요. 각 앱에서 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="setup_still_opens">여전히 링크를 열어요</string>
     <string name="setup_done">완료됨</string>
     <string name="setup_allowed">허용됨</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">버전</string>
     <string name="made_with_love">astro가 %1$s을 담아 만들었어요</string>
 
-    <string name="error_invalid_url">노래, 앨범, 아티스트, 플레이리스트 링크가 아니에요.</string>
+    <string name="error_invalid_url">곡, 앨범, 아티스트, 재생목록 링크가 아니에요.</string>
     <string name="error_network">연결할 수 없어요. 인터넷 연결을 확인하고 다시 시도하세요.</string>
     <string name="error_not_found">서비스에서 찾을 수 없어요. 비공개이거나 삭제되었을 수 있어요.</string>
     <string name="error_rate_limited">서비스가 혼잡해요. 잠시 후 다시 시도하세요.</string>
@@ -124,12 +124,23 @@
     <string name="share_link_button">링크 공유</string>
     <string name="settings_link_owners_title">이 링크를 여는 앱</string>
     <string name="settings_link_owners_description">이 앱들도 같은 링크를 열 수 있어요. 탭해서 앱이 직접 열지 선택하세요.</string>
-    <string name="link_owner_opens_them">직접 열어요</string>
+    <string name="link_owner_opens_them">직접 링크를 열어요</string>
     <string name="link_owner_lets_crosstune">Crosstune이 열게 해요</string>
-    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 어떤 앱인지 링크 옆에 표시돼요. 그 앱의 설정에서 \'지원되는 링크 열기\'를 끄세요.</string>
+    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 그 앱의 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="frontend_address_title">%1$s 주소</string>
     <string name="save_button">저장</string>
     <string name="frontend_address_invalid">yewtu.be 같은 웹 주소를 입력하세요</string>
     <string name="frontend_site_on">%1$s에서 동영상 열기</string>
-    <string name="source_open_links">이 링크를 Crosstune에서 열기</string>
+    <string name="source_open_links">Crosstune에서 열기</string>
+    <string name="setting_only_music_videos">음악 동영상만</string>
+    <string name="setting_only_music_videos_description">다른 동영상은 평소처럼 열려요.</string>
+    <string name="setup_sources_music">음악</string>
+    <string name="setup_sources_videos">동영상</string>
+    <string name="setting_only_music_videos_note">음악 동영상만 앱으로 보내요. 다른 동영상은 평소처럼 열려요.</string>
+    <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
+    <string name="setup_allow_progress">링크 %2$d개 중 %1$d개 허용됨</string>
+    <string name="setup_apps_stop_title">%1$s 멈추기</string>
+    <string name="setup_apps_stop_body">버튼을 탭한 다음 \'브라우저에서\'를 선택하세요.</string>
+    <string name="setup_apps_progress">앱 %1$d/%2$d</string>
+    <string name="setup_apps_all_done">완료했어요. 이제 이 앱들은 링크를 가져가지 않아요.</string>
 </resources>

@@ -30,7 +30,7 @@
     <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
-    <string name="settings_links_description">Services you turn on here open in Crosstune when you tap their links. Sharing or pasting works for all of them.</string>
+    <string name="settings_links_description">Tapped links from these open in Crosstune. Sharing and pasting always work.</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Other apps and sites</string>
@@ -44,7 +44,7 @@
     <string name="custom_template_invalid">Enter a name and a URL that contains {query}.</string>
     <string name="settings_behaviour_title">Behavior</string>
     <string name="setup_welcome_title">Welcome to Crosstune</string>
-    <string name="setup_welcome_body">Got a music link from one service but listen on another? Tap it and the same song opens in your favorite app.</string>
+    <string name="setup_welcome_body">Got a music link from another app? Tap it and it opens where you listen.</string>
     <string name="setup_get_started">Get started</string>
     <string name="next_button">Next</string>
     <string name="back_button">Back</string>
@@ -62,7 +62,7 @@
     <string name="setup_allow_step_add">Tap Add link.</string>
     <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
     <string name="setup_apps_title">Stop the other apps</string>
-    <string name="setup_apps_body">These apps open their own links first. In each one, choose “In your browser” or turn off “Open supported links”.</string>
+    <string name="setup_apps_body">These apps grab their links first. In each one, turn off “Open supported links”.</string>
     <string name="setup_still_opens">Still opens links</string>
     <string name="setup_done">Done</string>
     <string name="setup_allowed">Allowed</string>
@@ -117,7 +117,7 @@
     <!-- Each language opens its own translation of the website's privacy policy. -->
     <string name="privacy_policy_url">https://crosstune.4st.li/privacy/</string>
 
-    <string name="error_invalid_url">This isn\'t a link to a song, album, artist or playlist.</string>
+    <string name="error_invalid_url">That\'s not a song, album, artist or playlist link.</string>
     <string name="error_network">Couldn\'t connect. Check your internet and try again.</string>
     <string name="error_not_found">The service couldn\'t find this. It may be private or deleted.</string>
     <string name="error_rate_limited">The service is busy. Wait a moment and try again.</string>
@@ -140,12 +140,23 @@
     <string name="share_link_button">Share link</string>
     <string name="settings_link_owners_title">Apps with these links</string>
     <string name="settings_link_owners_description">These apps can open the same links. Tap one to choose whether it opens them itself.</string>
-    <string name="link_owner_opens_them">Opens them itself</string>
+    <string name="link_owner_opens_them">Keeps its links</string>
     <string name="link_owner_lets_crosstune">Lets Crosstune open them</string>
-    <string name="setup_allow_taken_hint">Can\'t tick a link? Another app has it: Android shows which one next to the link. In that app\'s settings, turn off “Open supported links”.</string>
+    <string name="setup_allow_taken_hint">Can\'t tick a link? Another app has it. Turn off its “Open supported links”.</string>
     <string name="frontend_address_title">%1$s address</string>
     <string name="save_button">Save</string>
     <string name="frontend_address_invalid">Enter a web address, like yewtu.be</string>
     <string name="frontend_site_on">Opens videos on %1$s</string>
-    <string name="source_open_links">Open these links in Crosstune</string>
+    <string name="source_open_links">Open in Crosstune</string>
+    <string name="setting_only_music_videos">Only music videos</string>
+    <string name="setting_only_music_videos_description">Other videos open as usual.</string>
+    <string name="setup_sources_music">Music</string>
+    <string name="setup_sources_videos">Videos</string>
+    <string name="setting_only_music_videos_note">Only music videos go to your app. Others open as usual.</string>
+    <string name="guide_may_differ">Your phone may look a bit different.</string>
+    <string name="setup_allow_progress">%1$d of %2$d links allowed</string>
+    <string name="setup_apps_stop_title">Stop %1$s</string>
+    <string name="setup_apps_stop_body">Tap the button, then choose “In your browser”.</string>
+    <string name="setup_apps_progress">App %1$d of %2$d</string>
+    <string name="setup_apps_all_done">All set. These apps no longer keep the links.</string>
 </resources>
