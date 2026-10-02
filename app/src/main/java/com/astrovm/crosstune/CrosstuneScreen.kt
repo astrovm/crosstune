@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -230,6 +231,8 @@ internal fun Page(
     actions: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
+    /** Pass the step's scroll state so each setup step starts at the top. */
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable () -> Unit
 ) {
     Scaffold(
@@ -268,7 +271,7 @@ internal fun Page(
                 modifier = Modifier
                     .widthIn(max = ContentMaxWidth)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
             ) {
                 content()
@@ -728,16 +731,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                         .fillMaxHeight(),
                     enabled = destinationReady
                 )
-            }
-            if (link != null && link.service != (destination as? Destination.Service)?.service) {
-                TextButton(
-                    onClick = actions.onOpenOriginal,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Text(stringResource(link.service.openLabelRes))
-                }
             }
         }
     }

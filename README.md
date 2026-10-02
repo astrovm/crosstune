@@ -6,8 +6,8 @@ Got a link from one music service but listen on another? Tap it and the same son
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Dreams Come True by S.E.S. resolved from Apple Music, ready to open in YouTube Music" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.png" alt="Destination choices with service icons" width="200">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Settings: default app and which services' links Crosstune opens" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.png" alt="Choosing which app opens the song, with app icons" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Settings: default app and which links Crosstune opens" width="200">
 </p>
 
 ## ⬇️ Install
