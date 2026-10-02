@@ -2530,7 +2530,9 @@ class MainActivityTest {
         )
 
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_allowed))
+        // YouTube's links are allowed already, so only the others are listed.
+        assertTextAbsent(LinkInterception.HOSTS.getValue(MusicService.YOUTUBE).joinToString(", "))
+        assertTextShown(LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).joinToString(", "))
         click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
@@ -2558,7 +2560,7 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_not_allowed))
+        assertTextShown(string(R.string.service_spotify))
         // Android lists every service's links, so setup names the ones to select.
         assertTextShown("open.spotify.com, spotify.link, www.spotify.link")
         // An app Crosstune can't see may keep them; Android names it next to the link.
@@ -2568,14 +2570,14 @@ class MainActivityTest {
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_not_allowed))
         assertTextShown("spotify.link, www.spotify.link")
 
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY)
             .associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_allowed))
+        // All allowed: the row goes, rather than staying with an "Allowed" label.
+        assertTextAbsent(string(R.string.service_spotify))
         assertTextAbsent("spotify.link, www.spotify.link")
     }
 
@@ -2600,7 +2602,7 @@ class MainActivityTest {
         assertTextShown(notice)
         click(string(R.string.fix_button))
         // The guide shows what to choose, then opens the app's own settings.
-        assertTextShown(string(R.string.setup_apps_stop_title, string(R.string.service_spotify)))
+        assertTextShown(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
@@ -2761,13 +2763,13 @@ class MainActivityTest {
         // One app at a time, in name order: YouTube first, then YouTube Create.
         assertTextShown(string(R.string.setup_apps_title))
         assertTextShown(string(R.string.setup_apps_progress, 1, 2))
-        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube"))
+        assertTextShown(string(R.string.open_app_link_settings_button, "YouTube"))
         youtubeAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
 
         assertTextShown(string(R.string.setup_apps_progress, 2, 2))
-        assertTextShown(string(R.string.setup_apps_stop_title, "YouTube Create"))
+        assertTextShown(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
@@ -2777,7 +2779,6 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
         assertTextAbsent(string(R.string.setup_still_opens))
-        assertTextAbsent(string(R.string.setup_apps_body))
     }
 
     @Test
@@ -2840,8 +2841,9 @@ class MainActivityTest {
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
 
-        // The only app, so its status is on its card, with no list repeating it.
-        assertTextShown(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
+        // The only app, so its name and status are on its card, with no list repeating it.
+        assertEquals(1, composeRule.onAllNodesWithText(string(R.string.service_spotify)).fetchSemanticsNodes().size)
+        assertTextShown(string(R.string.setup_apps_stop_body))
         assertTextAbsent(string(R.string.setup_fixed))
 
         // Fixed in Android's settings: the card makes way for the all-set line.
@@ -2849,8 +2851,7 @@ class MainActivityTest {
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
-        // Nothing left in the way, so the line saying Spotify opens the links goes too.
-        assertTextAbsent(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
+        assertTextAbsent(string(R.string.service_spotify))
         assertTextAbsent(string(R.string.setup_still_opens))
 
         click(string(R.string.next_button))

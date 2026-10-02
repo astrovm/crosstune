@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
     <string name="setup_apps_title">दूसरे ऐप के लिंक बंद करें</string>
-    <string name="setup_apps_body">ये ऐप लिंक को Crosstune से पहले खोल लेते हैं। इन्हें एक-एक करके बंद करें।</string>
     <string name="setup_still_opens">अब भी लिंक खोलता है</string>
     <string name="setup_done">हो गया</string>
-    <string name="setup_allowed">अनुमति है</string>
     <string name="setup_not_allowed">अभी अनुमति नहीं है</string>
     <string name="open_in_apple_music">Apple Music में खोलें</string>
     <string name="open_in_deezer">Deezer में खोलें</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">सिर्फ़ संगीत वीडियो आपके ऐप में जाते हैं। बाकी पहले की तरह खुलते हैं।</string>
     <string name="guide_may_differ">आपके फ़ोन पर यह थोड़ा अलग दिख सकता है।</string>
     <string name="setup_allow_progress">%2$d में से %1$d लिंक की अनुमति है</string>
-    <string name="setup_apps_stop_title">%1$s को रोकें</string>
-    <string name="setup_apps_stop_body">बटन पर टैप करें, फिर “ब्राउज़र में” चुनें। अगर स्विच दिखे, तो “समर्थित लिंक खोलें” बंद करें।</string>
+    <string name="setup_apps_stop_body">“ब्राउज़र में” चुनें या “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="setup_apps_progress">ऐप %1$d / %2$d</string>
     <string name="setup_apps_all_done">हो गया। अब ये लिंक Crosstune में खुलते हैं।</string>
     <string name="setup_skip_for_now">अभी नहीं</string>
     <string name="setup_fixed">ठीक हो गया</string>
-    <string name="setup_apps_body_one">%1$s इन लिंक को Crosstune से पहले खोल लेता है।</string>
     <string name="choose_app_button">ऐप चुनें</string>
     <string name="make_default_named">%1$s को डिफ़ॉल्ट बनाएं</string>
 </resources>
