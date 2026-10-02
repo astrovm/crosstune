@@ -2777,6 +2777,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
         assertTextAbsent(string(R.string.setup_still_opens))
+        assertTextAbsent(string(R.string.setup_apps_body))
     }
 
     @Test
@@ -2848,6 +2849,8 @@ class MainActivityTest {
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
+        // Nothing left in the way, so the line saying Spotify opens the links goes too.
+        assertTextAbsent(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
         assertTextAbsent(string(R.string.setup_still_opens))
 
         click(string(R.string.next_button))
