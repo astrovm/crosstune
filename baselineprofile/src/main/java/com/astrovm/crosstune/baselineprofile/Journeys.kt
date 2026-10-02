@@ -14,6 +14,7 @@ internal const val PACKAGE_NAME = "com.astrovm.crosstune"
 // The emulator can be slow, and a missed screen is a broken run anyway, so waits are generous.
 private const val SCREEN_TIMEOUT_MS = 30_000L
 private const val RESOLVE_TIMEOUT_MS = 30_000L
+private const val LOOKUP_START_MS = 2_000L
 
 // The device's language has to be English, since these find the app's screens by their text.
 private const val GET_STARTED = "Get started"
@@ -58,8 +59,9 @@ internal fun MacrobenchmarkScope.useMainScreen() {
         val field = waitFor(By.clazz("android.widget.EditText").enabled(true))
         field.text = link
         waitFor(By.text("Convert link").enabled(true)).click()
-        // The field is disabled while the link is looked up, whatever the outcome.
-        device.wait(Until.hasObject(By.clazz("android.widget.EditText").enabled(false)), SCREEN_TIMEOUT_MS)
+        // The field is disabled while the link is looked up. A link already in Recent shows at once
+        // and never disables it, so this only waits a moment.
+        device.wait(Until.hasObject(By.clazz("android.widget.EditText").enabled(false)), LOOKUP_START_MS)
         device.wait(Until.hasObject(By.clazz("android.widget.EditText").enabled(true)), RESOLVE_TIMEOUT_MS)
     }
     // Hides the keyboard, so the page has room to scroll. Back with no keyboard up would leave the app.

@@ -17,9 +17,14 @@ class BaselineProfileGenerator {
     @get:Rule
     val rule = BaselineProfileRule()
 
+    private companion object {
+        // The default of up to 15 passes takes over 5 minutes on an emulator; the profile is stable well before 5.
+        const val MAX_ITERATIONS = 5
+    }
+
     /** Cold start to the main screen; also the startup profile, which lays this code out first in the APK. */
     @Test
-    fun startup() = rule.collect(packageName = PACKAGE_NAME, includeInStartupProfile = true) {
+    fun startup() = rule.collect(packageName = PACKAGE_NAME, maxIterations = MAX_ITERATIONS, includeInStartupProfile = true) {
         pressHome()
         startActivityAndWait()
         finishSetupIfShown()
@@ -27,7 +32,7 @@ class BaselineProfileGenerator {
 
     /** Looking up links, scrolling to Recent and visiting the settings. */
     @Test
-    fun mainScreen() = rule.collect(packageName = PACKAGE_NAME) {
+    fun mainScreen() = rule.collect(packageName = PACKAGE_NAME, maxIterations = MAX_ITERATIONS) {
         pressHome()
         startActivityAndWait()
         finishSetupIfShown()

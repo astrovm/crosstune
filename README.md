@@ -101,8 +101,10 @@ You need the Android SDK and JDK 17 or newer. When building from the command lin
 
 The app ships a [baseline profile](https://developer.android.com/topic/performance/baselineprofiles/overview) in `app/src/main/generated/baselineProfiles/`, so Android compiles the code used on startup and on the main screen ahead of time, also for installs from F-Droid or GitHub. Builds use the committed profile and never need a device. After big changes to the screens, regenerate it on an English emulator or phone with Android 9 or newer and commit the result:
 
+It runs on every connected device, so with more than one, pick one with `ANDROID_SERIAL` (see `adb devices`):
+
 ```bash
-./gradlew :app:generateBaselineProfile
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateBaselineProfile
 # Optional: compare cold starts without compilation and with the profile.
 ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.astrovm.crosstune.baselineprofile.StartupBenchmark
 ```
