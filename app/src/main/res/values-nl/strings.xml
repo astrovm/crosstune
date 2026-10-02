@@ -51,8 +51,8 @@
     <string name="setup_allow_step_open">Tik op Linkinstellingen openen.</string>
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
-    <string name="setup_apps_title">Andere apps stoppen</string>
-    <string name="setup_apps_body">Deze apps pakken hun links als eerste. Zet in elke app ‘Ondersteunde links openen’ uit.</string>
+    <string name="setup_apps_title">Links van andere apps uitzetten</string>
+    <string name="setup_apps_body">Deze apps openen de links eerder dan Crosstune. Zet ze een voor een uit.</string>
     <string name="setup_still_opens">Opent nog links</string>
     <string name="setup_done">Klaar</string>
     <string name="setup_allowed">Toegestaan</string>
@@ -124,7 +124,7 @@
     <string name="settings_link_owners_description">Deze apps kunnen dezelfde links openen. Tik op een app om te kiezen of hij ze zelf opent.</string>
     <string name="link_owner_opens_them">Houdt zijn links</string>
     <string name="link_owner_lets_crosstune">Laat Crosstune ze openen</string>
-    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem. Zet daar ‘Ondersteunde links openen’ uit.</string>
+    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem. Kies in die app ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="frontend_address_title">Adres van %1$s</string>
     <string name="save_button">Opslaan</string>
     <string name="frontend_address_invalid">Voer een webadres in, zoals yewtu.be</string>
@@ -138,9 +138,12 @@
     <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
     <string name="setup_allow_progress">%1$d van %2$d links toegestaan</string>
     <string name="setup_apps_stop_title">%1$s stoppen</string>
-    <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’.</string>
+    <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’. Zie je een schakelaar, zet dan ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
-    <string name="setup_apps_all_done">Klaar. Deze apps houden de links niet meer vast.</string>
+    <string name="setup_apps_all_done">Klaar. Deze links openen nu in Crosstune.</string>
+    <string name="setup_skip_for_now">Later</string>
+    <string name="setup_fixed">Opgelost</string>
+    <string name="setup_apps_body_one">%1$s opent deze links eerder dan Crosstune.</string>
     <string name="choose_app_button">App kiezen</string>
     <string name="make_default_named">%1$s als standaard instellen</string>
 </resources>

@@ -51,8 +51,8 @@
     <string name="setup_allow_step_open">“Bağlantı ayarlarını aç” düğmesine dokunun.</string>
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
-    <string name="setup_apps_title">Diğer uygulamaları durdurun</string>
-    <string name="setup_apps_body">Bu uygulamalar kendi bağlantılarını önce alır. Her birinde “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
+    <string name="setup_apps_title">Diğer uygulamaların bağlantılarını kapat</string>
+    <string name="setup_apps_body">Bu uygulamalar bağlantıları Crosstune\'dan önce açıyor. Tek tek kapat.</string>
     <string name="setup_still_opens">Hâlâ bağlantıları açıyor</string>
     <string name="setup_done">Tamam</string>
     <string name="setup_allowed">İzin verildi</string>
@@ -124,7 +124,7 @@
     <string name="settings_link_owners_description">Bu uygulamalar aynı bağlantıları açabilir. Bağlantıları kendisinin açıp açmayacağını seçmek için birine dokun.</string>
     <string name="link_owner_opens_them">Bağlantılarını kendisi açar</string>
     <string name="link_owner_lets_crosstune">Crosstune\'un açmasına izin veriyor</string>
-    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış. Onun “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
+    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış. O uygulamada “Tarayıcıda” seçeneğini seç veya “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="frontend_address_title">%1$s adresi</string>
     <string name="save_button">Kaydet</string>
     <string name="frontend_address_invalid">Bir web adresi gir, örneğin yewtu.be</string>
@@ -138,9 +138,12 @@
     <string name="guide_may_differ">Telefonunda biraz farklı görünebilir.</string>
     <string name="setup_allow_progress">%2$d bağlantıdan %1$d tanesine izin verildi</string>
     <string name="setup_apps_stop_title">%1$s uygulamasını durdur</string>
-    <string name="setup_apps_stop_body">Düğmeye dokun, ardından “Tarayıcıda” seçeneğini seç.</string>
+    <string name="setup_apps_stop_body">Düğmeye dokun, ardından “Tarayıcıda” seçeneğini seç. Bunun yerine bir anahtar görürsen “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="setup_apps_progress">Uygulama %1$d / %2$d</string>
-    <string name="setup_apps_all_done">Tamam. Bu uygulamalar artık bağlantıları almıyor.</string>
+    <string name="setup_apps_all_done">Tamam. Bu bağlantılar artık Crosstune\'da açılıyor.</string>
+    <string name="setup_skip_for_now">Şimdi değil</string>
+    <string name="setup_fixed">Düzeltildi</string>
+    <string name="setup_apps_body_one">%1$s bu bağlantıları Crosstune\'dan önce açıyor.</string>
     <string name="choose_app_button">Uygulama seç</string>
     <string name="make_default_named">%1$s varsayılan olsun</string>
 </resources>

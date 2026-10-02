@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityOptions
 import android.app.Application
 import android.content.ClipData
 import androidx.compose.ui.test.hasTestTag
@@ -388,6 +389,27 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_CHOOSER, shareOriginal.action)
         val shared = shareOriginal.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         assertEquals(original, shared.getStringExtra(Intent.EXTRA_TEXT))
+        // Crosstune lets the share sheet start it, since some phones' share sheets don't lend their own permission.
+        val options = shadowOf(share.action).options!!
+        assertEquals(
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS,
+            options.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
+        )
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun beforeAndroid16TheShareSheetIsLetStartCrosstuneTheOlderWay() {
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        resolveTyped()
+
+        val share = shareChooser().customActions()[1]
+        @Suppress("DEPRECATION")
+        assertEquals(
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            shadowOf(share.action).options!!.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
+        )
     }
 
     @Test
@@ -2436,7 +2458,7 @@ class MainActivityTest {
         click(string(R.string.open_in_spotify))
     }
 
-    /** A guide's Done button, not the "Done" status beside a finished app. */
+    /** A guide's Done button, shown once there's nothing left to do. */
     private fun clickDoneButton() {
         composeRule.onAllNodes(hasText(string(R.string.setup_done)) and hasClickAction()).onFirst().performClick()
         composeRule.waitForIdle()
@@ -2606,7 +2628,9 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_allow_progress, 0, 3))
         click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
-        clickDoneButton()
+        // Nothing allowed yet, so leaving is skipping.
+        assertTextAbsent(string(R.string.setup_done))
+        click(string(R.string.setup_skip_for_now))
 
         // Settings marks the service itself rather than repeating the notice.
         click(string(R.string.settings_button))
@@ -2815,13 +2839,16 @@ class MainActivityTest {
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
 
-        // Fixed in Android's settings: the row stays, marked done, rather than vanishing.
+        // The only app, so its status is on its card, with no list repeating it.
+        assertTextShown(string(R.string.setup_apps_body_one, string(R.string.service_spotify)))
+        assertTextAbsent(string(R.string.setup_fixed))
+
+        // Fixed in Android's settings: the card makes way for the all-set line.
         setAppAllowsLinks(false)
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_done))
+        assertTextShown(string(R.string.setup_apps_all_done))
         assertTextAbsent(string(R.string.setup_still_opens))
-        assertTextShown(string(R.string.service_spotify))
 
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_step, 4, 4))
@@ -2831,18 +2858,22 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupHasThreeStepsWhenNoInstalledAppIsInTheWay() {
+    fun setupSkipsStoppingAppsWhenNoInstalledAppIsInTheWay() {
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
         click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_step, 1, 3))
+        // Still counted, so the total doesn't change as sources are picked.
+        assertTextShown(string(R.string.setup_step, 1, 4))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_step, 3, 3))
+        assertTextShown(string(R.string.setup_step, 4, 4))
         assertTextShown(string(R.string.setup_finish))
+        // Back skips it too.
+        click(string(R.string.back_button))
+        assertTextShown(string(R.string.setup_step, 2, 4))
     }
 
     @Test
@@ -2937,7 +2968,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_step, 2, 4))
         // Unticked again: the app no longer gets in the way, so there's nothing to stop.
         toggleRow(string(R.string.target_youtube_music))
-        assertTextShown(string(R.string.setup_step, 2, 3))
+        assertTextShown(string(R.string.setup_step, 2, 4))
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_allow_title))
         assertTextShown(string(R.string.setup_finish))

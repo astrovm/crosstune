@@ -51,8 +51,8 @@
     <string name="setup_allow_step_open">Tocá Abrir configuración de links.</string>
     <string name="setup_allow_step_add">Tocá Agregar vínculo.</string>
     <string name="setup_allow_step_tick">Tildá todos los links y tocá Agregar.</string>
-    <string name="setup_apps_title">Frená a las otras apps</string>
-    <string name="setup_apps_body">Estas apps se quedan con sus links primero. En cada una, desactivá “Abrir vínculos admitidos”.</string>
+    <string name="setup_apps_title">Desactivá los links de otras apps</string>
+    <string name="setup_apps_body">Estas apps abren los links antes que Crosstune. Desactivalas de a una.</string>
     <string name="setup_still_opens">Todavía abre links</string>
     <string name="setup_done">Listo</string>
     <string name="setup_allowed">Permitido</string>
@@ -124,7 +124,7 @@
     <string name="settings_link_owners_description">Estas apps pueden abrir los mismos links. Tocá una para elegir si los abre ella.</string>
     <string name="link_owner_opens_them">Se queda con sus links</string>
     <string name="link_owner_lets_crosstune">Deja que los abra Crosstune</string>
-    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app. Desactivá su “Abrir vínculos admitidos”.</string>
+    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app. En esa app, elegí “En un navegador” o desactivá “Abrir vínculos admitidos”.</string>
     <string name="frontend_address_title">Dirección de %1$s</string>
     <string name="save_button">Guardar</string>
     <string name="frontend_address_invalid">Escribí una dirección web, como yewtu.be</string>
@@ -138,9 +138,12 @@
     <string name="guide_may_differ">Tu teléfono puede verse un poco distinto.</string>
     <string name="setup_allow_progress">%1$d de %2$d links permitidos</string>
     <string name="setup_apps_stop_title">Frená %1$s</string>
-    <string name="setup_apps_stop_body">Tocá el botón y elegí “En un navegador”.</string>
+    <string name="setup_apps_stop_body">Tocá el botón y elegí “En un navegador”. Si ves un interruptor, desactivá “Abrir vínculos admitidos”.</string>
     <string name="setup_apps_progress">App %1$d de %2$d</string>
-    <string name="setup_apps_all_done">Listo. Estas apps ya no se quedan con los links.</string>
+    <string name="setup_apps_all_done">Listo. Estos links ahora se abren en Crosstune.</string>
+    <string name="setup_skip_for_now">Ahora no</string>
+    <string name="setup_fixed">Resuelto</string>
+    <string name="setup_apps_body_one">%1$s abre estos links antes que Crosstune.</string>
     <string name="choose_app_button">Elegir app</string>
     <string name="make_default_named">Usar %1$s por defecto</string>
 </resources>
