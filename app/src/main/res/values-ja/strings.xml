@@ -22,7 +22,7 @@
     <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
-    <string name="settings_links_description">ここでオンにしたサービスのリンクは、タップすると Crosstune で開きます。共有や貼り付けなら、すべてのサービスで使えます。</string>
+    <string name="settings_links_description">ここでオンにしたサービスのリンクをタップすると Crosstune で開きます。共有と貼り付けはいつでも使えます。</string>
     <string name="rule_opens_in">%1$s で開く</string>
     <string name="rule_default">デフォルト（%1$s）</string>
     <string name="settings_custom_title">その他のアプリとサイト</string>
@@ -36,7 +36,7 @@
     <string name="custom_template_invalid">名前と、{query} を含む URL を入力してください。</string>
     <string name="settings_behaviour_title">動作</string>
     <string name="setup_welcome_title">Crosstune へようこそ</string>
-    <string name="setup_welcome_body">ある音楽サービスのリンクをもらったけれど、聴いているのは別のサービス？ タップすれば、同じ曲がお気に入りのアプリで開きます。</string>
+    <string name="setup_welcome_body">ほかのアプリから音楽リンクが届いた？タップすると、いつも聴いているアプリで開きます。</string>
     <string name="setup_get_started">始める</string>
     <string name="next_button">次へ</string>
     <string name="back_button">戻る</string>
@@ -54,7 +54,7 @@
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
     <string name="setup_apps_title">ほかのアプリを止める</string>
-    <string name="setup_apps_body">これらのアプリは、自分のリンクを先に開いてしまいます。それぞれで「ブラウザ内」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
+    <string name="setup_apps_body">これらのアプリが先にリンクを開いてしまいます。それぞれで「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_still_opens">まだリンクを開く</string>
     <string name="setup_done">完了</string>
     <string name="setup_allowed">許可済み</string>
@@ -125,12 +125,17 @@
     <string name="share_link_button">リンクを共有</string>
     <string name="settings_link_owners_title">これらのリンクを開くアプリ</string>
     <string name="settings_link_owners_description">これらのアプリも同じリンクを開けます。タップして、そのアプリで開くかどうかを選べます。</string>
-    <string name="link_owner_opens_them">自分で開く</string>
+    <string name="link_owner_opens_them">自分でリンクを開く</string>
     <string name="link_owner_lets_crosstune">Crosstune に任せる</string>
-    <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。どのアプリかはリンクの横に表示されます。そのアプリの設定で「対応リンクを開く」をオフにしてください。</string>
+    <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。そのアプリの「対応リンクを開く」をオフにしてください。</string>
     <string name="frontend_address_title">%1$s のアドレス</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">yewtu.be のようなウェブアドレスを入力してください</string>
     <string name="frontend_site_on">%1$s で動画を開く</string>
-    <string name="source_open_links">これらのリンクを Crosstune で開く</string>
+    <string name="source_open_links">Crosstune で開く</string>
+    <string name="setting_only_music_videos">音楽動画のみ</string>
+    <string name="setting_only_music_videos_description">その他の動画はいつもどおり開きます。</string>
+    <string name="setup_sources_music">音楽</string>
+    <string name="setup_sources_videos">動画</string>
+    <string name="setting_only_music_videos_note">アプリに送られるのは音楽動画だけです。その他はいつもどおり開きます。</string>
 </resources>

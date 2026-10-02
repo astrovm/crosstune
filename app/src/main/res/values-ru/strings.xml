@@ -21,7 +21,7 @@
     <string name="settings_default_label">Открывать ссылки в</string>
     <string name="settings_about_title">О приложении</string>
     <string name="settings_links_title">Открывать ссылки из</string>
-    <string name="settings_links_description">Ссылки включённых здесь сервисов будут открываться в Crosstune. Отправка и вставка работают для всех сервисов.</string>
+    <string name="settings_links_description">Ссылки этих сервисов по нажатию открываются в Crosstune. Поделиться и вставить работает всегда.</string>
     <string name="rule_opens_in">Откроется в: %1$s</string>
     <string name="rule_default">По умолчанию (%1$s)</string>
     <string name="settings_custom_title">Другие приложения и сайты</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Введите название и URL с {query}.</string>
     <string name="settings_behaviour_title">Поведение</string>
     <string name="setup_welcome_title">Добро пожаловать в Crosstune</string>
-    <string name="setup_welcome_body">Прислали ссылку из одного музыкального сервиса, а вы слушаете в другом? Нажмите на неё, и та же песня откроется в любимом приложении.</string>
+    <string name="setup_welcome_body">Пришла ссылка на музыку из другого приложения? Нажмите, и она откроется там, где вы слушаете.</string>
     <string name="setup_get_started">Начать</string>
     <string name="next_button">Далее</string>
     <string name="back_button">Назад</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">Нажмите «Добавить ссылку».</string>
     <string name="setup_allow_step_tick">Отметьте все ссылки и нажмите «Добавить».</string>
     <string name="setup_apps_title">Отключите ссылки в других приложениях</string>
-    <string name="setup_apps_body">Эти приложения сначала открывают свои ссылки. В каждом выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
+    <string name="setup_apps_body">Эти приложения первыми забирают свои ссылки. В каждом отключите «Открывать поддерживаемые ссылки».</string>
     <string name="setup_still_opens">Всё ещё открывает ссылки</string>
     <string name="setup_done">Готово</string>
     <string name="setup_allowed">Разрешено</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">Версия</string>
     <string name="made_with_love">Сделано astro с %1$s</string>
 
-    <string name="error_invalid_url">Это не ссылка на песню, альбом, исполнителя или плейлист.</string>
+    <string name="error_invalid_url">Это не ссылка на трек, альбом, исполнителя или плейлист.</string>
     <string name="error_network">Не удалось подключиться. Проверьте интернет и повторите попытку.</string>
     <string name="error_not_found">Сервис не нашёл этот материал. Возможно, он закрыт или удалён.</string>
     <string name="error_rate_limited">Сервис перегружен. Подождите немного и повторите попытку.</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">Поделиться ссылкой</string>
     <string name="settings_link_owners_title">Приложения с этими ссылками</string>
     <string name="settings_link_owners_description">Эти приложения могут открывать те же ссылки. Нажмите на приложение, чтобы выбрать, открывает ли оно их само.</string>
-    <string name="link_owner_opens_them">Открывает их само</string>
+    <string name="link_owner_opens_them">Оставляет ссылки себе</string>
     <string name="link_owner_lets_crosstune">Отдаёт их Crosstune</string>
-    <string name="setup_allow_taken_hint">Не получается отметить ссылку? Её занимает другое приложение: Android показывает какое рядом со ссылкой. В его настройках отключите «Открывать поддерживаемые ссылки».</string>
+    <string name="setup_allow_taken_hint">Не получается отметить ссылку? Её занимает другое приложение. Отключите в нём «Открывать поддерживаемые ссылки».</string>
     <string name="frontend_address_title">Адрес %1$s</string>
     <string name="save_button">Сохранить</string>
     <string name="frontend_address_invalid">Введите веб-адрес, например yewtu.be</string>
     <string name="frontend_site_on">Открывает видео на %1$s</string>
-    <string name="source_open_links">Открывать эти ссылки в Crosstune</string>
+    <string name="source_open_links">Открывать в Crosstune</string>
+    <string name="setting_only_music_videos">Только музыкальные видео</string>
+    <string name="setting_only_music_videos_description">Остальные видео открываются как обычно.</string>
+    <string name="setup_sources_music">Музыка</string>
+    <string name="setup_sources_videos">Видео</string>
+    <string name="setting_only_music_videos_note">В ваше приложение попадают только музыкальные видео. Остальные открываются как обычно.</string>
 </resources>

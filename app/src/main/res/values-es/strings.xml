@@ -21,7 +21,7 @@
     <string name="settings_default_label">Abrir links en</string>
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_links_title">Abrir links de</string>
-    <string name="settings_links_description">Los servicios que actives acá se abren en Crosstune cuando tocás sus links. Compartir o pegar funciona con todos.</string>
+    <string name="settings_links_description">Los links de estos que toques se abren en Crosstune. Compartir y pegar siempre funcionan.</string>
     <string name="rule_opens_in">Se abre en: %1$s</string>
     <string name="rule_default">Predeterminada (%1$s)</string>
     <string name="settings_custom_title">Otras apps y sitios</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Ingresá un nombre y una URL que contenga {query}.</string>
     <string name="settings_behaviour_title">Comportamiento</string>
     <string name="setup_welcome_title">Te damos la bienvenida a Crosstune</string>
-    <string name="setup_welcome_body">¿Te pasaron un link de un servicio de música pero escuchás en otro? Tocalo y la misma canción se abre en tu app favorita.</string>
+    <string name="setup_welcome_body">¿Te llegó un link de música de otra app? Tocalo y se abre donde escuchás.</string>
     <string name="setup_get_started">Empezar</string>
     <string name="next_button">Siguiente</string>
     <string name="back_button">Atrás</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">Tocá Agregar vínculo.</string>
     <string name="setup_allow_step_tick">Tildá todos los links y tocá Agregar.</string>
     <string name="setup_apps_title">Frená a las otras apps</string>
-    <string name="setup_apps_body">Estas apps abren sus links primero. En cada una, elegí “En un navegador” o desactivá “Abrir vínculos admitidos”.</string>
+    <string name="setup_apps_body">Estas apps se quedan con sus links primero. En cada una, desactivá “Abrir vínculos admitidos”.</string>
     <string name="setup_still_opens">Todavía abre links</string>
     <string name="setup_done">Listo</string>
     <string name="setup_allowed">Permitido</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">Versión</string>
     <string name="made_with_love">Hecho con %1$s por astro</string>
 
-    <string name="error_invalid_url">Este no es un link de una canción, álbum, artista o playlist.</string>
+    <string name="error_invalid_url">Eso no es un link a una canción, álbum, artista o playlist.</string>
     <string name="error_network">No se pudo conectar. Revisá tu conexión a internet y probá de nuevo.</string>
     <string name="error_not_found">El servicio no encontró esto. Puede ser privado o haberse eliminado.</string>
     <string name="error_rate_limited">El servicio está saturado. Esperá un momento y probá de nuevo.</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">Compartir link</string>
     <string name="settings_link_owners_title">Apps con estos links</string>
     <string name="settings_link_owners_description">Estas apps pueden abrir los mismos links. Tocá una para elegir si los abre ella.</string>
-    <string name="link_owner_opens_them">Los abre ella</string>
+    <string name="link_owner_opens_them">Se queda con sus links</string>
     <string name="link_owner_lets_crosstune">Deja que los abra Crosstune</string>
-    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app: Android muestra cuál al lado del link. En la configuración de esa app, desactivá “Abrir vínculos admitidos”.</string>
+    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app. Desactivá su “Abrir vínculos admitidos”.</string>
     <string name="frontend_address_title">Dirección de %1$s</string>
     <string name="save_button">Guardar</string>
     <string name="frontend_address_invalid">Escribí una dirección web, como yewtu.be</string>
     <string name="frontend_site_on">Abre los videos en %1$s</string>
-    <string name="source_open_links">Abrir estos links en Crosstune</string>
+    <string name="source_open_links">Abrir en Crosstune</string>
+    <string name="setting_only_music_videos">Solo videos de música</string>
+    <string name="setting_only_music_videos_description">Los demás videos se abren como siempre.</string>
+    <string name="setup_sources_music">Música</string>
+    <string name="setup_sources_videos">Videos</string>
+    <string name="setting_only_music_videos_note">Solo los videos de música van a tu app. Los demás se abren como siempre.</string>
 </resources>

@@ -21,7 +21,7 @@
     <string name="settings_default_label">Bağlantıları şurada aç</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
-    <string name="settings_links_description">Burada açtığınız servislerin bağlantılarına dokunduğunuzda Crosstune açılır. Paylaşma ve yapıştırma hepsiyle çalışır.</string>
+    <string name="settings_links_description">Bunlardan dokunduğun bağlantılar Crosstune\'da açılır. Paylaşma ve yapıştırma her zaman çalışır.</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
     <string name="rule_default">Varsayılan (%1$s)</string>
     <string name="settings_custom_title">Diğer uygulamalar ve siteler</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Bir ad ve {query} içeren bir URL girin.</string>
     <string name="settings_behaviour_title">Davranış</string>
     <string name="setup_welcome_title">Crosstune\'a hoş geldiniz</string>
-    <string name="setup_welcome_body">Bir müzik servisinden bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Bağlantıya dokunun, aynı şarkı favori uygulamanızda açılsın.</string>
+    <string name="setup_welcome_body">Başka bir uygulamadan müzik bağlantısı mı geldi? Dokun, dinlediğin yerde açılsın.</string>
     <string name="setup_get_started">Başlayın</string>
     <string name="next_button">İleri</string>
     <string name="back_button">Geri</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
     <string name="setup_apps_title">Diğer uygulamaları durdurun</string>
-    <string name="setup_apps_body">Bu uygulamalar önce kendi bağlantılarını açar. Her birinde “Tarayıcınızda” seçeneğini seçin veya “Desteklenen bağlantıları aç” seçeneğini kapatın.</string>
+    <string name="setup_apps_body">Bu uygulamalar kendi bağlantılarını önce alır. Her birinde “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="setup_still_opens">Hâlâ bağlantıları açıyor</string>
     <string name="setup_done">Tamam</string>
     <string name="setup_allowed">İzin verildi</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">Bağlantıyı paylaş</string>
     <string name="settings_link_owners_title">Bu bağlantılara sahip uygulamalar</string>
     <string name="settings_link_owners_description">Bu uygulamalar aynı bağlantıları açabilir. Bağlantıları kendisinin açıp açmayacağını seçmek için birine dokun.</string>
-    <string name="link_owner_opens_them">Kendisi açıyor</string>
+    <string name="link_owner_opens_them">Bağlantılarını kendisi açar</string>
     <string name="link_owner_lets_crosstune">Crosstune\'un açmasına izin veriyor</string>
-    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış: Android hangisi olduğunu bağlantının yanında gösterir. O uygulamanın ayarlarında “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
+    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış. Onun “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="frontend_address_title">%1$s adresi</string>
     <string name="save_button">Kaydet</string>
     <string name="frontend_address_invalid">Bir web adresi gir, örneğin yewtu.be</string>
     <string name="frontend_site_on">Videoları %1$s üzerinde açar</string>
-    <string name="source_open_links">Bu bağlantıları Crosstune\'da aç</string>
+    <string name="source_open_links">Crosstune\'da aç</string>
+    <string name="setting_only_music_videos">Yalnızca müzik videoları</string>
+    <string name="setting_only_music_videos_description">Diğer videolar her zamanki gibi açılır.</string>
+    <string name="setup_sources_music">Müzik</string>
+    <string name="setup_sources_videos">Videolar</string>
+    <string name="setting_only_music_videos_note">Yalnızca müzik videoları uygulamana gider. Diğerleri her zamanki gibi açılır.</string>
 </resources>

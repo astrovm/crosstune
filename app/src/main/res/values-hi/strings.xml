@@ -21,7 +21,7 @@
     <string name="settings_default_label">लिंक इसमें खोलें</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
-    <string name="settings_links_description">यहाँ चालू की गई सेवाओं के लिंक पर टैप करने से वे Crosstune में खुलेंगे। शेयर या पेस्ट करने पर सभी सेवाओं के लिंक काम करते हैं।</string>
+    <string name="settings_links_description">इनके जिन लिंक पर आप टैप करते हैं, वे Crosstune में खुलते हैं। शेयर और पेस्ट हमेशा काम करते हैं।</string>
     <string name="rule_opens_in">%1$s में खुलेगा</string>
     <string name="rule_default">डिफ़ॉल्ट (%1$s)</string>
     <string name="settings_custom_title">अन्य ऐप्लिकेशन और साइटें</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">कोई नाम और {query} वाला URL डालें।</string>
     <string name="settings_behaviour_title">व्यवहार</string>
     <string name="setup_welcome_title">Crosstune में आपका स्वागत है</string>
-    <string name="setup_welcome_body">किसी एक म्यूज़िक सेवा का लिंक मिला, पर आप दूसरी पर सुनते हैं? उस पर टैप करें, वही गाना आपके पसंदीदा ऐप्लिकेशन में खुल जाएगा।</string>
+    <string name="setup_welcome_body">किसी दूसरे ऐप से संगीत लिंक मिला? टैप करें, वह वहीं खुलेगा जहाँ आप सुनते हैं।</string>
     <string name="setup_get_started">शुरू करें</string>
     <string name="next_button">आगे</string>
     <string name="back_button">पीछे</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
     <string name="setup_apps_title">दूसरे ऐप्लिकेशन रोकें</string>
-    <string name="setup_apps_body">ये ऐप्लिकेशन अपने लिंक पहले खुद खोलते हैं। हर एक में “ब्राउज़र में” चुनें या “काम करने वाले लिंक खोलें” बंद करें।</string>
+    <string name="setup_apps_body">ये ऐप अपने लिंक पहले खोल लेते हैं। हर एक में “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="setup_still_opens">अब भी लिंक खोलता है</string>
     <string name="setup_done">हो गया</string>
     <string name="setup_allowed">अनुमति है</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">लिंक शेयर करें</string>
     <string name="settings_link_owners_title">इन लिंक वाले ऐप</string>
     <string name="settings_link_owners_description">ये ऐप भी यही लिंक खोल सकते हैं। किसी पर टैप करके चुनें कि वह उन्हें खुद खोले या नहीं।</string>
-    <string name="link_owner_opens_them">इन्हें खुद खोलता है</string>
+    <string name="link_owner_opens_them">अपने लिंक खुद खोलता है</string>
     <string name="link_owner_lets_crosstune">Crosstune को खोलने देता है</string>
-    <string name="setup_allow_taken_hint">कोई लिंक टिक नहीं हो रहा? वह किसी और ऐप के पास है: Android लिंक के पास बताता है कि कौन-सा। उस ऐप की सेटिंग में “समर्थित लिंक खोलें” बंद करें।</string>
+    <string name="setup_allow_taken_hint">कोई लिंक टिक नहीं हो रहा? वह किसी और ऐप के पास है। उस ऐप का “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="frontend_address_title">%1$s का पता</string>
     <string name="save_button">सेव करें</string>
     <string name="frontend_address_invalid">कोई वेब पता डालें, जैसे yewtu.be</string>
     <string name="frontend_site_on">वीडियो %1$s पर खोलता है</string>
-    <string name="source_open_links">ये लिंक Crosstune में खोलें</string>
+    <string name="source_open_links">Crosstune में खोलें</string>
+    <string name="setting_only_music_videos">सिर्फ़ संगीत वीडियो</string>
+    <string name="setting_only_music_videos_description">बाकी वीडियो पहले की तरह खुलते हैं।</string>
+    <string name="setup_sources_music">संगीत</string>
+    <string name="setup_sources_videos">वीडियो</string>
+    <string name="setting_only_music_videos_note">सिर्फ़ संगीत वीडियो आपके ऐप में जाते हैं। बाकी पहले की तरह खुलते हैं।</string>
 </resources>

@@ -21,7 +21,7 @@
     <string name="settings_default_label">用以下应用打开链接</string>
     <string name="settings_about_title">关于</string>
     <string name="settings_links_title">打开来自以下服务的链接</string>
-    <string name="settings_links_description">在此开启的服务，其链接会在点按时用 Crosstune 打开。所有服务都支持分享或粘贴。</string>
+    <string name="settings_links_description">点按这些服务的链接会在 Crosstune 中打开。分享和粘贴始终可用。</string>
     <string name="rule_opens_in">在 %1$s 中打开</string>
     <string name="rule_default">默认（%1$s）</string>
     <string name="settings_custom_title">其他应用和网站</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">请输入名称和包含 {query} 的网址。</string>
     <string name="settings_behaviour_title">行为</string>
     <string name="setup_welcome_title">欢迎使用 Crosstune</string>
-    <string name="setup_welcome_body">收到一个音乐服务的链接，但你用的是另一个？点按链接，同一首歌就会在你喜欢的应用中打开。</string>
+    <string name="setup_welcome_body">收到其他应用的音乐链接？点按一下，就会在你常用的应用中打开。</string>
     <string name="setup_get_started">开始使用</string>
     <string name="next_button">下一步</string>
     <string name="back_button">返回</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">点按“添加链接”。</string>
     <string name="setup_allow_step_tick">勾选所有链接，然后点按“添加”。</string>
     <string name="setup_apps_title">阻止其他应用打开链接</string>
-    <string name="setup_apps_body">这些应用会优先打开自己的链接。请在每个应用中选择“在浏览器中”，或关闭“打开支持的链接”。</string>
+    <string name="setup_apps_body">这些应用会先打开自己的链接。请在每个应用中关闭“打开支持的链接”。</string>
     <string name="setup_still_opens">仍会打开链接</string>
     <string name="setup_done">已完成</string>
     <string name="setup_allowed">已允许</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">分享链接</string>
     <string name="settings_link_owners_title">可打开这些链接的应用</string>
     <string name="settings_link_owners_description">这些应用也能打开相同的链接。点按某个应用，选择是否由它自己打开。</string>
-    <string name="link_owner_opens_them">自己打开</string>
+    <string name="link_owner_opens_them">自己打开链接</string>
     <string name="link_owner_lets_crosstune">交给 Crosstune 打开</string>
-    <string name="setup_allow_taken_hint">无法勾选某个链接？说明它已被其他应用占用：Android 会在链接旁显示是哪个应用。请在该应用的设置中关闭“打开支持的链接”。</string>
+    <string name="setup_allow_taken_hint">无法勾选某个链接？说明它已被其他应用占用。请关闭该应用的“打开支持的链接”。</string>
     <string name="frontend_address_title">%1$s 地址</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">请输入网址，例如 yewtu.be</string>
     <string name="frontend_site_on">在 %1$s 上打开视频</string>
-    <string name="source_open_links">在 Crosstune 中打开这些链接</string>
+    <string name="source_open_links">在 Crosstune 中打开</string>
+    <string name="setting_only_music_videos">仅音乐视频</string>
+    <string name="setting_only_music_videos_description">其他视频照常打开。</string>
+    <string name="setup_sources_music">音乐</string>
+    <string name="setup_sources_videos">视频</string>
+    <string name="setting_only_music_videos_note">只有音乐视频会发送到你的应用，其他视频照常打开。</string>
 </resources>

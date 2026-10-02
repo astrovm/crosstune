@@ -21,7 +21,7 @@
     <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
-    <string name="settings_links_description">Layanan yang diaktifkan di sini akan terbuka di Crosstune saat linknya diketuk. Berbagi atau menempel link berfungsi untuk semua layanan.</string>
+    <string name="settings_links_description">Tautan dari layanan ini yang kamu ketuk terbuka di Crosstune. Berbagi dan menempel selalu berfungsi.</string>
     <string name="rule_opens_in">Dibuka di %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Aplikasi dan situs lain</string>
@@ -35,7 +35,7 @@
     <string name="custom_template_invalid">Masukkan nama dan URL yang berisi {query}.</string>
     <string name="settings_behaviour_title">Perilaku</string>
     <string name="setup_welcome_title">Selamat datang di Crosstune</string>
-    <string name="setup_welcome_body">Dapat link musik dari satu layanan, tapi kamu dengar di layanan lain? Ketuk linknya, dan lagu yang sama terbuka di aplikasi favoritmu.</string>
+    <string name="setup_welcome_body">Dapat tautan musik dari aplikasi lain? Ketuk dan tautan terbuka di tempat kamu mendengarkan.</string>
     <string name="setup_get_started">Mulai</string>
     <string name="next_button">Lanjut</string>
     <string name="back_button">Kembali</string>
@@ -53,7 +53,7 @@
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
     <string name="setup_apps_title">Hentikan aplikasi lain</string>
-    <string name="setup_apps_body">Aplikasi ini membuka linknya sendiri lebih dulu. Di setiap aplikasi, pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
+    <string name="setup_apps_body">Aplikasi ini mengambil tautannya lebih dulu. Di masing-masing, nonaktifkan “Buka link yang didukung”.</string>
     <string name="setup_still_opens">Masih membuka link</string>
     <string name="setup_done">Selesai</string>
     <string name="setup_allowed">Diizinkan</string>
@@ -99,7 +99,7 @@
     <string name="settings_version">Versi</string>
     <string name="made_with_love">Dibuat dengan %1$s oleh astro</string>
 
-    <string name="error_invalid_url">Ini bukan link lagu, album, artis, atau playlist.</string>
+    <string name="error_invalid_url">Itu bukan tautan lagu, album, artis, atau playlist.</string>
     <string name="error_network">Tidak bisa terhubung. Periksa koneksi internet dan coba lagi.</string>
     <string name="error_not_found">Layanan tidak menemukannya. Mungkin bersifat pribadi atau sudah dihapus.</string>
     <string name="error_rate_limited">Layanan sedang sibuk. Tunggu sebentar lalu coba lagi.</string>
@@ -124,12 +124,17 @@
     <string name="share_link_button">Bagikan tautan</string>
     <string name="settings_link_owners_title">Aplikasi dengan tautan ini</string>
     <string name="settings_link_owners_description">Aplikasi ini bisa membuka tautan yang sama. Ketuk salah satunya untuk memilih apakah aplikasi itu membukanya sendiri.</string>
-    <string name="link_owner_opens_them">Membukanya sendiri</string>
+    <string name="link_owner_opens_them">Menyimpan tautannya sendiri</string>
     <string name="link_owner_lets_crosstune">Membiarkan Crosstune membukanya</string>
-    <string name="setup_allow_taken_hint">Tidak bisa mencentang tautan? Aplikasi lain memakainya: Android menunjukkan aplikasinya di samping tautan. Di setelan aplikasi itu, nonaktifkan “Buka link yang didukung”.</string>
+    <string name="setup_allow_taken_hint">Tidak bisa mencentang tautan? Aplikasi lain memakainya. Nonaktifkan “Buka link yang didukung” di aplikasi itu.</string>
     <string name="frontend_address_title">Alamat %1$s</string>
     <string name="save_button">Simpan</string>
     <string name="frontend_address_invalid">Masukkan alamat web, seperti yewtu.be</string>
     <string name="frontend_site_on">Membuka video di %1$s</string>
-    <string name="source_open_links">Buka tautan ini di Crosstune</string>
+    <string name="source_open_links">Buka di Crosstune</string>
+    <string name="setting_only_music_videos">Hanya video musik</string>
+    <string name="setting_only_music_videos_description">Video lain terbuka seperti biasa.</string>
+    <string name="setup_sources_music">Musik</string>
+    <string name="setup_sources_videos">Video</string>
+    <string name="setting_only_music_videos_note">Hanya video musik yang masuk ke aplikasimu. Video lain terbuka seperti biasa.</string>
 </resources>

@@ -49,7 +49,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val sources = sourceSettings(state, actions)
     sources.firstOrNull { it.key == openSource }?.let { item ->
-        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), actions, onBack = { openSource = null })
+        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { openSource = null })
     }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
@@ -355,6 +355,8 @@ private class SourceSettings(
     val fallback: Destination,
     val onToggle: (Boolean) -> Unit,
     val onRule: (Destination?) -> Unit,
+    /** YouTube and its frontends, which are mostly videos that aren't music. */
+    val video: Boolean = false,
     /** For web frontends, the site they open videos on when picked as where to open things. */
     val site: Destination.Alternative? = null,
     val onSite: (String) -> Boolean = { false }
@@ -378,7 +380,8 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             rule = rule,
             fallback = state.defaultDestination,
             onToggle = { actions.onInterceptChange(source, it) },
-            onRule = { actions.onRuleChange(source, it) }
+            onRule = { actions.onRuleChange(source, it) },
+            video = source == MusicService.YOUTUBE
         )
     }
     val frontends = Frontend.SOURCES.map { frontend ->
@@ -395,6 +398,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             fallback = state.rules[MusicService.YOUTUBE] ?: state.defaultDestination,
             onToggle = { actions.onFrontendInterceptChange(frontend, it) },
             onRule = { actions.onFrontendRuleChange(frontend, it) },
+            video = true,
             site = state.destinations.filterIsInstance<Destination.Alternative>().firstOrNull { it.frontend == frontend },
             onSite = { actions.onFrontendInstanceChange(frontend, it) }
         )
@@ -455,6 +459,7 @@ private fun SourcePage(
     item: SourceSettings,
     destinations: List<Destination>,
     claimingApps: Map<String, Map<LinkApp, Boolean>>,
+    onlyMusicVideos: Boolean,
     actions: ScreenActions,
     onBack: () -> Unit
 ) {
@@ -476,6 +481,16 @@ private fun SourcePage(
                 enabled = !item.locked
             )
             if (item.notAllowed) NotAllowedRow(actions)
+            if (item.video) {
+                GroupDivider()
+                // Shared by YouTube, Invidious and Piped.
+                SettingSwitch(
+                    label = stringResource(R.string.setting_only_music_videos),
+                    description = stringResource(R.string.setting_only_music_videos_description),
+                    checked = onlyMusicVideos,
+                    onCheckedChange = actions.onOnlyMusicVideosChange
+                )
+            }
             GroupDivider()
             RuleMenu(item.rule, item.fallback, destinations, item.onRule)
             item.site?.let { site ->

@@ -34,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -230,39 +231,66 @@ internal fun UiState.listeningService(): MusicService? =
  */
 @Composable
 private fun SourcesStep(state: UiState, actions: ScreenActions) {
+    // Music services start ticked; it's what most people want.
+    LaunchedEffect(Unit) { actions.onPreselectSources() }
     StepHeader(R.string.setup_sources_title, R.string.setup_sources_body)
     val listening = state.listeningService()
+    SetupGroupTitle(R.string.setup_sources_music)
     Group {
         // Links usually come from the services the user doesn't use, so installed apps aren't put first.
-        MusicService.entries.filter { it.canBeSource && it != listening }
+        MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
             .forEachIndexed { index, source ->
                 if (index > 0) GroupDivider()
-                val checked = source in state.intercepted
-                ChoiceRow(
-                    modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) { actions.onInterceptChange(source, it) },
-                    control = { Checkbox(checked = checked, onCheckedChange = null) },
-                    label = stringResource(source.labelRes)
-                )
+                SourceChoice(stringResource(source.labelRes), source in state.intercepted) { actions.onInterceptChange(source, it) }
             }
-        // Invidious and Piped are sources of their own, whichever app the user listens in.
-        Frontend.SOURCES.forEach { frontend ->
-            GroupDivider()
-            val checked = frontend in state.frontendSources
-            ChoiceRow(
-                modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) { actions.onFrontendInterceptChange(frontend, it) },
-                control = { Checkbox(checked = checked, onCheckedChange = null) },
-                label = frontend.label
-            )
-        }
     }
     if (listening != null && listening.canBeSource) {
         Text(
             text = stringResource(R.string.setup_sources_listening_note, stringResource(listening.labelRes)),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)
         )
     }
+    // Most videos aren't music, so these start off; YouTube's own frontends are sources of their own.
+    SetupGroupTitle(R.string.setup_sources_videos)
+    Group {
+        if (listening != MusicService.YOUTUBE) {
+            SourceChoice(stringResource(R.string.target_youtube), MusicService.YOUTUBE in state.intercepted) {
+                actions.onInterceptChange(MusicService.YOUTUBE, it)
+            }
+            GroupDivider()
+        }
+        Frontend.SOURCES.forEachIndexed { index, frontend ->
+            if (index > 0) GroupDivider()
+            SourceChoice(frontend.label, frontend in state.frontendSources) { actions.onFrontendInterceptChange(frontend, it) }
+        }
+    }
+    Text(
+        text = stringResource(R.string.setting_only_music_videos_note),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)
+    )
+}
+
+@Composable
+private fun SetupGroupTitle(title: Int) {
+    Text(
+        text = stringResource(title),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun SourceChoice(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    ChoiceRow(
+        modifier = Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange),
+        control = { Checkbox(checked = checked, onCheckedChange = null) },
+        label = label
+    )
 }
 
 @Composable
