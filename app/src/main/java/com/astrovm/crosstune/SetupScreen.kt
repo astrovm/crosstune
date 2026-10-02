@@ -56,6 +56,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.Dp
 
 private enum class SetupStep { DESTINATION, SOURCES, APPS, ALLOW }
 
@@ -384,27 +389,19 @@ private fun StatusTag(done: Boolean, doneText: String, todoText: String) {
 }
 
 /**
- * One source's links: whether Android lets Crosstune open them, from Android 12, which can tell,
- * and which still need ticking, since Android lists every source's links together.
+ * One source and the links of it still to tick, since Android lists every source's links together:
+ * those Android says aren't allowed yet from Android 12, which can tell, or all of them before.
  */
 @Composable
-private fun AllowRow(label: String, unapproved: List<String>?, allHosts: List<String>) {
+private fun AllowRow(label: String, hosts: List<String>) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            if (unapproved != null) {
-                StatusTag(unapproved.isEmpty(), stringResource(R.string.setup_allowed), stringResource(R.string.setup_not_allowed))
-            }
-        }
-        val hosts = unapproved ?: allHosts
-        if (hosts.isNotEmpty()) {
-            Text(
-                text = hosts.joinToString(", "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-        }
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = hosts.joinToString(", "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }
 
@@ -422,9 +419,12 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
     AllowLinksGuide(state, actions)
 }
 
-/** A real screenshot of the Android screen to use, with what to tap circled. Phones vary, so it says so. */
+/**
+ * A real screenshot of the Android screen to use, with what to tap circled, and a line under it:
+ * by default that phones vary, or what to do when that's shorter said there.
+ */
 @Composable
-internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier) {
+internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier, caption: String? = stringResource(R.string.guide_may_differ)) {
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         // The steps around it say the same in words, for TalkBack.
         Image(
@@ -436,12 +436,14 @@ internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier) {
                 .clip(MaterialTheme.shapes.medium)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
         )
-        Text(
-            text = stringResource(R.string.guide_may_differ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp)
-        )
+        caption?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
     }
 }
 
@@ -483,15 +485,21 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
     NumberedStep(2, stringResource(R.string.setup_allow_step_add))
     GuideShot(R.drawable.guide_add_link, Modifier.padding(vertical = 12.dp))
     NumberedStep(3, stringResource(R.string.setup_allow_step_tick))
-    GuideShot(R.drawable.guide_tick_links, Modifier.padding(vertical = 12.dp))
-    Group {
-        MusicService.entries.filter { it in state.intercepted }.forEachIndexed { index, source ->
-            if (index > 0) GroupDivider()
-            AllowRow(stringResource(source.labelRes), state.unapprovedHosts?.let { it[source].orEmpty() }, LinkInterception.HOSTS[source].orEmpty())
-        }
-        Frontend.SOURCES.filter { it in state.frontendSources }.forEachIndexed { index, frontend ->
-            if (index > 0 || state.intercepted.isNotEmpty()) GroupDivider()
-            AllowRow(frontend.label, state.unapprovedFrontendHosts?.let { it[frontend].orEmpty() }, frontend.sites)
+    // The first screenshot already says phones vary.
+    GuideShot(R.drawable.guide_tick_links, Modifier.padding(vertical = 12.dp), caption = null)
+    // Only what's left to allow; the count above already says how many are done.
+    val toAllow = MusicService.entries.filter { it in state.intercepted }.map { source ->
+        stringResource(source.labelRes) to (state.unapprovedHosts?.let { it[source].orEmpty() } ?: LinkInterception.HOSTS[source].orEmpty())
+    } + Frontend.SOURCES.filter { it in state.frontendSources }.map { frontend ->
+        frontend.label to (state.unapprovedFrontendHosts?.let { it[frontend].orEmpty() } ?: frontend.sites)
+    }
+    val rows = toAllow.filter { (_, hosts) -> hosts.isNotEmpty() }
+    if (rows.isNotEmpty()) {
+        Group {
+            rows.forEachIndexed { index, (label, hosts) ->
+                if (index > 0) GroupDivider()
+                AllowRow(label, hosts)
+            }
         }
     }
     // Some apps that keep links can't be found, but Android names them next to each link it greys out.
@@ -507,24 +515,23 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
 
 @Composable
 private fun AppsStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
-    StepHeader(R.string.setup_apps_title, stopAppsBody(apps, state.blockingApps))
+    StepHeader(R.string.setup_apps_title, null)
     StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
-}
-
-/**
- * Why the apps need stopping, naming the app when there's just one, or null once Android says
- * all are stopped, when the guide's all-set line says so instead.
- */
-@Composable
-internal fun stopAppsBody(apps: List<LinkApp>, blocking: Set<LinkApp>?): String? = when {
-    blocking != null && apps.none { it in blocking } -> null
-    apps.size == 1 -> stringResource(R.string.setup_apps_body_one, apps.single().label)
-    else -> stringResource(R.string.setup_apps_body)
 }
 
 /** Whether a guide is finished, so its button can say Done rather than Skip for now. */
 internal fun appsGuideDone(apps: List<LinkApp>, blocking: Set<LinkApp>?): Boolean =
     blocking == null || apps.none { it in blocking }
+
+/** An installed app's own icon, or nothing if it's just been uninstalled. */
+@Composable
+private fun PackageIcon(packageName: String, size: Dp = 32.dp) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        runCatching { context.packageManager.getApplicationIcon(packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+    }
+    icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(size).clip(MaterialTheme.shapes.small)) }
+}
 
 /**
  * Installed apps that keep the links, one at a time from Android 12, which tells when each is
@@ -536,8 +543,7 @@ internal fun appsGuideDone(apps: List<LinkApp>, blocking: Set<LinkApp>?): Boolea
 internal fun StopAppsGuide(apps: List<LinkApp>, blocking: Set<LinkApp>?, onOpen: (LinkApp) -> Unit) {
     val current = blocking?.let { apps.firstOrNull { it in blocking } }
     if (blocking == null) {
-        Text(stringResource(R.string.setup_apps_stop_body), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 12.dp))
-        GuideShot(R.drawable.guide_stop_app, Modifier.padding(bottom = 16.dp))
+        GuideShot(R.drawable.guide_stop_app, Modifier.padding(bottom = 16.dp), caption = stringResource(R.string.setup_apps_stop_body))
     } else if (current == null) {
         Text(stringResource(R.string.setup_apps_all_done), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
     } else {
@@ -551,23 +557,21 @@ internal fun StopAppsGuide(apps: List<LinkApp>, blocking: Set<LinkApp>?, onOpen:
                     )
                 }
                 Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PackageIcon(current.packageName)
                     Text(
-                        text = stringResource(R.string.setup_apps_stop_title, current.label),
+                        text = current.label,
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp)
                     )
                     // With one app there's no list below, so its status goes here.
                     if (apps.size == 1) {
                         StatusTag(false, stringResource(R.string.setup_fixed), stringResource(R.string.setup_still_opens))
                     }
                 }
-                Text(
-                    text = stringResource(R.string.setup_apps_stop_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                GuideShot(R.drawable.guide_stop_app, Modifier.padding(vertical = 16.dp))
+                // What to pick goes under the screenshot, which shows it, instead of a paragraph above.
+                GuideShot(R.drawable.guide_stop_app, Modifier.padding(vertical = 16.dp), caption = stringResource(R.string.setup_apps_stop_body))
                 Button(
                     onClick = { onOpen(current) },
                     modifier = Modifier

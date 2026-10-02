@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
     <string name="setup_apps_title">Matikan link aplikasi lain</string>
-    <string name="setup_apps_body">Aplikasi ini membuka link sebelum Crosstune. Matikan satu per satu.</string>
     <string name="setup_still_opens">Masih membuka link</string>
     <string name="setup_done">Selesai</string>
-    <string name="setup_allowed">Diizinkan</string>
     <string name="setup_not_allowed">Belum diizinkan</string>
     <string name="open_in_apple_music">Buka di Apple Music</string>
     <string name="open_in_deezer">Buka di Deezer</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">Hanya video musik yang masuk ke aplikasimu. Video lain terbuka seperti biasa.</string>
     <string name="guide_may_differ">Tampilan di ponselmu mungkin sedikit berbeda.</string>
     <string name="setup_allow_progress">%1$d dari %2$d tautan diizinkan</string>
-    <string name="setup_apps_stop_title">Hentikan %1$s</string>
-    <string name="setup_apps_stop_body">Ketuk tombolnya, lalu pilih “Di browser”. Jika yang muncul tombol alih, nonaktifkan “Buka link yang didukung”.</string>
+    <string name="setup_apps_stop_body">Pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
     <string name="setup_apps_all_done">Beres. Link ini sekarang terbuka di Crosstune.</string>
     <string name="setup_skip_for_now">Nanti saja</string>
     <string name="setup_fixed">Beres</string>
-    <string name="setup_apps_body_one">%1$s membuka link ini sebelum Crosstune.</string>
     <string name="choose_app_button">Pilih aplikasi</string>
     <string name="make_default_named">Jadikan %1$s default</string>
 </resources>

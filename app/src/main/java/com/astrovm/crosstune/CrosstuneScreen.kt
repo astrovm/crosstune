@@ -191,14 +191,7 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
             !state.someLinksNotAllowed
         } else {
             val apps = appsToStop(state)
-            stopAppsBody(apps, state.blockingApps)?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
-                )
-            }
+            Spacer(Modifier.height(8.dp))
             StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
             appsGuideDone(apps, state.blockingApps)
         }
