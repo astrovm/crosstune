@@ -57,6 +57,14 @@ internal data class UiState(
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
+    /** Apps the share sheet offers to open a link in directly: the default first, then other installed ones. */
+    val shareTargets: List<MusicService>
+        get() = if (!setupComplete || !hasDefault) {
+            emptyList()
+        } else {
+            (listOfNotNull((defaultDestination as? Destination.Service)?.service) + MusicService.entries.filter { it in installed }).distinct()
+        }
+
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
         get() = selectedDestination ?: link?.let { rules[it.service] } ?: defaultDestination
@@ -115,7 +123,7 @@ internal class MainViewModel(
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
     private var job: Job? = null
-    private var lastRequest: Pair<LinkInput, Boolean>? = null
+    private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
     private var pendingOpen = false
 
     private fun UiState.withDestinations(): UiState {
@@ -170,8 +178,11 @@ internal class MainViewModel(
         uiState = uiState.copy(leaveSettings = false)
     }
 
-    /** Resolves a link from another app and opens it (or offers destinations) as soon as it is ready. */
-    fun resolveIncoming(text: String?) {
+    /**
+     * Resolves a link from another app and opens it (or offers destinations) as soon as it is
+     * ready; in [destination] when the user already chose one, e.g. with a share sheet target.
+     */
+    fun resolveIncoming(text: String?, destination: Destination? = null) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         uiState = uiState.copy(
             linkText = incoming,
@@ -189,7 +200,7 @@ internal class MainViewModel(
         if (input is LinkInput.Link) {
             uiState = uiState.copy(linkText = input.link.url)
         }
-        resolve(input, openWhenReady = true)
+        resolve(input, openWhenReady = true, destination)
     }
 
     /**
@@ -214,19 +225,19 @@ internal class MainViewModel(
         resolveTypedInput()
     }
 
-    /** Clipboard text from the Quick Settings tile or launcher shortcut. */
-    fun resolveClipboard(text: String?) {
+    /** Clipboard text from the Quick Settings tile or a launcher shortcut, which may name the app to open it in. */
+    fun resolveClipboard(text: String?, destination: Destination?) {
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
-        resolveIncoming(text)
+        resolveIncoming(text, destination)
     }
 
     fun retry() {
-        val (input, openWhenReady) = lastRequest ?: return
-        resolve(input, openWhenReady)
+        val (input, openWhenReady, destination) = lastRequest ?: return
+        resolve(input, openWhenReady, destination)
     }
 
-    private fun resolve(input: LinkInput, openWhenReady: Boolean) {
-        lastRequest = input to openWhenReady
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null) {
+        lastRequest = Triple(input, openWhenReady, destination)
         pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         job?.cancel()
@@ -236,7 +247,7 @@ internal class MainViewModel(
             error = null,
             result = null,
             destinationUrls = emptyMap(),
-            selectedDestination = null,
+            selectedDestination = destination,
             link = null,
             showDestinationPicker = false
         )
@@ -281,7 +292,9 @@ internal class MainViewModel(
             uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
         }
         // Incoming links without a chosen destination must not search the default before asking.
-        if (pendingOpen && (uiState.askEachTime || !uiState.setupComplete || ownService != null)) {
+        val ask = uiState.selectedDestination == null &&
+            (uiState.askEachTime || !uiState.setupComplete || ownService != null)
+        if (pendingOpen && ask) {
             pendingOpen = false
             uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService)
             return

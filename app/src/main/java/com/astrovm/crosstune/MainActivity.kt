@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.snapshotFlow
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
@@ -28,6 +29,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -76,6 +79,19 @@ class MainActivity : ComponentActivity() {
             incomingLink != null && !viewModel.uiState.handlingIncomingLink -> viewModel.resolveIncoming(incomingLink)
         }
 
+        val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Android limits how often a background app may change shortcuts, so only while shown.
+                // Converted links saved on an entry don't change its shortcut, so they don't restart it.
+                snapshotFlow {
+                    val recent = viewModel.uiState.history.take(AppShortcuts.MAX_RECENT).map { it.copy(destinationLinks = emptyMap()) }
+                    recent to viewModel.uiState.shareTargets
+                }
+                    .distinctUntilChanged()
+                    .collectLatest { (recent, targets) -> shortcuts.update(recent, targets) }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.effects.collect { effect ->
@@ -164,8 +180,13 @@ class MainActivity : ComponentActivity() {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
-                viewModel.resolveIncoming(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return)
+                viewModel.resolveIncoming(
+                    shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return,
+                    // A share sheet target picked an app to open it in.
+                    AppShortcuts.chosenDestination(intent)
+                )
             }
+            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString())
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
         }
     }
@@ -174,7 +195,7 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus || !pendingClipboardRead) return
         pendingClipboardRead = false
-        viewModel.resolveClipboard(clipboardText())
+        viewModel.resolveClipboard(clipboardText(), AppShortcuts.chosenDestination(intent))
     }
 
     /** Android only lets the focused app read the clipboard, which it is here: after focus or a tap. */
