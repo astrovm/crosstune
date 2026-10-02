@@ -22,6 +22,12 @@ internal sealed interface LinkInput {
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
 internal object MusicLinks {
+    /** Popular Invidious and Piped sites; YouTube's link alias in the manifest takes them too. */
+    val FRONTEND_SITES = listOf(
+        "yewtu.be", "inv.nadeko.net", "invidious.nerdvpn.de", "invidious.f5.si", "invidious.tiekoetter.com",
+        "yt.chocolatemoo53.com", "piped.video", "piped.yt", "piped.adminforge.de", "piped.privacy.com.de", "piped.leptons.xyz"
+    )
+
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
     private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
     private val spotifyIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
@@ -104,8 +110,9 @@ internal object MusicLinks {
             host == "soundcloud.com" || host == "www.soundcloud.com" || host == "m.soundcloud.com" ->
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
-            // Invidious and Piped, on any of their many sites, use YouTube's own watch links.
-            segments == listOf("watch") -> url.queryParameter("v")?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true)
+            // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
+            // popular sites' other video paths are recognised too.
+            segments == listOf("watch") || host in FRONTEND_SITES -> frontendVideo(url, segments)
             else -> null
         }
     }
@@ -134,6 +141,15 @@ internal object MusicLinks {
         segments == listOf("watch") -> url.queryParameter("v")?.let { youtube(service, it) }
         segments.size == 2 && segments[0] in setOf("shorts", "live") -> youtube(service, segments[1])
         else -> null
+    }
+
+    private fun frontendVideo(url: HttpUrl, segments: List<String>): MusicLink? {
+        val id = when {
+            segments == listOf("watch") -> url.queryParameter("v")
+            segments.size == 2 && segments[0] in setOf("shorts", "live", "embed") -> segments[1]
+            else -> null
+        }
+        return id?.let { youtube(MusicService.YOUTUBE, it) }?.copy(viaFrontend = true)
     }
 
     private fun youtube(service: MusicService, id: String): MusicLink? {

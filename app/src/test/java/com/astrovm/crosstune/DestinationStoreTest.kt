@@ -26,6 +26,9 @@ class DestinationStoreTest {
         assertEquals(
             listOf(
                 Destination.Alternative(Frontend.NEWPIPE),
+                // NewPipe also plays SoundCloud and Bandcamp.
+                Destination.Alternative(Frontend.NEWPIPE_SOUNDCLOUD),
+                Destination.Alternative(Frontend.NEWPIPE_BANDCAMP),
                 Destination.Alternative(Frontend.INVIDIOUS, "https://yewtu.be"),
                 Destination.Alternative(Frontend.PIPED, "https://piped.video")
             ),
