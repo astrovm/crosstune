@@ -157,18 +157,20 @@ private fun StepProgress(step: Int, lastStep: Int) {
 private fun StepHeader(title: Int, body: Int) = StepHeader(title, stringResource(body))
 
 @Composable
-private fun StepHeader(title: Int, body: String) {
+private fun StepHeader(title: Int, body: String?) {
     Text(
         text = stringResource(title),
         style = MaterialTheme.typography.headlineMedium,
-        modifier = Modifier.padding(top = 28.dp)
+        modifier = Modifier.padding(top = 28.dp, bottom = if (body == null) 24.dp else 0.dp)
     )
-    Text(
-        text = body,
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
-    )
+    body?.let {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+        )
+    }
 }
 
 @Composable
@@ -501,14 +503,20 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
 
 @Composable
 private fun AppsStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
-    StepHeader(R.string.setup_apps_title, stopAppsBody(apps))
+    StepHeader(R.string.setup_apps_title, stopAppsBody(apps, state.blockingApps))
     StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
 }
 
-/** Why the apps need stopping, naming the app when there's just one. */
+/**
+ * Why the apps need stopping, naming the app when there's just one, or null once Android says
+ * all are stopped, when the guide's all-set line says so instead.
+ */
 @Composable
-internal fun stopAppsBody(apps: List<LinkApp>): String =
-    apps.singleOrNull()?.let { stringResource(R.string.setup_apps_body_one, it.label) } ?: stringResource(R.string.setup_apps_body)
+internal fun stopAppsBody(apps: List<LinkApp>, blocking: Set<LinkApp>?): String? = when {
+    blocking != null && apps.none { it in blocking } -> null
+    apps.size == 1 -> stringResource(R.string.setup_apps_body_one, apps.single().label)
+    else -> stringResource(R.string.setup_apps_body)
+}
 
 /** Whether a guide is finished, so its button can say Done rather than Skip for now. */
 internal fun appsGuideDone(apps: List<LinkApp>, blocking: Set<LinkApp>?): Boolean =

@@ -93,6 +93,7 @@ You need the Android SDK and JDK 17 or newer. When building from the command lin
 
 ```bash
 ./gradlew :app:assembleDebug   # APK in app/build/outputs/apk/debug/
+./gradlew :app:assembleDev     # "Crosstune Dev", installs next to the released app
 ./gradlew :app:ci              # the same checks CI runs
 ```
 
