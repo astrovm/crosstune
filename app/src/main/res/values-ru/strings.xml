@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Нажмите «Добавить ссылку».</string>
     <string name="setup_allow_step_tick">Отметьте все ссылки и нажмите «Добавить».</string>
     <string name="setup_apps_title">Отключите ссылки в других приложениях</string>
-    <string name="setup_apps_body">Эти приложения открывают ссылки раньше Crosstune. Отключите их по очереди.</string>
     <string name="setup_still_opens">Всё ещё открывает ссылки</string>
     <string name="setup_done">Готово</string>
-    <string name="setup_allowed">Разрешено</string>
     <string name="setup_not_allowed">Ещё не разрешено</string>
     <string name="open_in_apple_music">Открыть в Apple Music</string>
     <string name="open_in_deezer">Открыть в Deezer</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">В ваше приложение попадают только музыкальные видео. Остальные открываются как обычно.</string>
     <string name="guide_may_differ">На вашем телефоне экран может немного отличаться.</string>
     <string name="setup_allow_progress">Разрешено ссылок: %1$d из %2$d</string>
-    <string name="setup_apps_stop_title">Остановите %1$s</string>
-    <string name="setup_apps_stop_body">Нажмите кнопку и выберите «В браузере». Если видите переключатель, отключите «Открывать поддерживаемые ссылки».</string>
+    <string name="setup_apps_stop_body">Выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
     <string name="setup_apps_progress">Приложение %1$d из %2$d</string>
     <string name="setup_apps_all_done">Готово. Теперь эти ссылки открываются в Crosstune.</string>
     <string name="setup_skip_for_now">Не сейчас</string>
     <string name="setup_fixed">Исправлено</string>
-    <string name="setup_apps_body_one">%1$s открывает эти ссылки раньше Crosstune.</string>
     <string name="choose_app_button">Выбрать приложение</string>
     <string name="make_default_named">Сделать %1$s основным</string>
 </resources>

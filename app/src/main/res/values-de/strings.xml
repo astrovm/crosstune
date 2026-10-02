@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Tippe auf „Link hinzufügen“.</string>
     <string name="setup_allow_step_tick">Wähle alle Links aus und tippe auf „Hinzufügen“.</string>
     <string name="setup_apps_title">Links anderer Apps abschalten</string>
-    <string name="setup_apps_body">Diese Apps öffnen die Links, bevor Crosstune es kann. Schalte sie nacheinander ab.</string>
     <string name="setup_still_opens">Öffnet noch Links</string>
     <string name="setup_done">Erledigt</string>
-    <string name="setup_allowed">Erlaubt</string>
     <string name="setup_not_allowed">Noch nicht erlaubt</string>
     <string name="open_in_apple_music">In Apple Music öffnen</string>
     <string name="open_in_deezer">In Deezer öffnen</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">Nur Musikvideos gehen an deine App. Andere öffnen sich wie gewohnt.</string>
     <string name="guide_may_differ">Auf deinem Handy kann es etwas anders aussehen.</string>
     <string name="setup_allow_progress">%1$d von %2$d Links zugelassen</string>
-    <string name="setup_apps_stop_title">%1$s stoppen</string>
-    <string name="setup_apps_stop_body">Tippe auf den Button und wähle „Im Browser“. Siehst du stattdessen einen Schalter, deaktiviere „Unterstützte Links öffnen“.</string>
+    <string name="setup_apps_stop_body">Wähle „Im Browser“ oder deaktiviere „Unterstützte Links öffnen“.</string>
     <string name="setup_apps_progress">App %1$d von %2$d</string>
     <string name="setup_apps_all_done">Fertig. Diese Links öffnen sich jetzt in Crosstune.</string>
     <string name="setup_skip_for_now">Später</string>
     <string name="setup_fixed">Behoben</string>
-    <string name="setup_apps_body_one">%1$s öffnet diese Links, bevor Crosstune es kann.</string>
     <string name="choose_app_button">App wählen</string>
     <string name="make_default_named">%1$s als Standard festlegen</string>
 </resources>

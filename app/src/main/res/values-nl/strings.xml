@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
     <string name="setup_apps_title">Links van andere apps uitzetten</string>
-    <string name="setup_apps_body">Deze apps openen de links eerder dan Crosstune. Zet ze een voor een uit.</string>
     <string name="setup_still_opens">Opent nog links</string>
     <string name="setup_done">Klaar</string>
-    <string name="setup_allowed">Toegestaan</string>
     <string name="setup_not_allowed">Nog niet toegestaan</string>
     <string name="open_in_apple_music">Openen in Apple Music</string>
     <string name="open_in_deezer">Openen in Deezer</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">Alleen muziekvideo\'s gaan naar je app. Andere openen zoals altijd.</string>
     <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
     <string name="setup_allow_progress">%1$d van %2$d links toegestaan</string>
-    <string name="setup_apps_stop_title">%1$s stoppen</string>
-    <string name="setup_apps_stop_body">Tik op de knop en kies ‘In je browser’. Zie je een schakelaar, zet dan ‘Ondersteunde links openen’ uit.</string>
+    <string name="setup_apps_stop_body">Kies ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
     <string name="setup_apps_all_done">Klaar. Deze links openen nu in Crosstune.</string>
     <string name="setup_skip_for_now">Later</string>
     <string name="setup_fixed">Opgelost</string>
-    <string name="setup_apps_body_one">%1$s opent deze links eerder dan Crosstune.</string>
     <string name="choose_app_button">App kiezen</string>
     <string name="make_default_named">%1$s als standaard instellen</string>
 </resources>

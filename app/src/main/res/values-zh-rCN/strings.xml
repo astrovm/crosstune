@@ -52,10 +52,8 @@
     <string name="setup_allow_step_add">点按“添加链接”。</string>
     <string name="setup_allow_step_tick">勾选所有链接，然后点按“添加”。</string>
     <string name="setup_apps_title">阻止其他应用打开链接</string>
-    <string name="setup_apps_body">这些应用会抢在 Crosstune 之前打开链接。请逐个关闭。</string>
     <string name="setup_still_opens">仍会打开链接</string>
     <string name="setup_done">已完成</string>
-    <string name="setup_allowed">已允许</string>
     <string name="setup_not_allowed">尚未允许</string>
     <string name="open_in_apple_music">在 Apple Music 中打开</string>
     <string name="open_in_deezer">在 Deezer 中打开</string>
@@ -137,13 +135,11 @@
     <string name="setting_only_music_videos_note">只有音乐视频会发送到你的应用，其他视频照常打开。</string>
     <string name="guide_may_differ">你的手机界面可能略有不同。</string>
     <string name="setup_allow_progress">已允许 %1$d/%2$d 个链接</string>
-    <string name="setup_apps_stop_title">停止 %1$s</string>
-    <string name="setup_apps_stop_body">点按按钮，然后选择“在浏览器中”。如果看到的是开关，请关闭“打开支持的链接”。</string>
+    <string name="setup_apps_stop_body">选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
     <string name="setup_apps_all_done">完成了。这些链接现在会在 Crosstune 中打开。</string>
     <string name="setup_skip_for_now">以后再说</string>
     <string name="setup_fixed">已解决</string>
-    <string name="setup_apps_body_one">%1$s 会抢在 Crosstune 之前打开这些链接。</string>
     <string name="choose_app_button">选择应用</string>
     <string name="make_default_named">将 %1$s 设为默认</string>
 </resources>
