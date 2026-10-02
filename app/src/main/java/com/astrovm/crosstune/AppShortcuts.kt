@@ -46,6 +46,8 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
             .setClassName(context, MainActivity.PASTE_ALIAS)
             .putExtra(Intent.EXTRA_SHORTCUT_ID, id)
         return ShortcutInfo.Builder(context, id)
+            // The share sheet and launchers both show the long label when it fits, so it can't
+            // say "copied link" for the launcher alone; there it sits under "Open copied link".
             .setShortLabel(context.getString(service.labelRes))
             .setLongLabel(context.getString(service.openLabelRes))
             .setIcon(Icon.createWithResource(context, service.iconRes))

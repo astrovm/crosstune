@@ -72,7 +72,7 @@
     <string name="setting_ask_each_time">使うアプリを毎回選ぶ</string>
     <string name="setting_ask_each_time_description">リンクをタップまたは共有するたびに、アプリを選びます。</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
-    <string name="setting_exact_match_description">Apple Music、Deezer、YouTube Music で曲・アルバム・アーティストに、Bandcamp で曲・アルバムに、YouTube で曲に対応します。ほかのアプリでは検索結果が開きます。</string>
+    <string name="setting_exact_match_description">アプリが対応していれば曲そのものを開きます。そうでなければ検索します。</string>
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
     <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
     <string name="setting_language">言語</string>
@@ -87,18 +87,13 @@
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>
     <string name="shortcut_paste_long">コピーした音楽リンクを開く</string>
     <string name="error_clipboard_empty">先に音楽リンクをコピーしてください。</string>
-    <string name="copy_button">コピー</string>
     <string name="copy_search_action">検索テキストをコピー</string>
-    <string name="share_search_button">共有</string>
     <string name="share_search_link">検索リンクを共有</string>
-    <string name="copy_original_link">%1$s のリンクをコピー</string>
-    <string name="share_original_link">%1$s のリンクを共有</string>
+    <string name="copy_service_link">%1$s のリンクをコピー</string>
+    <string name="share_service_link">%1$s のリンクを共有</string>
     <string name="search_copied_to_clipboard">検索テキストをコピーしました</string>
     <string name="link_copied_to_clipboard">リンクをコピーしました</string>
     <string name="link_settings_helper_title">新しいリンクを許可</string>
-    <string name="link_settings_helper_body">「リンク設定を開く」をタップし、「リンクを追加」をタップして、すべてのリンクにチェックを入れます。</string>
-    <string name="blocking_apps_title">まだリンクを開くアプリ</string>
-    <string name="blocking_apps_body">それぞれで「ブラウザ内」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="open_app_link_settings_button">%1$s の設定を開く</string>
     <string name="open_link_settings_button">リンク設定を開く</string>
     <string name="dismiss_button">閉じる</string>
@@ -118,4 +113,14 @@
     <string name="history_copy">%1$sのリンクをコピー</string>
     <string name="privacy_policy">プライバシーポリシー</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
+    <string name="handoff_opening">%1$s で開いています…</string>
+    <string name="notice_links_not_allowed">Crosstune でまだ開けないリンクがあります</string>
+    <string name="allow_button">許可</string>
+    <string name="notice_app_still_opens">%1$s がまだ自分のリンクを開いています</string>
+    <string name="fix_button">修正</string>
+    <string name="history_cleared">履歴を削除しました</string>
+    <string name="undo_button">元に戻す</string>
+    <string name="empty_hint">どのアプリでも音楽リンクをタップするか、Crosstune に共有してください。</string>
+    <string name="copy_link_button">リンクをコピー</string>
+    <string name="share_link_button">リンクを共有</string>
 </resources>

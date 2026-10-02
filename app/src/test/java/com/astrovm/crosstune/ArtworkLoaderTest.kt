@@ -2,9 +2,12 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import java.io.File
+import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -51,6 +54,27 @@ class ArtworkLoaderTest {
         fake.requestedUrls.clear()
         assertNull(loader.load("data:image/png;base64,AAAA"))
         assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
+    fun coversKeptOnDiskLoadWithoutTheNetworkAfterARestart() = runBlocking {
+        val dir = createTempDirectory("artwork").toFile()
+        fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png()) }
+        assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = dir).load(COVER))
+
+        // A new loader, like after the app restarts, finds it on disk.
+        fake.requestedUrls.clear()
+        assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = dir).load(COVER))
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+
+        // Only the newest are kept.
+        val many = ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = dir)
+        repeat(60) { many.load("https://img.example/$it.jpg") }
+        assertTrue(dir.listFiles()!!.size <= 48)
+
+        // A cover that can't be saved still shows.
+        val notADirectory = File(dir, "file").apply { writeText("x") }
+        assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = File(notADirectory, "artwork")).load(COVER))
     }
 
     private companion object {

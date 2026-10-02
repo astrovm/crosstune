@@ -55,10 +55,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             }
         }
     ) {
-        if (state.showLinkSettingsHelper) {
-            LinkSettingsHelper(actions, modifier = Modifier.padding(top = 4.dp))
-        }
-        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(top = 4.dp))
+        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, includeNotAllowed = false) }
 
         SectionHeader(stringResource(R.string.settings_default_title))
         Group {
@@ -264,18 +261,24 @@ private fun appVersion(): String {
     return remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
 }
 
-/** One source service: a switch for whether Crosstune intercepts its links, and where they go beneath. */
+/**
+ * One source service: a switch for whether Crosstune opens its links, whether Android lets it yet,
+ * and, once on or given its own app, where they go. The app the user listens in can't be turned on
+ * while its links would just go back to it.
+ */
 @Composable
 private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActions) {
     val intercepted = source in state.intercepted
-    var expanded by remember { mutableStateOf(false) }
     val rule = state.rules[source]
-    val defaultLabel = stringResource(R.string.rule_default, state.defaultDestination.label())
+    val listeningHere = source == state.listeningService() && rule == null
+    // Already on from before the rule existed: it can still be turned off.
+    val locked = listeningHere && !intercepted
+    val notAllowed = intercepted && state.unapprovedHosts?.get(source).orEmpty().isNotEmpty()
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .toggleable(value = intercepted, role = Role.Switch) { actions.onInterceptChange(source, it) }
+                .toggleable(value = intercepted, enabled = !locked, role = Role.Switch) { actions.onInterceptChange(source, it) }
                 .heightIn(min = 48.dp)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -285,39 +288,66 @@ private fun SourceRow(source: MusicService, state: UiState, actions: ScreenActio
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f)
             )
-            Switch(checked = intercepted, onCheckedChange = null)
+            Switch(checked = intercepted, onCheckedChange = null, enabled = !locked)
         }
-        Box(modifier = Modifier.padding(start = 8.dp)) {
-            TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+        if (listeningHere) {
+            Text(
+                text = stringResource(R.string.setup_sources_listening_note, stringResource(source.labelRes)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+            )
+        }
+        if (notAllowed) {
+            Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(R.string.rule_opens_in, rule?.label() ?: defaultLabel),
-                    style = MaterialTheme.typography.bodyMedium
+                    text = stringResource(R.string.setup_not_allowed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f)
                 )
-                AppIcon(
-                    R.drawable.ic_expand_more,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(start = 2.dp)
-                        .size(16.dp)
-                )
+                TextButton(onClick = actions.onOpenLinkSettings) { Text(stringResource(R.string.allow_button)) }
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        }
+        // Where its links go only matters once they come to Crosstune, or for the app the user listens in.
+        if (intercepted || rule != null || listeningHere) RuleMenu(source, rule, state, actions)
+    }
+}
+
+@Composable
+private fun RuleMenu(source: MusicService, rule: Destination?, state: UiState, actions: ScreenActions) {
+    var expanded by remember { mutableStateOf(false) }
+    val defaultLabel = stringResource(R.string.rule_default, state.defaultDestination.label())
+    Box(modifier = Modifier.padding(start = 8.dp)) {
+        TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Text(
+                stringResource(R.string.rule_opens_in, rule?.label() ?: defaultLabel),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            AppIcon(
+                R.drawable.ic_expand_more,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .size(16.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(defaultLabel) },
+                onClick = {
+                    expanded = false
+                    actions.onRuleChange(source, null)
+                }
+            )
+            state.destinations.forEach { destination ->
                 DropdownMenuItem(
-                    text = { Text(defaultLabel) },
+                    text = { Text(destination.label()) },
                     onClick = {
                         expanded = false
-                        actions.onRuleChange(source, null)
+                        actions.onRuleChange(source, destination)
                     }
                 )
-                state.destinations.forEach { destination ->
-                    DropdownMenuItem(
-                        text = { Text(destination.label()) },
-                        onClick = {
-                            expanded = false
-                            actions.onRuleChange(source, destination)
-                        }
-                    )
-                }
             }
         }
     }

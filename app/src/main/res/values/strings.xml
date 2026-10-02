@@ -84,7 +84,7 @@
     <string name="setting_ask_each_time">Ask which app to use</string>
     <string name="setting_ask_each_time_description">Pick an app each time you tap or share a link.</string>
     <string name="setting_exact_match">Open the exact match</string>
-    <string name="setting_exact_match_description">Works with Apple Music, Deezer and YouTube Music for songs, albums and artists, with Bandcamp for songs and albums, and with YouTube for songs. Other apps get a search.</string>
+    <string name="setting_exact_match_description">Opens the song itself when the app supports it. Otherwise it searches.</string>
     <string name="setting_clean_links">Remove tracking from links</string>
     <string name="setting_clean_links_description">Drops tracking parts like ?si= or utm_ from links you open, copy or share.</string>
     <string name="setting_language">Language</string>
@@ -99,18 +99,13 @@
     <string name="shortcut_paste_short">Open copied link</string>
     <string name="shortcut_paste_long">Open copied music link</string>
     <string name="error_clipboard_empty">Copy a music link first.</string>
-    <string name="copy_button">Copy</string>
     <string name="copy_search_action">Copy search text</string>
-    <string name="share_search_button">Share</string>
     <string name="share_search_link">Share search link</string>
-    <string name="copy_original_link">Copy %1$s link</string>
-    <string name="share_original_link">Share %1$s link</string>
+    <string name="copy_service_link">Copy %1$s link</string>
+    <string name="share_service_link">Share %1$s link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_copied_to_clipboard">Link copied</string>
     <string name="link_settings_helper_title">Allow the new links</string>
-    <string name="link_settings_helper_body">Tap Open link settings, then Add link, and tick all the links.</string>
-    <string name="blocking_apps_title">These apps still open the links</string>
-    <string name="blocking_apps_body">In each one, choose “In your browser” or turn off “Open supported links”.</string>
     <string name="open_app_link_settings_button">Open %1$s settings</string>
     <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
@@ -133,4 +128,14 @@
     <string name="make_default">Make default</string>
     <string name="history_open">Open %1$s</string>
     <string name="history_copy">Copy link for %1$s</string>
+    <string name="handoff_opening">Opening in %1$s…</string>
+    <string name="notice_links_not_allowed">Some links can\'t open in Crosstune yet</string>
+    <string name="allow_button">Allow</string>
+    <string name="notice_app_still_opens">%1$s still opens its own links</string>
+    <string name="fix_button">Fix</string>
+    <string name="history_cleared">History cleared</string>
+    <string name="undo_button">Undo</string>
+    <string name="empty_hint">Tap a music link in any app, or share one to Crosstune.</string>
+    <string name="copy_link_button">Copy link</string>
+    <string name="share_link_button">Share link</string>
 </resources>

@@ -221,7 +221,7 @@ private fun ChoiceRow(modifier: Modifier, control: @Composable () -> Unit, label
 }
 
 /** The service the user listens in, whose links already open where they should. */
-private fun UiState.listeningService(): MusicService? =
+internal fun UiState.listeningService(): MusicService? =
     if (hasDefault) (defaultDestination as? Destination.Service)?.service else null
 
 /**
@@ -264,13 +264,8 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
                 if (index > 0) GroupDivider()
                 val selected = state.hasDefault && destination == state.defaultDestination
                 ChoiceRow(
-                    modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) {
-                        actions.onTargetChange(destination)
-                        // Crosstune would only hand the app its own links back, so stop opening them.
-                        (destination as? Destination.Service)?.service
-                            ?.takeIf { it in state.intercepted }
-                            ?.let { actions.onInterceptChange(it, false) }
-                    },
+                    // Picking a service also stops Crosstune opening its links (see MainViewModel.selectDefault).
+                    modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) { actions.onTargetChange(destination) },
                     control = { RadioButton(selected = selected, onClick = null) },
                     label = destination.label(),
                     tag = { InstalledTag((destination as? Destination.Service)?.service, state.installed) }

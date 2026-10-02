@@ -40,6 +40,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,6 +115,9 @@ internal data class ScreenActions(
     val onHistoryOpen: (HistoryEntry) -> Unit = {},
     val onHistoryCopy: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
+    val onUndoClearHistory: () -> Unit = {},
+    val onForgetClearedHistory: () -> Unit = {},
+    val onCancelHandoff: () -> Unit = {},
     val onOpenLinkSettings: () -> Unit = {},
     val onOpenAppLinkSettings: (MusicService) -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
@@ -164,11 +171,13 @@ internal fun Page(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surface,
+        snackbarHost = snackbarHost,
         topBar = {
             if (title != null) {
                 TopAppBar(
@@ -212,8 +221,18 @@ internal fun Page(
 
 @Composable
 private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
+    // A link from another app on its way out shows just that, not all of Crosstune.
+    if (state.handingOff) return Handoff(state, actions)
     if (state.showDestinationPicker) {
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
+    }
+    val snackbar = remember { SnackbarHostState() }
+    val clearedMessage = stringResource(R.string.history_cleared)
+    val undoLabel = stringResource(R.string.undo_button)
+    LaunchedEffect(state.canUndoClearHistory) {
+        if (!state.canUndoClearHistory) return@LaunchedEffect
+        val result = snackbar.showSnackbar(clearedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Long)
+        if (result == SnackbarResult.ActionPerformed) actions.onUndoClearHistory() else actions.onForgetClearedHistory()
     }
 
     Page(
@@ -223,7 +242,8 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbar) }
     ) {
         Text(
             text = stringResource(R.string.app_tagline),
@@ -232,94 +252,150 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             modifier = Modifier.padding(bottom = 20.dp)
         )
 
-        if (state.showLinkSettingsHelper) {
-            LinkSettingsHelper(actions, modifier = Modifier.padding(bottom = 16.dp))
-        }
-        BlockingAppsNotice(state.blockingApps.orEmpty(), actions, modifier = Modifier.padding(bottom = 16.dp))
-
+        LinkNotices(state, actions)
         LinkField(state, actions)
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            DefaultDestinationMenu(
-                destinations = state.destinations,
-                selected = if (state.result == null) state.defaultDestination else state.resultDestination,
-                onSelect = if (state.result == null) actions.onTargetChange else actions.onResultTargetChange,
-                installed = state.installed,
-                modifier = Modifier.weight(1f)
-            )
-            if (state.result != null && state.resultDestination != state.defaultDestination) {
-                TextButton(onClick = actions.onMakeDefault) { Text(stringResource(R.string.make_default)) }
-            }
-        }
         StatusSection(state, actions)
-        state.result?.let { ResultCard(it, state.link, state.resultDestination, state.destinationUrls[state.resultDestination], !state.isMatching, actions) }
+        state.result?.let { ResultCard(it, state, actions) }
 
-        if (state.history.isNotEmpty()) {
-            HistorySection(state.history, actions)
+        val idle = state.result == null && state.error == null && !state.isLoading
+        if (idle && state.history.isEmpty()) {
+            Text(
+                text = stringResource(R.string.empty_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 32.dp)
+            )
+        }
+        // The song on screen isn't listed again right below it.
+        val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
+        if (history.isNotEmpty()) {
+            HistorySection(history, actions)
         }
     }
 }
 
-/** Reminder to allow links in Android's settings, until done or dismissed. */
+/**
+ * What the user sees while a link from another app is on its way out: the song once known, where
+ * it's going, and a way to stop and stay in Crosstune instead.
+ */
 @Composable
-internal fun LinkSettingsHelper(actions: ScreenActions, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.secondaryContainer
-    ) {
-        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
-            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
-            Column(modifier = Modifier.padding(start = 16.dp)) {
+private fun Handoff(state: UiState, actions: ScreenActions) {
+    val result = state.result
+    Page(title = null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 120.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (result != null) {
+                CoverArt(result.artworkUrl, actions.loadArtwork, size = 160.dp)
                 Text(
-                    text = stringResource(R.string.link_settings_helper_title),
-                    style = MaterialTheme.typography.titleMedium
+                    text = result.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 24.dp)
                 )
-                Text(
-                    text = stringResource(R.string.link_settings_helper_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                FlowRow(
-                    modifier = Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    TextButton(onClick = actions.onOpenLinkSettings) {
-                        Text(stringResource(R.string.open_link_settings_button))
-                    }
-                    TextButton(onClick = actions.onDismissLinkSettingsHelper) {
-                        Text(stringResource(R.string.dismiss_button))
-                    }
+                if (result.artist.isNotBlank()) {
+                    Text(
+                        text = result.artist,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+            } else {
+                AppLogo(size = 64.dp)
+            }
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .padding(top = 32.dp)
+                    .widthIn(max = 240.dp)
+                    .fillMaxWidth()
+            )
+            Text(
+                text = if (result == null) {
+                    stringResource(R.string.loading_text)
+                } else {
+                    stringResource(R.string.handoff_opening, state.resultDestination.label())
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            TextButton(onClick = actions.onCancelHandoff, modifier = Modifier.padding(top = 24.dp)) {
+                Text(stringResource(R.string.cancel_button))
             }
         }
     }
 }
 
 /**
- * Lists installed music apps that still open links meant for Crosstune, each with a button to its
- * own link settings, where "Open supported links" has to be turned off. Nothing shows when there are none.
+ * One line for each thing still keeping links from Crosstune: links Android doesn't let it open
+ * yet (before Android 12, which can't tell, a reminder until dismissed), and installed apps that
+ * still open their own links.
  */
 @Composable
-internal fun BlockingAppsNotice(apps: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier) {
-    if (apps.isEmpty()) return
+internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
+    // Settings marks each service that isn't allowed yet instead.
+    val unapproved = state.unapprovedHosts.takeIf { includeNotAllowed }
+    val allow = stringResource(R.string.allow_button)
+    if (state.unapprovedHosts != null) {
+        if (unapproved != null && state.intercepted.any { unapproved[it].orEmpty().isNotEmpty() }) {
+            NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onOpenLinkSettings)
+        }
+    } else if (state.showLinkSettingsHelper) {
+        NoticeStrip(
+            stringResource(R.string.link_settings_helper_title), allow, actions.onOpenLinkSettings,
+            onDismiss = actions.onDismissLinkSettingsHelper
+        )
+    }
+    MusicService.entries.filter { it in state.blockingApps.orEmpty() }.forEach { app ->
+        NoticeStrip(
+            stringResource(R.string.notice_app_still_opens, stringResource(app.labelRes)),
+            stringResource(R.string.fix_button),
+            { actions.onOpenAppLinkSettings(app) }
+        )
+    }
+}
+
+@Composable
+private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDismiss: (() -> Unit)? = null) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
-        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
-            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
-            Column(modifier = Modifier.padding(start = 16.dp)) {
-                Text(text = stringResource(R.string.blocking_apps_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = stringResource(R.string.blocking_apps_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                MusicService.entries.filter { it in apps }.forEach { app ->
-                    TextButton(onClick = { actions.onOpenAppLinkSettings(app) }) {
-                        Text(stringResource(R.string.open_app_link_settings_button, stringResource(app.labelRes)))
-                    }
+        Row(
+            modifier = Modifier
+                .heightIn(min = 52.dp)
+                .padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
+            TextButton(onClick = onAction) { Text(action) }
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss) {
+                    AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button))
                 }
             }
         }
@@ -368,20 +444,21 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         ),
         modifier = Modifier.fillMaxWidth()
     )
-    // Tonal, so the result's Open button stays the one primary action on screen.
-    FilledTonalButton(
-        onClick = actions.onResolve,
-        enabled = !busy,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 12.dp)
-            .heightIn(min = 52.dp)
-    ) {
-        Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge)
+    val convertModifier = Modifier
+        .fillMaxWidth()
+        .padding(top = 12.dp)
+        .heightIn(min = 52.dp)
+    val canConvert = !busy && state.linkText.isNotBlank()
+    val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
+    // The main action until there's a result; then the result's Open button is.
+    if (state.result == null) {
+        Button(onClick = actions.onResolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
+    } else {
+        FilledTonalButton(onClick = actions.onResolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
     }
 }
 
-/** "Opens in YouTube Music ▾": the default destination, one tap away without taking up the screen. */
+/** "Opens in YouTube Music ▾": where a result opens, or, labelled in settings, the default. */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
@@ -493,14 +570,11 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
 }
 
 @Composable
-private fun ResultCard(
-    result: MusicMetadata,
-    link: MusicLink?,
-    destination: Destination,
-    prepared: PreparedLink?,
-    destinationReady: Boolean,
-    actions: ScreenActions
-) {
+private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenActions) {
+    val link = state.link
+    val destination = state.resultDestination
+    val prepared = state.destinationUrls[destination]
+    val destinationReady = !state.isMatching
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -549,6 +623,19 @@ private fun ResultCard(
                     }
                 }
             }
+            // Changing it here only changes this result; the default lives in settings.
+            Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                DefaultDestinationMenu(
+                    destinations = state.destinations,
+                    selected = destination,
+                    onSelect = actions.onResultTargetChange,
+                    installed = state.installed,
+                    modifier = Modifier.weight(1f)
+                )
+                if (destination != state.defaultDestination) {
+                    TextButton(onClick = actions.onMakeDefault) { Text(stringResource(R.string.make_default)) }
+                }
+            }
             val searchFallback = prepared?.exact == false
             Button(
                 onClick = actions.onOpen,
@@ -556,7 +643,7 @@ private fun ResultCard(
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 20.dp)
+                    .padding(top = 4.dp)
                     .heightIn(min = 52.dp)
             ) {
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
@@ -576,7 +663,7 @@ private fun ResultCard(
                 // Same height even when only one label wraps.
                 SecondaryAction(
                     R.drawable.ic_content_copy,
-                    stringResource(R.string.copy_button),
+                    stringResource(R.string.copy_link_button),
                     actions.onCopyLink,
                     Modifier
                         .weight(1f)
@@ -585,7 +672,7 @@ private fun ResultCard(
                 )
                 SecondaryAction(
                     R.drawable.ic_share,
-                    stringResource(R.string.share_search_button),
+                    stringResource(R.string.share_link_button),
                     actions.onShareSearch,
                     Modifier
                         .weight(1f)

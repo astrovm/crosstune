@@ -127,8 +127,19 @@ class MainActivityTest {
         return string(R.string.search_in_destination, label)
     }
 
-    /** Picks the default destination from the "Opens in" menu under the link field. */
+    /**
+     * Picks from the "Opens in" menu: on the result card it changes just that result; with no
+     * result there's none on the main screen, so it changes the default in settings.
+     */
     private fun chooseDefault(label: String) {
+        val onResult = composeRule.onAllNodesWithTag(DEFAULT_MENU_TAG).fetchSemanticsNodes().isNotEmpty()
+        if (onResult) pickFromDefaultMenu(label) else inSettings { pickFromDefaultMenu(label) }
+    }
+
+    /** Picks from the menu on the current screen, e.g. the default in settings. */
+    private fun chooseDefaultHere(label: String) = pickFromDefaultMenu(label)
+
+    private fun pickFromDefaultMenu(label: String) {
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
         composeRule.waitForIdle()
         // The menu item is the last match: the menu button itself may show the same name.
@@ -150,7 +161,7 @@ class MainActivityTest {
 
     private fun waitForDestinationReady() {
         composeRule.waitUntil(TIMEOUT_MS) {
-            !composeRule.onNodeWithText(string(R.string.copy_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
+            !composeRule.onNodeWithText(string(R.string.copy_link_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
     }
 
@@ -226,7 +237,7 @@ class MainActivityTest {
     @Test
     fun openLinkSettingsOpensOpenByDefaultScreen() {
         val activity = launch()
-        click(string(R.string.open_link_settings_button))
+        click(string(R.string.allow_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -240,7 +251,7 @@ class MainActivityTest {
     @Config(sdk = [30])
     fun openLinkSettingsUsesAppDetailsBeforeAndroid12() {
         launch()
-        click(string(R.string.open_link_settings_button))
+        click(string(R.string.allow_button))
 
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, nextStartedActivity()!!.action)
     }
@@ -270,7 +281,7 @@ class MainActivityTest {
             }
         )
         launch()
-        click(string(R.string.open_link_settings_button))
+        click(string(R.string.allow_button))
 
         val started = nextStartedActivity()
         assertNotNull(started)
@@ -346,7 +357,7 @@ class MainActivityTest {
     }
 
     private fun shareChooser(): Intent {
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         return nextStartedActivity()!!.also { assertEquals(Intent.ACTION_CHOOSER, it.action) }
     }
 
@@ -361,8 +372,8 @@ class MainActivityTest {
 
         val (copy, share) = shareChooser().customActions()
         val spotify = string(R.string.service_spotify)
-        assertEquals(string(R.string.copy_original_link, spotify), copy.label)
-        assertEquals(string(R.string.share_original_link, spotify), share.label)
+        assertEquals(string(R.string.copy_service_link, spotify), copy.label)
+        assertEquals(string(R.string.share_service_link, spotify), share.label)
         val original = "https://open.spotify.com/track/$TRACK_ID"
 
         CopyLinkReceiver().onReceive(app, shadowOf(copy.action).savedIntent)
@@ -423,8 +434,26 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_VIEW, song.intent!!.action)
         assertEquals("https://open.spotify.com/track/$TRACK_ID", song.intent!!.dataString)
 
+        // The song on screen isn't listed again under Recent.
+        assertTextAbsent(string(R.string.clear_history_button))
+        click(string(R.string.clear_button))
         click(string(R.string.clear_history_button))
         composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isEmpty() }
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+
+        // Clearing can be undone for a while, which brings the shortcuts back too.
+        click(string(R.string.undo_button))
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        assertEquals(1, HistoryStore(prefs()).load().size)
+
+        // Once the offer is gone, the cleared history is too.
+        click(string(R.string.clear_history_button))
+        composeRule.mainClock.advanceTimeBy(15_000)
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.undo_button))
+        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        assertFalse(model.uiState.canUndoClearHistory)
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
     }
 
     @Test
@@ -618,13 +647,13 @@ class MainActivityTest {
         // Android 13+ confirms clipboard writes itself, so the app stays quiet.
         assertNull(ShadowToast.getTextOfLatestToast())
 
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals(
             "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
             clipboard.primaryClip!!.getItemAt(0).text.toString()
         )
 
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         val chooser = nextStartedActivity()
         assertEquals(Intent.ACTION_CHOOSER, chooser!!.action)
         @Suppress("DEPRECATION")
@@ -679,8 +708,9 @@ class MainActivityTest {
     @Test
     fun invalidInputsShowErrorWithoutNetworkCalls() {
         launch()
+        // Nothing to convert yet, so the button waits for text.
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
         val invalid = listOf(
-            "",
             "https://example.com/track/$TRACK_ID",
             "https://open.spotify.com/show/$TRACK_ID",
             "https://open.spotify.com/track",
@@ -693,8 +723,6 @@ class MainActivityTest {
             typeUrl(input)
             click(string(R.string.resolve_button))
             assertTextShown(string(R.string.error_invalid_url))
-            // An empty field offers Paste instead of Clear; typing clears the error too.
-            if (input.isEmpty()) typeUrl("x")
             click(string(R.string.clear_button))
             assertTextAbsent(string(R.string.error_invalid_url))
         }
@@ -993,8 +1021,10 @@ class MainActivityTest {
     @Test
     fun lookalikeHostsAndMalformedIdsAreRejected() {
         launch()
+        typeUrl("   ")
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        click(string(R.string.clear_button))
         val rejected = listOf(
-            "   ",
             "https://notspotify.com/track/$TRACK_ID",
             "https://spotify.com.evil.example/track/$TRACK_ID",
             "https://open.spotify.com/track/${TRACK_ID.dropLast(1)}",
@@ -1568,7 +1598,7 @@ class MainActivityTest {
         assertEquals(1, fake.requestedUrls.size)
         click(string(R.string.cancel_button))
         waitForDestinationReady()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/track/1",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         assertEquals(2, fake.requestedUrls.size)
@@ -1591,7 +1621,7 @@ class MainActivityTest {
         assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.exactMatch)
         resolveTyped()
         waitForDestinationReady()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/track/1",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
 
@@ -1601,7 +1631,7 @@ class MainActivityTest {
         val restored = launch()
         assertFalse(ViewModelProvider(restored)[MainViewModel::class.java].uiState.exactMatch)
         resolveTyped()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://www.deezer.com/search/Default%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
@@ -1623,12 +1653,12 @@ class MainActivityTest {
         resolveTyped()
         waitForDestinationReady()
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/us/album/clean/1?i=2", clipboard.primaryClip!!.getItemAt(0).text.toString())
 
         inSettings { composeRule.onNodeWithText(string(R.string.setting_clean_links)).performScrollTo().performClick() }
         assertFalse(prefs().getBoolean("clean_links", true))
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/us/album/clean/1?i=2&uo=4", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }
 
@@ -1666,10 +1696,10 @@ class MainActivityTest {
 
         chooseDefault(string(R.string.target_apple_music))
         waitForDestinationReady()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
         assertEquals("https://music.apple.com/us/song/1", shared.getStringExtra(Intent.EXTRA_TEXT))
         val requestsBeforeOpen = fake.requestedUrls.size
@@ -1686,13 +1716,13 @@ class MainActivityTest {
 
         val requestsBeforeReturning = fake.requestedUrls.size
         chooseDefault(string(R.string.target_apple_music))
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
 
         inSettings { click(string(R.string.setting_exact_match)) }
         assertFalse(prefs().getBoolean("exact_match", true))
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/search?term=Exact%20Artist", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }
 
@@ -1714,14 +1744,14 @@ class MainActivityTest {
         waitForText(string(R.string.matching_text))
         composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.open_in_deezer)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.copy_button)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.share_search_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.copy_link_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.share_link_button)).assertIsNotEnabled()
         assertNull(ViewModelProvider(activity)[MainViewModel::class.java].destinationUrl())
         assertNull(nextStartedActivity())
 
         release.countDown()
         waitUntil { composeRule.onAllNodesWithTextCount(string(R.string.matching_text)) == 0 }
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals(
             "https://www.deezer.com/search/Slow%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
@@ -1759,9 +1789,9 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
 
         val clipboard = app.getSystemService(ClipboardManager::class.java)
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         assertEquals(
             "https://music.youtube.com/watch?v=first000000",
             nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)
@@ -1772,19 +1802,19 @@ class MainActivityTest {
 
         resolveTyped(OTHER_TRACK_ID)
         waitForDestinationReady()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.youtube.com/watch?v=second00000", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(4, fake.requestedUrls.size)
 
         click("First")
         waitForDestinationReady()
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals("https://music.youtube.com/watch?v=first000000", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(4, fake.requestedUrls.size)
     }
 
     @Test
-    fun changingDestinationDuringAnIncomingMatchKeepsTheAutomaticOpen() {
+    fun cancellingAnIncomingLinkStaysInCrosstuneAndOpensNothing() {
         val release = CountDownLatch(1)
         prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
@@ -1799,14 +1829,19 @@ class MainActivityTest {
             }
         }
         val activity = launch(trackLink())
-        waitForText(string(R.string.matching_text))
-        chooseDefault(string(R.string.target_apple_music))
-        waitUntil { activity.isFinishing }
-        assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
+        // Only the song and where it's going show while it's on its way.
+        waitForText(string(R.string.handoff_opening, "Deezer"))
+        assertTextShown("Switch")
+        assertTextAbsent(string(R.string.resolve_button))
+
+        // Cancelling stays in Crosstune with the result, and the late match opens nothing.
+        click(string(R.string.cancel_button))
+        assertResultShown()
         release.countDown()
         Thread.sleep(200L)
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
     }
 
     @Test
@@ -1827,7 +1862,7 @@ class MainActivityTest {
             }
         }
         val activity = launch(trackLink())
-        waitForText(string(R.string.matching_text))
+        waitForText(string(R.string.handoff_opening, "Deezer"))
         controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
         waitUntil { activity.isFinishing }
         assertEquals("https://www.deezer.com/track/2", nextStartedActivity()!!.dataString)
@@ -1959,7 +1994,7 @@ class MainActivityTest {
         assertEquals("com.google.android.apps.youtube.music", opened.`package`)
         assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", opened.dataString)
 
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         @Suppress("DEPRECATION")
         val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
         assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", shared.getStringExtra(Intent.EXTRA_TEXT))
@@ -2064,8 +2099,10 @@ class MainActivityTest {
         }
         launch()
         click(string(R.string.settings_button))
-        // The YouTube row's dropdown is the third "Opens in" button (Spotify, YouTube Music, YouTube).
-        composeRule.onAllNodes(hasText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))))[2]
+        // Where a service's links go only shows once Crosstune opens them.
+        assertTextAbsent(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
+        toggleRow(string(R.string.target_youtube))
+        composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
             .performClick()
         composeRule.waitForIdle()
         // Apple Music is also a source row; the dropdown item is the last match.
@@ -2289,9 +2326,9 @@ class MainActivityTest {
         prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
         launch()
 
-        val openButton = string(R.string.open_app_link_settings_button, string(R.string.service_spotify))
-        assertTextShown(string(R.string.blocking_apps_title))
-        click(openButton)
+        val notice = string(R.string.notice_app_still_opens, string(R.string.service_spotify))
+        assertTextShown(notice)
+        click(string(R.string.fix_button))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:$spotify"), started.data)
@@ -2300,7 +2337,85 @@ class MainActivityTest {
         appAllowsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.blocking_apps_title))
+        assertTextAbsent(notice)
+    }
+
+    @Test
+    fun linksNotAllowedYetAreFlaggedOnTheMainScreenAndOnTheirSettingsRow() {
+        var states = emptyMap<String, Int>()
+        FakeDomainVerification.install(app) { states }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        launch()
+
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        click(string(R.string.allow_button))
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+
+        // Settings marks the service itself rather than repeating the notice.
+        click(string(R.string.settings_button))
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        assertTextShown(string(R.string.setup_not_allowed))
+        click(string(R.string.allow_button))
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+
+        states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setup_not_allowed))
+        click(string(R.string.back_button))
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+    }
+
+    @Test
+    fun theAppYouListenInOnlyOpensItsLinksOnceTheyGoSomewhereElse() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        click(string(R.string.settings_button))
+        val note = string(R.string.setup_sources_listening_note, string(R.string.target_youtube_music))
+        assertTextShown(note)
+        composeRule.onNode(hasText(string(R.string.target_youtube_music)) and isToggleable()).assertIsNotEnabled()
+
+        // Sent to Spotify instead, its links are worth opening.
+        composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.service_spotify))).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(note)
+        toggleRow(string(R.string.target_youtube_music))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+
+        // Back to the default, they'd only return to YouTube Music, so Crosstune stops opening them.
+        composeRule.onNodeWithText(string(R.string.rule_opens_in, "Spotify")).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.rule_default, "YouTube Music"))).onLast().performClick()
+        composeRule.waitForIdle()
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+        assertTextShown(note)
+
+        // Making an opened service the default stops opening its links too.
+        toggleRow(string(R.string.service_spotify))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
+        chooseDefaultHere(string(R.string.service_spotify))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
+    }
+
+    @Test
+    fun theHandoffShowsASongWithoutAnArtist() {
+        val release = CountDownLatch(1)
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, """{"data":[]}""")
+            } else {
+                FakeSpotify.html(request, FakeSpotify.trackPage("Untitled Artist Song", null))
+            }
+        }
+        val activity = launch(trackLink())
+        waitForText(string(R.string.handoff_opening, "Deezer"))
+        assertTextShown("Untitled Artist Song")
+        release.countDown()
+        waitUntil { activity.isFinishing }
     }
 
     @Test
@@ -2311,7 +2426,7 @@ class MainActivityTest {
             mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
         launch()
-        assertTextAbsent(string(R.string.blocking_apps_title))
+        assertTextAbsent(string(R.string.notice_app_still_opens, string(R.string.service_spotify)))
     }
 
     /** Setup as if Spotify were picked and its app installed and claiming the links; returns a way to change its switch. */
@@ -2673,13 +2788,13 @@ class MainActivityTest {
         assertEquals("https://www.deezer.com/search/Slow%20Artist", nextStartedActivity()!!.dataString)
         assertEquals(requestsBeforeFallback, fake.requestedUrls)
         // Copy, Share and another Open keep using the same prepared fallback.
-        click(string(R.string.copy_button))
+        click(string(R.string.copy_link_button))
         assertEquals(
             "https://www.deezer.com/search/Slow%20Artist",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
         )
         val requests = fake.requestedUrls.toList()
-        click(string(R.string.share_search_button))
+        click(string(R.string.share_link_button))
         val share = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
         assertEquals("https://www.deezer.com/search/Slow%20Artist", share.getStringExtra(Intent.EXTRA_TEXT))
         click(string(R.string.open_in_deezer))
@@ -2709,6 +2824,7 @@ class MainActivityTest {
     @Test
     fun theChosenDefaultIsMarkedSelectedInItsMenu() {
         launch()
+        click(string(R.string.settings_button))
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodes(hasText(string(R.string.target_youtube_music)) and isSelected()).onLast().assertExists()

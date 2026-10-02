@@ -54,6 +54,13 @@ internal data class UiState(
     val claimingApps: Set<MusicService>? = null,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
+    /**
+     * Set while a link from another app is on its way to an app, so the screen shows just that
+     * instead of all of Crosstune; cleared once the user has something to do here.
+     */
+    val handingOff: Boolean = false,
+    /** Set right after history is cleared, while it can still be brought back. */
+    val canUndoClearHistory: Boolean = false,
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
@@ -169,7 +176,7 @@ internal class MainViewModel(
 
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
-        uiState = uiState.copy(handlingIncomingLink = false)
+        uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
         val input = MusicLinks.parse(uiState.linkText) ?: return rejectInput()
         resolve(input, openWhenReady = false)
     }
@@ -187,6 +194,7 @@ internal class MainViewModel(
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
+            handingOff = true,
             leaveSettings = true
         )
         val input = MusicLinks.parse(incoming)
@@ -257,7 +265,8 @@ internal class MainViewModel(
                     isLoading = false,
                     error = resolution.error,
                     canRetry = resolution.error.canRetry,
-                    link = resolution.link
+                    link = resolution.link,
+                    handingOff = false
                 )
                 is Resolution.Resolved -> onResolved(resolution)
             }
@@ -296,7 +305,7 @@ internal class MainViewModel(
             (uiState.askEachTime || !uiState.setupComplete || ownService != null)
         if (pendingOpen && ask) {
             pendingOpen = false
-            uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService)
+            uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService, handingOff = false)
             return
         }
         prepareDestination(uiState.resultDestination)
@@ -380,7 +389,8 @@ internal class MainViewModel(
             error = null,
             canRetry = false,
             showDestinationPicker = false,
-            handlingIncomingLink = false
+            handlingIncomingLink = false,
+            handingOff = false
         )
     }
 
@@ -420,9 +430,32 @@ internal class MainViewModel(
         return url.forSharing()
     }
 
+    /** Kept until the undo offer goes away, so clearing by mistake loses nothing. */
+    private var clearedHistory: List<HistoryEntry> = emptyList()
+
     fun clearHistory() {
+        clearedHistory = uiState.history
         historyStore.clear()
-        uiState = uiState.copy(history = emptyList())
+        uiState = uiState.copy(history = emptyList(), canUndoClearHistory = true)
+    }
+
+    fun undoClearHistory() {
+        // Anything looked up since clearing stays on top.
+        val restored = (uiState.history + clearedHistory).distinctBy { it.link.url }
+        uiState = uiState.copy(history = historyStore.replace(restored), canUndoClearHistory = false)
+        clearedHistory = emptyList()
+    }
+
+    fun forgetClearedHistory() {
+        clearedHistory = emptyList()
+        uiState = uiState.copy(canUndoClearHistory = false)
+    }
+
+    /** Stops a link from another app on its way out and shows Crosstune instead. */
+    fun cancelHandoff() {
+        job?.cancel()
+        pendingOpen = false
+        uiState = uiState.copy(handingOff = false, isLoading = false, isMatching = false)
     }
 
     fun searchQuery(): String? = uiState.result?.let(::searchQuery)
@@ -454,7 +487,8 @@ internal class MainViewModel(
             link = null,
             error = null,
             showDestinationPicker = false,
-            handlingIncomingLink = false
+            handlingIncomingLink = false,
+            handingOff = false
         )
     }
 
@@ -470,11 +504,19 @@ internal class MainViewModel(
 
     fun selectDefault(destination: Destination) {
         destinationStore.setDefault(destination)
+        // Crosstune would only hand the app its own links back, unless a rule sends them elsewhere.
+        (destination as? Destination.Service)?.service
+            ?.takeIf { interception.isEnabled(it) && destinationStore.rule(it) == null }
+            ?.let { interception.setEnabled(it, false) }
         refreshSystemState()
     }
 
     fun setRule(source: MusicService, destination: Destination?) {
         destinationStore.setRule(source, destination)
+        // Without its rule, the app the user listens in would only get its own links back.
+        if (destination == null && interception.isEnabled(source) && source == uiState.listeningService()) {
+            interception.setEnabled(source, false)
+        }
         refreshSystemState()
     }
 
@@ -521,7 +563,7 @@ internal class MainViewModel(
     }
 
     fun showError(error: AppError) {
-        uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false)
+        uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
     }
 
     companion object {

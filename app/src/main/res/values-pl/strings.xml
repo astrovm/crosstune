@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">Pytaj, której aplikacji użyć</string>
     <string name="setting_ask_each_time_description">Wybieraj aplikację za każdym razem, gdy klikasz lub udostępniasz link.</string>
     <string name="setting_exact_match">Otwieraj dokładne dopasowanie</string>
-    <string name="setting_exact_match_description">Działa z Apple Music, Deezer i YouTube Music dla utworów, albumów i wykonawców, z Bandcamp dla utworów i albumów oraz z YouTube dla utworów. Inne aplikacje otwierają wyszukiwanie.</string>
+    <string name="setting_exact_match_description">Otwiera sam utwór, gdy aplikacja na to pozwala. W przeciwnym razie go wyszukuje.</string>
     <string name="setting_clean_links">Usuwaj śledzenie z linków</string>
     <string name="setting_clean_links_description">Usuwa elementy śledzące, takie jak ?si= czy utm_, z linków, które otwierasz, kopiujesz lub udostępniasz.</string>
     <string name="setting_language">Język</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">Otwórz skopiowany link</string>
     <string name="shortcut_paste_long">Otwórz skopiowany link muzyczny</string>
     <string name="error_clipboard_empty">Najpierw skopiuj link muzyczny.</string>
-    <string name="copy_button">Kopiuj</string>
     <string name="copy_search_action">Kopiuj tekst wyszukiwania</string>
-    <string name="share_search_button">Udostępnij</string>
     <string name="share_search_link">Udostępnij link wyszukiwania</string>
-    <string name="copy_original_link">Kopiuj link do %1$s</string>
-    <string name="share_original_link">Udostępnij link do %1$s</string>
+    <string name="copy_service_link">Kopiuj link do %1$s</string>
+    <string name="share_service_link">Udostępnij link do %1$s</string>
     <string name="search_copied_to_clipboard">Skopiowano tekst wyszukiwania</string>
     <string name="link_copied_to_clipboard">Skopiowano link</string>
     <string name="link_settings_helper_title">Zezwól na nowe linki</string>
-    <string name="link_settings_helper_body">Kliknij „Otwórz ustawienia linków”, potem „Dodaj link” i zaznacz wszystkie linki.</string>
-    <string name="blocking_apps_title">Te aplikacje nadal otwierają linki</string>
-    <string name="blocking_apps_body">W każdej z nich wybierz „W przeglądarce” lub wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="open_app_link_settings_button">Otwórz ustawienia: %1$s</string>
     <string name="open_link_settings_button">Otwórz ustawienia linków</string>
     <string name="dismiss_button">Odrzuć</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">Kopiuj link do %1$s</string>
     <string name="privacy_policy">Polityka prywatności</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/pl/privacy/</string>
+    <string name="handoff_opening">Otwieranie w %1$s…</string>
+    <string name="notice_links_not_allowed">Niektóre linki jeszcze nie otwierają się w Crosstune</string>
+    <string name="allow_button">Zezwól</string>
+    <string name="notice_app_still_opens">%1$s nadal otwiera swoje linki</string>
+    <string name="fix_button">Napraw</string>
+    <string name="history_cleared">Historia wyczyszczona</string>
+    <string name="undo_button">Cofnij</string>
+    <string name="empty_hint">Kliknij link do muzyki w dowolnej aplikacji albo udostępnij go do Crosstune.</string>
+    <string name="copy_link_button">Kopiuj link</string>
+    <string name="share_link_button">Udostępnij link</string>
 </resources>

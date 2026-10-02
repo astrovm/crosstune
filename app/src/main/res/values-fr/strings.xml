@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">Demander quelle application utiliser</string>
     <string name="setting_ask_each_time_description">Choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</string>
     <string name="setting_exact_match">Ouvrir le résultat exact</string>
-    <string name="setting_exact_match_description">Compatible avec Apple Music, Deezer et YouTube Music, pour les titres, albums et artistes, avec Bandcamp pour les titres et albums, et avec YouTube pour les titres. Les autres applications reçoivent une recherche.</string>
+    <string name="setting_exact_match_description">Ouvre directement le morceau quand l’application le permet. Sinon, lance une recherche.</string>
     <string name="setting_clean_links">Retirer le pistage des liens</string>
     <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
     <string name="setting_language">Langue</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">Ouvrir le lien copié</string>
     <string name="shortcut_paste_long">Ouvrir le lien musical copié</string>
     <string name="error_clipboard_empty">Copiez d\'abord un lien musical.</string>
-    <string name="copy_button">Copier</string>
     <string name="copy_search_action">Copier le texte de recherche</string>
-    <string name="share_search_button">Partager</string>
     <string name="share_search_link">Partager le lien de recherche</string>
-    <string name="copy_original_link">Copier le lien %1$s</string>
-    <string name="share_original_link">Partager le lien %1$s</string>
+    <string name="copy_service_link">Copier le lien %1$s</string>
+    <string name="share_service_link">Partager le lien %1$s</string>
     <string name="search_copied_to_clipboard">Texte de recherche copié</string>
     <string name="link_copied_to_clipboard">Lien copié</string>
     <string name="link_settings_helper_title">Autoriser les nouveaux liens</string>
-    <string name="link_settings_helper_body">Appuyez sur Ouvrir les paramètres des liens, puis sur Ajouter un lien, et cochez tous les liens.</string>
-    <string name="blocking_apps_title">Ces applications ouvrent encore les liens</string>
-    <string name="blocking_apps_body">Dans chacune, choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="open_app_link_settings_button">Ouvrir les paramètres de %1$s</string>
     <string name="open_link_settings_button">Ouvrir les paramètres des liens</string>
     <string name="dismiss_button">Ignorer</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">Copier le lien de %1$s</string>
     <string name="privacy_policy">Politique de confidentialité</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/fr/privacy/</string>
+    <string name="handoff_opening">Ouverture dans %1$s…</string>
+    <string name="notice_links_not_allowed">Certains liens ne s’ouvrent pas encore dans Crosstune</string>
+    <string name="allow_button">Autoriser</string>
+    <string name="notice_app_still_opens">%1$s ouvre encore ses propres liens</string>
+    <string name="fix_button">Corriger</string>
+    <string name="history_cleared">Historique effacé</string>
+    <string name="undo_button">Annuler</string>
+    <string name="empty_hint">Touchez un lien musical dans n’importe quelle application, ou partagez-le avec Crosstune.</string>
+    <string name="copy_link_button">Copier le lien</string>
+    <string name="share_link_button">Partager le lien</string>
 </resources>

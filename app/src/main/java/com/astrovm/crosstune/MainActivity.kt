@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +46,7 @@ class MainActivity : ComponentActivity() {
                     ExactMatcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
-                    ArtworkLoader(client)
+                    ArtworkLoader(client, cacheDir = File(cacheDir, "artwork"))
                 )
             }
         }
@@ -136,6 +137,9 @@ class MainActivity : ComponentActivity() {
                         onHistoryOpen = viewModel::openHistoryEntry,
                         onHistoryCopy = viewModel::copyHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
+                        onUndoClearHistory = viewModel::undoClearHistory,
+                        onForgetClearedHistory = viewModel::forgetClearedHistory,
+                        onCancelHandoff = viewModel::cancelHandoff,
                         onOpenLinkSettings = ::openAppLinkSettings,
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
@@ -297,12 +301,12 @@ class MainActivity : ComponentActivity() {
         return arrayOf(
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_content_copy),
-                getString(R.string.copy_original_link, service),
+                getString(R.string.copy_service_link, service),
                 PendingIntent.getBroadcast(this, 0, copy, flags)
             ).build(),
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_share),
-                getString(R.string.share_original_link, service),
+                getString(R.string.share_service_link, service),
                 PendingIntent.getActivity(this, 0, shareChooser(original), flags)
             ).build()
         )

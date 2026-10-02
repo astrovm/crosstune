@@ -71,7 +71,7 @@
     <string name="setting_ask_each_time">询问使用哪个应用</string>
     <string name="setting_ask_each_time_description">每次点按或分享链接时选择应用。</string>
     <string name="setting_exact_match">打开精确匹配</string>
-    <string name="setting_exact_match_description">适用于 Apple Music、Deezer 和 YouTube Music 的歌曲、专辑和艺人，Bandcamp 的歌曲和专辑，以及 YouTube 的歌曲。其他应用会打开搜索结果。</string>
+    <string name="setting_exact_match_description">应用支持时直接打开歌曲本身，否则进行搜索。</string>
     <string name="setting_clean_links">去除链接中的跟踪参数</string>
     <string name="setting_clean_links_description">从你打开、复制或分享的链接中去掉 ?si=、utm_ 等跟踪参数。</string>
     <string name="setting_language">语言</string>
@@ -86,18 +86,13 @@
     <string name="shortcut_paste_short">打开已复制的链接</string>
     <string name="shortcut_paste_long">打开已复制的音乐链接</string>
     <string name="error_clipboard_empty">请先复制音乐链接。</string>
-    <string name="copy_button">复制</string>
     <string name="copy_search_action">复制搜索文字</string>
-    <string name="share_search_button">分享</string>
     <string name="share_search_link">分享搜索链接</string>
-    <string name="copy_original_link">复制 %1$s 链接</string>
-    <string name="share_original_link">分享 %1$s 链接</string>
+    <string name="copy_service_link">复制 %1$s 链接</string>
+    <string name="share_service_link">分享 %1$s 链接</string>
     <string name="search_copied_to_clipboard">已复制搜索文字</string>
     <string name="link_copied_to_clipboard">已复制链接</string>
     <string name="link_settings_helper_title">允许打开新链接</string>
-    <string name="link_settings_helper_body">点按“打开链接设置”，然后点按“添加链接”，并勾选所有链接。</string>
-    <string name="blocking_apps_title">这些应用仍会打开链接</string>
-    <string name="blocking_apps_body">请在每个应用中选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="open_app_link_settings_button">打开%1$s设置</string>
     <string name="open_link_settings_button">打开链接设置</string>
     <string name="dismiss_button">关闭</string>
@@ -117,4 +112,14 @@
     <string name="history_copy">复制%1$s的链接</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/zh-cn/privacy/</string>
+    <string name="handoff_opening">正在用 %1$s 打开…</string>
+    <string name="notice_links_not_allowed">部分链接还不能在 Crosstune 中打开</string>
+    <string name="allow_button">允许</string>
+    <string name="notice_app_still_opens">%1$s 仍会打开自己的链接</string>
+    <string name="fix_button">修复</string>
+    <string name="history_cleared">已清除历史记录</string>
+    <string name="undo_button">撤销</string>
+    <string name="empty_hint">在任意应用中点按音乐链接，或将其分享给 Crosstune。</string>
+    <string name="copy_link_button">复制链接</string>
+    <string name="share_link_button">分享链接</string>
 </resources>
