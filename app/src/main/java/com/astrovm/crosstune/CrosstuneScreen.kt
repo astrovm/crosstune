@@ -183,16 +183,20 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
             }
         }
     ) {
-        if (allow) {
+        // Leaving with something left to do is skipping it, so the button says so.
+        val done = if (allow) {
             AllowLinksGuide(state, actions)
+            !state.someLinksNotAllowed
         } else {
+            val apps = appsToStop(state)
             Text(
-                text = stringResource(R.string.setup_apps_body),
+                text = stopAppsBody(apps),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
             )
-            StopAppsGuide(appsToStop(state), state.blockingApps, actions.onOpenAppLinkSettings)
+            StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
+            appsGuideDone(apps, state.blockingApps)
         }
         FilledTonalButton(
             onClick = onDone,
@@ -201,7 +205,7 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
                 .padding(top = 24.dp)
                 .heightIn(min = 52.dp)
         ) {
-            Text(stringResource(R.string.setup_done), style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(if (done) R.string.setup_done else R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
         }
     }
 }

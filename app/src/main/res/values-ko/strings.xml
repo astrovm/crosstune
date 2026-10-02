@@ -51,8 +51,8 @@
     <string name="setup_allow_step_open">링크 설정 열기를 탭하세요.</string>
     <string name="setup_allow_step_add">링크 추가를 탭하세요.</string>
     <string name="setup_allow_step_tick">모든 링크를 선택한 다음 추가를 탭하세요.</string>
-    <string name="setup_apps_title">다른 앱 차단</string>
-    <string name="setup_apps_body">이 앱들이 먼저 자기 링크를 가져가요. 각 앱에서 \'지원되는 링크 열기\'를 끄세요.</string>
+    <string name="setup_apps_title">다른 앱의 링크 끄기</string>
+    <string name="setup_apps_body">이 앱들이 Crosstune보다 먼저 링크를 열어요. 하나씩 꺼 주세요.</string>
     <string name="setup_still_opens">여전히 링크를 열어요</string>
     <string name="setup_done">완료됨</string>
     <string name="setup_allowed">허용됨</string>
@@ -124,7 +124,7 @@
     <string name="settings_link_owners_description">이 앱들도 같은 링크를 열 수 있어요. 탭해서 앱이 직접 열지 선택하세요.</string>
     <string name="link_owner_opens_them">직접 링크를 열어요</string>
     <string name="link_owner_lets_crosstune">Crosstune이 열게 해요</string>
-    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 그 앱의 \'지원되는 링크 열기\'를 끄세요.</string>
+    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 그 앱에서 \'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="frontend_address_title">%1$s 주소</string>
     <string name="save_button">저장</string>
     <string name="frontend_address_invalid">yewtu.be 같은 웹 주소를 입력하세요</string>
@@ -138,9 +138,12 @@
     <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
     <string name="setup_allow_progress">링크 %2$d개 중 %1$d개 허용됨</string>
     <string name="setup_apps_stop_title">%1$s 멈추기</string>
-    <string name="setup_apps_stop_body">버튼을 탭한 다음 \'브라우저에서\'를 선택하세요.</string>
+    <string name="setup_apps_stop_body">버튼을 탭한 다음 \'브라우저에서\'를 선택하세요. 스위치가 보이면 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="setup_apps_progress">앱 %1$d/%2$d</string>
-    <string name="setup_apps_all_done">완료했어요. 이제 이 앱들은 링크를 가져가지 않아요.</string>
+    <string name="setup_apps_all_done">완료했어요. 이제 이 링크는 Crosstune에서 열려요.</string>
+    <string name="setup_skip_for_now">나중에</string>
+    <string name="setup_fixed">해결됨</string>
+    <string name="setup_apps_body_one">%1$s 앱이 Crosstune보다 먼저 이 링크를 열어요.</string>
     <string name="choose_app_button">앱 선택</string>
     <string name="make_default_named">%1$s을(를) 기본으로 설정</string>
 </resources>

@@ -70,12 +70,13 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     // 0 is the welcome page; after that, a position in [steps].
     var position by rememberSaveable { mutableIntStateOf(0) }
     val appsToFix = appsToStop(state)
-    // Stopping the apps is only a step when an installed app is in the way.
-    val steps = SetupStep.entries.filter { it != SetupStep.APPS || appsToFix.isNotEmpty() }
-    // The step list can shrink under the user, e.g. when Android stops reporting an app.
-    val current = position.coerceAtMost(steps.size)
+    // Every step is counted, so the total doesn't change as sources are picked, but stopping the
+    // apps is skipped when no installed app is in the way.
+    val steps = SetupStep.entries
+    val skipped = { position: Int -> steps.getOrNull(position - 1) == SetupStep.APPS && appsToFix.isEmpty() }
+    val current = position
     val step = if (current == 0) null else steps[current - 1]
-    val back = { position = current - 1 }
+    val back = { position = (current - 1).let { if (skipped(it)) it - 1 else it } }
     // System back steps back like the Back button instead of leaving setup.
     BackHandler(enabled = current > 0, onBack = back)
 
@@ -103,7 +104,9 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                 }
                 val isLast = current == steps.size
                 Button(
-                    onClick = { if (isLast) actions.onCompleteSetup() else position = current + 1 },
+                    onClick = {
+                        if (isLast) actions.onCompleteSetup() else position = (current + 1).let { if (skipped(it)) it + 1 else it }
+                    },
                     // There's no built-in default any more, so one has to be picked.
                     enabled = step != SetupStep.DESTINATION || state.hasDefault,
                     modifier = buttonModifier
@@ -151,14 +154,17 @@ private fun StepProgress(step: Int, lastStep: Int) {
 }
 
 @Composable
-private fun StepHeader(title: Int, body: Int) {
+private fun StepHeader(title: Int, body: Int) = StepHeader(title, stringResource(body))
+
+@Composable
+private fun StepHeader(title: Int, body: String) {
     Text(
         text = stringResource(title),
         style = MaterialTheme.typography.headlineMedium,
         modifier = Modifier.padding(top = 28.dp)
     )
     Text(
-        text = stringResource(body),
+        text = body,
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
@@ -447,7 +453,12 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
         val missing = sources.sumOf { unapproved[it].orEmpty().size } +
             frontends.sumOf { state.unapprovedFrontendHosts?.get(it).orEmpty().size }
         Box(modifier = Modifier.padding(bottom = 16.dp)) {
-            StatusTag(missing == 0, stringResource(R.string.setup_allow_progress, total - missing, total), stringResource(R.string.setup_allow_progress, total - missing, total))
+            // Not a warning: links still to allow are what the steps below are for.
+            Tag(
+                stringResource(R.string.setup_allow_progress, total - missing, total),
+                if (missing == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                if (missing == 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
     NumberedStep(1, stringResource(R.string.setup_allow_step_open))
@@ -490,14 +501,23 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
 
 @Composable
 private fun AppsStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
-    StepHeader(R.string.setup_apps_title, R.string.setup_apps_body)
+    StepHeader(R.string.setup_apps_title, stopAppsBody(apps))
     StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
 }
 
+/** Why the apps need stopping, naming the app when there's just one. */
+@Composable
+internal fun stopAppsBody(apps: List<LinkApp>): String =
+    apps.singleOrNull()?.let { stringResource(R.string.setup_apps_body_one, it.label) } ?: stringResource(R.string.setup_apps_body)
+
+/** Whether a guide is finished, so its button can say Done rather than Skip for now. */
+internal fun appsGuideDone(apps: List<LinkApp>, blocking: Set<LinkApp>?): Boolean =
+    blocking == null || apps.none { it in blocking }
+
 /**
  * Installed apps that keep the links, one at a time from Android 12, which tells when each is
- * done, with a screenshot of what to choose; every app stays listed below, marked done once
- * fixed, so the list doesn't shrink under the user's finger. Before Android 12 all are listed,
+ * done, with a screenshot of what to choose; with more than one, every app stays listed below,
+ * marked once fixed, so the list doesn't shrink under the user's finger. Before Android 12 all are listed,
  * each with its own button. Used in setup and from the notices.
  */
 @Composable
@@ -518,11 +538,17 @@ internal fun StopAppsGuide(apps: List<LinkApp>, blocking: Set<LinkApp>?, onOpen:
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Text(
-                    text = stringResource(R.string.setup_apps_stop_title, current.label),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                Row(modifier = Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.setup_apps_stop_title, current.label),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // With one app there's no list below, so its status goes here.
+                    if (apps.size == 1) {
+                        StatusTag(false, stringResource(R.string.setup_fixed), stringResource(R.string.setup_still_opens))
+                    }
+                }
                 Text(
                     text = stringResource(R.string.setup_apps_stop_body),
                     style = MaterialTheme.typography.bodyMedium,
@@ -541,13 +567,15 @@ internal fun StopAppsGuide(apps: List<LinkApp>, blocking: Set<LinkApp>?, onOpen:
             }
         }
     }
+    // A list of one would only repeat the card above, or the all-set line once it's fixed.
+    if (blocking != null && apps.size <= 1) return
     Group {
         apps.forEachIndexed { index, app ->
             if (index > 0) GroupDivider()
             Column(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = app.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    blocking?.let { StatusTag(app !in it, stringResource(R.string.setup_done), stringResource(R.string.setup_still_opens)) }
+                    blocking?.let { StatusTag(app !in it, stringResource(R.string.setup_fixed), stringResource(R.string.setup_still_opens)) }
                 }
                 // Before Android 12 there's no way to tell which still keep the links, so each gets a button.
                 if (blocking == null) {
