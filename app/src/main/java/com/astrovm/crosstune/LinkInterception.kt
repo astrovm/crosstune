@@ -92,21 +92,44 @@ internal class LinkInterception(private val context: Context) {
      */
     fun claimingApps(sources: Set<MusicService>, frontends: Set<Frontend> = emptySet()): Map<LinkApp, Boolean>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-        val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         val wanted = sources.flatMap { HOSTS[it].orEmpty() } + frontends.flatMap { it.sites }
-        val candidates = (installedServices().map { it.packageName } + installedOtherApps() + appsOpening(wanted)).distinct()
+        return claims(appStates(wanted) ?: return null, wanted)
+    }
+
+    /**
+     * Like [claimingApps], for every source on its own, whether Crosstune opens its links or not,
+     * keyed like [Destination.key]: a service's name, or "frontend:" and a web frontend's.
+     */
+    fun claimingAppsBySource(): Map<String, Map<LinkApp, Boolean>>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val hosts = HOSTS.mapKeys { it.key.name } + Frontend.SOURCES.associate { Destination.FRONTEND_PREFIX + it.name to it.sites }
+        val states = appStates(hosts.values.flatten()) ?: return null
+        return hosts.mapValues { (_, wanted) -> claims(states, wanted) }
+    }
+
+    /** Each installed app that may claim any of [hosts], with what Android says about its links. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun appStates(hosts: List<String>): List<Pair<LinkApp, DomainVerificationUserState>>? {
+        val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
+        val candidates = (installedServices().map { it.packageName } + installedOtherApps() + appsOpening(hosts)).distinct()
         return candidates.mapNotNull { packageName ->
             val state = try {
                 manager.getDomainVerificationUserState(packageName)
             } catch (_: PackageManager.NameNotFoundException) {
                 null
             } ?: return@mapNotNull null
-            val claims = state.hostToStateMap.any { (host, hostState) ->
+            appFor(packageName) to state
+        }.sortedBy { it.first.label.lowercase() }
+    }
+
+    /** The apps among [states] that verified any of [wanted], each with whether it still opens them. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun claims(states: List<Pair<LinkApp, DomainVerificationUserState>>, wanted: List<String>): Map<LinkApp, Boolean> =
+        states.filter { (_, state) ->
+            state.hostToStateMap.any { (host, hostState) ->
                 hostState != DomainVerificationUserState.DOMAIN_STATE_NONE && wanted.any { covers(it, host) }
             }
-            if (claims) appFor(packageName) to state.isLinkHandlingAllowed else null
-        }.sortedBy { it.first.label.lowercase() }.toMap()
-    }
+        }.associate { (app, state) -> app to state.isLinkHandlingAllowed }
 
     /** Installed apps whose services' links Crosstune opens, for when Android can't say which really take them. */
     fun installedSourceApps(sources: Set<MusicService>): List<LinkApp> =

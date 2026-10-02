@@ -58,6 +58,8 @@ internal data class UiState(
     val blockingApps: Set<LinkApp>? = null,
     /** Installed apps that claim links Crosstune intercepts, blocking or not; null before Android 12. */
     val claimingApps: Set<LinkApp>? = null,
+    /** For every source, by [Destination.key], installed apps that claim its links and whether each still opens them. */
+    val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>? = null,
     /** The intercepted services' own installed apps, which may take their links when Android can't say. */
     val installedSourceApps: List<LinkApp> = emptyList(),
     /** Set while handling a link from another app, which takes priority over setup. */
@@ -171,6 +173,7 @@ internal class MainViewModel(
             unapprovedHosts = interception.unapprovedHosts(),
             blockingApps = claiming?.filterValues { it }?.keys,
             claimingApps = claiming?.keys,
+            claimingAppsBySource = interception.claimingAppsBySource(),
             installedSourceApps = interception.installedSourceApps(intercepted)
         )
     }

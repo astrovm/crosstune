@@ -49,7 +49,7 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val sources = sourceSettings(state, actions)
     sources.firstOrNull { it.key == openSource }?.let { item ->
-        return SourcePage(item, state.destinations, actions, onBack = { openSource = null })
+        return SourcePage(item, state.destinations, state.claimingAppsBySource.orEmpty(), actions, onBack = { openSource = null })
     }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
@@ -88,20 +88,6 @@ internal fun SettingsScreen(state: UiState, actions: ScreenActions, onBack: () -
             }
         }
 
-        // Kept here even once they let Crosstune open the links, so the choice can be undone.
-        val owners = state.claimingApps.orEmpty()
-        if (owners.isNotEmpty()) {
-            SectionHeader(
-                title = stringResource(R.string.settings_link_owners_title),
-                description = stringResource(R.string.settings_link_owners_description)
-            )
-            Group {
-                owners.forEachIndexed { index, app ->
-                    if (index > 0) GroupDivider()
-                    LinkOwnerRow(app, opensThem = app in state.blockingApps.orEmpty(), onClick = { actions.onOpenAppLinkSettings(app) })
-                }
-            }
-        }
 
         SectionHeader(
             title = stringResource(R.string.settings_custom_title),
@@ -460,9 +446,18 @@ private fun SourceSummaryRow(item: SourceSettings, onOpen: () -> Unit) {
     }
 }
 
-/** One source's own page: whether Crosstune opens its links, whether Android lets it, where they go and, for web frontends, their site. */
+/**
+ * One source's own page: whether Crosstune opens its links, whether Android lets it, where they go,
+ * for web frontends their site, and the apps that can open the same links.
+ */
 @Composable
-private fun SourcePage(item: SourceSettings, destinations: List<Destination>, actions: ScreenActions, onBack: () -> Unit) {
+private fun SourcePage(
+    item: SourceSettings,
+    destinations: List<Destination>,
+    claimingApps: Map<String, Map<LinkApp, Boolean>>,
+    actions: ScreenActions,
+    onBack: () -> Unit
+) {
     BackHandler(onBack = onBack)
     Page(
         title = item.label,
@@ -486,6 +481,20 @@ private fun SourcePage(item: SourceSettings, destinations: List<Destination>, ac
             item.site?.let { site ->
                 GroupDivider()
                 FrontendSiteRow(site, item.onSite)
+            }
+        }
+        // Kept here even once they let Crosstune open the links, so the choice can be undone.
+        val owners = claimingApps[item.key].orEmpty()
+        if (owners.isNotEmpty()) {
+            SectionHeader(
+                title = stringResource(R.string.settings_link_owners_title),
+                description = stringResource(R.string.settings_link_owners_description)
+            )
+            Group {
+                owners.entries.forEachIndexed { index, (app, opensThem) ->
+                    if (index > 0) GroupDivider()
+                    LinkOwnerRow(app, opensThem = opensThem, onClick = { actions.onOpenAppLinkSettings(app) })
+                }
             }
         }
     }

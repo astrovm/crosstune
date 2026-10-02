@@ -2639,6 +2639,9 @@ class MainActivityTest {
         LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
         launch()
         click(string(R.string.settings_button))
+        // Not in the main list: each source's page shows the apps that can open its links.
+        assertTextAbsent(string(R.string.settings_link_owners_title))
+        openSource(string(R.string.target_youtube))
         assertTextShown(string(R.string.settings_link_owners_title))
         assertTextShown(string(R.string.link_owner_opens_them))
 
