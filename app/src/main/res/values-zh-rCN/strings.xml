@@ -40,6 +40,7 @@
     <string name="setup_step">第 %1$d 步，共 %2$d 步</string>
     <string name="setup_sources_title">Crosstune 应打开哪些链接？</string>
     <string name="setup_sources_listening_note">你在 %1$s 中收听，所以它的链接已经会在那里打开。</string>
+    <string name="settings_listening_locked">你在 %1$s 中收听，所以它的链接已经会在那里打开。要开启，请在下面选择另一个应用。</string>
     <string name="setup_destination_title">你在哪里听歌？</string>
     <string name="setup_destination_body">之后可以更改。</string>
     <string name="setup_allow_title">允许打开链接</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">视频</string>
     <string name="setting_only_music_videos_note">只有音乐视频会发送到你的应用，其他视频照常打开。</string>
     <string name="guide_may_differ">你的手机界面可能略有不同。</string>
-    <string name="setup_allow_progress">已允许 %1$d/%2$d 个链接</string>
     <string name="setup_apps_stop_body">选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
-    <string name="setup_apps_all_done">完成了。这些链接现在会在 Crosstune 中打开。</string>
+    <string name="setup_apps_all_done">完成了。这些应用不会再打开这些链接。</string>
+    <string name="setup_allow_all_done">完成了。这些链接现在会在 Crosstune 中打开。</string>
     <string name="setup_skip_for_now">以后再说</string>
     <string name="setup_fixed">已解决</string>
     <string name="choose_app_button">选择应用</string>

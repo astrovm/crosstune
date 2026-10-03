@@ -1289,8 +1289,11 @@ class MainActivityTest {
 
         release.countDown()
         waitForText("Done")
-        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsEnabled()
+        // Converting the same text again would change nothing, so the button goes until it's edited.
+        assertTextAbsent(string(R.string.resolve_button))
         assertEquals(1, fake.requestedUrls.size)
+        typeUrl(TRACK_ID + "x")
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsEnabled()
     }
 
     // region lifecycle and error handling
@@ -1777,7 +1780,7 @@ class MainActivityTest {
         resolveTyped()
 
         waitForText(string(R.string.matching_text))
-        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        assertTextAbsent(string(R.string.resolve_button))
         composeRule.onNodeWithText(string(R.string.open_in_deezer)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.copy_link_button)).assertIsNotEnabled()
         composeRule.onNodeWithText(string(R.string.share_link_button)).assertIsNotEnabled()
@@ -2292,7 +2295,7 @@ class MainActivityTest {
         assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
         click(string(R.string.next_button))
         assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
-        click(string(R.string.setup_finish))
+        click(string(R.string.setup_skip_for_now))
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.settings_button))
@@ -2546,7 +2549,9 @@ class MainActivityTest {
         click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
-        click(string(R.string.setup_finish))
+        // Links are still to allow, so leaving now is skipping that.
+        assertTextAbsent(string(R.string.setup_finish))
+        click(string(R.string.setup_skip_for_now))
         assertTextShown(string(R.string.spotify_link_label))
         assertTextAbsent(string(R.string.link_settings_helper_title))
         assertTrue(prefs().getBoolean("setup_complete", false))
@@ -2634,8 +2639,8 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.allow_button))
-        // The guide shows what to tap, and how many links are allowed so far.
-        assertTextShown(string(R.string.setup_allow_progress, 0, 3))
+        // The guide shows what to tap.
+        assertTextAbsent(string(R.string.setup_allow_all_done))
         click(string(R.string.open_link_settings_button))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
         // Nothing allowed yet, so leaving is skipping.
@@ -2654,7 +2659,9 @@ class MainActivityTest {
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_allow_progress, 3, 3))
+        // All allowed, the guide just says so.
+        assertTextShown(string(R.string.setup_allow_all_done))
+        assertTextAbsent(string(R.string.open_link_settings_button))
         assertTextAbsent(string(R.string.setup_not_allowed))
         clickDoneButton()
         assertTextAbsent(string(R.string.setup_not_allowed))
@@ -2671,7 +2678,8 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         sourceSwitch(string(R.string.target_youtube_music)).assertIsNotEnabled()
         openSource(string(R.string.target_youtube_music))
-        val note = string(R.string.setup_sources_listening_note, string(R.string.target_youtube_music))
+        // Locked, the note says how to turn it on.
+        val note = string(R.string.settings_listening_locked, string(R.string.target_youtube_music))
         assertTextShown(note)
         sourceSwitch(string(R.string.source_open_links)).assertIsNotEnabled()
 
@@ -2864,7 +2872,7 @@ class MainActivityTest {
 
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_step, 4, 4))
-        assertTextShown(string(R.string.setup_allow_step_tick))
+        assertTextShown(string(R.string.setup_allow_all_done))
         click(string(R.string.setup_finish))
         assertTrue(prefs().getBoolean("setup_complete", false))
     }
@@ -2937,6 +2945,25 @@ class MainActivityTest {
         val firstLabel = rows.first().config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString { it.text }
         assertEquals("${string(R.string.target_soundcloud)}, ${string(R.string.setup_installed)}", firstLabel)
         assertTextShown(string(R.string.setup_installed))
+    }
+
+    @Test
+    fun setupPicksTheOnlyInstalledMusicAppButLeavesTheChoiceWithMore() {
+        freshInstall()
+        // YouTube comes with most phones, so it doesn't count.
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE.packageName })
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
+        launch()
+        click(string(R.string.setup_get_started))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+        assertEquals(Destination.Service(MusicService.SOUNDCLOUD), DestinationStore(prefs()).defaultDestination())
+
+        controller!!.pause().stop().destroy()
+        freshInstall()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
+        launch()
+        click(string(R.string.setup_get_started))
+        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
     }
 
     @Test

@@ -40,6 +40,7 @@
     <string name="setup_step">Krok %1$d z %2$d</string>
     <string name="setup_sources_title">Które linki ma otwierać Crosstune?</string>
     <string name="setup_sources_listening_note">Słuchasz w %1$s, więc jego linki i tak się tam otwierają.</string>
+    <string name="settings_listening_locked">Słuchasz w %1$s, więc jego linki i tak się tam otwierają. Wybierz poniżej inną aplikację, aby to włączyć.</string>
     <string name="setup_destination_title">Gdzie słuchasz?</string>
     <string name="setup_destination_body">Możesz to później zmienić.</string>
     <string name="setup_allow_title">Zezwól na linki</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">Filmy</string>
     <string name="setting_only_music_videos_note">Do Twojej aplikacji trafiają tylko teledyski. Inne filmy otwierają się jak zwykle.</string>
     <string name="guide_may_differ">Na Twoim telefonie może to wyglądać trochę inaczej.</string>
-    <string name="setup_allow_progress">Dozwolone linki: %1$d z %2$d</string>
     <string name="setup_apps_stop_body">Wybierz „W przeglądarce” albo wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
-    <string name="setup_apps_all_done">Gotowe. Te linki otwierają się teraz w Crosstune.</string>
+    <string name="setup_apps_all_done">Gotowe. Te aplikacje już nie otwierają linków.</string>
+    <string name="setup_allow_all_done">Gotowe. Te linki otwierają się teraz w Crosstune.</string>
     <string name="setup_skip_for_now">Nie teraz</string>
     <string name="setup_fixed">Naprawione</string>
     <string name="choose_app_button">Wybierz aplikację</string>

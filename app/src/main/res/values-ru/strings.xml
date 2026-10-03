@@ -40,6 +40,7 @@
     <string name="setup_step">Шаг %1$d из %2$d</string>
     <string name="setup_sources_title">Какие ссылки открывать в Crosstune?</string>
     <string name="setup_sources_listening_note">Вы слушаете в %1$s, поэтому его ссылки и так открываются там.</string>
+    <string name="settings_listening_locked">Вы слушаете в %1$s, поэтому его ссылки и так открываются там. Чтобы включить, выберите ниже другое приложение.</string>
     <string name="setup_destination_title">Где вы слушаете музыку?</string>
     <string name="setup_destination_body">Позже его можно сменить.</string>
     <string name="setup_allow_title">Разрешите ссылки</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">Видео</string>
     <string name="setting_only_music_videos_note">В ваше приложение попадают только музыкальные видео. Остальные открываются как обычно.</string>
     <string name="guide_may_differ">На вашем телефоне экран может немного отличаться.</string>
-    <string name="setup_allow_progress">Разрешено ссылок: %1$d из %2$d</string>
     <string name="setup_apps_stop_body">Выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
     <string name="setup_apps_progress">Приложение %1$d из %2$d</string>
-    <string name="setup_apps_all_done">Готово. Теперь эти ссылки открываются в Crosstune.</string>
+    <string name="setup_apps_all_done">Готово. Эти приложения больше не открывают ссылки.</string>
+    <string name="setup_allow_all_done">Готово. Теперь эти ссылки открываются в Crosstune.</string>
     <string name="setup_skip_for_now">Не сейчас</string>
     <string name="setup_fixed">Исправлено</string>
     <string name="choose_app_button">Выбрать приложение</string>

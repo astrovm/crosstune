@@ -41,6 +41,7 @@
     <string name="setup_step">ステップ %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune で開くリンクは？</string>
     <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
+    <string name="settings_listening_locked">%1$s で聴いているので、そのリンクはすでにそこで開きます。オンにするには、下で別のアプリを選んでください。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
     <string name="setup_destination_body">あとから変更できます。</string>
     <string name="setup_allow_title">リンクを許可</string>
@@ -129,10 +130,10 @@
     <string name="setup_sources_videos">動画</string>
     <string name="setting_only_music_videos_note">アプリに送られるのは音楽動画だけです。その他はいつもどおり開きます。</string>
     <string name="guide_may_differ">お使いのスマートフォンでは少し違って見えることがあります。</string>
-    <string name="setup_allow_progress">%2$d 件中 %1$d 件のリンクを許可済み</string>
     <string name="setup_apps_stop_body">「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_apps_progress">アプリ %1$d / %2$d</string>
-    <string name="setup_apps_all_done">完了しました。これらのリンクは Crosstune で開くようになりました。</string>
+    <string name="setup_apps_all_done">完了しました。これらのアプリはもうリンクを開きません。</string>
+    <string name="setup_allow_all_done">完了しました。これらのリンクは Crosstune で開くようになりました。</string>
     <string name="setup_skip_for_now">後で</string>
     <string name="setup_fixed">解決済み</string>
     <string name="choose_app_button">アプリを選ぶ</string>
