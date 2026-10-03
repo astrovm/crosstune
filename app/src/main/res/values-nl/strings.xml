@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Links toestaan</string>
     <string name="setup_allow_none">Je hebt geen services gekozen, dus er is niets toe te staan. Je kunt nog steeds links delen met of plakken in Crosstune.</string>
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
+    <string name="setup_allow_step_in_app">Kies ‘In de app’.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
     <string name="setup_apps_title">Links van andere apps uitzetten</string>
     <string name="setup_still_opens">Opent nog links</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/nl/privacy/</string>
     <string name="handoff_opening">Openen in %1$s…</string>
     <string name="notice_links_not_allowed">Sommige links openen nog niet in Crosstune</string>
+    <string name="notice_own_links_off">Getikte links openen in je browser, niet in Crosstune</string>
     <string name="allow_button">Toestaan</string>
     <string name="notice_app_still_opens">%1$s opent zijn eigen links nog</string>
     <string name="fix_button">Oplossen</string>

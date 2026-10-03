@@ -46,6 +46,7 @@
     <string name="setup_allow_title">लिंक की अनुमति दें</string>
     <string name="setup_allow_none">आपने कोई सेवा नहीं चुनी, इसलिए अनुमति देने के लिए कुछ नहीं है। फिर भी आप Crosstune में लिंक शेयर या पेस्ट कर सकते हैं।</string>
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
+    <string name="setup_allow_step_in_app">“ऐप में” चुनें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
     <string name="setup_apps_title">दूसरे ऐप के लिंक बंद करें</string>
     <string name="setup_still_opens">अब भी लिंक खोलता है</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/hi/privacy/</string>
     <string name="handoff_opening">%1$s में खोला जा रहा है…</string>
     <string name="notice_links_not_allowed">कुछ लिंक अभी Crosstune में नहीं खुलते</string>
+    <string name="notice_own_links_off">टैप किए गए लिंक Crosstune में नहीं, ब्राउज़र में खुलते हैं</string>
     <string name="allow_button">अनुमति दें</string>
     <string name="notice_app_still_opens">%1$s अब भी अपने लिंक खुद खोलता है</string>
     <string name="fix_button">ठीक करें</string>

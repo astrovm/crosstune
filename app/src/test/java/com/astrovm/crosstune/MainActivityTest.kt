@@ -2631,6 +2631,38 @@ class MainActivityTest {
     }
 
     @Test
+    fun crosstuneSetToOpenLinksInTheBrowserIsFlaggedEverywhereWithHowToFixIt() {
+        var ownLinksOn = false
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != app.packageName || ownLinksOn }) {
+            LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        launch()
+
+        // Every link is allowed, but none reach Crosstune, so the notice says why.
+        val notice = string(R.string.notice_own_links_off)
+        assertTextShown(notice)
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        click(string(R.string.fix_button))
+        // Android hides the links to tick until it's switched back, so that's the step.
+        assertTextShown(string(R.string.setup_allow_step_in_app))
+        assertTextAbsent(string(R.string.setup_allow_step_add))
+        click(string(R.string.open_link_settings_button))
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        click(string(R.string.setup_skip_for_now))
+
+        // Settings says so too, since it affects every source.
+        click(string(R.string.settings_button))
+        assertTextShown(notice)
+        click(string(R.string.back_button))
+
+        ownLinksOn = true
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(notice)
+    }
+
+    @Test
     fun linksNotAllowedYetAreFlaggedOnTheMainScreenAndOnTheirSettingsRow() {
         var states = emptyMap<String, Int>()
         FakeDomainVerification.install(app) { states }

@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Permitir os links</string>
     <string name="setup_allow_none">Você não escolheu nenhum serviço, então não há nada para permitir. Você ainda pode compartilhar ou colar links no Crosstune.</string>
     <string name="setup_allow_step_add">Toque em Adicionar link.</string>
+    <string name="setup_allow_step_in_app">Escolha “No app”.</string>
     <string name="setup_allow_step_tick">Marque todos os links e toque em Adicionar.</string>
     <string name="setup_apps_title">Desative os links de outros apps</string>
     <string name="setup_still_opens">Ainda abre links</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/pt-br/privacy/</string>
     <string name="handoff_opening">Abrindo no %1$s…</string>
     <string name="notice_links_not_allowed">Alguns links ainda não abrem no Crosstune</string>
+    <string name="notice_own_links_off">Links tocados abrem no navegador, não no Crosstune</string>
     <string name="allow_button">Permitir</string>
     <string name="notice_app_still_opens">O %1$s ainda abre os próprios links</string>
     <string name="fix_button">Corrigir</string>

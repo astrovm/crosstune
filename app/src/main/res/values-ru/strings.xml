@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Разрешите ссылки</string>
     <string name="setup_allow_none">Вы не выбрали ни одного сервиса, поэтому разрешать нечего. Ссылки всё равно можно отправлять в Crosstune или вставлять в него.</string>
     <string name="setup_allow_step_add">Нажмите «Добавить ссылку».</string>
+    <string name="setup_allow_step_in_app">Выберите «В приложении».</string>
     <string name="setup_allow_step_tick">Отметьте все ссылки и нажмите «Добавить».</string>
     <string name="setup_apps_title">Отключите ссылки в других приложениях</string>
     <string name="setup_still_opens">Всё ещё открывает ссылки</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/ru/privacy/</string>
     <string name="handoff_opening">Открываем в %1$s…</string>
     <string name="notice_links_not_allowed">Некоторые ссылки пока не открываются в Crosstune</string>
+    <string name="notice_own_links_off">Ссылки открываются в браузере, а не в Crosstune</string>
     <string name="allow_button">Разрешить</string>
     <string name="notice_app_still_opens">%1$s всё ещё открывает свои ссылки</string>
     <string name="fix_button">Исправить</string>

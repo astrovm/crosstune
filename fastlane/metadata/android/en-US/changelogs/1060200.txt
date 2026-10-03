@@ -1,0 +1,1 @@
+Crosstune now tells you when its links are set to open in your browser, and how to fix it.

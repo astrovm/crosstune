@@ -55,6 +55,7 @@
     <string name="setup_allow_title">Allow the links</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
     <string name="setup_allow_step_add">Tap Add link.</string>
+    <string name="setup_allow_step_in_app">Pick “In the app”.</string>
     <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
     <string name="setup_apps_title">Turn off other apps\' links</string>
     <string name="setup_still_opens">Still opens links</string>
@@ -122,6 +123,7 @@
     <string name="history_copy">Copy link for %1$s</string>
     <string name="handoff_opening">Opening in %1$s…</string>
     <string name="notice_links_not_allowed">Some links can\'t open in Crosstune yet</string>
+    <string name="notice_own_links_off">Tapped links open in your browser, not Crosstune</string>
     <string name="allow_button">Allow</string>
     <string name="notice_app_still_opens">%1$s still opens its own links</string>
     <string name="fix_button">Fix</string>

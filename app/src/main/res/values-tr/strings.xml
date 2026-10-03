@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Bağlantılara izin verin</string>
     <string name="setup_allow_none">Hiçbir servis seçmediniz, bu yüzden izin verilecek bir şey yok. Yine de bağlantıları Crosstune\'a paylaşabilir veya yapıştırabilirsiniz.</string>
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
+    <string name="setup_allow_step_in_app">“Uygulamada” seçeneğini seç.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
     <string name="setup_apps_title">Diğer uygulamaların bağlantılarını kapat</string>
     <string name="setup_still_opens">Hâlâ bağlantıları açıyor</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/tr/privacy/</string>
     <string name="handoff_opening">%1$s uygulamasında açılıyor…</string>
     <string name="notice_links_not_allowed">Bazı bağlantılar henüz Crosstune\'da açılmıyor</string>
+    <string name="notice_own_links_off">Dokunulan bağlantılar Crosstune yerine tarayıcıda açılıyor</string>
     <string name="allow_button">İzin ver</string>
     <string name="notice_app_still_opens">%1$s kendi bağlantılarını hâlâ açıyor</string>
     <string name="fix_button">Düzelt</string>

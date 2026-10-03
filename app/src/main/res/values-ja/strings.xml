@@ -47,6 +47,7 @@
     <string name="setup_allow_title">リンクを許可</string>
     <string name="setup_allow_none">サービスが選ばれていないため、許可するものはありません。リンクの共有や貼り付けは Crosstune でそのまま使えます。</string>
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
+    <string name="setup_allow_step_in_app">「アプリで開く」を選んでください。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
     <string name="setup_apps_title">ほかのアプリのリンクをオフにする</string>
     <string name="setup_still_opens">まだリンクを開く</string>
@@ -107,6 +108,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
     <string name="handoff_opening">%1$s で開いています…</string>
     <string name="notice_links_not_allowed">Crosstune でまだ開けないリンクがあります</string>
+    <string name="notice_own_links_off">タップしたリンクが Crosstune ではなくブラウザで開きます</string>
     <string name="allow_button">許可</string>
     <string name="notice_app_still_opens">%1$s がまだ自分のリンクを開いています</string>
     <string name="fix_button">修正</string>

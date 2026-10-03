@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Izinkan link</string>
     <string name="setup_allow_none">Kamu belum memilih layanan, jadi tidak ada yang perlu diizinkan. Kamu tetap bisa membagikan atau menempel link ke Crosstune.</string>
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
+    <string name="setup_allow_step_in_app">Pilih “Di aplikasi”.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
     <string name="setup_apps_title">Matikan link aplikasi lain</string>
     <string name="setup_still_opens">Masih membuka link</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/id/privacy/</string>
     <string name="handoff_opening">Membuka di %1$s…</string>
     <string name="notice_links_not_allowed">Beberapa tautan belum bisa dibuka di Crosstune</string>
+    <string name="notice_own_links_off">Link yang diketuk terbuka di browser, bukan di Crosstune</string>
     <string name="allow_button">Izinkan</string>
     <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
