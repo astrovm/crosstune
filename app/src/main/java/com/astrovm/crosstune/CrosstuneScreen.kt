@@ -414,7 +414,10 @@ internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllow
     val allow = stringResource(R.string.allow_button)
     // Each opens the matching guide, which shows exactly what to tap in Android's settings.
     if (state.unapprovedHosts != null) {
-        if (includeNotAllowed && state.someLinksNotAllowed) {
+        // Set to open in the browser, no link reaches Crosstune at all, so settings says so too.
+        if (state.ownLinksOff && state.interceptsAnything) {
+            NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide)
+        } else if (includeNotAllowed && state.someLinksNotAllowed) {
             NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide)
         }
     } else if (state.showLinkSettingsHelper) {
@@ -517,12 +520,15 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         .heightIn(min = 52.dp)
     val canConvert = !busy && state.linkText.isNotBlank()
     val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
-    // The text the result on screen came from: converting it again would change nothing.
-    val resultText = rememberSaveable(state.result) { state.linkText }
+    // The text the result or error on screen came from: converting it again would change nothing,
+    // and an error that's worth retrying has its own Try again.
+    val shownText = rememberSaveable(state.result, state.error) { state.linkText }
+    val shown = (state.result != null || state.error != null) && state.linkText == shownText
+    if (shown) return
     // The main action until there's a result; then the result's Open button is.
     if (state.result == null) {
         Button(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
-    } else if (state.linkText != resultText) {
+    } else {
         FilledTonalButton(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
     }
 }

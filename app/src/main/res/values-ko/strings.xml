@@ -46,6 +46,7 @@
     <string name="setup_allow_title">링크 허용</string>
     <string name="setup_allow_none">선택한 서비스가 없어서 허용할 항목이 없어요. 링크를 Crosstune에 공유하거나 붙여넣는 것은 그대로 가능해요.</string>
     <string name="setup_allow_step_add">링크 추가를 탭하세요.</string>
+    <string name="setup_allow_step_in_app">\'앱에서\'를 선택하세요.</string>
     <string name="setup_allow_step_tick">모든 링크를 선택한 다음 추가를 탭하세요.</string>
     <string name="setup_apps_title">다른 앱의 링크 끄기</string>
     <string name="setup_still_opens">여전히 링크를 열어요</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/ko/privacy/</string>
     <string name="handoff_opening">%1$s에서 여는 중…</string>
     <string name="notice_links_not_allowed">아직 Crosstune에서 열리지 않는 링크가 있어요</string>
+    <string name="notice_own_links_off">탭한 링크가 Crosstune이 아닌 브라우저에서 열려요</string>
     <string name="allow_button">허용</string>
     <string name="notice_app_still_opens">%1$s 앱이 아직 자체 링크를 열어요</string>
     <string name="fix_button">해결</string>
@@ -131,7 +133,7 @@
     <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
     <string name="setup_apps_stop_body">\'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="setup_apps_progress">앱 %1$d/%2$d</string>
-    <string name="setup_apps_all_done">완료했어요. 이제 이 앱들은 링크를 열지 않아요.</string>
+    <string name="setup_apps_all_done">완료했어요. 이제 다른 앱이 링크를 열지 않아요.</string>
     <string name="setup_allow_all_done">완료했어요. 이제 이 링크는 Crosstune에서 열려요.</string>
     <string name="setup_skip_for_now">나중에</string>
     <string name="setup_fixed">해결됨</string>

@@ -46,6 +46,7 @@
     <string name="setup_allow_title">Zezwól na linki</string>
     <string name="setup_allow_none">Nie wybrano żadnych serwisów, więc nie ma na co zezwalać. Nadal możesz udostępniać lub wklejać linki w Crosstune.</string>
     <string name="setup_allow_step_add">Kliknij „Dodaj link”.</string>
+    <string name="setup_allow_step_in_app">Wybierz „W aplikacji”.</string>
     <string name="setup_allow_step_tick">Zaznacz wszystkie linki, a potem kliknij „Dodaj”.</string>
     <string name="setup_apps_title">Wyłącz linki w innych aplikacjach</string>
     <string name="setup_still_opens">Nadal otwiera linki</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/pl/privacy/</string>
     <string name="handoff_opening">Otwieranie w %1$s…</string>
     <string name="notice_links_not_allowed">Niektóre linki jeszcze nie otwierają się w Crosstune</string>
+    <string name="notice_own_links_off">Kliknięte linki otwierają się w przeglądarce, nie w Crosstune</string>
     <string name="allow_button">Zezwól</string>
     <string name="notice_app_still_opens">%1$s nadal otwiera swoje linki</string>
     <string name="fix_button">Napraw</string>
@@ -131,7 +133,7 @@
     <string name="guide_may_differ">Na Twoim telefonie może to wyglądać trochę inaczej.</string>
     <string name="setup_apps_stop_body">Wybierz „W przeglądarce” albo wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
-    <string name="setup_apps_all_done">Gotowe. Te aplikacje już nie otwierają linków.</string>
+    <string name="setup_apps_all_done">Gotowe. Żadna inna aplikacja nie otwiera już linków.</string>
     <string name="setup_allow_all_done">Gotowe. Te linki otwierają się teraz w Crosstune.</string>
     <string name="setup_skip_for_now">Nie teraz</string>
     <string name="setup_fixed">Naprawione</string>

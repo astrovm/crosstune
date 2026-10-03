@@ -488,12 +488,17 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
         }
     }
     Spacer(Modifier.height(10.dp))
+    // Set to open in the browser, Android hides the links to tick, so switching back comes first.
+    if (state.ownLinksOff) {
+        NumberedStep(2, stringResource(R.string.setup_allow_step_in_app))
+        return
+    }
     NumberedStep(2, stringResource(R.string.setup_allow_step_add))
     GuideShot(R.drawable.guide_add_link, Modifier.padding(vertical = 12.dp))
     NumberedStep(3, stringResource(R.string.setup_allow_step_tick))
     // The first screenshot already says phones vary.
     GuideShot(R.drawable.guide_tick_links, Modifier.padding(vertical = 12.dp), caption = null)
-    // Only what's left to allow; the count above already says how many are done.
+    // Only what's left to allow.
     val toAllow = MusicService.entries.filter { it in state.intercepted }.map { source ->
         stringResource(source.labelRes) to (state.unapprovedHosts?.let { it[source].orEmpty() } ?: LinkInterception.HOSTS[source].orEmpty())
     } + Frontend.SOURCES.filter { it in state.frontendSources }.map { frontend ->

@@ -28,7 +28,12 @@ internal data class LinkState(
     /** Like [unapprovedHosts], for each web frontend's sites. */
     val unapprovedFrontendHosts: Map<Frontend, List<String>>?,
     /** For every source, by [Destination.key], installed apps that claim its links and whether each still opens them; null before Android 12. */
-    val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>?
+    val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>?,
+    /**
+     * Whether Crosstune's own "Open by default" is set to "In your browser", which sends every
+     * link elsewhere however many are allowed. Android hides the allowed links meanwhile.
+     */
+    val ownLinksOff: Boolean = false
 ) {
     /**
      * Installed apps that claim links Crosstune is set to intercept, each with whether it still
@@ -102,20 +107,22 @@ internal class LinkInterception(private val context: Context) {
         val installed = installedServices()
         val serviceApps = installed.associateWith { appFor(it.packageName) }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null, null)
-        val own = ownHostStates()
+        val own = ownState()
+        val hosts = own?.hostToStateMap
         return LinkState(
             serviceApps,
-            unapprovedHosts = own?.let(::unapprovedFrom),
-            unapprovedFrontendHosts = own?.let(::unapprovedFrontendsFrom),
-            claimingAppsBySource = claimingAppsBySource(installed)
+            unapprovedHosts = hosts?.let(::unapprovedFrom),
+            unapprovedFrontendHosts = hosts?.let(::unapprovedFrontendsFrom),
+            claimingAppsBySource = claimingAppsBySource(installed),
+            ownLinksOff = own?.isLinkHandlingAllowed == false
         )
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private fun ownHostStates(): Map<String, Int>? {
+    private fun ownState(): DomainVerificationUserState? {
         val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return null
         return try {
-            manager.getDomainVerificationUserState(context.packageName)?.hostToStateMap
+            manager.getDomainVerificationUserState(context.packageName)
         } catch (_: PackageManager.NameNotFoundException) {
             null
         }

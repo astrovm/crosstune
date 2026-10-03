@@ -46,6 +46,7 @@
     <string name="setup_allow_title">允许打开链接</string>
     <string name="setup_allow_none">你没有选择任何服务，因此无需允许。你仍可以将链接分享或粘贴到 Crosstune。</string>
     <string name="setup_allow_step_add">点按“添加链接”。</string>
+    <string name="setup_allow_step_in_app">选择“在应用中”。</string>
     <string name="setup_allow_step_tick">勾选所有链接，然后点按“添加”。</string>
     <string name="setup_apps_title">阻止其他应用打开链接</string>
     <string name="setup_still_opens">仍会打开链接</string>
@@ -106,6 +107,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/zh-cn/privacy/</string>
     <string name="handoff_opening">正在用 %1$s 打开…</string>
     <string name="notice_links_not_allowed">部分链接还不能在 Crosstune 中打开</string>
+    <string name="notice_own_links_off">点按的链接会在浏览器中打开，而不是在 Crosstune 中</string>
     <string name="allow_button">允许</string>
     <string name="notice_app_still_opens">%1$s 仍会打开自己的链接</string>
     <string name="fix_button">修复</string>
@@ -131,7 +133,7 @@
     <string name="guide_may_differ">你的手机界面可能略有不同。</string>
     <string name="setup_apps_stop_body">选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
-    <string name="setup_apps_all_done">完成了。这些应用不会再打开这些链接。</string>
+    <string name="setup_apps_all_done">完成了。其他应用不会再打开这些链接。</string>
     <string name="setup_allow_all_done">完成了。这些链接现在会在 Crosstune 中打开。</string>
     <string name="setup_skip_for_now">以后再说</string>
     <string name="setup_fixed">已解决</string>

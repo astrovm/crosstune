@@ -47,6 +47,7 @@
     <string name="setup_allow_title">Consenti i link</string>
     <string name="setup_allow_none">Non hai scelto nessun servizio, quindi non c\'è nulla da consentire. Puoi comunque condividere o incollare i link in Crosstune.</string>
     <string name="setup_allow_step_add">Tocca Aggiungi link.</string>
+    <string name="setup_allow_step_in_app">Scegli “Nell’app”.</string>
     <string name="setup_allow_step_tick">Seleziona tutti i link, poi tocca Aggiungi.</string>
     <string name="setup_apps_title">Disattiva i link delle altre app</string>
     <string name="setup_still_opens">Apre ancora i link</string>
@@ -107,6 +108,7 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/it/privacy/</string>
     <string name="handoff_opening">Apertura in %1$s…</string>
     <string name="notice_links_not_allowed">Alcuni link non si aprono ancora in Crosstune</string>
+    <string name="notice_own_links_off">I link toccati si aprono nel browser, non in Crosstune</string>
     <string name="allow_button">Consenti</string>
     <string name="notice_app_still_opens">%1$s apre ancora i propri link</string>
     <string name="fix_button">Risolvi</string>
@@ -132,7 +134,7 @@
     <string name="guide_may_differ">Sul tuo telefono potrebbe apparire un po\' diverso.</string>
     <string name="setup_apps_stop_body">Scegli “Nel browser” o disattiva “Apri link supportati”.</string>
     <string name="setup_apps_progress">App %1$d di %2$d</string>
-    <string name="setup_apps_all_done">Fatto. Queste app non aprono più i link.</string>
+    <string name="setup_apps_all_done">Fatto. Nessun’altra app apre più i link.</string>
     <string name="setup_allow_all_done">Fatto. Ora questi link si aprono in Crosstune.</string>
     <string name="setup_skip_for_now">Non ora</string>
     <string name="setup_fixed">Risolto</string>

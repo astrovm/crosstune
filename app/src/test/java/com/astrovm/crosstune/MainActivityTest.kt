@@ -1154,10 +1154,12 @@ class MainActivityTest {
         typeUrl(TRACK_ID)
         click(string(R.string.resolve_button))
         waitForText(string(R.string.error_network))
+        // Converting the same text again is what Try again is for, so there's one button for it.
+        assertTextAbsent(string(R.string.resolve_button))
 
         // Retry without editing the input, so only the resolution itself can clear the error.
         respondWithTrack("Recovered", "Artist · Song")
-        click(string(R.string.resolve_button))
+        click(string(R.string.retry_button))
         waitForText("Recovered")
         assertTextAbsent(string(R.string.error_network))
     }
@@ -1339,6 +1341,8 @@ class MainActivityTest {
         )
         for ((code, message) in cases) {
             fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Error", "Page"), code = code) }
+            // Typed afresh, as converting the text an error is shown for again isn't offered.
+            typeUrl("")
             typeUrl(TRACK_ID)
             click(string(R.string.resolve_button))
             waitForText(string(message))
@@ -2627,6 +2631,38 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_apps_all_done))
         clickDoneButton()
+        assertTextAbsent(notice)
+    }
+
+    @Test
+    fun crosstuneSetToOpenLinksInTheBrowserIsFlaggedEverywhereWithHowToFixIt() {
+        var ownLinksOn = false
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != app.packageName || ownLinksOn }) {
+            LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        launch()
+
+        // Every link is allowed, but none reach Crosstune, so the notice says why.
+        val notice = string(R.string.notice_own_links_off)
+        assertTextShown(notice)
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        click(string(R.string.fix_button))
+        // Android hides the links to tick until it's switched back, so that's the step.
+        assertTextShown(string(R.string.setup_allow_step_in_app))
+        assertTextAbsent(string(R.string.setup_allow_step_add))
+        click(string(R.string.open_link_settings_button))
+        assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
+        click(string(R.string.setup_skip_for_now))
+
+        // Settings says so too, since it affects every source.
+        click(string(R.string.settings_button))
+        assertTextShown(notice)
+        click(string(R.string.back_button))
+
+        ownLinksOn = true
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
         assertTextAbsent(notice)
     }
 

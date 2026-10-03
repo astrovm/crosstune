@@ -57,6 +57,8 @@ internal data class UiState(
     val installed: Set<MusicService> = emptySet(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
     val unapprovedHosts: Map<MusicService, List<String>>? = null,
+    /** Crosstune's own links are set to open in the browser, so none reach it; see [LinkState.ownLinksOff]. */
+    val ownLinksOff: Boolean = false,
     /**
      * Installed apps that still open links Crosstune intercepts, until changed in their own
      * settings; null before Android 12, which can't tell.
@@ -98,7 +100,7 @@ internal data class UiState(
 
     /** Whether some link Crosstune is set to open isn't allowed yet; false before Android 12, which can't tell. */
     val someLinksNotAllowed: Boolean
-        get() = intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
+        get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
             frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
 
     /** A one-time choice takes precedence over the source rule and global default. */
@@ -200,6 +202,7 @@ internal class MainViewModel(
             systemStateKnown = true,
             installed = state.serviceApps.keys,
             unapprovedHosts = state.unapprovedHosts,
+            ownLinksOff = state.ownLinksOff,
             unapprovedFrontendHosts = state.unapprovedFrontendHosts,
             blockingApps = claiming?.filterValues { it }?.keys,
             claimingApps = claiming?.keys,
