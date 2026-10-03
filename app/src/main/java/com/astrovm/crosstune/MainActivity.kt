@@ -111,10 +111,6 @@ class MainActivity : ComponentActivity() {
                             startActivity(shareChooser(effect.url))
                             finish()
                         }
-                        is Effect.Copy -> {
-                            copyToClipboard("Crosstune link", effect.url, R.string.link_copied_to_clipboard)
-                            finish()
-                        }
                     }
                 }
             }
@@ -225,7 +221,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * A link shared to Crosstune, or copied and opened from a launcher shortcut. A share sheet
-     * entry may have picked an app to open it in, or to share, copy or show it instead; either beats
+     * entry may have picked an app to open it in, or to share or show it instead; either beats
      * showing it first. Each use is reported, so Android puts the entries used most up front.
      */
     private fun resolveShared(text: String?, fromClipboard: Boolean) {
@@ -233,11 +229,7 @@ class MainActivity : ComponentActivity() {
         val action = AppShortcuts.chosenAction(intent)
         intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.let { getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(it) }
         val show = action == AppShortcuts.ShareAction.SHOW || chosen == null && action == null && viewModel.uiState.showSongFirst
-        val after = when (action) {
-            AppShortcuts.ShareAction.SHARE -> AfterLookup.SHARE
-            AppShortcuts.ShareAction.COPY -> AfterLookup.COPY
-            else -> AfterLookup.OPEN
-        }
+        val after = if (action == AppShortcuts.ShareAction.SHARE) AfterLookup.SHARE else AfterLookup.OPEN
         if (fromClipboard) viewModel.resolveClipboard(text, chosen, show, after) else viewModel.resolveIncoming(text, chosen, show, after)
     }
 
