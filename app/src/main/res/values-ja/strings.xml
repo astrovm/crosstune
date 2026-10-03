@@ -123,7 +123,7 @@
     <string name="settings_link_owners_description">これらのアプリも同じリンクを開けます。タップして、そのアプリで開くかどうかを選べます。</string>
     <string name="link_owner_opens_them">自分でリンクを開く</string>
     <string name="link_owner_lets_crosstune">Crosstune に任せる</string>
-    <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。そのアプリで「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
+    <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。Crosstune ではなくそのアプリの設定を開き、「ブラウザで開く」を選ぶか「対応リンクを開く」をオフにしてください。</string>
     <string name="frontend_address_title">%1$s のアドレス</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">yewtu.be のようなウェブアドレスを入力してください</string>

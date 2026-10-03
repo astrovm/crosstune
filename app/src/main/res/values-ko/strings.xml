@@ -122,7 +122,7 @@
     <string name="settings_link_owners_description">이 앱들도 같은 링크를 열 수 있어요. 탭해서 앱이 직접 열지 선택하세요.</string>
     <string name="link_owner_opens_them">직접 링크를 열어요</string>
     <string name="link_owner_lets_crosstune">Crosstune이 열게 해요</string>
-    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 그 앱에서 \'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
+    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. Crosstune이 아니라 그 앱의 설정을 열고 \'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="frontend_address_title">%1$s 주소</string>
     <string name="save_button">저장</string>
     <string name="frontend_address_invalid">yewtu.be 같은 웹 주소를 입력하세요</string>

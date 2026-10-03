@@ -122,7 +122,7 @@
     <string name="settings_link_owners_description">Estas apps pueden abrir los mismos links. Tocá una para elegir si los abre ella.</string>
     <string name="link_owner_opens_them">Se queda con sus links</string>
     <string name="link_owner_lets_crosstune">Deja que los abra Crosstune</string>
-    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app. En esa app, elegí “En un navegador” o desactivá “Abrir vínculos admitidos”.</string>
+    <string name="setup_allow_taken_hint">¿No podés marcar un link? Lo tiene otra app. Abrí la configuración de esa app, no la de Crosstune, y elegí “En un navegador” o desactivá “Abrir vínculos admitidos”.</string>
     <string name="frontend_address_title">Dirección de %1$s</string>
     <string name="save_button">Guardar</string>
     <string name="frontend_address_invalid">Escribí una dirección web, como yewtu.be</string>
