@@ -80,6 +80,7 @@
     <string name="cancel_button">キャンセル</string>
     <string name="retry_button">再試行</string>
     <string name="history_title">最近</string>
+    <string name="playlist_songs_title">曲</string>
     <string name="clear_history_button">履歴を消去</string>
     <string name="tile_label">コピーした音楽リンクを開く</string>
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>

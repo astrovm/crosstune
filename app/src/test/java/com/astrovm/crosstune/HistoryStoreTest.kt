@@ -125,4 +125,21 @@ class HistoryStoreTest {
             store.load()
         )
     }
+
+    @Test
+    fun keepsAPlaylistsSongs() {
+        val playlist = HistoryEntry(
+            MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "1", "https://www.deezer.com/playlist/1"),
+            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(MusicMetadata("One", "Band"), MusicMetadata("Two", "")))
+        )
+        store.add(playlist)
+        assertEquals(playlist, HistoryStore(preferences).load().single())
+
+        // Songs saved without a title, or not as a pair, are skipped.
+        preferences.edit().putString(
+            "history",
+            """[{"type":"PLAYLIST","id":"1","title":"Top","service":"DEEZER","url":"https://www.deezer.com/playlist/1","tracks":[["One","Band"],["",""],"x"]}]"""
+        ).commit()
+        assertEquals(listOf(MusicMetadata("One", "Band")), HistoryStore(preferences).load().single().metadata.tracks)
+    }
 }

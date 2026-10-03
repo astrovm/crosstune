@@ -80,6 +80,7 @@
     <string name="cancel_button">Annulla</string>
     <string name="retry_button">Riprova</string>
     <string name="history_title">Recenti</string>
+    <string name="playlist_songs_title">Brani</string>
     <string name="clear_history_button">Cancella cronologia</string>
     <string name="tile_label">Apri link musicale copiato</string>
     <string name="shortcut_paste_short">Apri link copiato</string>

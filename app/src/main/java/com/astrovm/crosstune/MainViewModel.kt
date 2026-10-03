@@ -435,6 +435,12 @@ internal class MainViewModel(
             effectChannel.send(Effect.Share(url))
             return
         }
+        // A playlist can't open as one in another app, so its songs show here to pick from,
+        // unless the user already picked where it goes.
+        if (pendingOpen && uiState.selectedDestination == null && uiState.result?.tracks.orEmpty().isNotEmpty()) {
+            pendingOpen = false
+            uiState = uiState.copy(handingOff = false)
+        }
         // Incoming links without a chosen destination must not search the default before asking.
         val ask = uiState.selectedDestination == null &&
             (uiState.askEachTime || !uiState.setupComplete || ownService != null)
@@ -447,6 +453,26 @@ internal class MainViewModel(
         if (!pendingOpen) return
         pendingOpen = false
         open(uiState.resultDestination, finishAfterOpen = true)
+    }
+
+    private var trackJob: Job? = null
+
+    /** Opens one of a playlist's songs where the result goes, matched like a song of its own. */
+    fun openTrack(track: MusicMetadata) {
+        val destination = uiState.resultDestination
+        trackJob?.cancel()
+        trackJob = viewModelScope.launch {
+            val exactUrl = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
+                uiState = uiState.copy(isMatching = true)
+                try {
+                    matcher.find(service, track)
+                } finally {
+                    uiState = uiState.copy(isMatching = false)
+                }
+            }
+            val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
+            effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
+        }
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */

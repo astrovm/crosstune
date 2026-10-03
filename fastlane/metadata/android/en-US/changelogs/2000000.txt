@@ -2,3 +2,4 @@ Crosstune moves now: screens slide, results fade in, buttons respond to your tou
 Recent is cleaner: one play button per song, and swipe a song away to remove it.
 "Open links in" can now also ask which app to use, or show the song first.
 The share sheet offers your app, Share link and Show song. Hide them in Settings.
+Playlists from Spotify, Apple Music and Deezer show their songs; tap one to open it in your app.

@@ -79,6 +79,7 @@
     <string name="cancel_button">Annuler</string>
     <string name="retry_button">Réessayer</string>
     <string name="history_title">Récents</string>
+    <string name="playlist_songs_title">Titres</string>
     <string name="clear_history_button">Effacer l\'historique</string>
     <string name="tile_label">Ouvrir le lien musical copié</string>
     <string name="shortcut_paste_short">Ouvrir le lien copié</string>

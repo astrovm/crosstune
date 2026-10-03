@@ -66,6 +66,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
                     .putOpt("artwork", entry.metadata.artworkUrl)
+                    // A playlist's songs as [title, artist] pairs, kept short.
+                    .put("tracks", JSONArray().apply { entry.metadata.tracks.forEach { put(JSONArray().put(it.title).put(it.artist)) } })
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
@@ -91,7 +93,13 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
             val destinationUrl = value.optString("url").ifBlank { return@mapNotNull null }
             key to PreparedLink(destinationUrl, value.optBoolean("exact"), value.optBoolean("matchingEnabled"))
         }.toMap()
-        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }), prepared)
+        val tracks = optJSONArray("tracks")?.let { list ->
+            (0 until list.length()).mapNotNull { index ->
+                val pair = list.optJSONArray(index) ?: return@mapNotNull null
+                MusicMetadata(pair.optString(0).ifEmpty { return@mapNotNull null }, pair.optString(1))
+            }
+        }.orEmpty()
+        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks), prepared)
     }
 
     private companion object {

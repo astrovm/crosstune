@@ -438,6 +438,35 @@ class MainActivityTest {
     }
 
     @Test
+    fun aTappedPlaylistShowsItsSongsAndEachOpensInTheDefaultApp() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "Playlist"))
+            }
+        }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")))
+
+        // A playlist can't open as one elsewhere, so its songs show instead of it opening.
+        waitForText("First Song")
+        assertTextShown(string(R.string.playlist_songs_title))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+
+        // Each song is matched on its own, and opens without leaving Crosstune behind.
+        composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = nextStartedActivity()!!
+        assertEquals("deezer.android.app", opened.`package`)
+        assertEquals("https://www.deezer.com/search/Second%20Song", opened.dataString)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
     fun selectedTextOpensInTheDefaultApp() {
         respondWithTrack("Selected", "Artist · Song")
         val activity = launch(
@@ -1619,7 +1648,9 @@ class MainActivityTest {
             listOf(
                 "https://open.spotify.com/album/$TRACK_ID",
                 "https://open.spotify.com/artist/$TRACK_ID",
-                "https://open.spotify.com/playlist/$TRACK_ID"
+                "https://open.spotify.com/playlist/$TRACK_ID",
+                // Its songs come from the embed page.
+                "https://open.spotify.com/embed/playlist/$TRACK_ID"
             ),
             fake.requestedUrls
         )

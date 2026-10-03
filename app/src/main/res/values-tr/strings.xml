@@ -79,6 +79,7 @@
     <string name="cancel_button">İptal</string>
     <string name="retry_button">Tekrar dene</string>
     <string name="history_title">Son kullanılanlar</string>
+    <string name="playlist_songs_title">Şarkılar</string>
     <string name="clear_history_button">Geçmişi temizle</string>
     <string name="tile_label">Kopyalanan müzik bağlantısını aç</string>
     <string name="shortcut_paste_short">Kopyalanan bağlantıyı aç</string>

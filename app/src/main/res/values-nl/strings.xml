@@ -79,6 +79,7 @@
     <string name="cancel_button">Annuleren</string>
     <string name="retry_button">Opnieuw proberen</string>
     <string name="history_title">Recent</string>
+    <string name="playlist_songs_title">Nummers</string>
     <string name="clear_history_button">Geschiedenis wissen</string>
     <string name="tile_label">Gekopieerde muzieklink openen</string>
     <string name="shortcut_paste_short">Gekopieerde link openen</string>

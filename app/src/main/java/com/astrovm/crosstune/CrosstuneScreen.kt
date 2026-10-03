@@ -137,6 +137,7 @@ internal data class ScreenActions(
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onHistoryOpen: (HistoryEntry) -> Unit = {},
     val onRemoveHistory: (HistoryEntry) -> Unit = {},
+    val onOpenTrack: (MusicMetadata) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
     val onForgetClearedHistory: () -> Unit = {},
@@ -355,7 +356,12 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
         AnimatedContent(targetState = state.result, transitionSpec = { swap() }, label = "result") { result ->
-            result?.let { ResultCard(it, state, actions) }
+            result?.let {
+                Column {
+                    ResultCard(it, state, actions)
+                    if (it.tracks.isNotEmpty()) PlaylistSongs(it.tracks, actions)
+                }
+            }
         }
 
         val idle = state.result == null && state.error == null && !state.isLoading
@@ -1013,6 +1019,45 @@ private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
         contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
     ) {
         AppIcon(R.drawable.ic_delete, contentDescription = null, modifier = Modifier.size(24.dp))
+    }
+}
+
+/** A playlist's songs, each opening on its own where the result goes. */
+@Composable
+private fun PlaylistSongs(tracks: List<MusicMetadata>, actions: ScreenActions) {
+    SectionHeader(title = stringResource(R.string.playlist_songs_title), modifier = Modifier.padding(top = 8.dp))
+    Group {
+        tracks.forEachIndexed { index, track ->
+            if (index > 0) GroupDivider()
+            val openLabel = stringResource(R.string.history_open, track.title)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = openLabel) { actions.onOpenTrack(track) }
+                    .padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${index + 1}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(min = 28.dp)
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                    Text(track.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (track.artist.isNotBlank()) {
+                        Text(
+                            track.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(24.dp))
+            }
+        }
     }
 }
 

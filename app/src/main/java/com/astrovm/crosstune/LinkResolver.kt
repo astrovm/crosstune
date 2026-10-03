@@ -59,8 +59,25 @@ internal class LinkResolver(
         }
         when (val metadata = parse(link, body)) {
             null -> Resolution.Failed(if (isApiNotFound(link)) AppError.NOT_FOUND else AppError.METADATA_UNAVAILABLE, link)
-            else -> Resolution.Resolved(link, metadata)
+            else -> Resolution.Resolved(link, withSpotifyTracks(link, metadata))
         }
+    }
+
+    /**
+     * Spotify's playlist page doesn't list the songs, but its embed page does. They're extra, so
+     * the playlist still shows without them when that page can't be read.
+     */
+    private suspend fun withSpotifyTracks(link: MusicLink, metadata: MusicMetadata): MusicMetadata {
+        if (link.service != MusicService.SPOTIFY || link.type != ItemType.PLAYLIST) return metadata
+        val tracks = try {
+            val (response, body) = fetch("https://open.spotify.com/embed/playlist/${link.id}")
+            if (response.isSuccessful) MetadataParsers.spotifyEmbedTracks(body) else emptyList()
+        } catch (_: IOException) {
+            emptyList()
+        } catch (_: JSONException) {
+            emptyList()
+        }
+        return metadata.copy(tracks = tracks)
     }
 
     /** The iTunes Lookup API reports missing items as an empty result inside a successful response. */

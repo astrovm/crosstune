@@ -92,6 +92,7 @@
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
     <string name="history_title">Recent</string>
+    <string name="playlist_songs_title">Songs</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
     <string name="shortcut_paste_short">Open copied link</string>
