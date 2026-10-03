@@ -156,4 +156,26 @@ class LinkResolverTest {
         serve { FakeSpotify.html(it, """<script id="__NEXT_DATA__" type="application/json">{nope</script>""") }
         assertEquals(emptyList<MusicMetadata>(), (resolve(link) as Resolution.Resolved).metadata.tracks)
     }
+
+    @Test
+    fun newSourcesAndAlbumSongsAreReadFromTheRightPlaces() {
+        respond("""{"resultCount":1,"results":[{"wrapperType":"collection","collectionName":"After Hours","artistName":"The Weeknd"}]}""")
+        assertResolved(
+            "https://music.apple.com/us/album/after-hours/1499378108",
+            "https://itunes.apple.com/lookup?id=1499378108&country=us&entity=song",
+            MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
+        )
+        respond("""<meta property="og:title" content="Road Trip">""")
+        assertResolved(
+            "https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+            "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+            MusicMetadata("Road Trip", "", ItemType.PLAYLIST)
+        )
+        respond("""{"title":"Last Last","author_name":"Burna Boy"}""")
+        assertResolved(
+            "https://audiomack.com/burna-boy/song/last-last",
+            "https://audiomack.com/oembed?format=json&url=https%3A%2F%2Faudiomack.com%2Fburna-boy%2Fsong%2Flast-last",
+            MusicMetadata("Last Last", "Burna Boy")
+        )
+    }
 }

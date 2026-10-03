@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -138,6 +139,9 @@ internal data class ScreenActions(
     val onHistoryOpen: (HistoryEntry) -> Unit = {},
     val onRemoveHistory: (HistoryEntry) -> Unit = {},
     val onOpenTrack: (MusicMetadata) -> Unit = {},
+    val onCopySongs: () -> Unit = {},
+    val onPlayAll: () -> Unit = {},
+    val onShareSongs: () -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
     val onForgetClearedHistory: () -> Unit = {},
@@ -359,7 +363,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             result?.let {
                 Column {
                     ResultCard(it, state, actions)
-                    if (it.tracks.isNotEmpty()) PlaylistSongs(it.tracks, actions)
+                    if (it.tracks.isNotEmpty()) PlaylistSongs(it.tracks, state, actions)
                 }
             }
         }
@@ -807,6 +811,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 Button(
                     onClick = actions.onOpen,
                     enabled = destinationReady,
+                    colors = openButtonColors(state),
                     shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
                     contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                     interactionSource = press.source,
@@ -840,28 +845,39 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Same height even when only one label wraps.
+                // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
+                // the list to another service, rather than a search for its name.
+                val songs = result.tracks.isNotEmpty()
                 SecondaryAction(
                     R.drawable.ic_content_copy,
-                    stringResource(R.string.copy_link_button),
-                    actions.onCopyLink,
+                    stringResource(if (songs) R.string.copy_songs_button else R.string.copy_link_button),
+                    if (songs) actions.onCopySongs else actions.onCopyLink,
                     Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    enabled = destinationReady
+                    enabled = songs || destinationReady
                 )
                 SecondaryAction(
                     R.drawable.ic_share,
-                    stringResource(R.string.share_link_button),
-                    actions.onShareSearch,
+                    stringResource(if (songs) R.string.share_songs_button else R.string.share_link_button),
+                    if (songs) actions.onShareSongs else actions.onShareSearch,
                     Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    enabled = destinationReady
+                    enabled = songs || destinationReady
                 )
             }
         }
     }
 }
+
+/**
+ * A playlist only searches its name elsewhere, so with its songs listed below, they come first
+ * and the Open button steps back.
+ */
+@Composable
+private fun openButtonColors(state: UiState): ButtonColors =
+    if (state.result?.type == ItemType.PLAYLIST && state.result.tracks.isNotEmpty()) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.buttonColors()
 
 /** The split button's arrow: lists the apps to open this result in instead. */
 @Composable
@@ -871,6 +887,7 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
     Box {
         Button(
             onClick = { expanded = true },
+            colors = openButtonColors(state),
             shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
             contentPadding = PaddingValues(horizontal = 14.dp),
             interactionSource = press.source,
@@ -931,8 +948,35 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         },
         modifier = Modifier.padding(top = 8.dp)
     )
+    // A longer list gets a search, by title or artist.
+    var query by rememberSaveable { mutableStateOf("") }
+    val searchable = history.size > SEARCHABLE_HISTORY
+    if (searchable) {
+        TextField(
+            value = query,
+            onValueChange = { query = it },
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.search_recent)) },
+            leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
+            shape = MaterialTheme.shapes.large,
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        )
+    }
+    val words = query.trim().lowercase().split(" ").filter { it.isNotEmpty() }
+    val shown = if (!searchable) history else history.filter { entry ->
+        val text = "${entry.metadata.title} ${entry.metadata.artist}".lowercase()
+        words.all { it in text }
+    }
     Group {
-        history.forEachIndexed { index, entry ->
+        shown.forEachIndexed { index, entry ->
             // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
             key(entry.link.url) {
                 if (index > 0) GroupDivider()
@@ -1024,8 +1068,34 @@ private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
 
 /** A playlist's songs, each opening on its own where the result goes. */
 @Composable
-private fun PlaylistSongs(tracks: List<MusicMetadata>, actions: ScreenActions) {
-    SectionHeader(title = stringResource(R.string.playlist_songs_title), modifier = Modifier.padding(top = 8.dp))
+private fun PlaylistSongs(tracks: List<MusicMetadata>, state: UiState, actions: ScreenActions) {
+    val progress = state.queueProgress
+    SectionHeader(
+        title = stringResource(R.string.playlist_songs_title),
+        modifier = Modifier.padding(top = 8.dp),
+        action = if (!state.canPlayAll) null else {
+            {
+                // Matching every song takes a moment, so it shows how far it got.
+                AnimatedContent(targetState = progress, contentKey = { it != null }, transitionSpec = { swap() }, label = "play all") { shown ->
+                    if (shown != null) {
+                        Text(
+                            stringResource(R.string.play_all_progress, shown.first, shown.second),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .semantics { liveRegion = LiveRegionMode.Polite }
+                        )
+                    } else {
+                        TextButton(onClick = actions.onPlayAll) {
+                            AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(stringResource(R.string.play_all_button), modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
+                }
+            }
+        }
+    )
     Group {
         tracks.forEachIndexed { index, track ->
             if (index > 0) GroupDivider()
@@ -1060,6 +1130,9 @@ private fun PlaylistSongs(tracks: List<MusicMetadata>, actions: ScreenActions) {
         }
     }
 }
+
+/** How many Recent items fit at a glance; past that, a search shows above them. */
+private const val SEARCHABLE_HISTORY = 5
 
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =

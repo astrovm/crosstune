@@ -18,13 +18,17 @@
     <string name="service_bandcamp" translatable="false">Bandcamp</string>
     <string name="service_amazon_music" translatable="false">Amazon Music</string>
     <string name="open_in_spotify">Open in Spotify</string>
+    <string name="service_audiomack" translatable="false">Audiomack</string>
+    <string name="service_qobuz" translatable="false">Qobuz</string>
+    <string name="open_in_audiomack">Open in Audiomack</string>
+    <string name="open_in_qobuz">Open in Qobuz</string>
     <string name="open_in_bandcamp">Open in Bandcamp</string>
     <string name="open_in_amazon_music">Open in Amazon Music</string>
     <string name="from_service">from %1$s</string>
     <string name="open_in_custom">Open in %1$s</string>
     <string name="settings_button">Settings</string>
     <string name="settings_title">Settings</string>
-    <string name="settings_default_title">Default app</string>
+    <string name="settings_where_you_listen">Where you listen</string>
     <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
@@ -92,7 +96,10 @@
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
     <string name="history_title">Recent</string>
+    <string name="search_recent">Search Recent</string>
     <string name="playlist_songs_title">Songs</string>
+    <string name="play_all_button">Play all</string>
+    <string name="play_all_progress">Finding songs… %1$d of %2$d</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
     <string name="shortcut_paste_short">Open copied link</string>
@@ -136,6 +143,9 @@
     <string name="empty_hint">Tap a music link in any app, or share one to Crosstune.</string>
     <string name="copy_link_button">Copy link</string>
     <string name="share_link_button">Share link</string>
+    <string name="copy_songs_button">Copy songs</string>
+    <string name="share_songs_button">Share songs</string>
+    <string name="songs_copied">Songs copied</string>
     <string name="settings_link_owners_title">Apps with these links</string>
     <string name="settings_link_owners_description">Tap one to change it.</string>
     <string name="link_owner_opens_them">Keeps its links</string>

@@ -4,15 +4,16 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 
 <b>Funkcje</b>
 <ul>
-<li>Rozpoznaje linki ze Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud i Bandcamp oraz otwiera je w dowolnej z tych aplikacji lub w Amazon Music.</li>
+<li>Rozpoznaje linki ze Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp i Audiomack oraz otwiera je w dowolnej z tych aplikacji lub w Amazon Music i Qobuz.</li>
+<li>Playlisty i albumy pokazują swoje utwory: otwórz dowolny w swojej aplikacji, skopiuj lub udostępnij listę albo odtwórz wszystko w YouTube Music lub YouTube.</li>
 <li>Kieruj każdy serwis gdzie indziej, np. linki z YouTube do YouTube Music, a resztę do Apple Music.</li>
 <li>Pytaj, której aplikacji użyć: wybieraj aplikację za każdym razem, gdy klikasz lub udostępniasz link.</li>
 <li>Otwieraj dokładne dopasowanie: Apple Music, Deezer i YouTube Music mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, Bandcamp utwór lub album, a YouTube utwór.</li>
 <li>Dodawaj inne aplikacje i strony z wyszukiwarką.</li>
-<li>Wklejaj jednym kliknięciem, wracaj do ostatnich linków, używaj kafelka w Szybkich ustawieniach albo przytrzymaj ikonę aplikacji, by otworzyć skopiowany link.</li>
+<li>Wklejaj jednym kliknięciem, przeszukuj ostatnie linki i wracaj do nich albo otwieraj skopiowany link z widżetu na ekranie głównym, kafelka w Szybkich ustawieniach lub przytrzymując ikonę aplikacji.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Kolory Material You na Androidzie 12 i nowszych.</li>
 </ul>
 
 <b>Prywatność</b>
-Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp.
+Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube.

@@ -214,7 +214,8 @@ internal class LinkInterception(private val context: Context) {
             ),
             MusicService.TIDAL to listOf("tidal.com", "www.tidal.com", "listen.tidal.com"),
             MusicService.SOUNDCLOUD to listOf("soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com"),
-            MusicService.BANDCAMP to listOf("*.bandcamp.com")
+            MusicService.BANDCAMP to listOf("*.bandcamp.com"),
+            MusicService.AUDIOMACK to listOf("audiomack.com", "www.audiomack.com")
         )
 
         /** Whether two hosts, either of which may be a `*.` wildcard, can name the same site. */

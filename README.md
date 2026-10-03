@@ -35,7 +35,9 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **One app per service.** For example, YouTube links to YouTube Music and the rest to Apple Music.
 - **Ask every time.** Pick the app each time you open a link.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
-- **Shortcuts.** One-tap paste, recent links, a Quick Settings tile, and a long-press shortcut on the app icon.
+- **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
+- **Shortcuts.** One-tap paste, a home screen widget, a Quick Settings tile, and a long-press shortcut on the app icon.
+- **Recent.** Search it, and swipe a song away to remove it.
 - **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
 - **15 languages.** Follows your phone, or pick one in Settings.
 
@@ -44,14 +46,16 @@ Pasting or sharing a link to Crosstune works without any setup.
 | Service | Reads | Exact match |
 | --- | --- | --- |
 | Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs, track IDs | Search |
-| YouTube Music | Songs and videos | Songs, albums, artists |
-| YouTube | Videos, Shorts, live streams, `youtu.be` | Songs |
+| YouTube Music | Songs, videos and playlists | Songs, albums, artists |
+| YouTube | Videos, Shorts, live streams, playlists, `youtu.be` | Songs |
 | Apple Music | Songs, albums, artists, playlists | Songs, albums, artists |
 | Deezer | Songs, albums, artists, playlists, `link.deezer.com` | Songs, albums, artists |
 | TIDAL | Songs, albums, artists, playlists | Search |
 | SoundCloud | Tracks, artists, sets, `on.soundcloud.com` | Search |
 | Bandcamp | Tracks, albums | Songs, albums |
+| Audiomack | Songs, albums, playlists | Search |
 | Amazon Music | Can't read its links | Search |
+| Qobuz | Can't read its links | Search |
 
 Songs can open in any of these. "Search" means Crosstune opens a search for the title and artist.
 

@@ -275,4 +275,34 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE, album) })
         assertTrue(fake.requestedUrls.isEmpty())
     }
+
+    @Test
+    fun aQueueMatchesEachSongThenAsksYouTubeForATemporaryPlaylistOfThem() {
+        var playlistAnswer: (Request) -> okhttp3.Response = { request ->
+            FakeSpotify.html(request, "").newBuilder().code(303)
+                .header("Location", "https://www.youtube.com/watch?v=first000000&list=TLGGqueue").build()
+        }
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/watch_videos" -> playlistAnswer(request)
+                else -> FakeSpotify.html(request, youTubeMusicPage(
+                    youTubeMusicRow("First", "Band • Album • 3:00", videoId = "first000000"),
+                    youTubeMusicRow("Second", "Band • Album • 3:00", videoId = "second00000")
+                ))
+            }
+        }
+        val tracks = listOf(MusicMetadata("First", "Band"), MusicMetadata("Missing", "Nobody"), MusicMetadata("Second", "Band"))
+        val looked = mutableListOf<Int>()
+        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", url)
+        assertEquals(listOf(1, 2, 3), looked.sorted())
+        assertTrue(fake.requestedUrls.any { java.net.URLDecoder.decode(it, "UTF-8").endsWith("watch_videos?video_ids=first000000,second00000") })
+
+        // Without the temporary playlist, the first song still plays, in YouTube here.
+        playlistAnswer = { throw IOException("offline") }
+        assertEquals("https://www.youtube.com/watch?v=first000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE, tracks) {} })
+
+        // Nothing matched, nothing to play.
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
+    }
 }

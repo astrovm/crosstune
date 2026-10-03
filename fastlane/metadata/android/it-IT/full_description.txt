@@ -4,15 +4,16 @@ Qualcuno ti manda un link da un servizio musicale, ma tu ascolti su un altro. To
 
 <b>Funzionalità</b>
 <ul>
-<li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud e Bandcamp e li apre in uno qualsiasi di questi servizi o in Amazon Music.</li>
+<li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack e li apre in uno qualsiasi di questi servizi o in Amazon Music e Qobuz.</li>
+<li>Playlist e album mostrano i loro brani: aprine uno qualsiasi nella tua app, copia o condividi l'elenco, oppure riproduci tutto in YouTube Music o YouTube.</li>
 <li>Indirizza ogni servizio dove vuoi, ad esempio i link di YouTube in YouTube Music e tutto il resto in Apple Music.</li>
 <li>Chiedi quale app usare: scegli un'app ogni volta che tocchi o condividi un link.</li>
 <li>Apri il risultato esatto: Apple Music, Deezer e YouTube Music possono aprire direttamente il brano, l'album o l'artista invece di una ricerca, Bandcamp il brano o l'album, e YouTube il brano.</li>
 <li>Aggiungi altre app e siti con una pagina di ricerca.</li>
-<li>Incolla con un tocco, riapri i link recenti, usa il riquadro delle Impostazioni rapide o tieni premuta l'icona dell'app per aprire un link copiato.</li>
+<li>Incolla con un tocco, cerca e riapri i link recenti, oppure apri un link copiato dal widget della schermata Home, dal riquadro delle Impostazioni rapide o tenendo premuta l'icona dell'app.</li>
 <li>Link non leggibile? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
 <li>Colori Material You su Android 12 e versioni successive.</li>
 </ul>
 
 <b>Privacy</b>
-Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per mostrare titolo, artista e copertina di un link, Crosstune interroga solo il servizio da cui proviene il link. Con Apri il risultato esatto attivo, titolo e artista vengono inviati anche alla ricerca di Apple, Deezer, YouTube Music, YouTube o Bandcamp.
+Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per mostrare titolo, artista e copertina di un link, Crosstune interroga solo il servizio da cui proviene il link. Con Apri il risultato esatto attivo, titolo e artista vengono inviati anche alla ricerca di Apple, Deezer, YouTube Music, YouTube o Bandcamp. Riproduci tutto invia titoli e artisti dei brani alla ricerca di YouTube Music, e i video trovati a YouTube.

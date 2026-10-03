@@ -32,6 +32,8 @@ internal object MusicLinks {
     private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
     private val spotifyIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
     private val youtubeIdRegex = Regex("""^[A-Za-z0-9_-]{11}$""")
+    /** Playlist IDs, e.g. PL… for user playlists or OLAK5uy_… for albums on YouTube Music. */
+    private val youtubeListRegex = Regex("""^[A-Za-z0-9_-]{12,}$""")
     private val numericIdRegex = Regex("""^\d+$""")
     private val tidalIdRegex = Regex("""^[A-Za-z0-9-]+$""")
     private val spotifyUrlInPageRegex =
@@ -77,6 +79,7 @@ internal object MusicLinks {
         host.isOn("tidal.com") -> MusicService.TIDAL
         host.isOn("soundcloud.com") -> MusicService.SOUNDCLOUD
         host.endsWith(".bandcamp.com") -> MusicService.BANDCAMP
+        host.isOn("audiomack.com") -> MusicService.AUDIOMACK
         else -> null
     }
 
@@ -110,6 +113,7 @@ internal object MusicLinks {
             host == "soundcloud.com" || host == "www.soundcloud.com" || host == "m.soundcloud.com" ->
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
+            host == "audiomack.com" || host == "www.audiomack.com" -> audiomack(segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
             segments == listOf("watch") || host in frontendSites -> frontendVideo(url, segments)
@@ -140,6 +144,10 @@ internal object MusicLinks {
     private fun youtubeWatch(service: MusicService, url: HttpUrl, segments: List<String>): MusicLink? = when {
         segments == listOf("watch") -> url.queryParameter("v")?.let { youtube(service, it) }
         segments.size == 2 && segments[0] in setOf("shorts", "live") -> youtube(service, segments[1])
+        segments == listOf("playlist") -> url.queryParameter("list")?.takeIf { youtubeListRegex.matches(it) }?.let { list ->
+            val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
+            MusicLink(service, ItemType.PLAYLIST, list, "$base/playlist?list=$list")
+        }
         else -> null
     }
 
@@ -157,6 +165,13 @@ internal object MusicLinks {
         if (!youtubeIdRegex.matches(id)) return null
         val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
         return MusicLink(service, ItemType.TRACK, id, "$base/watch?v=$id")
+    }
+
+    /** audiomack.com/{artist}/{song|album|playlist}/{slug}; the id keeps the artist and slug. */
+    private fun audiomack(segments: List<String>): MusicLink? {
+        if (segments.size != 3) return null
+        val type = mapOf("song" to ItemType.TRACK, "album" to ItemType.ALBUM, "playlist" to ItemType.PLAYLIST)[segments[1]] ?: return null
+        return MusicLink(MusicService.AUDIOMACK, type, "${segments[0]}/${segments[2]}", "https://audiomack.com/${segments.joinToString("/")}")
     }
 
     /** music.apple.com/{region}/{song|album|artist|playlist}/{slug}/{id}, where album?i= is a song. */
@@ -229,4 +244,13 @@ internal object MusicLinks {
     }
 
     private fun String.isShortLinkHost() = this in shortLinkHosts || endsWith(".spotify.link")
+}
+
+private val youtubeServices = setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC)
+
+/** This YouTube or YouTube Music playlist's own page on [service], if that's one of the two. */
+internal fun MusicLink.youtubePlaylistOn(service: MusicService?): String? {
+    if (type != ItemType.PLAYLIST || this.service !in youtubeServices || service !in youtubeServices) return null
+    val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
+    return "$base/playlist?list=$id"
 }

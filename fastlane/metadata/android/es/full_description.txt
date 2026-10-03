@@ -4,15 +4,16 @@ Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. T
 
 <b>Características</b>
 <ul>
-<li>Lee links de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud y Bandcamp, y los abre en cualquiera de esas apps o en Amazon Music.</li>
+<li>Lee links de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp y Audiomack, y los abre en cualquiera de esas apps o en Amazon Music y Qobuz.</li>
+<li>Las playlists y los álbumes muestran sus canciones: abrí cualquiera en tu app, copiá o compartí la lista, o reproducila entera en YouTube Music o YouTube.</li>
 <li>Mandá cada servicio a un lugar distinto, por ejemplo los links de YouTube a YouTube Music y todo lo demás a Apple Music.</li>
 <li>Preguntar qué app usar: elegí una app cada vez que tocás o compartís un link.</li>
 <li>Abrir la coincidencia exacta: Apple Music, Deezer y YouTube Music pueden abrir la canción, el álbum o el artista en sí, en vez de una búsqueda, Bandcamp la canción o el álbum, y YouTube la canción.</li>
 <li>Agregá otras apps y sitios que tengan página de búsqueda.</li>
-<li>Pegá con un toque, volvé a abrir links recientes, usá el mosaico de Configuración rápida o mantené apretado el ícono de la app para abrir un link copiado.</li>
+<li>Pegá con un toque, buscá y volvé a abrir links recientes, o abrí un link copiado desde el widget de la pantalla de inicio, el mosaico de Configuración rápida o manteniendo apretado el ícono de la app.</li>
 <li>¿No se puede leer un link? Abrilo en la app de la que viene, copiá el texto de búsqueda o compartí un link de búsqueda.</li>
 <li>Colores de Material You en Android 12 y posteriores.</li>
 </ul>
 
 <b>Privacidad</b>
-Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp.
+Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp. Reproducir todo manda los títulos y artistas de las canciones a la búsqueda de YouTube Music, y los videos encontrados a YouTube.

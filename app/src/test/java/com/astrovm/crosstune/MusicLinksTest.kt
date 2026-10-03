@@ -229,4 +229,31 @@ class MusicLinksTest {
         listOf("https://notdeezer.com/x", "https://evilspotify.link/x", "https://faketidal.com/x", "https://mysoundcloud.com/x")
             .forEach { assertNull(it, MusicLinks.serviceFor(it)) }
     }
+
+    @Test
+    fun youtubeAndYouTubeMusicPlaylistsAndWhereEachOpensAsItself() {
+        val list = "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
+        assertLink("https://www.youtube.com/playlist?list=$list", MusicService.YOUTUBE, ItemType.PLAYLIST, list, "https://www.youtube.com/playlist?list=$list")
+        assertLink("https://music.youtube.com/playlist?list=$list&si=x", MusicService.YOUTUBE_MUSIC, ItemType.PLAYLIST, list, "https://music.youtube.com/playlist?list=$list")
+        assertNull(link("https://www.youtube.com/playlist?list=short"))
+        assertNull(link("https://www.youtube.com/playlist"))
+
+        val playlist = link("https://www.youtube.com/playlist?list=$list")!!
+        assertEquals("https://music.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
+        assertEquals("https://www.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE))
+        assertNull(playlist.youtubePlaylistOn(MusicService.SPOTIFY))
+        assertNull(playlist.youtubePlaylistOn(null))
+        assertNull(link("https://www.youtube.com/watch?v=4NRXx6U8ABQ")!!.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
+        assertNull(link("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")!!.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))
+    }
+
+    @Test
+    fun audiomackSongsAlbumsAndPlaylists() {
+        assertLink("https://audiomack.com/burna-boy/song/last-last", MusicService.AUDIOMACK, ItemType.TRACK, "burna-boy/last-last", "https://audiomack.com/burna-boy/song/last-last")
+        assertLink("https://www.audiomack.com/burna-boy/album/love-damini", MusicService.AUDIOMACK, ItemType.ALBUM, "burna-boy/love-damini", "https://audiomack.com/burna-boy/album/love-damini")
+        assertLink("https://audiomack.com/someone/playlist/mix", MusicService.AUDIOMACK, ItemType.PLAYLIST, "someone/mix", "https://audiomack.com/someone/playlist/mix")
+        assertNull(link("https://audiomack.com/burna-boy"))
+        assertNull(link("https://audiomack.com/burna-boy/podcast/episode"))
+        assertEquals(MusicService.AUDIOMACK, MusicLinks.serviceFor("https://audiomack.com/burna-boy"))
+    }
 }

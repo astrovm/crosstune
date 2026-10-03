@@ -13,7 +13,7 @@ internal enum class ItemType(@StringRes val labelRes: Int) {
 
 /**
  * A music service Crosstune can open things in and, when [canBeSource], read links from.
- * Amazon Music links render with JavaScript and expose no metadata, so it is destination-only.
+ * Amazon Music and Qobuz links render with JavaScript and expose no metadata, so they are destination-only.
  */
 internal enum class MusicService(
     @StringRes val labelRes: Int,
@@ -55,9 +55,17 @@ internal enum class MusicService(
         R.string.service_bandcamp, R.string.open_in_bandcamp, R.drawable.ic_service_bandcamp, "com.bandcamp.android", true,
         querySearchUrl("https://bandcamp.com/search", "q")
     ),
+    AUDIOMACK(
+        R.string.service_audiomack, R.string.open_in_audiomack, R.drawable.ic_service_audiomack, "com.audiomack", true,
+        querySearchUrl("https://audiomack.com/search", "q")
+    ),
     AMAZON_MUSIC(
         R.string.service_amazon_music, R.string.open_in_amazon_music, R.drawable.ic_service_amazonmusic, "com.amazon.mp3", false,
         pathSearchUrl("https://music.amazon.com/search")
+    ),
+    QOBUZ(
+        R.string.service_qobuz, R.string.open_in_qobuz, R.drawable.ic_service_qobuz, "com.qobuz.music", false,
+        querySearchUrl("https://play.qobuz.com/search", "q")
     );
 
     fun searchUrl(query: String): String = searchUrlBuilder(query)

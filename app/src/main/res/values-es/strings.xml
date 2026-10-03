@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Abrir en YouTube Music</string>
     <string name="open_in_youtube">Abrir en YouTube</string>
     <string name="open_in_spotify">Abrir en Spotify</string>
+    <string name="open_in_audiomack">Abrir en Audiomack</string>
+    <string name="open_in_qobuz">Abrir en Qobuz</string>
     <string name="open_in_bandcamp">Abrir en Bandcamp</string>
     <string name="open_in_amazon_music">Abrir en Amazon Music</string>
     <string name="from_service">de %1$s</string>
     <string name="open_in_custom">Abrir en %1$s</string>
     <string name="settings_button">Configuración</string>
     <string name="settings_title">Configuración</string>
-    <string name="settings_default_title">App predeterminada</string>
+    <string name="settings_where_you_listen">Donde escuchás</string>
     <string name="settings_default_label">Abrir links en</string>
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_links_title">Abrir links de</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Cancelar</string>
     <string name="retry_button">Reintentar</string>
     <string name="history_title">Recientes</string>
+    <string name="search_recent">Buscar en Recientes</string>
     <string name="playlist_songs_title">Canciones</string>
+    <string name="play_all_button">Reproducir todo</string>
+    <string name="play_all_progress">Buscando canciones… %1$d de %2$d</string>
     <string name="clear_history_button">Borrar historial</string>
     <string name="tile_label">Abrir link de música copiado</string>
     <string name="shortcut_paste_short">Abrir link copiado</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Tocá un link de música en cualquier app, o compartilo con Crosstune.</string>
     <string name="copy_link_button">Copiar link</string>
     <string name="share_link_button">Compartir link</string>
+    <string name="copy_songs_button">Copiar canciones</string>
+    <string name="share_songs_button">Compartir canciones</string>
+    <string name="songs_copied">Canciones copiadas</string>
     <string name="settings_link_owners_title">Apps con estos links</string>
     <string name="settings_link_owners_description">Tocá una para cambiarlo.</string>
     <string name="link_owner_opens_them">Se queda con sus links</string>

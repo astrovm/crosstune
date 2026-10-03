@@ -4,15 +4,16 @@
 
 <b>功能</b>
 <ul>
-<li>可读取 Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud 和 Bandcamp 的链接，并在其中任意一个或 Amazon Music 中打开。</li>
+<li>可读取 Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack 的链接，并在其中任意一个或 Amazon Music 和 Qobuz 中打开。</li>
+<li>播放列表和专辑会显示其中的歌曲：可在你的应用中打开任意一首，复制或分享列表，或在 YouTube Music 或 YouTube 中全部播放。</li>
 <li>为每个服务指定不同的去向，例如 YouTube 链接用 YouTube Music 打开，其余都用 Apple Music 打开。</li>
 <li>询问使用哪个应用：每次点按或分享链接时选择应用。</li>
 <li>打开精确匹配：Apple Music、Deezer 和 YouTube Music 可直接打开歌曲、专辑或艺人本身，而不是搜索结果，Bandcamp 可直接打开歌曲或专辑，YouTube 可直接打开歌曲。</li>
 <li>添加其他带搜索页面的应用和网站。</li>
-<li>一键粘贴、重新打开最近的链接，使用快捷设置图块，或长按应用图标来打开已复制的链接。</li>
+<li>一键粘贴，搜索并重新打开最近的链接，或通过主屏幕微件、快捷设置图块或长按应用图标来打开已复制的链接。</li>
 <li>无法读取链接？可在链接来源的应用中打开，也可以复制搜索文字或分享搜索链接。</li>
 <li>Android 12 及更高版本支持 Material You 动态配色。</li>
 </ul>
 
 <b>隐私</b>
-没有账号、数据分析或广告。历史记录只保存在你的设备上。为了显示链接的标题、艺人和封面，Crosstune 只会向链接所属的服务发出请求。开启“打开精确匹配”后，标题和艺人还会发送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜索。
+没有账号、数据分析或广告。历史记录只保存在你的设备上。为了显示链接的标题、艺人和封面，Crosstune 只会向链接所属的服务发出请求。开启“打开精确匹配”后，标题和艺人还会发送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜索。“全部播放”会将歌曲的标题和艺人发送到 YouTube Music 的搜索，并将找到的视频发送到 YouTube。

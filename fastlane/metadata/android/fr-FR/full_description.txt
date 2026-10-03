@@ -4,15 +4,16 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 
 <b>Fonctionnalités</b>
 <ul>
-<li>Lit les liens de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud et Bandcamp, et les ouvre dans n'importe lequel de ces services ou dans Amazon Music.</li>
+<li>Lit les liens de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack, et les ouvre dans n'importe lequel de ces services ou dans Amazon Music et Qobuz.</li>
+<li>Les playlists et les albums affichent leurs titres : ouvrez-en un dans votre application, copiez ou partagez la liste, ou lisez-la en entier dans YouTube Music ou YouTube.</li>
 <li>Envoyez chaque service vers une destination différente, par exemple les liens YouTube vers YouTube Music et tout le reste vers Apple Music.</li>
 <li>Demander quelle application utiliser : choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</li>
 <li>Ouvrir le résultat exact : Apple Music, Deezer et YouTube Music peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp le titre ou l'album, et YouTube le titre.</li>
 <li>Ajoutez d'autres applications et sites dotés d'une page de recherche.</li>
-<li>Collez d'un seul geste, rouvrez vos liens récents, utilisez la tuile des réglages rapides ou appuyez longuement sur l'icône de l'application pour ouvrir un lien copié.</li>
+<li>Collez d'un seul geste, recherchez et rouvrez vos liens récents, ou ouvrez un lien copié depuis le widget de l'écran d'accueil, la tuile des réglages rapides ou en appuyant longuement sur l'icône de l'application.</li>
 <li>Un lien illisible ? Ouvrez-le dans l'application d'origine, copiez le texte de recherche ou partagez un lien de recherche.</li>
 <li>Couleurs Material You sur Android 12 et versions ultérieures.</li>
 </ul>
 
 <b>Confidentialité</b>
-Aucun compte, aucune statistique d'utilisation, aucune publicité. L'historique reste sur votre appareil. Pour afficher le titre, l'artiste et la pochette d'un lien, Crosstune interroge uniquement le service d'où provient le lien. Avec l'option « Ouvrir le résultat exact » activée, le titre et l'artiste sont aussi envoyés à la recherche d'Apple, de Deezer, de YouTube Music, de YouTube ou de Bandcamp.
+Aucun compte, aucune statistique d'utilisation, aucune publicité. L'historique reste sur votre appareil. Pour afficher le titre, l'artiste et la pochette d'un lien, Crosstune interroge uniquement le service d'où provient le lien. Avec l'option « Ouvrir le résultat exact » activée, le titre et l'artiste sont aussi envoyés à la recherche d'Apple, de Deezer, de YouTube Music, de YouTube ou de Bandcamp. « Tout lire » envoie les titres et les artistes des morceaux à la recherche de YouTube Music, et les vidéos trouvées à YouTube.

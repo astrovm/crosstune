@@ -1,0 +1,6 @@
+<!-- A plain "Q" like a record, in Qobuz's black; Simple Icons has no Qobuz logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF000000"
+        android:pathData="M11,2A9,9 0,1 0,16.39 18.21L19.59,21.41L21.41,19.59L18.21,16.39A9,9 0,0 0,11 2ZM11,4.5A6.5,6.5 0,1 1,11 17.5A6.5,6.5 0,1 1,11 4.5ZM11,9A2,2 0,1 0,11 13A2,2 0,1 0,11 9Z" />
+</vector>

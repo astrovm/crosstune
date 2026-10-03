@@ -4,15 +4,16 @@
 
 <b>主な機能</b>
 <ul>
-<li>Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp のリンクを読み取り、これらのいずれか、または Amazon Music で開きます。</li>
+<li>Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack のリンクを読み取り、これらのいずれか、または Amazon Music や Qobuz で開きます。</li>
+<li>プレイリストやアルバムは曲の一覧を表示します。好きな曲をアプリで開いたり、リストをコピー・共有したり、YouTube Music や YouTube ですべて再生したりできます。</li>
 <li>サービスごとに開くアプリを変更できます。たとえば YouTube のリンクは YouTube Music、それ以外は Apple Music で開くこともできます。</li>
 <li>使うアプリを毎回選べます。リンクをタップまたは共有するたびに、アプリを選びます。</li>
 <li>一致する項目を直接開けます。Apple Music、Deezer、YouTube Music なら、検索結果ではなく曲、アルバム、アーティストそのものを開きます。Bandcamp では曲とアルバム、YouTube では曲を開きます。</li>
 <li>検索ページのあるアプリやサイトを追加できます。</li>
-<li>ワンタップで貼り付け、最近のリンクをもう一度開く、クイック設定タイルの利用、アプリのアイコンを長押ししてコピーしたリンクを開く、といった使い方ができます。</li>
+<li>ワンタップで貼り付け、最近のリンクの検索と再表示、ホーム画面のウィジェット、クイック設定タイル、アプリのアイコンの長押しでコピーしたリンクを開く、といった使い方ができます。</li>
 <li>リンクを読み取れないときは、元のアプリで開く、検索テキストをコピーする、検索リンクを共有する、のいずれかを選べます。</li>
 <li>Android 12 以降では Material You のカラーに対応しています。</li>
 </ul>
 
 <b>プライバシー</b>
-アカウント登録、解析、広告はありません。履歴は端末内にのみ保存されます。リンクのタイトル、アーティスト、カバーを表示するため、Crosstune はリンク元のサービスにのみ問い合わせます。「一致する項目を直接開く」をオンにすると、タイトルとアーティストが Apple、Deezer、YouTube Music、YouTube、Bandcamp の検索にも送信されます。
+アカウント登録、解析、広告はありません。履歴は端末内にのみ保存されます。リンクのタイトル、アーティスト、カバーを表示するため、Crosstune はリンク元のサービスにのみ問い合わせます。「一致する項目を直接開く」をオンにすると、タイトルとアーティストが Apple、Deezer、YouTube Music、YouTube、Bandcamp の検索にも送信されます。「すべて再生」では、曲のタイトルとアーティストが YouTube Music の検索に、見つかった動画が YouTube に送信されます。

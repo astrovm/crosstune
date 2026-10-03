@@ -321,7 +321,55 @@ class MetadataParsersTest {
 
         val deezer = json("""{"title":"Top","tracks":{"data":[{"title":"Boston","artist":{"name":"Stella"}},{"title":""},{"title":"Solo"},"x"]}}""")
         assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), MetadataParsers.deezer(deezer, ItemType.PLAYLIST)!!.tracks)
-        // Only playlists list songs; an album's tracks aren't read.
-        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.deezer(deezer, ItemType.ALBUM)!!.tracks)
+        // Albums list theirs the same way.
+        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), MetadataParsers.deezer(deezer, ItemType.ALBUM)!!.tracks)
+    }
+
+    @Test
+    fun albumsListTheirSongsOnAppleMusicAndBandcamp() {
+        val lookup = json("""{"results":[
+            {"wrapperType":"collection","collectionName":"After Hours","artistName":"The Weeknd"},
+            {"wrapperType":"track","trackName":"Alone Again","artistName":"The Weeknd"},
+            {"wrapperType":"track","trackName":""},
+            {"wrapperType":"artist","artistName":"Not a song"}]}""")
+        assertEquals(listOf(MusicMetadata("Alone Again", "The Weeknd")), MetadataParsers.appleMusic(lookup, ItemType.ALBUM)!!.tracks)
+
+        val album = """{"name":"Volume Alpha","byArtist":{"name":"C418"},"track":{"itemListElement":[{"item":{"name":"Key"}},{"item":{"name":""}},{}]}}"""
+        fun page(data: String) = """<meta property="og:title" content="Volume Alpha, by C418"><script type="application/ld+json" id="tralbum-jsonld">$data</script>"""
+        assertEquals(listOf(MusicMetadata("Key", "C418")), MetadataParsers.bandcamp(page(album), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page("{nope"), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page("""{"name":"x"}"""), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp("""<meta property="og:title" content="Volume Alpha, by C418">""", ItemType.ALBUM)!!.tracks)
+        // A single song's page doesn't list songs.
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(page(album), ItemType.TRACK)!!.tracks)
+    }
+
+    @Test
+    fun youtubePlaylistsReadTheirVideosAsSongs() {
+        fun lockup(title: String, channel: String, type: String = "LOCKUP_CONTENT_TYPE_VIDEO") =
+            """{"lockupViewModel":{"contentType":"$type","metadata":{"lockupMetadataViewModel":{"title":{"content":"$title"},
+            "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"$channel"}}]}]}}}}}}"""
+        val data = """{"contents":[${lockup("Artist - Song (Official Video)", "ArtistVEVO")},${lockup("Other Song", "Band - Topic")},
+            ${lockup("A mix", "Someone", "LOCKUP_CONTENT_TYPE_PLAYLIST")},${lockup("", "Nobody")},2]}"""
+        val html = """<meta property="og:title" content="Road Trip"><meta property="og:image" content="https://i.ytimg.com/x.jpg">
+            <script>var ytInitialData = $data;</script>"""
+        assertEquals(
+            MusicMetadata("Road Trip", "", ItemType.PLAYLIST, "https://i.ytimg.com/x.jpg", listOf(MusicMetadata("Song", "Artist"), MusicMetadata("Other Song", "Band"))),
+            MetadataParsers.youtubePlaylist(html)
+        )
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {nope;</script>""")!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X">""")!!.tracks)
+        assertNull(MetadataParsers.youtubePlaylist("<html></html>"))
+    }
+
+    @Test
+    fun audiomackOEmbedGivesTheNameArtistAndCover() {
+        assertEquals(
+            MusicMetadata("Last Last", "Burna Boy", ItemType.TRACK, "https://i.audiomack.com/x.webp"),
+            MetadataParsers.audiomack(json("""{"title":"Last Last","author_name":"Burna Boy","thumbnail_url":"https://i.audiomack.com/x.webp"}"""), ItemType.TRACK)
+        )
+        // A playlist's author is whoever made it, not an artist.
+        assertEquals(MusicMetadata("Mix", "", ItemType.PLAYLIST), MetadataParsers.audiomack(json("""{"title":"Mix","author_name":"Someone"}"""), ItemType.PLAYLIST))
+        assertNull(MetadataParsers.audiomack(json("""{"title":""}"""), ItemType.TRACK))
     }
 }

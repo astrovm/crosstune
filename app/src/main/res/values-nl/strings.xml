@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Openen in YouTube Music</string>
     <string name="open_in_youtube">Openen in YouTube</string>
     <string name="open_in_spotify">Openen in Spotify</string>
+    <string name="open_in_audiomack">Openen in Audiomack</string>
+    <string name="open_in_qobuz">Openen in Qobuz</string>
     <string name="open_in_bandcamp">Openen in Bandcamp</string>
     <string name="open_in_amazon_music">Openen in Amazon Music</string>
     <string name="from_service">van %1$s</string>
     <string name="open_in_custom">Openen in %1$s</string>
     <string name="settings_button">Instellingen</string>
     <string name="settings_title">Instellingen</string>
-    <string name="settings_default_title">Standaardapp</string>
+    <string name="settings_where_you_listen">Waar je luistert</string>
     <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Annuleren</string>
     <string name="retry_button">Opnieuw proberen</string>
     <string name="history_title">Recent</string>
+    <string name="search_recent">Zoeken in Recent</string>
     <string name="playlist_songs_title">Nummers</string>
+    <string name="play_all_button">Alles afspelen</string>
+    <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>
     <string name="clear_history_button">Geschiedenis wissen</string>
     <string name="tile_label">Gekopieerde muzieklink openen</string>
     <string name="shortcut_paste_short">Gekopieerde link openen</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Tik in een app op een muzieklink, of deel hem met Crosstune.</string>
     <string name="copy_link_button">Link kopiëren</string>
     <string name="share_link_button">Link delen</string>
+    <string name="copy_songs_button">Nummers kopiëren</string>
+    <string name="share_songs_button">Nummers delen</string>
+    <string name="songs_copied">Nummers gekopieerd</string>
     <string name="settings_link_owners_title">Apps met deze links</string>
     <string name="settings_link_owners_description">Tik op een app om dit te wijzigen.</string>
     <string name="link_owner_opens_them">Houdt zijn links</string>

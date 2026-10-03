@@ -10,13 +10,15 @@
     <string name="open_in_youtube_music">Apri in YouTube Music</string>
     <string name="open_in_youtube">Apri in YouTube</string>
     <string name="open_in_spotify">Apri in Spotify</string>
+    <string name="open_in_audiomack">Apri in Audiomack</string>
+    <string name="open_in_qobuz">Apri in Qobuz</string>
     <string name="open_in_bandcamp">Apri in Bandcamp</string>
     <string name="open_in_amazon_music">Apri in Amazon Music</string>
     <string name="from_service">da %1$s</string>
     <string name="open_in_custom">Apri in %1$s</string>
     <string name="settings_button">Impostazioni</string>
     <string name="settings_title">Impostazioni</string>
-    <string name="settings_default_title">App predefinita</string>
+    <string name="settings_where_you_listen">Dove ascolti</string>
     <string name="settings_default_label">Apri i link in</string>
     <string name="settings_about_title">Informazioni</string>
     <string name="settings_links_title">Apri i link da</string>
@@ -80,7 +82,10 @@
     <string name="cancel_button">Annulla</string>
     <string name="retry_button">Riprova</string>
     <string name="history_title">Recenti</string>
+    <string name="search_recent">Cerca nei recenti</string>
     <string name="playlist_songs_title">Brani</string>
+    <string name="play_all_button">Riproduci tutto</string>
+    <string name="play_all_progress">Ricerca dei brani… %1$d di %2$d</string>
     <string name="clear_history_button">Cancella cronologia</string>
     <string name="tile_label">Apri link musicale copiato</string>
     <string name="shortcut_paste_short">Apri link copiato</string>
@@ -121,6 +126,9 @@
     <string name="empty_hint">Tocca un link musicale in qualsiasi app, oppure condividilo con Crosstune.</string>
     <string name="copy_link_button">Copia link</string>
     <string name="share_link_button">Condividi link</string>
+    <string name="copy_songs_button">Copia brani</string>
+    <string name="share_songs_button">Condividi brani</string>
+    <string name="songs_copied">Brani copiati</string>
     <string name="settings_link_owners_title">App con questi link</string>
     <string name="settings_link_owners_description">Toccane una per cambiare.</string>
     <string name="link_owner_opens_them">Tiene i suoi link</string>

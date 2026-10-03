@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2000000
-        versionName = "2.0.0"
+        versionCode = 2010000
+        versionName = "2.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

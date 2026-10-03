@@ -48,6 +48,8 @@ internal data class UiState(
     val shareSheetApps: Boolean = true,
     /** Whether a tapped or shared link shows here first instead of opening; see [linkMode]. */
     val showSongFirst: Boolean = false,
+    /** While Play all matches a collection's songs: how many have been looked up, out of how many. */
+    val queueProgress: Pair<Int, Int>? = null,
     /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
     val afterLookup: AfterLookup = AfterLookup.OPEN,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
@@ -97,6 +99,15 @@ internal data class UiState(
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
+    /**
+     * Whether a collection's songs can play as one queue where it goes: YouTube Music and YouTube
+     * make one for any list of videos. A YouTube playlist opens as itself there instead.
+     */
+    val canPlayAll: Boolean
+        get() = result?.tracks.orEmpty().isNotEmpty() &&
+            resultDestination.matchService.let { it == MusicService.YOUTUBE_MUSIC || it == MusicService.YOUTUBE } &&
+            link?.youtubePlaylistOn(resultDestination.matchService) == null
+
     val linkMode: LinkMode
         get() = if (showSongFirst) LinkMode.SHOW else if (askEachTime) LinkMode.ASK else LinkMode.OPEN
 
@@ -437,7 +448,10 @@ internal class MainViewModel(
         }
         // A playlist can't open as one in another app, so its songs show here to pick from,
         // unless the user already picked where it goes.
-        if (pendingOpen && uiState.selectedDestination == null && uiState.result?.tracks.orEmpty().isNotEmpty()) {
+        val opensWhole = uiState.link?.youtubePlaylistOn(uiState.resultDestination.matchService) != null
+        if (pendingOpen && uiState.selectedDestination == null && !opensWhole &&
+            uiState.result?.type == ItemType.PLAYLIST && uiState.result?.tracks.orEmpty().isNotEmpty()
+        ) {
             pendingOpen = false
             uiState = uiState.copy(handingOff = false)
         }
@@ -456,6 +470,23 @@ internal class MainViewModel(
     }
 
     private var trackJob: Job? = null
+
+    /** Plays the result's songs, up to [MAX_QUEUE], as one queue in YouTube Music or YouTube. */
+    fun playAll() {
+        val destination = uiState.resultDestination
+        val service = destination.matchService ?: return
+        val tracks = uiState.result?.tracks.orEmpty().take(MAX_QUEUE)
+        trackJob?.cancel()
+        trackJob = viewModelScope.launch {
+            uiState = uiState.copy(queueProgress = 0 to tracks.size)
+            try {
+                val url = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
+                if (url == null) showError(AppError.NOT_FOUND) else effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
+            } finally {
+                uiState = uiState.copy(queueProgress = null)
+            }
+        }
+    }
 
     /** Opens one of a playlist's songs where the result goes, matched like a song of its own. */
     fun openTrack(track: MusicMetadata) {
@@ -500,6 +531,8 @@ internal class MainViewModel(
         uiState.link?.takeIf { it.service == service }?.let { link ->
             return destination.adapt(link.url)
         }
+        // YouTube and YouTube Music share playlists, so one opens as itself in the other.
+        uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
@@ -624,6 +657,11 @@ internal class MainViewModel(
     }
 
     fun searchQuery(): String? = uiState.result?.let(::searchQuery)
+
+    /** The result's songs as "Artist - Title" lines, which song list transfer sites read. */
+    fun songList(): String? = uiState.result?.tracks?.takeIf { it.isNotEmpty() }?.joinToString("\n") { track ->
+        if (track.artist.isBlank()) track.title else "${track.artist} - ${track.title}"
+    }
 
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
@@ -803,6 +841,8 @@ internal class MainViewModel(
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
+        /** YouTube makes temporary playlists of up to 50 videos. */
+        const val MAX_QUEUE = 50
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
         private const val KEY_SETUP_COMPLETE = "setup_complete"

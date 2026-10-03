@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Открыть в YouTube Music</string>
     <string name="open_in_youtube">Открыть в YouTube</string>
     <string name="open_in_spotify">Открыть в Spotify</string>
+    <string name="open_in_audiomack">Открыть в Audiomack</string>
+    <string name="open_in_qobuz">Открыть в Qobuz</string>
     <string name="open_in_bandcamp">Открыть в Bandcamp</string>
     <string name="open_in_amazon_music">Открыть в Amazon Music</string>
     <string name="from_service">из %1$s</string>
     <string name="open_in_custom">Открыть в %1$s</string>
     <string name="settings_button">Настройки</string>
     <string name="settings_title">Настройки</string>
-    <string name="settings_default_title">Приложение по умолчанию</string>
+    <string name="settings_where_you_listen">Здесь вы слушаете</string>
     <string name="settings_default_label">Открывать ссылки в</string>
     <string name="settings_about_title">О приложении</string>
     <string name="settings_links_title">Открывать ссылки из</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
     <string name="history_title">Недавние</string>
+    <string name="search_recent">Поиск в недавних</string>
     <string name="playlist_songs_title">Треки</string>
+    <string name="play_all_button">Слушать всё</string>
+    <string name="play_all_progress">Ищем треки… %1$d из %2$d</string>
     <string name="clear_history_button">Очистить историю</string>
     <string name="tile_label">Открыть скопированную ссылку</string>
     <string name="shortcut_paste_short">Открыть ссылку</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Нажмите на музыкальную ссылку в любом приложении или поделитесь ей с Crosstune.</string>
     <string name="copy_link_button">Копировать ссылку</string>
     <string name="share_link_button">Поделиться ссылкой</string>
+    <string name="copy_songs_button">Копировать треки</string>
+    <string name="share_songs_button">Поделиться треками</string>
+    <string name="songs_copied">Треки скопированы</string>
     <string name="settings_link_owners_title">Приложения с этими ссылками</string>
     <string name="settings_link_owners_description">Нажмите на приложение, чтобы изменить.</string>
     <string name="link_owner_opens_them">Оставляет ссылки себе</string>

@@ -29,6 +29,8 @@ import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
+import androidx.compose.ui.test.performTextInput
+import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
@@ -464,6 +466,123 @@ class MainActivityTest {
         assertEquals("deezer.android.app", opened.`package`)
         assertEquals("https://www.deezer.com/search/Second%20Song", opened.dataString)
         assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun setupSaysWhenAnAppStillTakesTheLinksInsteadOfAllSet() {
+        setupWithSpotifyAppInTheWay()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        // Spotify's app still takes the links, so moving on is skipping that.
+        assertTextShown(string(R.string.setup_apps_title))
+        click(string(R.string.setup_skip_for_now))
+        // Its links are allowed, but they don't open in Crosstune while the app takes them.
+        assertTextShown(string(R.string.notice_app_still_opens, string(R.string.service_spotify)))
+        assertTextAbsent(string(R.string.setup_allow_all_done))
+        assertTextShown(string(R.string.setup_skip_for_now))
+    }
+
+    @Test
+    fun theAppYouListenInSaysSoInTheSourceList() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        click(string(R.string.settings_button))
+        assertTextShown(string(R.string.settings_where_you_listen))
+    }
+
+    private fun collectionWithSongs(title: String = "Road Trip", type: String = "playlist") {
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
+                    .header("Location", "https://www.youtube.com/watch?v=first000000&list=TLGGqueue").build()
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                    "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"First Song"}]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                    "playlistItemData":{"videoId":"first000000"}}}]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("$title | Spotify", type))
+            }
+        }
+    }
+
+    @Test
+    fun aPlaylistsSongsCanBeCopiedSharedOrPlayedAllAtOnceInYouTubeMusic() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        collectionWithSongs()
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+
+        // The songs, not a search for the playlist's name, are what's copied and shared.
+        click(string(R.string.copy_songs_button))
+        assertEquals("Band - First Song\nSecond Song", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.share_songs_button))
+        val chooser = nextStartedActivity()!!
+        assertEquals("Band - First Song\nSecond Song", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+
+        // Play all matches each song and opens YouTube's temporary playlist of them.
+        click(string(R.string.play_all_button))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun playAllSaysSoWhenNoSongMatchesAndIsOnlyForYouTube() {
+        prefs().edit().putString("default_target", "YOUTUBE").putBoolean("exact_match", true).commit()
+        collectionWithSongs()
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        fake.handler = { request -> FakeSpotify.html(request, """{"contents":[]}""") }
+        click(string(R.string.play_all_button))
+        waitForText(string(R.string.error_not_found))
+        assertNull(nextStartedActivity())
+
+        // Elsewhere there's no queue to make, so it isn't offered.
+        click(string(R.string.clear_button))
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        collectionWithSongs()
+        controller!!.pause().resume()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        waitForText("First Song")
+        assertTextAbsent(string(R.string.play_all_button))
+    }
+
+    @Test
+    fun aYouTubePlaylistOpensAsItselfInYouTubeMusic() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        fake.handler = { request -> FakeSpotify.html(request, """<meta property="og:title" content="Road Trip">""") }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aLongRecentListCanBeSearchedByTitleOrArtist() {
+        val store = HistoryStore(prefs())
+        (1..6).forEach { n ->
+            store.add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "$n", "https://www.deezer.com/track/$n"), MusicMetadata("Song $n", if (n == 3) "Special Band" else "Band")))
+        }
+        launch()
+        composeRule.onNodeWithText(string(R.string.search_recent)).performScrollTo().performTextInput("special song")
+        composeRule.waitForIdle()
+        assertTextShown("Song 3")
+        assertTextAbsent("Song 4")
+    }
+
+    @Test
+    fun theWidgetOpensTheCopiedLink() {
+        val widgets = shadowOf(AppWidgetManager.getInstance(app))
+        val id = widgets.createWidget(OpenCopiedWidget::class.java, R.layout.widget_open_copied)
+        widgets.getViewFor(id).performClick()
+        val started = nextStartedActivity()!!
+        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, started.action)
+        assertEquals(MainActivity.PASTE_ALIAS, started.component!!.className)
     }
 
     @Test
@@ -1647,6 +1766,8 @@ class MainActivityTest {
         assertEquals(
             listOf(
                 "https://open.spotify.com/album/$TRACK_ID",
+                // Albums and playlists get their songs from the embed page.
+                "https://open.spotify.com/embed/album/$TRACK_ID",
                 "https://open.spotify.com/artist/$TRACK_ID",
                 "https://open.spotify.com/playlist/$TRACK_ID",
                 // Its songs come from the embed page.
