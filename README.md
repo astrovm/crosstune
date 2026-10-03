@@ -99,6 +99,16 @@ You need the Android SDK and JDK 17 or newer. When building from the command lin
 
 `:app:ci` runs the Robolectric tests with a 100% line coverage gate, lint, and the debug and minified release builds. Reports go to `app/build/reports/`.
 
+The app ships a [baseline profile](https://developer.android.com/topic/performance/baselineprofiles/overview) in `app/src/main/generated/baselineProfiles/`, so Android compiles the code used on startup and on the main screen ahead of time, also for installs from F-Droid or GitHub. Builds use the committed profile and never need a device. After big changes to the screens, regenerate it on an English emulator or phone with Android 9 or newer and commit the result:
+
+It runs on every connected device, so with more than one, pick one with `ANDROID_SERIAL` (see `adb devices`):
+
+```bash
+ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateBaselineProfile
+# Optional: compare cold starts without compilation and with the profile.
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.astrovm.crosstune.baselineprofile.StartupBenchmark
+```
+
 The version is set explicitly in `app/build.gradle.kts`: `versionName` is `X.Y.Z`, and `versionCode` is `X*1000000 + Y*10000 + Z*100`. Builds use these values even without Git history or tags. F-Droid's update checker reads the same metadata.
 
 ### Releasing

@@ -19,3 +19,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Crosstune"
 include(":app")
+include(":baselineprofile")
