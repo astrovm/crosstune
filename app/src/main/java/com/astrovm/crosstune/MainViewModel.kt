@@ -394,7 +394,7 @@ internal class MainViewModel(
                 openWhenReady && destination == null && uiState.onlyMusicVideos && it.service == MusicService.YOUTUBE
             }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
-            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: resolver.resolve(input) }
+            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
             if (video != null && matcher.isMusicVideo(video.id) == false) {
                 lookup.cancel()
                 return@launch openAsIs(video)
@@ -412,6 +412,13 @@ internal class MainViewModel(
                 is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
             }
         }
+    }
+
+    /** A song from Now Playing comes without a cover, so one is looked up by its name. */
+    private suspend fun withCover(resolution: Resolution): Resolution {
+        if (resolution !is Resolution.Resolved || resolution.link.service != null || resolution.metadata.artworkUrl != null) return resolution
+        val cover = matcher.cover(resolution.metadata) ?: return resolution
+        return resolution.copy(metadata = resolution.metadata.copy(artworkUrl = cover))
     }
 
     /** [prepared] are the links already found for it, when it came from Recent. */

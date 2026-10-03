@@ -45,6 +45,32 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aNowPlayingSongGetsTheCoverOfTheClosestDeezerSong() {
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/1000x1000-000000-80-0-0.jpg"
+        respond(
+            """{"data":[
+                {"title":"Other Song","artist":{"name":"The Hollies"},"album":{"cover_xl":"https://cdn/other.jpg"}},
+                {"title":"Long Cool Woman in a Black Dress","artist":{"name":"A Cover Band"},"album":{"cover_xl":"https://cdn/cover-band.jpg"}},
+                {"title":"Long Cool Woman (In a Black Dress) (2003 Remaster)","artist":{"name":"The Hollies"},"album":{"cover_xl":"$cover"}}
+            ]}"""
+        )
+        val song = MusicMetadata("Long Cool Woman in a Black Dress", "Hollies")
+        assertEquals(cover, runBlocking { matcher().cover(song) })
+        assertTrue(fake.requestedUrls.single().startsWith("https://api.deezer.com/search/track?q=Long%20Cool%20Woman"))
+
+        // No close song, no answer, or offline: no cover.
+        respond("""{"data":[{"title":"Long Cool Woman","artist":{"name":"The Hollies"},"album":{"cover_xl":"$cover"}}]}""")
+        assertNull(runBlocking { matcher().cover(song) })
+        respond("""{"data":[{"title":"Long Cool Woman in a Black Dress","artist":{"name":"The Hollies"},"album":{"cover_xl":""}}]}""")
+        assertNull(runBlocking { matcher().cover(song) })
+        respond("not json")
+        assertNull(runBlocking { matcher().cover(song) })
+        fake.handler = { throw IOException("offline") }
+        assertNull(runBlocking { matcher().cover(song) })
+        assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Hollies")) })
+    }
+
+    @Test
     fun appleMusicSkipsRemixesAndIgnoresAccentsAndPunctuation() {
         respond(
             """{"results":[

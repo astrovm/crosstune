@@ -159,6 +159,10 @@ class MainActivityTest {
         composeRule.waitForIdle()
     }
 
+    /** A song from Now Playing only goes online to look for its cover. */
+    private fun assertOnlyCoverSearches() =
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search/track?") })
+
     private fun assertResultShown() {
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
     }
@@ -250,7 +254,7 @@ class MainActivityTest {
         })
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
         val entry = HistoryStore(prefs()).load().first()
         controller!!.pause().stop().destroy()
         val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
@@ -269,14 +273,14 @@ class MainActivityTest {
         val opened = nextStartedActivity()!!
         assertEquals("com.google.android.apps.youtube.music", opened.`package`)
         assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", opened.dataString)
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
         val saved = HistoryStore(prefs()).load().first()
         assertEquals(MusicMetadata("A Song", "Example Band"), saved.metadata)
         controller!!.pause().stop().destroy()
         val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
         composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
         assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
     }
 
     @Test
@@ -289,6 +293,31 @@ class MainActivityTest {
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals("https://music.youtube.com/search?q=Canci%C3%B3n%20Simon%20%26%20Garfunkel", nextStartedActivity()!!.dataString)
         assertEquals(MusicMetadata("Canción", "Simon & Garfunkel"), HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aNowPlayingSongShowsAndSavesTheCoverFoundForIt() {
+        prefs().edit().putBoolean("show_song_first", true).commit()
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/1000x1000-000000-80-0-0.jpg"
+        fake.handler = { request -> FakeSpotify.html(request,
+            """{"data":[{"title":"A Song (Remastered)","artist":{"name":"The Example Band"},"album":{"cover_xl":"$cover"}}]}""") }
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
+        })
+        waitForText("A Song")
+        assertEquals(cover, HistoryStore(prefs()).load().first().metadata.artworkUrl)
+        // One search for it, then the cover itself.
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://api.deezer.com/search/track?") })
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search/track?") || it == cover })
+
+        // Opened again from Recent, it already has its cover.
+        fake.requestedUrls.clear()
+        controller!!.pause().stop().destroy()
+        val url = HistoryStore(prefs()).load().first().link.url
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)).putExtra(MainActivity.EXTRA_SHOW_SONG, true))
+        waitForText("A Song")
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.startsWith("https://api.deezer.com/") })
     }
 
     @Test
@@ -311,7 +340,7 @@ class MainActivityTest {
         waitForText("A Song")
         composeRule.onNodeWithTag(RESULT_TEXT_TAG).assertIsDisplayed()
         assertFalse(activity.isFinishing)
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
     }
 
     @Test
@@ -323,7 +352,7 @@ class MainActivityTest {
         val activity = controller!!.get()
         waitUntil { activity.isFinishing }
         assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
     }
 
     @Test
@@ -1154,7 +1183,7 @@ class MainActivityTest {
         composeRule.onNode(hasSetTextAction()).assert(hasText(shown, substring = false)).performImeAction()
         waitForText("A Song")
         assertTextAbsent(string(R.string.error_invalid_url))
-        assertTrue(fake.requestedUrls.isEmpty())
+        assertOnlyCoverSearches()
     }
 
     @Test
