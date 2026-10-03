@@ -29,6 +29,15 @@ class LinkResolverTest {
     }
 
     @Test
+    fun recognizedSongNeedsNoMetadataNetworkRequest() {
+        val result = resolve("https://www.google.com/search?q=A+Song+by+Example+Band") as Resolution.Resolved
+        assertEquals(MusicMetadata("A Song", "Example Band"), result.metadata)
+        assertEquals(null, result.link.service)
+        assertEquals(ItemType.TRACK, result.link.type)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
     fun youtubeAndYoutubeMusicUseOEmbed() {
         respond("""{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
         val oEmbed = "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ"

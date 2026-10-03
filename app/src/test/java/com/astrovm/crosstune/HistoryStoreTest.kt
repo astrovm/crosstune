@@ -23,6 +23,16 @@ class HistoryStoreTest {
         )
 
     @Test
+    fun recognizedSongsRoundTripWithPreparedDestinations() {
+        val url = "https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        val song = HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band"))
+        store.add(song)
+        val prepared = PreparedLink("https://music.youtube.com/watch?v=abcdefghijk", true, true)
+        store.remember(url, "YOUTUBE_MUSIC", prepared)
+        assertEquals(song.copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to prepared)), HistoryStore(preferences).load().first())
+    }
+
+    @Test
     fun keepsNewestFirstWithoutDuplicatesAndCapsAtTwenty() {
         (1..25).forEach { store.add(entry(it)) }
         store.add(entry(10))

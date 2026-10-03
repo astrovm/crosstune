@@ -74,7 +74,7 @@
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
     <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
     <string name="setting_share_sheet_apps">共有メニューのアプリ</string>
-    <string name="setting_share_sheet_apps_description">共有するときに「YouTube Music で開く」などを表示します。Android はどんなテキストでも表示します。</string>
+    <string name="setting_share_sheet_apps_description">共有メニューに音楽アプリを表示します。</string>
     <string name="setting_language">言語</string>
     <string name="language_system_default">システムのデフォルト</string>
     <string name="matching_text">一致する項目を探しています…</string>

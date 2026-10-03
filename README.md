@@ -57,6 +57,8 @@ Pasting or sharing a link to Crosstune works without any setup.
 | Amazon Music | Can't read its links | Search |
 | Qobuz | Can't read its links | Search |
 
+Pixel **Now Playing** shares are also supported when the Google search link contains “Song by Artist”.
+
 Songs can open in any of these. "Search" means Crosstune opens a search for the title and artist.
 
 ## 🛠️ Troubleshooting

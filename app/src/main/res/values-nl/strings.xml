@@ -73,7 +73,7 @@
     <string name="setting_clean_links">Tracking uit links halen</string>
     <string name="setting_clean_links_description">Haalt trackingonderdelen zoals ?si= of utm_ uit links die je opent, kopieert of deelt.</string>
     <string name="setting_share_sheet_apps">Apps in het deelmenu</string>
-    <string name="setting_share_sheet_apps_description">Openen in YouTube Music en andere als je deelt. Android toont ze bij elke tekst.</string>
+    <string name="setting_share_sheet_apps_description">Muziekapps tonen bij het delen.</string>
     <string name="setting_language">Taal</string>
     <string name="language_system_default">Systeemstandaard</string>
     <string name="matching_text">Exacte match zoeken…</string>

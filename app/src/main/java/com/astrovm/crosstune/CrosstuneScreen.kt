@@ -732,9 +732,9 @@ private fun ErrorCard(error: AppError, state: UiState, actions: ScreenActions) {
                         }
                     }
                     // A link Crosstune couldn't read can still be opened in the app it belongs to.
-                    state.link?.let { link ->
+                    state.link?.service?.let { service ->
                         TextButton(onClick = actions.onOpenOriginal, colors = onError) {
-                            Text(stringResource(link.service.openLabelRes))
+                            Text(stringResource(service.openLabelRes))
                         }
                     }
                 }
@@ -774,7 +774,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     Text(
                         text = listOfNotNull(
                             stringResource(result.type.labelRes),
-                            link?.let { stringResource(R.string.from_service, stringResource(it.service.labelRes)) }
+                            link?.service?.let { stringResource(R.string.from_service, stringResource(it.labelRes)) }
                         ).joinToString(" "),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
@@ -1025,7 +1025,7 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                     text = listOf(
                         if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
                         entry.metadata.artist,
-                        stringResource(entry.link.service.labelRes)
+                        entry.link.service?.let { stringResource(it.labelRes) }.orEmpty()
                     )
                         .filter { it.isNotBlank() }
                         .joinToString(" · "),

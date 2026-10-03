@@ -1,11 +1,13 @@
 package com.astrovm.crosstune
 
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** A link to one item on one service. [url] is canonical; [region] is the storefront for Apple Music. */
 internal data class MusicLink(
-    val service: MusicService,
+    /** Null for recognized songs shared as search links rather than a music service link. */
+    val service: MusicService?,
     val type: ItemType,
     val id: String,
     val url: String,
@@ -22,6 +24,8 @@ internal data class MusicLink(
 internal sealed interface LinkInput {
     data class Link(val link: MusicLink) : LinkInput
     data class ShortLink(val url: String) : LinkInput
+    /** Pixel Now Playing shares a Google search containing the song and artist. */
+    data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput
 }
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
@@ -61,10 +65,24 @@ internal object MusicLinks {
         val url = value.toHttpUrlOrNull()
             ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null }
             ?: return null
+        recognizedSong(url)?.let { return it }
         fromUrl(url)?.let { return LinkInput.Link(it) }
         if (!url.host.isShortLinkHost()) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
         return LinkInput.ShortLink(url.newBuilder().scheme("https").build().toString())
+    }
+
+    private fun recognizedSong(url: HttpUrl): LinkInput.RecognizedSong? {
+        if (url.host !in setOf("google.com", "www.google.com") || url.encodedPath != "/search") return null
+        val query = url.queryParameter("q") ?: return null
+        val separator = query.lastIndexOf(" by ")
+        if (separator < 0) return null
+        val title = query.substring(0, separator).trim()
+        val artist = query.substring(separator + 4).trim()
+        if (title.isBlank() || artist.isBlank()) return null
+        val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", "$title by $artist").build().toString()
+        return LinkInput.RecognizedSong(canonical, MusicMetadata(title, artist))
     }
 
     /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
