@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
                     when (effect) {
                         is Effect.Open -> open(effect)
                         is Effect.Share -> {
-                            startActivity(shareChooser(effect.url, effect.original, effect.source))
+                            startActivity(shareChooser(effect.url, effect.original))
                             finish()
                         }
                         is Effect.Copy -> {
