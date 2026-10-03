@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">Her müzik bağlantısını favori uygulamanızda açın.</string>
     <string name="spotify_link_label">Müzik bağlantısı</string>
     <string name="spotify_link_placeholder">Müzik bağlantısı yapıştırın</string>
     <string name="resolve_button">Bağlantıyı dönüştür</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">Ayarlar</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_default_title">Varsayılan uygulama</string>
-    <string name="settings_default_label">Bağlantıları şurada aç</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
     <string name="settings_links_description">Bunlardan dokunduğun bağlantılar Crosstune\'da açılır. Paylaşma ve yapıştırma her zaman çalışır.</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
     <string name="rule_default">Varsayılan (%1$s)</string>
     <string name="settings_custom_title">Diğer uygulamalar ve siteler</string>
-    <string name="settings_custom_description">Arama sayfası olan herhangi bir uygulama ya da web sitesi ekleyin.</string>
     <string name="add_custom_destination_button">Uygulama veya site ekle</string>
     <string name="remove_button">Kaldır</string>
     <string name="add_button">Ekle</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">Yüklü</string>
     <string name="setup_step">Adım %1$d / %2$d</string>
     <string name="setup_sources_title">Crosstune hangi bağlantıları açsın?</string>
-    <string name="setup_sources_body">Bağlantı aldığınız servisleri seçin.</string>
     <string name="setup_sources_listening_note">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor.</string>
     <string name="setup_destination_title">Nerede dinliyorsunuz?</string>
-    <string name="setup_destination_body">Dinlediğiniz uygulamayı seçin. Daha sonra değiştirebilirsiniz.</string>
+    <string name="setup_destination_body">Daha sonra değiştirebilirsiniz.</string>
     <string name="setup_allow_title">Bağlantılara izin verin</string>
     <string name="setup_allow_none">Hiçbir servis seçmediniz, bu yüzden izin verilecek bir şey yok. Yine de bağlantıları Crosstune\'a paylaşabilir veya yapıştırabilirsiniz.</string>
-    <string name="setup_allow_step_open">“Bağlantı ayarlarını aç” düğmesine dokunun.</string>
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
     <string name="setup_apps_title">Diğer uygulamaların bağlantılarını kapat</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">Bağlantıyı kopyala</string>
     <string name="share_link_button">Bağlantıyı paylaş</string>
     <string name="settings_link_owners_title">Bu bağlantılara sahip uygulamalar</string>
-    <string name="settings_link_owners_description">Bu uygulamalar aynı bağlantıları açabilir. Bağlantıları kendisinin açıp açmayacağını seçmek için birine dokun.</string>
+    <string name="settings_link_owners_description">Değiştirmek için birine dokun.</string>
     <string name="link_owner_opens_them">Bağlantılarını kendisi açar</string>
     <string name="link_owner_lets_crosstune">Crosstune\'un açmasına izin veriyor</string>
-    <string name="setup_allow_taken_hint">Bir bağlantıyı işaretleyemiyor musun? Başka bir uygulama almış. Crosstune\'un değil, o uygulamanın ayarlarını aç ve “Tarayıcıda” seçeneğini seç veya “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="frontend_address_title">%1$s adresi</string>
     <string name="save_button">Kaydet</string>
     <string name="frontend_address_invalid">Bir web adresi gir, örneğin yewtu.be</string>

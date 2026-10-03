@@ -226,7 +226,7 @@ class MainActivityTest {
     fun launcherShowsLinkHelperUntilDismissed() {
         launch()
         assertTextShown(string(R.string.link_settings_helper_title))
-        assertTextShown(string(R.string.app_tagline))
+        assertTextShown(string(R.string.spotify_link_label))
 
         click(string(R.string.dismiss_button))
 
@@ -2292,7 +2292,6 @@ class MainActivityTest {
         assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
         click(string(R.string.next_button))
         assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
-        assertTextShown(string(R.string.setup_allow_taken_hint))
         click(string(R.string.setup_finish))
 
         assertTextShown(string(R.string.notice_links_not_allowed))
@@ -2548,7 +2547,7 @@ class MainActivityTest {
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
         click(string(R.string.setup_finish))
-        assertTextShown(string(R.string.app_tagline))
+        assertTextShown(string(R.string.spotify_link_label))
         assertTextAbsent(string(R.string.link_settings_helper_title))
         assertTrue(prefs().getBoolean("setup_complete", false))
         assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
@@ -2574,8 +2573,6 @@ class MainActivityTest {
         assertTextShown(string(R.string.service_spotify))
         // Android lists every service's links, so setup names the ones to select.
         assertTextShown("open.spotify.com, spotify.link, www.spotify.link")
-        // An app Crosstune can't see may keep them; Android names it next to the link.
-        assertTextShown(string(R.string.setup_allow_taken_hint))
 
         // Returning from Android's settings refreshes the status; short links still need allowing.
         states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED)

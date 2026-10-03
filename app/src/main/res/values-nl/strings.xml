@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">Open elke muzieklink in je favoriete app.</string>
     <string name="spotify_link_label">Muzieklink</string>
     <string name="spotify_link_placeholder">Plak een muzieklink</string>
     <string name="resolve_button">Link omzetten</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">Instellingen</string>
     <string name="settings_title">Instellingen</string>
     <string name="settings_default_title">Standaardapp</string>
-    <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="settings_links_description">Aangetikte links van deze diensten openen in Crosstune. Delen en plakken werken altijd.</string>
     <string name="rule_opens_in">Opent in %1$s</string>
     <string name="rule_default">Standaard (%1$s)</string>
     <string name="settings_custom_title">Andere apps en sites</string>
-    <string name="settings_custom_description">Voeg een app of website met een zoekpagina toe.</string>
     <string name="add_custom_destination_button">App of site toevoegen</string>
     <string name="remove_button">Verwijderen</string>
     <string name="add_button">Toevoegen</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">Geïnstalleerd</string>
     <string name="setup_step">Stap %1$d van %2$d</string>
     <string name="setup_sources_title">Welke links moet Crosstune openen?</string>
-    <string name="setup_sources_body">Kies de services waarvan je links krijgt.</string>
     <string name="setup_sources_listening_note">Je luistert in %1$s, dus de links ervan openen daar al.</string>
     <string name="setup_destination_title">Waar luister je?</string>
-    <string name="setup_destination_body">Kies de app waarin je luistert. Je kunt dit later wijzigen.</string>
+    <string name="setup_destination_body">Je kunt dit later wijzigen.</string>
     <string name="setup_allow_title">Links toestaan</string>
     <string name="setup_allow_none">Je hebt geen services gekozen, dus er is niets toe te staan. Je kunt nog steeds links delen met of plakken in Crosstune.</string>
-    <string name="setup_allow_step_open">Tik op Linkinstellingen openen.</string>
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
     <string name="setup_apps_title">Links van andere apps uitzetten</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">Link kopiëren</string>
     <string name="share_link_button">Link delen</string>
     <string name="settings_link_owners_title">Apps met deze links</string>
-    <string name="settings_link_owners_description">Deze apps kunnen dezelfde links openen. Tik op een app om te kiezen of hij ze zelf opent.</string>
+    <string name="settings_link_owners_description">Tik op een app om dit te wijzigen.</string>
     <string name="link_owner_opens_them">Houdt zijn links</string>
     <string name="link_owner_lets_crosstune">Laat Crosstune ze openen</string>
-    <string name="setup_allow_taken_hint">Kun je een link niet aanvinken? Een andere app heeft hem. Open de instellingen van die app, niet die van Crosstune, en kies ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="frontend_address_title">Adres van %1$s</string>
     <string name="save_button">Opslaan</string>
     <string name="frontend_address_invalid">Voer een webadres in, zoals yewtu.be</string>

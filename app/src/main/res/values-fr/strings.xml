@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">Ouvrez n\'importe quel lien musical dans votre application préférée.</string>
     <string name="spotify_link_label">Lien musical</string>
     <string name="spotify_link_placeholder">Collez un lien musical</string>
     <string name="resolve_button">Convertir le lien</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">Paramètres</string>
     <string name="settings_title">Paramètres</string>
     <string name="settings_default_title">Application par défaut</string>
-    <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
     <string name="settings_links_description">Les liens de ces services que vous touchez s’ouvrent dans Crosstune. Partager et coller fonctionnent toujours.</string>
     <string name="rule_opens_in">Ouvre dans : %1$s</string>
     <string name="rule_default">Par défaut (%1$s)</string>
     <string name="settings_custom_title">Autres applications et sites</string>
-    <string name="settings_custom_description">Ajoutez n\'importe quelle application ou n\'importe quel site doté d\'une page de recherche.</string>
     <string name="add_custom_destination_button">Ajouter une application ou un site</string>
     <string name="remove_button">Supprimer</string>
     <string name="add_button">Ajouter</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">Installée</string>
     <string name="setup_step">Étape %1$d sur %2$d</string>
     <string name="setup_sources_title">Quels liens Crosstune doit-il ouvrir ?</string>
-    <string name="setup_sources_body">Choisissez les services dont vous recevez des liens.</string>
     <string name="setup_sources_listening_note">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà.</string>
     <string name="setup_destination_title">Où écoutez-vous ?</string>
-    <string name="setup_destination_body">Choisissez l\'application dans laquelle vous écoutez. Vous pourrez la changer plus tard.</string>
+    <string name="setup_destination_body">Vous pourrez la changer plus tard.</string>
     <string name="setup_allow_title">Autoriser les liens</string>
     <string name="setup_allow_none">Vous n\'avez choisi aucun service, il n\'y a donc rien à autoriser. Vous pouvez toujours partager ou coller des liens dans Crosstune.</string>
-    <string name="setup_allow_step_open">Appuyez sur Ouvrir les paramètres des liens.</string>
     <string name="setup_allow_step_add">Appuyez sur Ajouter un lien.</string>
     <string name="setup_allow_step_tick">Cochez tous les liens, puis appuyez sur Ajouter.</string>
     <string name="setup_apps_title">Désactiver les liens des autres applications</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">Copier le lien</string>
     <string name="share_link_button">Partager le lien</string>
     <string name="settings_link_owners_title">Applications avec ces liens</string>
-    <string name="settings_link_owners_description">Ces applications peuvent ouvrir les mêmes liens. Touchez-en une pour choisir si elle les ouvre elle-même.</string>
+    <string name="settings_link_owners_description">Touchez-en une pour changer.</string>
     <string name="link_owner_opens_them">Garde ses liens</string>
     <string name="link_owner_lets_crosstune">Laisse Crosstune les ouvrir</string>
-    <string name="setup_allow_taken_hint">Impossible de cocher un lien ? Une autre application l’a. Ouvrez les paramètres de cette application, pas ceux de Crosstune, et choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="frontend_address_title">Adresse de %1$s</string>
     <string name="save_button">Enregistrer</string>
     <string name="frontend_address_invalid">Saisissez une adresse web, comme yewtu.be</string>

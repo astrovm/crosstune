@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">Buka link musik apa pun di aplikasi favoritmu.</string>
     <string name="spotify_link_label">Link musik</string>
     <string name="spotify_link_placeholder">Tempel link musik</string>
     <string name="resolve_button">Konversi link</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">Setelan</string>
     <string name="settings_title">Setelan</string>
     <string name="settings_default_title">Aplikasi default</string>
-    <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
     <string name="settings_links_description">Tautan dari layanan ini yang kamu ketuk terbuka di Crosstune. Berbagi dan menempel selalu berfungsi.</string>
     <string name="rule_opens_in">Dibuka di %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Aplikasi dan situs lain</string>
-    <string name="settings_custom_description">Tambahkan aplikasi atau situs apa pun yang punya halaman pencarian.</string>
     <string name="add_custom_destination_button">Tambah aplikasi atau situs</string>
     <string name="remove_button">Hapus</string>
     <string name="add_button">Tambah</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">Terinstal</string>
     <string name="setup_step">Langkah %1$d dari %2$d</string>
     <string name="setup_sources_title">Link mana yang harus dibuka Crosstune?</string>
-    <string name="setup_sources_body">Pilih layanan yang link-nya sering kamu terima.</string>
     <string name="setup_sources_listening_note">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana.</string>
     <string name="setup_destination_title">Kamu dengar musik di mana?</string>
-    <string name="setup_destination_body">Pilih aplikasi yang kamu pakai untuk mendengarkan. Bisa diubah nanti.</string>
+    <string name="setup_destination_body">Bisa diubah nanti.</string>
     <string name="setup_allow_title">Izinkan link</string>
     <string name="setup_allow_none">Kamu belum memilih layanan, jadi tidak ada yang perlu diizinkan. Kamu tetap bisa membagikan atau menempel link ke Crosstune.</string>
-    <string name="setup_allow_step_open">Ketuk Buka setelan link.</string>
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
     <string name="setup_apps_title">Matikan link aplikasi lain</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">Salin tautan</string>
     <string name="share_link_button">Bagikan tautan</string>
     <string name="settings_link_owners_title">Aplikasi dengan tautan ini</string>
-    <string name="settings_link_owners_description">Aplikasi ini bisa membuka tautan yang sama. Ketuk salah satunya untuk memilih apakah aplikasi itu membukanya sendiri.</string>
+    <string name="settings_link_owners_description">Ketuk salah satunya untuk mengubahnya.</string>
     <string name="link_owner_opens_them">Menyimpan tautannya sendiri</string>
     <string name="link_owner_lets_crosstune">Membiarkan Crosstune membukanya</string>
-    <string name="setup_allow_taken_hint">Tidak bisa mencentang tautan? Aplikasi lain memakainya. Buka setelan aplikasi itu, bukan Crosstune, lalu pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="frontend_address_title">Alamat %1$s</string>
     <string name="save_button">Simpan</string>
     <string name="frontend_address_invalid">Masukkan alamat web, seperti yewtu.be</string>
