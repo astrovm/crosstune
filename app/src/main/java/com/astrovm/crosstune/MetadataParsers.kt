@@ -59,18 +59,48 @@ internal object MetadataParsers {
 
     /** YouTube oEmbed: "Artist - Song (Official Video)" by "ArtistVEVO", or "Song" by "Artist - Topic". */
     fun youtube(json: JSONObject): MusicMetadata? {
-        val rawTitle = json.optString("title").replace(videoNoiseRegex, "").trim().ifEmpty { return null }
-        val authorName = json.optString("author_name")
-        val author = authorName.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // hqdefault is letterboxed to 4:3; mqdefault is the bare 16:9 frame, whose center is the cover on art tracks.
         val artwork = json.optString("thumbnail_url").replace("/hqdefault.", "/mqdefault.").ifBlank { null }
+        return youtubeVideo(json.optString("title"), json.optString("author_name"))?.copy(artworkUrl = artwork)
+    }
+
+    /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
+    private fun youtubeVideo(title: String, channel: String): MusicMetadata? {
+        val rawTitle = title.replace(videoNoiseRegex, "").trim().ifEmpty { return null }
+        val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011".
-        val separator = if (authorName.endsWith(" - Topic")) -1 else rawTitle.indexOf(" - ")
+        val separator = if (channel.endsWith(" - Topic")) -1 else rawTitle.indexOf(" - ")
         return if (separator > 0) {
-            MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim(), artworkUrl = artwork)
+            MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim())
         } else {
-            MusicMetadata(rawTitle, author, artworkUrl = artwork)
+            MusicMetadata(rawTitle, author)
         }
+    }
+
+    private val youtubeDataRegex = Regex("""var ytInitialData = (\{.*?\});</script>""", RegexOption.DOT_MATCHES_ALL)
+
+    /**
+     * A YouTube playlist page: its name, picture and, in the page's own data, its first videos, each
+     * with its title and channel, read as songs like single videos are.
+     */
+    fun youtubePlaylist(html: String): MusicMetadata? {
+        val tags = openGraphTags(html)
+        val title = tags["og:title"]?.takeIf { it.isNotBlank() } ?: return null
+        val data = youtubeDataRegex.find(html)?.groupValues?.get(1)
+        val videos = data?.let { runCatching { youtubeVideos(JSONTokener(it).nextValue()) }.getOrNull() }.orEmpty()
+        return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image(), videos)
+    }
+
+    private fun youtubeVideos(value: Any?): List<MusicMetadata> = when (value) {
+        is JSONObject -> value.optJSONObject("lockupViewModel")?.takeIf { it.optString("contentType") == "LOCKUP_CONTENT_TYPE_VIDEO" }?.let { lockup ->
+            val metadata = lockup.optJSONObject("metadata")?.optJSONObject("lockupMetadataViewModel")
+            val channel = metadata?.optJSONObject("metadata")?.optJSONObject("contentMetadataViewModel")
+                ?.optJSONArray("metadataRows")?.optJSONObject(0)?.optJSONArray("metadataParts")?.optJSONObject(0)
+                ?.optJSONObject("text")?.optString("content").orEmpty()
+            listOfNotNull(youtubeVideo(metadata?.optJSONObject("title")?.optString("content").orEmpty(), channel))
+        } ?: value.keys().asSequence().flatMap { youtubeVideos(value.opt(it)) }.toList()
+        is JSONArray -> (0 until value.length()).flatMap { youtubeVideos(value.opt(it)) }
+        else -> emptyList()
     }
 
     /** iTunes Lookup API result for a song, album or artist. */
@@ -81,11 +111,18 @@ internal object MetadataParsers {
         val artwork = result.optString("artworkUrl100").replace("/100x100bb.", "/600x600bb.").ifBlank { null }
         return when (type) {
             ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type, artwork)
+            // Albums are looked up with their songs, which follow the album in the results.
             ItemType.ALBUM -> MusicMetadata(
-                result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork
+                result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork,
+                appleAlbumSongs(json.optJSONArray("results")!!)
             )
             else -> MusicMetadata(artist, "", type)
         }.takeIf { it.title.isNotBlank() }
+    }
+
+    private fun appleAlbumSongs(results: JSONArray): List<MusicMetadata> = (1 until results.length()).mapNotNull { index ->
+        val song = results.optJSONObject(index)?.takeIf { it.optString("wrapperType") == "track" } ?: return@mapNotNull null
+        MusicMetadata(song.optString("trackName").ifBlank { return@mapNotNull null }, song.optString("artistName"))
     }
 
     /**
@@ -117,7 +154,7 @@ internal object MetadataParsers {
         else -> emptyList()
     }
 
-    /** Spotify's embed page lists a playlist's first songs, each with its title and artists. */
+    /** Spotify's embed page lists an album's or playlist's first songs, each with its title and artists. */
     fun spotifyEmbedTracks(html: String): List<MusicMetadata> {
         val data = spotifyDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
         val list = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
@@ -143,14 +180,21 @@ internal object MetadataParsers {
         val artwork = json.optString("cover_xl").ifEmpty { json.optString("picture_xl") }
             .ifEmpty { json.optJSONObject("album")?.optString("cover_xl").orEmpty() }
             .ifBlank { null }
-        // A playlist's object lists its songs, up to a few hundred.
-        val tracks = if (type == ItemType.PLAYLIST) json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty() else emptyList()
+        // An album's or playlist's object lists its songs, up to a few hundred.
+        val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()
         return MusicMetadata(title, artist, type, artwork, tracks).takeIf { title.isNotBlank() }
     }
 
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
         val track = data.optJSONObject(index) ?: return@mapNotNull null
         MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optJSONObject("artist")?.optString("name").orEmpty())
+    }
+
+    /** Audiomack oEmbed: the song, album or playlist's name, its artist and its cover. */
+    fun audiomack(json: JSONObject, type: ItemType): MusicMetadata? {
+        val title = json.optString("title").ifBlank { return null }
+        val artist = if (type == ItemType.PLAYLIST) "" else json.optString("author_name")
+        return MusicMetadata(title, artist, type, json.optString("thumbnail_url").ifBlank { null })
     }
 
     /** The error inside a Deezer API response, or null when there is none. */
@@ -194,7 +238,22 @@ internal object MetadataParsers {
     fun bandcamp(html: String, type: ItemType): MusicMetadata? {
         val tags = openGraphTags(html)
         val title = tags["og:title"]?.takeIf { it.isNotBlank() } ?: return null
-        return splitBy(title, ", by ", type).copy(artworkUrl = tags.image())
+        val tracks = if (type == ItemType.ALBUM) bandcampAlbumSongs(html) else emptyList()
+        return splitBy(title, ", by ", type).copy(artworkUrl = tags.image(), tracks = tracks)
+    }
+
+    private val bandcampDataRegex = Regex("""<script type="application/ld\+json"[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+
+    /** A Bandcamp album page's structured data lists its songs, all by the album's artist. */
+    private fun bandcampAlbumSongs(html: String): List<MusicMetadata> {
+        val data = bandcampDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val album = runCatching { JSONObject(data) }.getOrNull() ?: return emptyList()
+        val artist = album.optJSONObject("byArtist")?.optString("name").orEmpty()
+        val list = album.optJSONObject("track")?.optJSONArray("itemListElement") ?: return emptyList()
+        return (0 until list.length()).mapNotNull { index ->
+            val name = list.optJSONObject(index)?.optJSONObject("item")?.optString("name")
+            name?.ifBlank { null }?.let { MusicMetadata(it, artist) }
+        }
     }
 
     private fun splitBy(text: String, separator: String, type: ItemType): MusicMetadata {

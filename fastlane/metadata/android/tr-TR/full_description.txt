@@ -4,15 +4,16 @@ Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde d
 
 <b>Özellikler</b>
 <ul>
-<li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud ve Bandcamp bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music'te açar.</li>
+<li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music ve Qobuz'da açar.</li>
+<li>Çalma listeleri ve albümler şarkılarını gösterir: istediğiniz şarkıyı uygulamanızda açın, listeyi kopyalayın veya paylaşın ya da hepsini YouTube Music veya YouTube'da çalın.</li>
 <li>Her servisi farklı bir yere yönlendirin; örneğin YouTube bağlantılarını YouTube Music'e, diğer hepsini Apple Music'e.</li>
 <li>Hangi uygulamanın kullanılacağını sor: bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı her seferinde siz seçin.</li>
 <li>Tam eşleşmeyi aç: Apple Music, Deezer ve YouTube Music, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; Bandcamp şarkıyı veya albümü, YouTube ise şarkıyı açabilir.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
-<li>Tek dokunuşla yapıştırın, son bağlantıları yeniden açın, Hızlı Ayarlar kutucuğunu kullanın veya kopyalanan bir bağlantıyı açmak için uygulama simgesine uzun basın.</li>
+<li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>
 
 <b>Gizlilik</b>
-Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Bir bağlantının başlığını, sanatçısını ve kapağını göstermek için Crosstune yalnızca bağlantının geldiği servise sorar. Tam eşleşmeyi aç seçeneği açıkken başlık ve sanatçı, Apple, Deezer, YouTube Music, YouTube veya Bandcamp'in aramasına da gönderilir.
+Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Bir bağlantının başlığını, sanatçısını ve kapağını göstermek için Crosstune yalnızca bağlantının geldiği servise sorar. Tam eşleşmeyi aç seçeneği açıkken başlık ve sanatçı, Apple, Deezer, YouTube Music, YouTube veya Bandcamp'in aramasına da gönderilir. Tümünü çal, şarkıların başlıklarını ve sanatçılarını YouTube Music'in aramasına, bulunan videoları ise YouTube'a gönderir.

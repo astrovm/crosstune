@@ -4,15 +4,16 @@ Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem an
 
 <b>Funktionen</b>
 <ul>
-<li>Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud und Bandcamp und öffnet sie in einem dieser Dienste oder in Amazon Music.</li>
+<li>Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack und öffnet sie in einem dieser Dienste oder in Amazon Music und Qobuz.</li>
+<li>Playlists und Alben zeigen ihre Songs: Öffne jeden davon in deiner App, kopiere oder teile die Liste oder spiele alles in YouTube Music oder YouTube ab.</li>
 <li>Schicke jeden Dienst woandershin, z. B. YouTube-Links an YouTube Music und alles andere an Apple Music.</li>
 <li>Nach der App fragen: Wähle bei jedem angetippten oder geteilten Link eine App.</li>
 <li>Genauen Treffer öffnen: Apple Music, Deezer und YouTube Music können den Song, das Album oder den Künstler selbst öffnen statt einer Suche, Bandcamp den Song oder das Album, YouTube den Song.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
-<li>Mit einem Tipp einfügen, zuletzt genutzte Links erneut öffnen, die Schnelleinstellungen-Kachel nutzen oder das App-Symbol gedrückt halten, um einen kopierten Link zu öffnen.</li>
+<li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
 <li>Link nicht lesbar? Öffne ihn in der App, aus der er stammt, kopiere den Suchtext oder teile einen Such-Link.</li>
 <li>Material-You-Farben ab Android 12.</li>
 </ul>
 
 <b>Datenschutz</b>
-Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Ist „Genauen Treffer öffnen“ aktiv, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp.
+Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Ist „Genauen Treffer öffnen“ aktiv, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp. „Alle abspielen“ schickt Titel und Künstler der Songs an die Suche von YouTube Music und die gefundenen Videos an YouTube.

@@ -10,13 +10,15 @@
     <string name="open_in_youtube_music">YouTube Music で開く</string>
     <string name="open_in_youtube">YouTube で開く</string>
     <string name="open_in_spotify">Spotify で開く</string>
+    <string name="open_in_audiomack">Audiomack で開く</string>
+    <string name="open_in_qobuz">Qobuz で開く</string>
     <string name="open_in_bandcamp">Bandcamp で開く</string>
     <string name="open_in_amazon_music">Amazon Music で開く</string>
     <string name="from_service">%1$s から</string>
     <string name="open_in_custom">%1$s で開く</string>
     <string name="settings_button">設定</string>
     <string name="settings_title">設定</string>
-    <string name="settings_default_title">デフォルトのアプリ</string>
+    <string name="settings_where_you_listen">聴いているアプリ</string>
     <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
@@ -80,7 +82,10 @@
     <string name="cancel_button">キャンセル</string>
     <string name="retry_button">再試行</string>
     <string name="history_title">最近</string>
+    <string name="search_recent">最近の項目を検索</string>
     <string name="playlist_songs_title">曲</string>
+    <string name="play_all_button">すべて再生</string>
+    <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>
     <string name="clear_history_button">履歴を消去</string>
     <string name="tile_label">コピーした音楽リンクを開く</string>
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>
@@ -121,6 +126,9 @@
     <string name="empty_hint">どのアプリでも音楽リンクをタップするか、Crosstune に共有してください。</string>
     <string name="copy_link_button">リンクをコピー</string>
     <string name="share_link_button">リンクを共有</string>
+    <string name="copy_songs_button">曲をコピー</string>
+    <string name="share_songs_button">曲を共有</string>
+    <string name="songs_copied">曲をコピーしました</string>
     <string name="settings_link_owners_title">これらのリンクを開くアプリ</string>
     <string name="settings_link_owners_description">タップして変更できます。</string>
     <string name="link_owner_opens_them">自分でリンクを開く</string>

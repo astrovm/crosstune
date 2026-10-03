@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">在 YouTube Music 中打开</string>
     <string name="open_in_youtube">在 YouTube 中打开</string>
     <string name="open_in_spotify">在 Spotify 中打开</string>
+    <string name="open_in_audiomack">在 Audiomack 中打开</string>
+    <string name="open_in_qobuz">在 Qobuz 中打开</string>
     <string name="open_in_bandcamp">在 Bandcamp 中打开</string>
     <string name="open_in_amazon_music">在 Amazon Music 中打开</string>
     <string name="from_service">来自 %1$s</string>
     <string name="open_in_custom">在 %1$s 中打开</string>
     <string name="settings_button">设置</string>
     <string name="settings_title">设置</string>
-    <string name="settings_default_title">默认应用</string>
+    <string name="settings_where_you_listen">你收听的地方</string>
     <string name="settings_default_label">用以下应用打开链接</string>
     <string name="settings_about_title">关于</string>
     <string name="settings_links_title">打开来自以下服务的链接</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">取消</string>
     <string name="retry_button">重试</string>
     <string name="history_title">最近</string>
+    <string name="search_recent">搜索最近</string>
     <string name="playlist_songs_title">歌曲</string>
+    <string name="play_all_button">全部播放</string>
+    <string name="play_all_progress">正在查找歌曲… %1$d/%2$d</string>
     <string name="clear_history_button">清除历史记录</string>
     <string name="tile_label">打开已复制的音乐链接</string>
     <string name="shortcut_paste_short">打开已复制的链接</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">在任意应用中点按音乐链接，或将其分享给 Crosstune。</string>
     <string name="copy_link_button">复制链接</string>
     <string name="share_link_button">分享链接</string>
+    <string name="copy_songs_button">复制歌曲</string>
+    <string name="share_songs_button">分享歌曲</string>
+    <string name="songs_copied">已复制歌曲</string>
     <string name="settings_link_owners_title">可打开这些链接的应用</string>
     <string name="settings_link_owners_description">点按某个应用即可更改。</string>
     <string name="link_owner_opens_them">自己打开链接</string>

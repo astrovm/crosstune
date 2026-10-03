@@ -321,6 +321,7 @@
                 <data android:scheme="https" />
                 <data android:host="music.youtube.com" />
                 <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/playlist" />
             </intent-filter>
         </activity-alias>
 
@@ -341,6 +342,7 @@
                 <data android:pathPrefix="/watch" />
                 <data android:pathPrefix="/shorts/" />
                 <data android:pathPrefix="/live/" />
+                <data android:pathPrefix="/playlist" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -520,6 +522,38 @@
                 <data android:pathPrefix="/album/" />
             </intent-filter>
         </activity-alias>
+
+        <activity-alias
+            android:name=".intercept.AUDIOMACK"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            tools:ignore="AppLinkWarning">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="audiomack.com" />
+                <data android:host="www.audiomack.com" />
+                <data android:pathPattern="/.*/song/.*" />
+                <data android:pathPattern="/.*/album/.*" />
+                <data android:pathPattern="/.*/playlist/.*" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Home screen widget that opens the copied music link. -->
+        <receiver
+            android:name=".OpenCopiedWidget"
+            android:exported="true"
+            android:label="@string/shortcut_paste_long">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_open_copied" />
+        </receiver>
 
         <service
             android:name=".ClipboardTileService"

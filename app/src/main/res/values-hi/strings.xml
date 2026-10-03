@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">YouTube Music में खोलें</string>
     <string name="open_in_youtube">YouTube में खोलें</string>
     <string name="open_in_spotify">Spotify में खोलें</string>
+    <string name="open_in_audiomack">Audiomack में खोलें</string>
+    <string name="open_in_qobuz">Qobuz में खोलें</string>
     <string name="open_in_bandcamp">Bandcamp में खोलें</string>
     <string name="open_in_amazon_music">Amazon Music में खोलें</string>
     <string name="from_service">%1$s से</string>
     <string name="open_in_custom">%1$s में खोलें</string>
     <string name="settings_button">सेटिंग</string>
     <string name="settings_title">सेटिंग</string>
-    <string name="settings_default_title">डिफ़ॉल्ट ऐप्लिकेशन</string>
+    <string name="settings_where_you_listen">जहां आप सुनते हैं</string>
     <string name="settings_default_label">लिंक इसमें खोलें</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">रद्द करें</string>
     <string name="retry_button">फिर कोशिश करें</string>
     <string name="history_title">हाल के</string>
+    <string name="search_recent">हाल ही में खोजें</string>
     <string name="playlist_songs_title">गाने</string>
+    <string name="play_all_button">सभी चलाएं</string>
+    <string name="play_all_progress">गाने ढूंढ रहे हैं… %2$d में से %1$d</string>
     <string name="clear_history_button">इतिहास मिटाएँ</string>
     <string name="tile_label">कॉपी किया म्यूज़िक लिंक खोलें</string>
     <string name="shortcut_paste_short">कॉपी किया लिंक खोलें</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">किसी भी ऐप में संगीत लिंक पर टैप करें, या उसे Crosstune पर शेयर करें।</string>
     <string name="copy_link_button">लिंक कॉपी करें</string>
     <string name="share_link_button">लिंक शेयर करें</string>
+    <string name="copy_songs_button">गाने कॉपी करें</string>
+    <string name="share_songs_button">गाने शेयर करें</string>
+    <string name="songs_copied">गाने कॉपी हो गए</string>
     <string name="settings_link_owners_title">इन लिंक वाले ऐप</string>
     <string name="settings_link_owners_description">बदलने के लिए किसी पर टैप करें।</string>
     <string name="link_owner_opens_them">अपने लिंक खुद खोलता है</string>

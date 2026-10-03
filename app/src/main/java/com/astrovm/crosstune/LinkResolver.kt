@@ -64,13 +64,13 @@ internal class LinkResolver(
     }
 
     /**
-     * Spotify's playlist page doesn't list the songs, but its embed page does. They're extra, so
-     * the playlist still shows without them when that page can't be read.
+     * Spotify's album and playlist pages don't list the songs, but their embed pages do. They're
+     * extra, so the album or playlist still shows without them when that page can't be read.
      */
     private suspend fun withSpotifyTracks(link: MusicLink, metadata: MusicMetadata): MusicMetadata {
-        if (link.service != MusicService.SPOTIFY || link.type != ItemType.PLAYLIST) return metadata
+        if (link.service != MusicService.SPOTIFY || (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM)) return metadata
         val tracks = try {
-            val (response, body) = fetch("https://open.spotify.com/embed/playlist/${link.id}")
+            val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
             if (response.isSuccessful) MetadataParsers.spotifyEmbedTracks(body) else emptyList()
         } catch (_: IOException) {
             emptyList()
@@ -85,14 +85,22 @@ internal class LinkResolver(
         link.service == MusicService.APPLE_MUSIC && link.type != ItemType.PLAYLIST
 
     private fun metadataUrl(link: MusicLink): String = when (link.service) {
-        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> oEmbed("https://www.youtube.com/oembed", link)
+        // A playlist's page lists its videos; YouTube Music's own pages don't, but share its lists.
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> if (link.type == ItemType.PLAYLIST) {
+            "https://www.youtube.com/playlist?list=${link.id}"
+        } else {
+            oEmbed("https://www.youtube.com/oembed", link)
+        }
         MusicService.SOUNDCLOUD -> oEmbed("https://soundcloud.com/oembed", link)
+        MusicService.AUDIOMACK -> oEmbed("https://audiomack.com/oembed", link)
         MusicService.APPLE_MUSIC -> if (link.type == ItemType.PLAYLIST) {
             link.url
         } else {
             "https://itunes.apple.com/lookup".toHttpUrl().newBuilder()
                 .addQueryParameter("id", link.id)
                 .addQueryParameter("country", link.region ?: "us")
+                // An album's songs come with it.
+                .apply { if (link.type == ItemType.ALBUM) addQueryParameter("entity", "song") }
                 .build().toString()
         }
         MusicService.DEEZER -> "https://api.deezer.com/${link.url.toHttpUrl().pathSegments.first()}/${link.id}"
@@ -107,7 +115,11 @@ internal class LinkResolver(
 
     private fun parse(link: MusicLink, body: String): MusicMetadata? = when (link.service) {
         MusicService.SPOTIFY -> MetadataParsers.spotify(body, link.type)
-        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtube(JSONObject(body))
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> if (link.type == ItemType.PLAYLIST) {
+            MetadataParsers.youtubePlaylist(body)
+        } else {
+            MetadataParsers.youtube(JSONObject(body))
+        }
         MusicService.APPLE_MUSIC -> if (link.type == ItemType.PLAYLIST) {
             MetadataParsers.applePlaylist(body)
         } else {
@@ -116,6 +128,7 @@ internal class LinkResolver(
         MusicService.DEEZER -> MetadataParsers.deezer(JSONObject(body), link.type)
         MusicService.TIDAL -> MetadataParsers.tidal(body, link.type)
         MusicService.SOUNDCLOUD -> MetadataParsers.soundCloud(JSONObject(body), link.type)
+        MusicService.AUDIOMACK -> MetadataParsers.audiomack(JSONObject(body), link.type)
         // Bandcamp; Amazon Music is never a source.
         else -> MetadataParsers.bandcamp(body, link.type)
     }

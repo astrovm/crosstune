@@ -1,6 +1,11 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -17,6 +22,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.text.Normalizer
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -74,6 +80,41 @@ internal class ExactMatcher(
             } catch (_: JSONException) {
                 null
             }
+        }
+    }
+
+    /**
+     * One queue for [tracks] in YouTube Music or YouTube ([target]): each song is matched to its
+     * video, then YouTube makes a temporary playlist of those videos, opened at the first. No
+     * account needed. [onProgress] hears how many have been looked up. Null when none match.
+     */
+    suspend fun youtubeQueue(target: MusicService, tracks: List<MusicMetadata>, onProgress: (Int) -> Unit): String? {
+        val looked = AtomicInteger()
+        val lookups = Semaphore(QUEUE_LOOKUPS_AT_ONCE)
+        val ids = coroutineScope {
+            tracks.map { track ->
+                async {
+                    lookups.withPermit { find(target, track) }.also { onProgress(looked.incrementAndGet()) }
+                }
+            }.awaitAll()
+        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }
+        if (ids.isEmpty()) return null
+        val watch = if (target == MusicService.YOUTUBE_MUSIC) YOUTUBE_MUSIC_WATCH_URL else YOUTUBE_WATCH_URL
+        val list = try {
+            temporaryPlaylist(ids)
+        } catch (_: IOException) {
+            null
+        }
+        // Without the playlist, the first song still plays.
+        return watch + ids.first() + (list?.let { "&list=$it" } ?: "")
+    }
+
+    /** YouTube answers a list of videos with a redirect to a temporary playlist of them. */
+    private suspend fun temporaryPlaylist(ids: List<String>): String? {
+        val url = YOUTUBE_WATCH_VIDEOS_URL.toHttpUrl().newBuilder().addQueryParameter("video_ids", ids.joinToString(",")).build()
+        val noRedirects = client.newBuilder().followRedirects(false).build()
+        return noRedirects.newCall(Request.Builder().url(url).get().build()).executeAsync().use { response ->
+            response.header("Location")?.toHttpUrlOrNull()?.queryParameter("list")
         }
     }
 
@@ -239,6 +280,8 @@ internal class ExactMatcher(
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+        const val QUEUE_LOOKUPS_AT_ONCE = 6
+        const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
         const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"

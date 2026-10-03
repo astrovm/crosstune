@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">YouTube Music에서 열기</string>
     <string name="open_in_youtube">YouTube에서 열기</string>
     <string name="open_in_spotify">Spotify에서 열기</string>
+    <string name="open_in_audiomack">Audiomack에서 열기</string>
+    <string name="open_in_qobuz">Qobuz에서 열기</string>
     <string name="open_in_bandcamp">Bandcamp에서 열기</string>
     <string name="open_in_amazon_music">Amazon Music에서 열기</string>
     <string name="from_service">%1$s에서</string>
     <string name="open_in_custom">%1$s에서 열기</string>
     <string name="settings_button">설정</string>
     <string name="settings_title">설정</string>
-    <string name="settings_default_title">기본 앱</string>
+    <string name="settings_where_you_listen">듣는 곳</string>
     <string name="settings_default_label">링크를 열 앱</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">취소</string>
     <string name="retry_button">다시 시도</string>
     <string name="history_title">최근</string>
+    <string name="search_recent">최근 항목 검색</string>
     <string name="playlist_songs_title">노래</string>
+    <string name="play_all_button">모두 재생</string>
+    <string name="play_all_progress">노래를 찾는 중… %1$d/%2$d</string>
     <string name="clear_history_button">기록 삭제</string>
     <string name="tile_label">복사한 음악 링크 열기</string>
     <string name="shortcut_paste_short">복사한 링크 열기</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">아무 앱에서나 음악 링크를 탭하거나 Crosstune으로 공유하세요.</string>
     <string name="copy_link_button">링크 복사</string>
     <string name="share_link_button">링크 공유</string>
+    <string name="copy_songs_button">노래 복사</string>
+    <string name="share_songs_button">노래 공유</string>
+    <string name="songs_copied">노래를 복사했어요</string>
     <string name="settings_link_owners_title">이 링크를 여는 앱</string>
     <string name="settings_link_owners_description">탭해서 변경하세요.</string>
     <string name="link_owner_opens_them">직접 링크를 열어요</string>

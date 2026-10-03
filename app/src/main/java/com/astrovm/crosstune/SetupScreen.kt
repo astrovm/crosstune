@@ -119,9 +119,14 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                 }
                 // There's no built-in default any more, so one has to be picked.
                 val enabled = ready && (step != SetupStep.DESTINATION || state.hasDefault)
-                // Leaving with links still to allow is skipping them, so the button says so and
-                // the guide's own button stays the main one.
-                if (step == SetupStep.ALLOW && state.someLinksNotAllowed) {
+                // Leaving with links still to allow, or an app still taking them, is skipping that,
+                // so the button says so and the guide's own button stays the main one.
+                val skipping = when (step) {
+                    SetupStep.APPS -> !appsGuideDone(appsToFix, state.blockingApps)
+                    SetupStep.ALLOW -> state.someLinksNotAllowed || state.blockingApps.orEmpty().isNotEmpty()
+                    else -> false
+                }
+                if (skipping) {
                     FilledTonalButton(onClick = onNext, enabled = enabled, interactionSource = nextPress.source, modifier = buttonModifier.then(nextPress.modifier)) {
                         Text(stringResource(R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
                     }
@@ -481,9 +486,21 @@ internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier, c
  */
 @Composable
 internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
-    // Once Android says every link is allowed, that's all there is to show.
+    // Once Android says every link is allowed, that's all there is to show, unless an app still
+    // takes them: then they don't open in Crosstune yet, so that's said instead of "All set".
     if (state.unapprovedHosts != null && !state.someLinksNotAllowed) {
-        Text(stringResource(R.string.setup_allow_all_done), style = MaterialTheme.typography.titleMedium)
+        val blocking = state.blockingApps.orEmpty()
+        if (blocking.isEmpty()) {
+            Text(stringResource(R.string.setup_allow_all_done), style = MaterialTheme.typography.titleMedium)
+        } else {
+            blocking.forEach { app ->
+                Text(
+                    stringResource(R.string.notice_app_still_opens, app.label),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+        }
         return
     }
     // The button says what to do, so step 1 is the button itself.

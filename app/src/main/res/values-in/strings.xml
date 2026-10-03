@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Buka di YouTube Music</string>
     <string name="open_in_youtube">Buka di YouTube</string>
     <string name="open_in_spotify">Buka di Spotify</string>
+    <string name="open_in_audiomack">Buka di Audiomack</string>
+    <string name="open_in_qobuz">Buka di Qobuz</string>
     <string name="open_in_bandcamp">Buka di Bandcamp</string>
     <string name="open_in_amazon_music">Buka di Amazon Music</string>
     <string name="from_service">dari %1$s</string>
     <string name="open_in_custom">Buka di %1$s</string>
     <string name="settings_button">Setelan</string>
     <string name="settings_title">Setelan</string>
-    <string name="settings_default_title">Aplikasi default</string>
+    <string name="settings_where_you_listen">Tempat kamu mendengarkan</string>
     <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Batal</string>
     <string name="retry_button">Coba lagi</string>
     <string name="history_title">Terbaru</string>
+    <string name="search_recent">Cari di Terbaru</string>
     <string name="playlist_songs_title">Lagu</string>
+    <string name="play_all_button">Putar semua</string>
+    <string name="play_all_progress">Mencari lagu… %1$d dari %2$d</string>
     <string name="clear_history_button">Hapus riwayat</string>
     <string name="tile_label">Buka link musik yang disalin</string>
     <string name="shortcut_paste_short">Buka link disalin</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Ketuk tautan musik di aplikasi apa pun, atau bagikan ke Crosstune.</string>
     <string name="copy_link_button">Salin tautan</string>
     <string name="share_link_button">Bagikan tautan</string>
+    <string name="copy_songs_button">Salin lagu</string>
+    <string name="share_songs_button">Bagikan lagu</string>
+    <string name="songs_copied">Lagu disalin</string>
     <string name="settings_link_owners_title">Aplikasi dengan tautan ini</string>
     <string name="settings_link_owners_description">Ketuk salah satunya untuk mengubahnya.</string>
     <string name="link_owner_opens_them">Menyimpan tautannya sendiri</string>

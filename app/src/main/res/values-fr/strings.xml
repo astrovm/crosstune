@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Ouvrir dans YouTube Music</string>
     <string name="open_in_youtube">Ouvrir dans YouTube</string>
     <string name="open_in_spotify">Ouvrir dans Spotify</string>
+    <string name="open_in_audiomack">Ouvrir dans Audiomack</string>
+    <string name="open_in_qobuz">Ouvrir dans Qobuz</string>
     <string name="open_in_bandcamp">Ouvrir dans Bandcamp</string>
     <string name="open_in_amazon_music">Ouvrir dans Amazon Music</string>
     <string name="from_service">depuis %1$s</string>
     <string name="open_in_custom">Ouvrir dans %1$s</string>
     <string name="settings_button">Paramètres</string>
     <string name="settings_title">Paramètres</string>
-    <string name="settings_default_title">Application par défaut</string>
+    <string name="settings_where_you_listen">Là où vous écoutez</string>
     <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Annuler</string>
     <string name="retry_button">Réessayer</string>
     <string name="history_title">Récents</string>
+    <string name="search_recent">Rechercher dans Récents</string>
     <string name="playlist_songs_title">Titres</string>
+    <string name="play_all_button">Tout lire</string>
+    <string name="play_all_progress">Recherche des titres… %1$d sur %2$d</string>
     <string name="clear_history_button">Effacer l\'historique</string>
     <string name="tile_label">Ouvrir le lien musical copié</string>
     <string name="shortcut_paste_short">Ouvrir le lien copié</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Touchez un lien musical dans n’importe quelle application, ou partagez-le avec Crosstune.</string>
     <string name="copy_link_button">Copier le lien</string>
     <string name="share_link_button">Partager le lien</string>
+    <string name="copy_songs_button">Copier les titres</string>
+    <string name="share_songs_button">Partager les titres</string>
+    <string name="songs_copied">Titres copiés</string>
     <string name="settings_link_owners_title">Applications avec ces liens</string>
     <string name="settings_link_owners_description">Touchez-en une pour changer.</string>
     <string name="link_owner_opens_them">Garde ses liens</string>

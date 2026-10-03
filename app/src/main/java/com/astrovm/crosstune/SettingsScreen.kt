@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -92,7 +94,8 @@ private fun SettingsList(
     ) {
         Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, includeNotAllowed = false) }
 
-        SectionHeader(stringResource(R.string.settings_default_title))
+        // "Open links in" says what this is, also when it's set to ask or show first.
+        Spacer(Modifier.height(16.dp))
         Group {
             DefaultDestinationMenu(
                 destinations = state.destinations,
@@ -473,6 +476,13 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
                     stringResource(R.string.setup_not_allowed),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
+                )
+            } else if (item.locked) {
+                // The switch is off and can't be turned on; the reason is on the source's page.
+                Text(
+                    stringResource(R.string.settings_where_you_listen),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else if (item.on && item.rule != null) {
                 // Only when it differs from the default, so the list stays quiet.

@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">Otwórz w YouTube Music</string>
     <string name="open_in_youtube">Otwórz w YouTube</string>
     <string name="open_in_spotify">Otwórz w Spotify</string>
+    <string name="open_in_audiomack">Otwórz w Audiomack</string>
+    <string name="open_in_qobuz">Otwórz w Qobuz</string>
     <string name="open_in_bandcamp">Otwórz w Bandcamp</string>
     <string name="open_in_amazon_music">Otwórz w Amazon Music</string>
     <string name="from_service">z %1$s</string>
     <string name="open_in_custom">Otwórz w %1$s</string>
     <string name="settings_button">Ustawienia</string>
     <string name="settings_title">Ustawienia</string>
-    <string name="settings_default_title">Domyślna aplikacja</string>
+    <string name="settings_where_you_listen">Tu słuchasz</string>
     <string name="settings_default_label">Otwieraj linki w</string>
     <string name="settings_about_title">Informacje</string>
     <string name="settings_links_title">Otwieraj linki z</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">Anuluj</string>
     <string name="retry_button">Spróbuj ponownie</string>
     <string name="history_title">Ostatnie</string>
+    <string name="search_recent">Szukaj w ostatnich</string>
     <string name="playlist_songs_title">Utwory</string>
+    <string name="play_all_button">Odtwórz wszystko</string>
+    <string name="play_all_progress">Szukanie utworów… %1$d z %2$d</string>
     <string name="clear_history_button">Wyczyść historię</string>
     <string name="tile_label">Otwórz skopiowany link muzyczny</string>
     <string name="shortcut_paste_short">Otwórz skopiowany link</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Kliknij link do muzyki w dowolnej aplikacji albo udostępnij go do Crosstune.</string>
     <string name="copy_link_button">Kopiuj link</string>
     <string name="share_link_button">Udostępnij link</string>
+    <string name="copy_songs_button">Kopiuj utwory</string>
+    <string name="share_songs_button">Udostępnij utwory</string>
+    <string name="songs_copied">Skopiowano utwory</string>
     <string name="settings_link_owners_title">Aplikacje z tymi linkami</string>
     <string name="settings_link_owners_description">Kliknij jedną, aby to zmienić.</string>
     <string name="link_owner_opens_them">Zatrzymuje swoje linki</string>

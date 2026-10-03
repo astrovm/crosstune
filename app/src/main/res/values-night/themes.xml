@@ -4,4 +4,6 @@
         <item name="android:windowBackground">@color/window_background</item>
     </style>
     <color name="window_background">#FF141218</color>
+    <color name="widget_background">#FF2B2930</color>
+    <color name="widget_text">#FFE6E1E5</color>
 </resources>

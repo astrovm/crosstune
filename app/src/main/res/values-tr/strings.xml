@@ -9,13 +9,15 @@
     <string name="open_in_youtube_music">YouTube Music\'te aç</string>
     <string name="open_in_youtube">YouTube\'da aç</string>
     <string name="open_in_spotify">Spotify\'da aç</string>
+    <string name="open_in_audiomack">Audiomack\'da aç</string>
+    <string name="open_in_qobuz">Qobuz\'da aç</string>
     <string name="open_in_bandcamp">Bandcamp\'te aç</string>
     <string name="open_in_amazon_music">Amazon Music\'te aç</string>
     <string name="from_service">Kaynak: %1$s</string>
     <string name="open_in_custom">%1$s ile aç</string>
     <string name="settings_button">Ayarlar</string>
     <string name="settings_title">Ayarlar</string>
-    <string name="settings_default_title">Varsayılan uygulama</string>
+    <string name="settings_where_you_listen">Dinlediğin yer</string>
     <string name="settings_default_label">Bağlantıları şurada aç</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
@@ -79,7 +81,10 @@
     <string name="cancel_button">İptal</string>
     <string name="retry_button">Tekrar dene</string>
     <string name="history_title">Son kullanılanlar</string>
+    <string name="search_recent">Son kullanılanlarda ara</string>
     <string name="playlist_songs_title">Şarkılar</string>
+    <string name="play_all_button">Tümünü çal</string>
+    <string name="play_all_progress">Şarkılar aranıyor… %2$d şarkıdan %1$d</string>
     <string name="clear_history_button">Geçmişi temizle</string>
     <string name="tile_label">Kopyalanan müzik bağlantısını aç</string>
     <string name="shortcut_paste_short">Kopyalanan bağlantıyı aç</string>
@@ -120,6 +125,9 @@
     <string name="empty_hint">Herhangi bir uygulamada bir müzik bağlantısına dokun ya da Crosstune ile paylaş.</string>
     <string name="copy_link_button">Bağlantıyı kopyala</string>
     <string name="share_link_button">Bağlantıyı paylaş</string>
+    <string name="copy_songs_button">Şarkıları kopyala</string>
+    <string name="share_songs_button">Şarkıları paylaş</string>
+    <string name="songs_copied">Şarkılar kopyalandı</string>
     <string name="settings_link_owners_title">Bu bağlantılara sahip uygulamalar</string>
     <string name="settings_link_owners_description">Değiştirmek için birine dokun.</string>
     <string name="link_owner_opens_them">Bağlantılarını kendisi açar</string>
