@@ -79,6 +79,7 @@
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
     <string name="history_title">Недавние</string>
+    <string name="playlist_songs_title">Треки</string>
     <string name="clear_history_button">Очистить историю</string>
     <string name="tile_label">Открыть скопированную ссылку</string>
     <string name="shortcut_paste_short">Открыть ссылку</string>

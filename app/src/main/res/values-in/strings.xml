@@ -79,6 +79,7 @@
     <string name="cancel_button">Batal</string>
     <string name="retry_button">Coba lagi</string>
     <string name="history_title">Terbaru</string>
+    <string name="playlist_songs_title">Lagu</string>
     <string name="clear_history_button">Hapus riwayat</string>
     <string name="tile_label">Buka link musik yang disalin</string>
     <string name="shortcut_paste_short">Buka link disalin</string>
