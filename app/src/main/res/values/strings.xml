@@ -78,6 +78,7 @@
 
     <string name="setting_ask_each_time">Ask which app to use</string>
     <string name="show_song_first">Show the song first</string>
+    <string name="show_song_short">Show song</string>
     <string name="setting_exact_match">Open the exact match</string>
     <string name="setting_exact_match_description">Opens the song itself when the app supports it. Otherwise it searches.</string>
     <string name="setting_clean_links">Remove tracking from links</string>
@@ -98,8 +99,6 @@
     <string name="error_clipboard_empty">Copy a music link first.</string>
     <string name="copy_search_action">Copy search text</string>
     <string name="share_search_link">Share search link</string>
-    <string name="copy_original_link">Copy original link</string>
-    <string name="share_original_link">Share original link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_copied_to_clipboard">Link copied</string>
     <string name="link_settings_helper_title">Allow the new links</string>
@@ -124,6 +123,7 @@
     <string name="search_in_destination">Search in %1$s</string>
     <string name="history_open">Open %1$s</string>
     <string name="handoff_opening">Opening in %1$s…</string>
+    <string name="handoff_getting_link">Getting the %1$s link…</string>
     <string name="notice_links_not_allowed">Some links can\'t open in Crosstune yet</string>
     <string name="notice_own_links_off">Tapped links open in your browser, not Crosstune</string>
     <string name="allow_button">Allow</string>
@@ -158,6 +158,4 @@
     <string name="setup_fixed">Fixed</string>
     <string name="choose_app_button">Choose app</string>
     <string name="make_default_named">Make %1$s the default</string>
-    <string name="show_song_short">Show song</string>
-    <string name="handoff_getting_link">Getting the %1$s link…</string>
 </resources>

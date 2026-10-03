@@ -521,11 +521,6 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- The share sheet's "Copy … link" action; only Crosstune's own PendingIntent reaches it. -->
-        <receiver
-            android:name=".CopyLinkReceiver"
-            android:exported="false" />
-
         <service
             android:name=".ClipboardTileService"
             android:exported="true"

@@ -65,6 +65,7 @@
 
     <string name="setting_ask_each_time">Pytaj, której aplikacji użyć</string>
     <string name="show_song_first">Najpierw pokaż utwór</string>
+    <string name="show_song_short">Pokaż utwór</string>
     <string name="setting_exact_match">Otwieraj dokładne dopasowanie</string>
     <string name="setting_exact_match_description">Otwiera sam utwór, gdy aplikacja na to pozwala. W przeciwnym razie go wyszukuje.</string>
     <string name="setting_clean_links">Usuwaj śledzenie z linków</string>
@@ -85,8 +86,6 @@
     <string name="error_clipboard_empty">Najpierw skopiuj link muzyczny.</string>
     <string name="copy_search_action">Kopiuj tekst wyszukiwania</string>
     <string name="share_search_link">Udostępnij link wyszukiwania</string>
-    <string name="copy_original_link">Kopiuj oryginalny link</string>
-    <string name="share_original_link">Udostępnij oryginalny link</string>
     <string name="search_copied_to_clipboard">Skopiowano tekst wyszukiwania</string>
     <string name="link_copied_to_clipboard">Skopiowano link</string>
     <string name="link_settings_helper_title">Zezwól na nowe linki</string>
@@ -108,6 +107,7 @@
     <string name="privacy_policy">Polityka prywatności</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/pl/privacy/</string>
     <string name="handoff_opening">Otwieranie w %1$s…</string>
+    <string name="handoff_getting_link">Pobieranie linku %1$s…</string>
     <string name="notice_links_not_allowed">Niektóre linki jeszcze nie otwierają się w Crosstune</string>
     <string name="notice_own_links_off">Kliknięte linki otwierają się w przeglądarce, nie w Crosstune</string>
     <string name="allow_button">Zezwól</string>

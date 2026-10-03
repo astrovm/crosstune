@@ -65,6 +65,7 @@
 
     <string name="setting_ask_each_time">询问使用哪个应用</string>
     <string name="show_song_first">先显示歌曲</string>
+    <string name="show_song_short">查看歌曲</string>
     <string name="setting_exact_match">打开精确匹配</string>
     <string name="setting_exact_match_description">应用支持时直接打开歌曲本身，否则进行搜索。</string>
     <string name="setting_clean_links">去除链接中的跟踪参数</string>
@@ -85,8 +86,6 @@
     <string name="error_clipboard_empty">请先复制音乐链接。</string>
     <string name="copy_search_action">复制搜索文字</string>
     <string name="share_search_link">分享搜索链接</string>
-    <string name="copy_original_link">复制原始链接</string>
-    <string name="share_original_link">分享原始链接</string>
     <string name="search_copied_to_clipboard">已复制搜索文字</string>
     <string name="link_copied_to_clipboard">已复制链接</string>
     <string name="link_settings_helper_title">允许打开新链接</string>
@@ -108,6 +107,7 @@
     <string name="privacy_policy">隐私政策</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/zh-cn/privacy/</string>
     <string name="handoff_opening">正在用 %1$s 打开…</string>
+    <string name="handoff_getting_link">正在获取 %1$s 链接…</string>
     <string name="notice_links_not_allowed">部分链接还不能在 Crosstune 中打开</string>
     <string name="notice_own_links_off">点按的链接会在浏览器中打开，而不是在 Crosstune 中</string>
     <string name="allow_button">允许</string>

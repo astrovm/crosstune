@@ -65,6 +65,7 @@
 
     <string name="setting_ask_each_time">Hangi uygulamanın kullanılacağını sor</string>
     <string name="show_song_first">Önce şarkıyı göster</string>
+    <string name="show_song_short">Şarkıyı göster</string>
     <string name="setting_exact_match">Tam eşleşmeyi aç</string>
     <string name="setting_exact_match_description">Uygulama destekliyorsa şarkının kendisini açar. Desteklemiyorsa arar.</string>
     <string name="setting_clean_links">Bağlantılardan izlemeyi kaldır</string>
@@ -85,8 +86,6 @@
     <string name="error_clipboard_empty">Önce bir müzik bağlantısı kopyalayın.</string>
     <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>
-    <string name="copy_original_link">Orijinal bağlantıyı kopyala</string>
-    <string name="share_original_link">Orijinal bağlantıyı paylaş</string>
     <string name="search_copied_to_clipboard">Arama metni kopyalandı</string>
     <string name="link_copied_to_clipboard">Bağlantı kopyalandı</string>
     <string name="link_settings_helper_title">Yeni bağlantılara izin verin</string>
@@ -108,6 +107,7 @@
     <string name="privacy_policy">Gizlilik politikası</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/tr/privacy/</string>
     <string name="handoff_opening">%1$s uygulamasında açılıyor…</string>
+    <string name="handoff_getting_link">%1$s bağlantısı alınıyor…</string>
     <string name="notice_links_not_allowed">Bazı bağlantılar henüz Crosstune\'da açılmıyor</string>
     <string name="notice_own_links_off">Dokunulan bağlantılar Crosstune yerine tarayıcıda açılıyor</string>
     <string name="allow_button">İzin ver</string>

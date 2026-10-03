@@ -65,6 +65,7 @@
 
     <string name="setting_ask_each_time">Спрашивать, где открыть</string>
     <string name="show_song_first">Сначала показать трек</string>
+    <string name="show_song_short">Показать трек</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
     <string name="setting_exact_match_description">Открывает сам трек, если приложение это поддерживает. Иначе ищет его.</string>
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
@@ -85,8 +86,6 @@
     <string name="error_clipboard_empty">Сначала скопируйте музыкальную ссылку.</string>
     <string name="copy_search_action">Копировать текст поиска</string>
     <string name="share_search_link">Поделиться ссылкой на поиск</string>
-    <string name="copy_original_link">Копировать исходную ссылку</string>
-    <string name="share_original_link">Поделиться исходной ссылкой</string>
     <string name="search_copied_to_clipboard">Текст поиска скопирован</string>
     <string name="link_copied_to_clipboard">Ссылка скопирована</string>
     <string name="link_settings_helper_title">Разрешите новые ссылки</string>
@@ -108,6 +107,7 @@
     <string name="privacy_policy">Политика конфиденциальности</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ru/privacy/</string>
     <string name="handoff_opening">Открываем в %1$s…</string>
+    <string name="handoff_getting_link">Получаем ссылку %1$s…</string>
     <string name="notice_links_not_allowed">Некоторые ссылки пока не открываются в Crosstune</string>
     <string name="notice_own_links_off">Ссылки открываются в браузере, а не в Crosstune</string>
     <string name="allow_button">Разрешить</string>

@@ -100,17 +100,13 @@ internal data class UiState(
     val linkMode: LinkMode
         get() = if (showSongFirst) LinkMode.SHOW else if (askEachTime) LinkMode.ASK else LinkMode.OPEN
 
-    /**
-     * Apps the share sheet offers to open a link in directly: the default first, then other installed
-     * ones. Crosstune's own entry already opens in the default app, so then it isn't offered twice.
-     */
-    val shareTargets: List<MusicService>
-        get() = if (!setupComplete || !hasDefault || !shareSheetApps) {
-            emptyList()
-        } else {
-            val default = (defaultDestination as? Destination.Service)?.service
-            (listOfNotNull(default) + MusicService.entries.filter { it in installed }).distinct()
-        }
+    /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
+    val shareSheetEntries: Boolean
+        get() = setupComplete && hasDefault && shareSheetApps
+
+    /** The app the top row offers to open a shared link in, when the default is one. */
+    val shareSheetApp: MusicService?
+        get() = (defaultDestination as? Destination.Service)?.service
 
     /** Whether Crosstune opens any links at all. */
     val interceptsAnything: Boolean get() = intercepted.isNotEmpty() || frontendSources.isNotEmpty()
@@ -137,7 +133,7 @@ internal enum class LinkMode { OPEN, ASK, SHOW }
 internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
-    data class Share(val url: String, val original: String?, val source: MusicService?) : Effect
+    data class Share(val url: String) : Effect
     data class Copy(val url: String) : Effect
 }
 
@@ -340,9 +336,9 @@ internal class MainViewModel(
     }
 
     /** Clipboard text from the Quick Settings tile or a launcher shortcut, which may name the app to open it in. */
-    fun resolveClipboard(text: String?, destination: Destination?) {
+    fun resolveClipboard(text: String?, destination: Destination?, show: Boolean, after: AfterLookup) {
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
-        resolveIncoming(text, destination)
+        resolveIncoming(text, destination, show, after)
     }
 
     fun retry() {
@@ -437,8 +433,7 @@ internal class MainViewModel(
         if (pendingOpen && uiState.afterLookup != AfterLookup.OPEN) {
             pendingOpen = false
             val url = prepareDestination(uiState.resultDestination) ?: return
-            val original = originalUrl()?.takeIf { it != url }
-            effectChannel.send(if (uiState.afterLookup == AfterLookup.SHARE) Effect.Share(url, original, uiState.link?.service) else Effect.Copy(url))
+            effectChannel.send(if (uiState.afterLookup == AfterLookup.SHARE) Effect.Share(url) else Effect.Copy(url))
             return
         }
         // Incoming links without a chosen destination must not search the default before asking.
@@ -612,8 +607,6 @@ internal class MainViewModel(
         return uiState.destinationUrls[destination]?.url?.forSharing()
     }
 
-    /** The link the result came from, as Crosstune would share it. */
-    fun originalUrl(): String? = uiState.link?.url?.forSharing()
 
     fun clear() {
         job?.cancel()

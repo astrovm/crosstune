@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import android.app.ActivityOptions
 import android.app.Application
 import android.content.ClipData
 import androidx.compose.ui.test.hasTestTag
@@ -33,7 +32,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
-import android.service.chooser.ChooserAction
 import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -421,75 +419,22 @@ class MainActivityTest {
         return nextStartedActivity()!!.also { assertEquals(Intent.ACTION_CHOOSER, it.action) }
     }
 
-    private fun Intent.customActions(): List<ChooserAction> =
-        getParcelableArrayExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, ChooserAction::class.java).orEmpty().toList()
-
     @Test
-    fun theShareSheetOffersToCopyOrShareTheOriginalLinkInstead() {
+    fun theShareSheetSharesTheConvertedLinkWithoutCrosstuneInIt() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
         launch()
         resolveTyped()
+        waitForDestinationReady()
 
         val chooser = shareChooser()
+        assertEquals("https://www.deezer.com/search/Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
         // Crosstune isn't offered in its own share sheet, which would only loop back here.
         assertEquals(
             listOf(ComponentName(app, MainActivity::class.java)),
             chooser.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ComponentName::class.java)!!.toList()
         )
-        val (copy, share) = chooser.customActions()
-        assertEquals(string(R.string.copy_original_link), copy.label)
-        assertEquals(string(R.string.share_original_link), share.label)
-        val original = "https://open.spotify.com/track/$TRACK_ID"
-
-        CopyLinkReceiver().onReceive(app, shadowOf(copy.action).savedIntent)
-        assertEquals(original, app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
-
-        val shareOriginal = shadowOf(share.action).savedIntent
-        assertEquals(Intent.ACTION_CHOOSER, shareOriginal.action)
-        val shared = shareOriginal.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
-        assertEquals(original, shared.getStringExtra(Intent.EXTRA_TEXT))
-        // Crosstune lets the share sheet start it, since some phones' share sheets don't lend their own permission.
-        val options = shadowOf(share.action).options!!
-        assertEquals(
-            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS,
-            options.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
-        )
-    }
-
-    @Test
-    @Config(sdk = [35])
-    fun beforeAndroid16TheShareSheetIsLetStartCrosstuneTheOlderWay() {
-        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
-        launch()
-        resolveTyped()
-
-        val share = shareChooser().customActions()[1]
-        @Suppress("DEPRECATION")
-        assertEquals(
-            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
-            shadowOf(share.action).options!!.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode")
-        )
-    }
-
-    @Test
-    fun noOriginalLinkActionsWhenSharingTheOriginalItself() {
-        prefs().edit().putString("default_target", "SPOTIFY").commit()
-        respondWithTrack("Mine", "Artist · Song")
-        launch()
-        resolveTyped()
-        assertEquals(emptyList<ChooserAction>(), shareChooser().customActions())
-
-        // A copy request without a link does nothing.
-        CopyLinkReceiver().onReceive(app, Intent(app, CopyLinkReceiver::class.java))
-    }
-
-    @Test
-    @Config(sdk = [33])
-    fun beforeAndroid14TheShareSheetHasNoExtraActions() {
-        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
-        launch()
-        resolveTyped()
-        assertFalse(shareChooser().hasExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS))
+        assertFalse(chooser.hasExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS))
     }
 
     @Test
@@ -581,34 +526,25 @@ class MainActivityTest {
     }
 
     @Test
-    fun theShareSheetOffersAppsToOpenLinksInAfterTheRecentSongs() {
+    fun theShareSheetOffersTheDefaultAppAndToShareCopyOrShowAfterTheRecentSongs() {
         prefs().edit().putString("default_target", "DEEZER").commit()
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.TIDAL.packageName })
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SOUNDCLOUD.packageName })
         respondWithTrack("No Cover", "Artist · Song")
         launch()
         resolveTyped()
 
-        // Crosstune's own entry opens in Deezer, the default, so only the other apps are offered.
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 3 }
-        val (song, tidal, soundcloud) = dynamicShortcuts().sortedBy { it.rank }
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 5 }
+        val (song, deezer) = dynamicShortcuts().sortedBy { it.rank }
+        assertEquals(
+            listOf("No Cover", "Deezer", string(R.string.share_link_button), string(R.string.copy_link_button), string(R.string.show_song_short)),
+            dynamicShortcuts().sortedBy { it.rank }.map { it.shortLabel }
+        )
         assertEquals("No Cover", song.shortLabel)
-        assertEquals("SoundCloud", soundcloud.shortLabel)
         // Named by the app alone, so a long "Open in …" isn't cut off in the share sheet.
-        assertEquals("TIDAL", tidal.shortLabel)
-        assertNull(tidal.longLabel)
-        assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), tidal.categories)
-        // Android drops shortcuts hidden from the launcher, so there they open the copied link.
-        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, tidal.intent!!.action)
-        assertEquals(MainActivity.PASTE_ALIAS, tidal.intent!!.component!!.className)
-
-        // When Crosstune's own entry asks or shows first, the default is offered as well, first.
-        // Two at most, leaving the row for people and chats: SoundCloud doesn't make it.
-        inSettings { chooseDefaultHere(string(R.string.setting_ask_each_time)) }
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 3 }
-        assertEquals(listOf("No Cover", "Deezer", "TIDAL"), dynamicShortcuts().sortedBy { it.rank }.map { it.shortLabel })
-        inSettings { chooseDefaultHere(string(R.string.target_deezer)) }
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().any { it.shortLabel == "SoundCloud" } }
+        assertNull(deezer.longLabel)
+        assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), deezer.categories)
+        // Android drops shortcuts hidden from the launcher, so there they use the copied link.
+        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, deezer.intent!!.action)
+        assertEquals(MainActivity.PASTE_ALIAS, deezer.intent!!.component!!.className)
 
         // Android shows them for any shared text, so they can be turned off, leaving the song.
         click(string(R.string.settings_button))
@@ -621,10 +557,60 @@ class MainActivityTest {
     @Test
     @Config(sdk = [29])
     fun beforeAndroid11ShareSheetTargetsAreNotKeptLongLived() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("ask_each_time", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").commit()
         launch()
         composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
-        assertEquals("Deezer", dynamicShortcuts().single().shortLabel)
+        assertEquals("Deezer", dynamicShortcuts().minBy { it.rank }.shortLabel)
+    }
+
+    private fun sharedFromTopRow(entry: String) = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+        putExtra(Intent.EXTRA_SHORTCUT_ID, entry)
+    }
+
+    @Test
+    fun theTopRowsShareEntrySharesTheConvertedLinkWithoutCrosstune() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        respondWithTrack("Shared On", "Artist · Song")
+        val activity = launch(sharedFromTopRow("action:SHARE"))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        val chooser = nextStartedActivity()!!
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
+    @Test
+    fun theTopRowsCopyEntryCopiesTheConvertedLink() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        respondWithTrack("Copied On", "Artist · Song")
+        val activity = launch(sharedFromTopRow("action:COPY"))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://www.deezer.com/search/Copied%20On%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun theTopRowsShowEntryShowsTheSongEvenWhenLinksOpenRightAway() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        respondWithTrack("Shown Here", "Artist · Song")
+        val activity = launch(sharedFromTopRow("action:SHOW"))
+        waitForText("Shown Here")
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun theTopRowsCopyEntryFromTheLauncherCopiesTheConvertedCopiedLink() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        respondWithTrack("From Launcher", "Artist · Song")
+        app.getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
+        launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "action:COPY"))
+        controller!!.windowFocusChanged(true)
+        val activity = controller!!.get()
+        waitUntil { activity.isFinishing }
+        assertEquals("https://www.deezer.com/search/From%20Launcher%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
     }
 
     @Test

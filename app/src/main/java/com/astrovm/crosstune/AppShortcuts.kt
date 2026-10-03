@@ -12,17 +12,21 @@ import androidx.core.net.toUri
 
 /**
  * Keeps Crosstune's dynamic shortcuts in step with the app: the latest songs, and share sheet
- * targets that open a shared link straight in one app. Android drops shortcuts hidden from the
- * launcher, so the targets show there too, after the songs, where they open the copied link.
+ * targets that open a shared link in the default app, or share, copy or show it. Android drops
+ * shortcuts hidden from the launcher, so the targets show there too, after the songs, where they
+ * do the same with the copied link.
  */
 internal class AppShortcuts(private val context: Context, private val loadArtwork: suspend (String) -> ImageBitmap?) {
 
-    suspend fun update(recent: List<HistoryEntry>, shareTargets: List<MusicService>) {
+    /**
+     * With [shareSheet] on, the share sheet's top row offers to open a shared link in [app], the
+     * default, and to share, copy or show it instead. Android shows the ones used most.
+     */
+    suspend fun update(recent: List<HistoryEntry>, shareSheet: Boolean, app: MusicService?) {
         val manager = context.getSystemService(ShortcutManager::class.java) ?: return
         val songs = recent.take(MAX_RECENT).mapIndexed { rank, entry -> songShortcut(entry, rank) }
-        // Preview: the default app, then each thing the share sheet could do with the link instead.
-        val opens = shareTargets.take(1).mapIndexed { rank, service -> shareTarget(service, rank) }
-        val actions = if (shareTargets.isEmpty()) emptyList() else ShareAction.entries.mapIndexed { rank, action -> actionTarget(action, opens.size + rank) }
+        val opens = listOfNotNull(app.takeIf { shareSheet }).map { shareTarget(it, 0) }
+        val actions = if (shareSheet) ShareAction.entries.mapIndexed { rank, action -> actionTarget(action, opens.size + rank) } else emptyList()
         val targets = opens + actions
         // Some devices allow as few as five per activity, counting the one in shortcuts.xml.
         manager.dynamicShortcuts = (songs + targets).take(manager.maxShortcutCountPerActivity - manager.manifestShortcuts.size)
@@ -92,8 +96,6 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
         }
 
         const val MAX_RECENT = 3
-        /** Android's top row is shared with people and chats, so Crosstune takes little of it. */
-        const val MAX_SHARE_TARGETS = 2
         private const val RECENT_PREFIX = "recent:"
         private const val SHARE_PREFIX = "open_in:"
 

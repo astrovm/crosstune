@@ -65,6 +65,7 @@
 
     <string name="setting_ask_each_time">Perguntar qual app usar</string>
     <string name="show_song_first">Mostrar a música primeiro</string>
+    <string name="show_song_short">Ver música</string>
     <string name="setting_exact_match">Abrir o resultado exato</string>
     <string name="setting_exact_match_description">Abre a própria música quando o app permite. Caso contrário, faz uma busca.</string>
     <string name="setting_clean_links">Remover rastreamento dos links</string>
@@ -85,8 +86,6 @@
     <string name="error_clipboard_empty">Copie um link de música primeiro.</string>
     <string name="copy_search_action">Copiar texto da busca</string>
     <string name="share_search_link">Compartilhar link de busca</string>
-    <string name="copy_original_link">Copiar link original</string>
-    <string name="share_original_link">Compartilhar link original</string>
     <string name="search_copied_to_clipboard">Texto da busca copiado</string>
     <string name="link_copied_to_clipboard">Link copiado</string>
     <string name="link_settings_helper_title">Permita os novos links</string>
@@ -108,6 +107,7 @@
     <string name="privacy_policy">Política de privacidade</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/pt-br/privacy/</string>
     <string name="handoff_opening">Abrindo no %1$s…</string>
+    <string name="handoff_getting_link">Buscando o link do %1$s…</string>
     <string name="notice_links_not_allowed">Alguns links ainda não abrem no Crosstune</string>
     <string name="notice_own_links_off">Links tocados abrem no navegador, não no Crosstune</string>
     <string name="allow_button">Permitir</string>
