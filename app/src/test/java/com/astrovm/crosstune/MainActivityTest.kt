@@ -532,10 +532,11 @@ class MainActivityTest {
         launch()
         resolveTyped()
 
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 5 }
+        // Three, as many as Android shows per app.
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 4 }
         val (song, deezer) = dynamicShortcuts().sortedBy { it.rank }
         assertEquals(
-            listOf("No Cover", "Deezer", string(R.string.share_link_button), string(R.string.copy_link_button), string(R.string.show_song_short)),
+            listOf("No Cover", "Deezer", string(R.string.share_link_button), string(R.string.show_song_short)),
             dynamicShortcuts().sortedBy { it.rank }.map { it.shortLabel }
         )
         assertEquals("No Cover", song.shortLabel)
@@ -581,16 +582,6 @@ class MainActivityTest {
     }
 
     @Test
-    fun theTopRowsCopyEntryCopiesTheConvertedLink() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
-        respondWithTrack("Copied On", "Artist · Song")
-        val activity = launch(sharedFromTopRow("action:COPY"))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
-        assertEquals("https://www.deezer.com/search/Copied%20On%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
-        assertNull(nextStartedActivity())
-    }
-
-    @Test
     fun theTopRowsShowEntryShowsTheSongEvenWhenLinksOpenRightAway() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         respondWithTrack("Shown Here", "Artist · Song")
@@ -601,16 +592,17 @@ class MainActivityTest {
     }
 
     @Test
-    fun theTopRowsCopyEntryFromTheLauncherCopiesTheConvertedCopiedLink() {
+    fun theTopRowsShareEntryFromTheLauncherSharesTheConvertedCopiedLink() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
         respondWithTrack("From Launcher", "Artist · Song")
         app.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
-        launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "action:COPY"))
+        launch(pasteIntent().putExtra(Intent.EXTRA_SHORTCUT_ID, "action:SHARE"))
         controller!!.windowFocusChanged(true)
         val activity = controller!!.get()
         waitUntil { activity.isFinishing }
-        assertEquals("https://www.deezer.com/search/From%20Launcher%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        val chooser = nextStartedActivity()!!
+        assertEquals("https://www.deezer.com/search/From%20Launcher%20Artist", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
     }
 
     @Test
