@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
+import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 
 /** What Crosstune knows about an item; [artist] is blank for artists and playlists. */
 internal data class MusicMetadata(
@@ -8,7 +10,9 @@ internal data class MusicMetadata(
     val artist: String,
     val type: ItemType = ItemType.TRACK,
     /** Cover art, thumbnail or artist picture, when the service gives one. */
-    val artworkUrl: String? = null
+    val artworkUrl: String? = null,
+    /** A playlist's songs, as far as its service shows them without signing in; empty otherwise. */
+    val tracks: List<MusicMetadata> = emptyList()
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -84,12 +88,47 @@ internal object MetadataParsers {
         }.takeIf { it.title.isNotBlank() }
     }
 
-    /** Apple Music playlist pages title themselves "Name on Apple Music". */
+    /**
+     * Apple Music playlist pages title themselves "Name on Apple Music", and list their songs in
+     * the page's own data, each with a title, its artists and "song" as its kind.
+     */
     fun applePlaylist(html: String): MusicMetadata? {
         val tags = openGraphTags(html)
         val title = tags["og:title"]?.removeSuffix(" on Apple Music")?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image())
+        val data = appleDataRegex.find(html)?.groupValues?.get(1)
+        val songs = data?.let { runCatching { appleSongs(JSONTokener(it).nextValue()) }.getOrNull() }.orEmpty()
+        return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image(), songs)
     }
+
+    private val appleDataRegex = Regex("""<script type="application/json" id="serialized-server-data">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+
+    /** Every song found anywhere in Apple Music's page data, in page order. */
+    private fun appleSongs(value: Any?): List<MusicMetadata> = when (value) {
+        is JSONObject -> {
+            val isSong = value.optJSONObject("contentDescriptor")?.optString("kind") == "song"
+            val title = value.optString("title")
+            if (isSong && title.isNotBlank()) {
+                listOf(MusicMetadata(title, value.optString("artistName")))
+            } else {
+                value.keys().asSequence().flatMap { appleSongs(value.opt(it)) }.toList()
+            }
+        }
+        is JSONArray -> (0 until value.length()).flatMap { appleSongs(value.opt(it)) }
+        else -> emptyList()
+    }
+
+    /** Spotify's embed page lists a playlist's first songs, each with its title and artists. */
+    fun spotifyEmbedTracks(html: String): List<MusicMetadata> {
+        val data = spotifyDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val list = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
+            ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList") ?: return emptyList()
+        return (0 until list.length()).mapNotNull { index ->
+            val track = list.optJSONObject(index) ?: return@mapNotNull null
+            MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"))
+        }
+    }
+
+    private val spotifyDataRegex = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
 
     /** Deezer API object; errors come back as {"error": {...}} with HTTP 200, see [deezerError]. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
@@ -104,7 +143,14 @@ internal object MetadataParsers {
         val artwork = json.optString("cover_xl").ifEmpty { json.optString("picture_xl") }
             .ifEmpty { json.optJSONObject("album")?.optString("cover_xl").orEmpty() }
             .ifBlank { null }
-        return MusicMetadata(title, artist, type, artwork).takeIf { title.isNotBlank() }
+        // A playlist's object lists its songs, up to a few hundred.
+        val tracks = if (type == ItemType.PLAYLIST) json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty() else emptyList()
+        return MusicMetadata(title, artist, type, artwork, tracks).takeIf { title.isNotBlank() }
+    }
+
+    private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
+        val track = data.optJSONObject(index) ?: return@mapNotNull null
+        MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optJSONObject("artist")?.optString("name").orEmpty())
     }
 
     /** The error inside a Deezer API response, or null when there is none. */

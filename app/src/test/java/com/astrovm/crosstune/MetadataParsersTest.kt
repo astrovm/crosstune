@@ -294,4 +294,34 @@ class MetadataParsersTest {
         assertEquals(AppError.METADATA_UNAVAILABLE, error(300))
         assertNull(MetadataParsers.deezerError(json("""{"title":"Song"}""")))
     }
+
+    @Test
+    fun playlistsListTheirSongsWhereTheServiceShowsThem() {
+        val nextData = """{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First","subtitle":"Artist A, Artist B"},{"title":""},{"title":"Second","subtitle":"Artist C"},"skip"]}}}}}}"""
+        assertEquals(
+            listOf(MusicMetadata("First", "Artist A, Artist B"), MusicMetadata("Second", "Artist C")),
+            MetadataParsers.spotifyEmbedTracks("""<script id="__NEXT_DATA__" type="application/json">$nextData</script>""")
+        )
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.spotifyEmbedTracks("<html></html>"))
+        assertEquals(
+            emptyList<MusicMetadata>(),
+            MetadataParsers.spotifyEmbedTracks("""<script id="__NEXT_DATA__" type="application/json">{"props":{}}</script>""")
+        )
+
+        // Apple Music: songs anywhere in the page data, but not the playlist itself or untitled ones.
+        val pageData = """{"data":[{"contentDescriptor":{"kind":"playlist"},"title":"Hits","sections":[{"items":[
+            {"title":"Uno","artistName":"Artist","contentDescriptor":{"kind":"song"}},
+            {"title":"","contentDescriptor":{"kind":"song"}},
+            {"title":"Dos","artistName":"Other","contentDescriptor":{"kind":"song"}},1]}]}]}"""
+        val html = """<meta property="og:title" content="Hits on Apple Music"><script type="application/json" id="serialized-server-data">$pageData</script>"""
+        assertEquals(listOf(MusicMetadata("Uno", "Artist"), MusicMetadata("Dos", "Other")), MetadataParsers.applePlaylist(html)!!.tracks)
+        val broken = """<meta property="og:title" content="Hits on Apple Music"><script type="application/json" id="serialized-server-data">{nope</script>"""
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(broken)!!.tracks)
+
+        val deezer = json("""{"title":"Top","tracks":{"data":[{"title":"Boston","artist":{"name":"Stella"}},{"title":""},{"title":"Solo"},"x"]}}""")
+        assertEquals(listOf(MusicMetadata("Boston", "Stella"), MusicMetadata("Solo", "")), MetadataParsers.deezer(deezer, ItemType.PLAYLIST)!!.tracks)
+        // Only playlists list songs; an album's tracks aren't read.
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.deezer(deezer, ItemType.ALBUM)!!.tracks)
+    }
 }

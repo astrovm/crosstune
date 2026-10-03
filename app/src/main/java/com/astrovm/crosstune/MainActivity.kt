@@ -154,6 +154,7 @@ class MainActivity : ComponentActivity() {
                         onHistoryEntryClick = viewModel::showHistoryEntry,
                         onHistoryOpen = viewModel::openHistoryEntry,
                         onRemoveHistory = viewModel::removeHistoryEntry,
+                        onOpenTrack = viewModel::openTrack,
                         onClearHistory = viewModel::clearHistory,
                         onUndoClearHistory = viewModel::undoClearHistory,
                         onForgetClearedHistory = viewModel::forgetClearedHistory,

@@ -79,6 +79,7 @@
     <string name="cancel_button">Abbrechen</string>
     <string name="retry_button">Erneut versuchen</string>
     <string name="history_title">Zuletzt</string>
+    <string name="playlist_songs_title">Songs</string>
     <string name="clear_history_button">Verlauf löschen</string>
     <string name="tile_label">Kopierten Musik-Link öffnen</string>
     <string name="shortcut_paste_short">Kopierten Link öffnen</string>

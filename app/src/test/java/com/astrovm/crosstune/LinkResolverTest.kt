@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -132,5 +133,27 @@ class LinkResolverTest {
 
         respond("""{"title":"","artist":{"name":"Someone"}}""")
         assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://www.deezer.com/track/1") as Resolution.Failed).error)
+    }
+
+    @Test
+    fun spotifyPlaylistsReadTheirSongsFromTheEmbedPageWhenItCanBeRead() {
+        val page = """<meta property="og:title" content="Mix | Spotify">"""
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[{"title":"One","subtitle":"Band"}]}}}}}}</script>"""
+        fun serve(embedResponse: (Request) -> okhttp3.Response) {
+            fake.handler = { request -> if (request.url.encodedPath.startsWith("/embed/")) embedResponse(request) else FakeSpotify.html(request, page) }
+        }
+        val link = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+
+        serve { FakeSpotify.html(it, embed) }
+        assertEquals(listOf(MusicMetadata("One", "Band")), (resolve(link) as Resolution.Resolved).metadata.tracks)
+        assertTrue(fake.requestedUrls.contains("https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M"))
+
+        // Without the songs, the playlist still resolves.
+        serve { FakeSpotify.html(it, "", code = 404) }
+        assertEquals(MusicMetadata("Mix", "", ItemType.PLAYLIST), (resolve(link) as Resolution.Resolved).metadata)
+        serve { FakeSpotify.brokenBody(it) }
+        assertEquals(emptyList<MusicMetadata>(), (resolve(link) as Resolution.Resolved).metadata.tracks)
+        serve { FakeSpotify.html(it, """<script id="__NEXT_DATA__" type="application/json">{nope</script>""") }
+        assertEquals(emptyList<MusicMetadata>(), (resolve(link) as Resolution.Resolved).metadata.tracks)
     }
 }
