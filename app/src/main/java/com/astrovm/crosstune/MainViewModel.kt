@@ -528,7 +528,7 @@ internal class MainViewModel(
         val metadata = uiState.result ?: return null
         val service = destination.matchService
         // The link already belongs to the destination's service: open it as is instead of searching.
-        uiState.link?.takeIf { it.service == service }?.let { link ->
+        uiState.link?.takeIf { service != null && it.service == service }?.let { link ->
             return destination.adapt(link.url)
         }
         // YouTube and YouTube Music share playlists, so one opens as itself in the other.
@@ -553,7 +553,7 @@ internal class MainViewModel(
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
         val finishAfterOpen = lastRequest?.second == true
-        effectChannel.trySend(Effect.Open(link.url, link.service.packageName, finishAfterOpen))
+        effectChannel.trySend(Effect.Open(link.url, link.service?.packageName, finishAfterOpen))
     }
 
     fun dismissDestinationPicker() {
@@ -614,7 +614,7 @@ internal class MainViewModel(
 
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = destination.matchService
-        if (service == entry.link.service) return destination.adapt(entry.link.url)
+        if (service != null && service == entry.link.service) return destination.adapt(entry.link.url)
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))
@@ -677,7 +677,7 @@ internal class MainViewModel(
 
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
-        uiState.link?.takeIf { destination.matchService == it.service }?.let { return destination.adapt(it.url) }
+        uiState.link?.takeIf { it.service != null && destination.matchService == it.service }?.let { return destination.adapt(it.url) }
         // Every shown result has its link prepared before Copy and Share are enabled.
         return uiState.destinationUrls[destination]?.url?.forSharing()
     }

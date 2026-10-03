@@ -40,6 +40,9 @@ internal class LinkResolver(
     suspend fun resolve(input: LinkInput): Resolution = when (input) {
         is LinkInput.Link -> resolveLink(input.link)
         is LinkInput.ShortLink -> guarded(null) { resolveShortLink(input.url) }
+        is LinkInput.RecognizedSong -> Resolution.Resolved(
+            MusicLink(null, ItemType.TRACK, input.url, input.url), input.metadata
+        )
     }
 
     private suspend fun resolveShortLink(url: String): Resolution {

@@ -14,6 +14,26 @@ class MusicLinksTest {
     }
 
     @Test
+    fun recognizedSongSearchLinksDecodeSongAndArtist() {
+        val url = "https://www.google.com/search?q=A+Song+by+Example+Band"
+        val expected = LinkInput.RecognizedSong(
+            "https://www.google.com/search?q=A%20Song%20by%20Example%20Band",
+            MusicMetadata("A Song", "Example Band")
+        )
+        assertEquals(expected, MusicLinks.parse("A Song by Example Band\n$url"))
+        assertEquals(expected, MusicLinks.parse("https://google.com/search?q=A%20Song%20by%20Example%20Band&utm_source=test"))
+        val unicode = MusicLinks.parse("https://www.google.com/search?q=Canci%C3%B3n+%26+Sol+by+Artista") as LinkInput.RecognizedSong
+        assertEquals(MusicMetadata("Canción & Sol", "Artista"), unicode.metadata)
+        assertEquals(MusicMetadata("Walk by Night", "Band"), (MusicLinks.parse("https://www.google.com/search?q=Walk+by+Night+by+Band") as LinkInput.RecognizedSong).metadata)
+        listOf(
+            "https://www.google.com/search", "https://www.google.com/search?q=weather",
+            "https://www.google.com/search?q=+by+Band", "https://www.google.com/search?q=Song+by+",
+            "https://google.com.evil.example/search?q=Song+by+Band",
+            "https://www.google.com/other?q=Song+by+Band"
+        ).forEach { assertNull(it, MusicLinks.parse(it)) }
+    }
+
+    @Test
     fun youtubeVideosFromEveryUrlShape() {
         val id = "4NRXx6U8ABQ"
         val youtube = "https://www.youtube.com/watch?v=$id"

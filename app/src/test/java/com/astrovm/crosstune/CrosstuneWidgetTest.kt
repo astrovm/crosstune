@@ -55,6 +55,17 @@ class CrosstuneWidgetTest {
         }
 
     @Test
+    fun recognizedSongWidgetUsesArtistWithoutASourceService() {
+        val url = "https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        HistoryStore(preferences).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+        val loaded = runBlocking { CrosstuneWidget.widgetSongs(app).first() }
+        assertEquals("A Song", loaded.title)
+        assertEquals("Example Band", loaded.subtitle)
+        assertEquals(url, loaded.url)
+    }
+
+    @Test
     fun oneRowTallItsJustTheButtonForTheCopiedLink() = widget(CrosstuneWidget.PILL, listOf(song)) {
         onNode(hasText("Song")).assertDoesNotExist()
         onAllNodes(hasAnyDescendant(hasText(app.getString(R.string.shortcut_paste_short)))).assertAny(hasStartActivityClickAction(paste))

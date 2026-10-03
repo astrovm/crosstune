@@ -73,7 +73,7 @@
     <string name="setting_clean_links">Tracking aus Links entfernen</string>
     <string name="setting_clean_links_description">Entfernt Tracking-Teile wie ?si= oder utm_ aus Links, die du öffnest, kopierst oder teilst.</string>
     <string name="setting_share_sheet_apps">Apps beim Teilen</string>
-    <string name="setting_share_sheet_apps_description">In YouTube Music öffnen und weitere beim Teilen. Android zeigt sie bei jedem Text.</string>
+    <string name="setting_share_sheet_apps_description">Musik-Apps beim Teilen anzeigen.</string>
     <string name="setting_language">Sprache</string>
     <string name="language_system_default">Systemstandard</string>
     <string name="matching_text">Genauer Treffer wird gesucht…</string>

@@ -73,7 +73,7 @@
     <string name="setting_clean_links">Quitar el rastreo de los links</string>
     <string name="setting_clean_links_description">Saca las partes de rastreo, como ?si= o utm_, de los links que abrís, copiás o compartís.</string>
     <string name="setting_share_sheet_apps">Apps al compartir</string>
-    <string name="setting_share_sheet_apps_description">Abrir en YouTube Music y otras cuando compartís. Android las muestra para cualquier texto.</string>
+    <string name="setting_share_sheet_apps_description">Mostrá apps de música al compartir.</string>
     <string name="setting_language">Idioma</string>
     <string name="language_system_default">Predeterminado del sistema</string>
     <string name="matching_text">Buscando la coincidencia exacta…</string>

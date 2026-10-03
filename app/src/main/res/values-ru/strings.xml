@@ -73,7 +73,7 @@
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
     <string name="setting_clean_links_description">Удаляет метки отслеживания вроде ?si= или utm_ из ссылок, которые вы открываете, копируете или отправляете.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>
-    <string name="setting_share_sheet_apps_description">Открыть в YouTube Music и других при отправке. Android показывает их для любого текста.</string>
+    <string name="setting_share_sheet_apps_description">Показывать музыкальные приложения в меню «Поделиться».</string>
     <string name="setting_language">Язык</string>
     <string name="language_system_default">Как в системе</string>
     <string name="matching_text">Ищем точное совпадение…</string>

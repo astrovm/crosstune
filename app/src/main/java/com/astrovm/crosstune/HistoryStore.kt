@@ -58,7 +58,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         entries.forEach { entry ->
             array.put(
                 JSONObject()
-                    .put("service", entry.link.service.name)
+                    .put("service", entry.link.service?.name ?: "RECOGNIZED_SONG")
                     .put("type", entry.link.type.name)
                     .put("id", entry.link.id)
                     .put("url", entry.link.url)
@@ -84,7 +84,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val id = optString("id").ifEmpty { return null }
         val title = optString("title").ifEmpty { return null }
         // Entries saved before multi-service support only stored Spotify items.
-        val service = MusicService.fromName(optString("service", MusicService.SPOTIFY.name)) ?: return null
+        val source = optString("service", MusicService.SPOTIFY.name)
+        val service = if (source == "RECOGNIZED_SONG") null else MusicService.fromName(source) ?: return null
         val url = optString("url").ifEmpty { "https://open.spotify.com/${type.name.lowercase()}/$id" }
         val link = MusicLink(service, type, id, url, optString("region").ifEmpty { null })
         val destinations = optJSONObject("destinations") ?: JSONObject()

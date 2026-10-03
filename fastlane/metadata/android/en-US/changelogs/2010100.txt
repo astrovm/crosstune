@@ -1,0 +1,2 @@
+Open songs shared from Pixel Now Playing in your music app.
+Simpler, generic wording for apps in the share sheet.

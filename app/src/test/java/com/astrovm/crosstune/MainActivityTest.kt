@@ -227,6 +227,72 @@ class MainActivityTest {
     // endregion
 
     @Test
+    fun recognizedSongMatchesExactTrackInChosenShareSheetApp() {
+        prefs().edit().putBoolean("exact_match", true).commit()
+        fake.handler = { request -> FakeSpotify.html(request,
+            """{"data":[{"id":123,"title":"A Song","artist":{"name":"Example Band"},"link":"https://www.deezer.com/track/123"}]}""") }
+        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+            putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
+        })
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
+        assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") })
+    }
+
+    @Test
+    fun recognizedSongSearchesCustomDestinationInsteadOfOpeningGoogle() {
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+        })
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        assertTrue(fake.requestedUrls.isEmpty())
+        val entry = HistoryStore(prefs()).load().first()
+        controller!!.pause().stop().destroy()
+        val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
+        composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
+        assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun pixelNowPlayingShareOpensMusicSearchAndCanReopenFromHistory() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "A Song by Example Band\nhttps://www.google.com/search?q=A+Song+by+Example+Band")
+        })
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        val opened = nextStartedActivity()!!
+        assertEquals("com.google.android.apps.youtube.music", opened.`package`)
+        assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", opened.dataString)
+        assertTrue(fake.requestedUrls.isEmpty())
+        val saved = HistoryStore(prefs()).load().first()
+        assertEquals(MusicMetadata("A Song", "Example Band"), saved.metadata)
+        controller!!.pause().stop().destroy()
+        val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
+        composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
+        assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun recognizedSongDisplaysWithoutInventingASourceService() {
+        prefs().edit().putBoolean("show_song_first", true).commit()
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+        })
+        waitForText("A Song")
+        assertNull(nextStartedActivity())
+        composeRule.onNodeWithTag(RESULT_TEXT_TAG).assertIsDisplayed()
+        assertEquals(null, HistoryStore(prefs()).load().first().link.service)
+    }
+
+    @Test
     fun launcherShowsLinkHelperUntilDismissed() {
         launch()
         assertTextShown(string(R.string.link_settings_helper_title))
