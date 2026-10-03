@@ -33,6 +33,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.key
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -126,7 +135,7 @@ internal data class ScreenActions(
     val onShareSearch: () -> Unit = {},
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onHistoryOpen: (HistoryEntry) -> Unit = {},
-    val onHistoryCopy: (HistoryEntry) -> Unit = {},
+    val onRemoveHistory: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
     val onForgetClearedHistory: () -> Unit = {},
@@ -319,9 +328,10 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
     val snackbar = remember { SnackbarHostState() }
-    val clearedMessage = stringResource(R.string.history_cleared)
+    val clearedMessage = stringResource(if (state.removedOneFromHistory) R.string.history_removed else R.string.history_cleared)
     val undoLabel = stringResource(R.string.undo_button)
-    LaunchedEffect(state.canUndoClearHistory) {
+    // Each removal or clear gets its own offer, replacing one still showing.
+    LaunchedEffect(state.canUndoClearHistory, state.historyUndoId) {
         if (!state.canUndoClearHistory) return@LaunchedEffect
         val result = snackbar.showSnackbar(clearedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Long)
         if (result == SnackbarResult.ActionPerformed) actions.onUndoClearHistory() else actions.onForgetClearedHistory()
@@ -363,7 +373,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
-            if (shown.isNotEmpty()) Column { HistorySection(shown, actions) }
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
         }
     }
 }
@@ -874,7 +884,7 @@ private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modif
 }
 
 @Composable
-private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) {
+private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
     SectionHeader(
         title = stringResource(R.string.history_title),
         action = {
@@ -886,46 +896,87 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
     )
     Group {
         history.forEachIndexed { index, entry ->
-            if (index > 0) GroupDivider()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { actions.onHistoryEntryClick(entry) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
-                Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                    Text(
-                        text = entry.metadata.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        // Most are songs, so only other kinds say what they are, which leaves room
-                        // for the service before the line is cut.
-                        text = listOf(
-                            if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
-                            entry.metadata.artist,
-                            stringResource(entry.link.service.labelRes)
-                        )
-                            .filter { it.isNotBlank() }
-                            .joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                IconButton(onClick = { actions.onHistoryOpen(entry) }) {
-                    AppIcon(R.drawable.ic_open_in_new, contentDescription = stringResource(R.string.history_open, entry.metadata.title))
-                }
-                IconButton(onClick = { actions.onHistoryCopy(entry) }) {
-                    AppIcon(R.drawable.ic_content_copy, contentDescription = stringResource(R.string.history_copy, entry.metadata.title))
-                }
+            // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
+            key(entry.link.url) {
+                if (index > 0) GroupDivider()
+                HistoryRow(entry, state.ruleFor(entry.link) ?: state.defaultDestination, state.installed, actions)
             }
         }
+    }
+}
+
+/**
+ * One item in Recent: its cover, what it is, and a round button with the icon of the app it
+ * opens in. Tapping the rest shows the full result; swiping either way removes it.
+ */
+@Composable
+private fun HistoryRow(entry: HistoryEntry, destination: Destination, installed: Set<MusicService>, actions: ScreenActions) {
+    val swipe = rememberSwipeToDismissBoxState()
+    val remove = stringResource(R.string.remove_button)
+    SwipeToDismissBox(
+        state = swipe,
+        onDismiss = { actions.onRemoveHistory(entry) },
+        backgroundContent = { RemoveBackground(swipe.dismissDirection) }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .clickable { actions.onHistoryEntryClick(entry) }
+                // Swiping isn't something TalkBack can do, so removing is an action of its own there.
+                .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
+            Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp).weight(1f)) {
+                Text(
+                    text = entry.metadata.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    // Most are songs, so only other kinds say what they are, which leaves room
+                    // for the service before the line is cut.
+                    text = listOf(
+                        if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
+                        entry.metadata.artist,
+                        stringResource(entry.link.service.labelRes)
+                    )
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            // The app's own icon says where it opens, so there's no label on screen.
+            val press = rememberPress()
+            val openLabel = stringResource(R.string.history_open, entry.metadata.title)
+            FilledTonalIconButton(
+                onClick = { actions.onHistoryOpen(entry) },
+                interactionSource = press.source,
+                modifier = press.modifier.semantics { contentDescription = openLabel }
+            ) {
+                DestinationIcon(destination, installed, size = 24.dp)
+            }
+        }
+    }
+}
+
+/** What shows under a row as it's swiped: the error color, and a bin on the side it's going to. */
+@Composable
+private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 24.dp),
+        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+    ) {
+        AppIcon(R.drawable.ic_delete, contentDescription = null, modifier = Modifier.size(24.dp))
     }
 }
 

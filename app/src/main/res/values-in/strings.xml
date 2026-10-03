@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">Tidak bisa membaca detail link ini.</string>
     <string name="search_in_destination">Cari di %1$s</string>
     <string name="history_open">Buka %1$s</string>
-    <string name="history_copy">Salin link untuk %1$s</string>
     <string name="privacy_policy">Kebijakan privasi</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/id/privacy/</string>
     <string name="handoff_opening">Membuka di %1$s…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
     <string name="history_cleared">Riwayat dihapus</string>
+    <string name="history_removed">Dihapus</string>
     <string name="undo_button">Urungkan</string>
     <string name="empty_hint">Ketuk tautan musik di aplikasi apa pun, atau bagikan ke Crosstune.</string>
     <string name="copy_link_button">Salin tautan</string>

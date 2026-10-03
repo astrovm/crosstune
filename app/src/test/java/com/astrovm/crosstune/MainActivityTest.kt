@@ -35,7 +35,12 @@ import android.os.Looper
 import android.provider.Settings
 import android.service.chooser.ChooserAction
 import android.text.SpannableString
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
@@ -486,6 +491,40 @@ class MainActivityTest {
         val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
         assertFalse(model.uiState.canUndoClearHistory)
         assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun recentItemsShowTheAppTheyOpenInAndCanBeSwipedAwayOneAtATime() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        val store = HistoryStore(prefs())
+        listOf("Third", "Second", "First").forEachIndexed { index, title ->
+            store.add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "id$index", "https://open.spotify.com/track/id$index"), MusicMetadata(title, "Artist")))
+        }
+        launch()
+        // Each row's button carries the icon of the app it opens in, here Deezer, the default.
+        composeRule.onAllNodesWithTag("destination-icon:DEEZER", useUnmergedTree = true).assertCountEquals(3)
+        composeRule.onNode(hasContentDescription(string(R.string.history_open, "First"))).assertExists()
+        fun titles() = HistoryStore(prefs()).load().map { it.metadata.title }
+
+        // Swiped away, it goes, and undo puts it back where it was.
+        composeRule.onNodeWithText("Second").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        assertEquals(listOf("First", "Third"), titles())
+        assertTextShown(string(R.string.history_removed))
+        click(string(R.string.undo_button))
+        assertEquals(listOf("First", "Second", "Third"), titles())
+
+        // Either way works. Removing another while the offer shows makes the offer about that one.
+        composeRule.onNodeWithText("First").performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        assertEquals(listOf("Second", "Third"), titles())
+        // TalkBack can't swipe a row, so it has Remove instead.
+        val row = composeRule.onNodeWithText("Third").fetchSemanticsNode()
+        composeRule.runOnUiThread { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() }
+        composeRule.waitForIdle()
+        assertEquals(listOf("Second"), titles())
+        click(string(R.string.undo_button))
+        assertEquals(listOf("Second", "Third"), titles())
     }
 
     @Test
@@ -3340,8 +3379,6 @@ class MainActivityTest {
         val activity = launch()
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
 
-        click(string(R.string.history_copy, "Remember"))
-        assertEquals("https://www.deezer.com/track/123", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
         assertEquals(requests, fake.requestedUrls.size)
@@ -3350,9 +3387,6 @@ class MainActivityTest {
 
         model.setExactMatch(false)
         composeRule.waitForIdle()
-        click(string(R.string.history_copy, "Remember"))
-        assertEquals("https://www.deezer.com/search/Remember%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
-        assertEquals(requests, fake.requestedUrls.size)
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://www.deezer.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
         assertNull(model.uiState.result)
@@ -3366,8 +3400,8 @@ class MainActivityTest {
 
         model.selectDefault(Destination.Service(MusicService.TIDAL))
         composeRule.waitForIdle()
-        click(string(R.string.history_copy, "Remember"))
-        assertEquals("https://listen.tidal.com/search?q=Remember%20Artist", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.history_open, "Remember"))
+        assertEquals("https://listen.tidal.com/search?q=Remember%20Artist", nextStartedActivity()!!.dataString)
         assertNull(model.uiState.result)
     }
 

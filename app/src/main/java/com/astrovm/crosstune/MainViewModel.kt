@@ -82,8 +82,12 @@ internal data class UiState(
      * instead of all of Crosstune; cleared once the user has something to do here.
      */
     val handingOff: Boolean = false,
-    /** Set right after history is cleared, while it can still be brought back. */
+    /** Set right after history is cleared, or one item removed, while it can still be brought back. */
     val canUndoClearHistory: Boolean = false,
+    /** Whether what can be undone is one item removed rather than all of it cleared. */
+    val removedOneFromHistory: Boolean = false,
+    /** Counts removals and clears, so each one offers its own undo even while the last offer shows. */
+    val historyUndoId: Int = 0,
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
@@ -115,7 +119,6 @@ internal data class UiState(
 internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
-    data class Copy(val url: String) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -507,14 +510,7 @@ internal class MainViewModel(
         }
     }
 
-    fun copyHistoryEntry(entry: HistoryEntry) {
-        viewModelScope.launch {
-            val url = urlForHistory(entry, destinationFor(entry)) ?: return@launch
-            effectChannel.send(Effect.Copy(url))
-        }
-    }
-
-    /** Recent Open and Copy use the saved default, not whatever result is on screen. */
+    /** Recent's Open uses the saved default, not whatever result is on screen. */
     private fun destinationFor(entry: HistoryEntry): Destination =
         uiState.ruleFor(entry.link) ?: uiState.defaultDestination
 
@@ -535,12 +531,29 @@ internal class MainViewModel(
     fun clearHistory() {
         clearedHistory = uiState.history
         historyStore.clear()
-        uiState = uiState.copy(history = emptyList(), canUndoClearHistory = true)
+        uiState = uiState.copy(
+            history = emptyList(),
+            canUndoClearHistory = true,
+            removedOneFromHistory = false,
+            historyUndoId = uiState.historyUndoId + 1
+        )
+    }
+
+    /** Drops one item, e.g. swiped away; undo puts it back where it was. */
+    fun removeHistoryEntry(entry: HistoryEntry) {
+        clearedHistory = uiState.history
+        uiState = uiState.copy(
+            history = historyStore.replace(uiState.history.filterNot { it.link.url == entry.link.url }),
+            canUndoClearHistory = true,
+            removedOneFromHistory = true,
+            historyUndoId = uiState.historyUndoId + 1
+        )
     }
 
     fun undoClearHistory() {
-        // Anything looked up since clearing stays on top.
-        val restored = (uiState.history + clearedHistory).distinctBy { it.link.url }
+        // Anything looked up since stays on top, and the rest goes back in its old order.
+        val kept = clearedHistory.map { it.link.url }.toSet()
+        val restored = uiState.history.filterNot { it.link.url in kept } + clearedHistory
         uiState = uiState.copy(history = historyStore.replace(restored), canUndoClearHistory = false)
         clearedHistory = emptyList()
     }

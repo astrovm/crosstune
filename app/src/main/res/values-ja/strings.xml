@@ -104,7 +104,6 @@
     <string name="error_metadata_unavailable">このリンクの詳細を読み取れませんでした。</string>
     <string name="search_in_destination">%1$sで検索</string>
     <string name="history_open">%1$sを開く</string>
-    <string name="history_copy">%1$sのリンクをコピー</string>
     <string name="privacy_policy">プライバシーポリシー</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
     <string name="handoff_opening">%1$s で開いています…</string>
@@ -114,6 +113,7 @@
     <string name="notice_app_still_opens">%1$s がまだ自分のリンクを開いています</string>
     <string name="fix_button">修正</string>
     <string name="history_cleared">履歴を削除しました</string>
+    <string name="history_removed">削除しました</string>
     <string name="undo_button">元に戻す</string>
     <string name="empty_hint">どのアプリでも音楽リンクをタップするか、Crosstune に共有してください。</string>
     <string name="copy_link_button">リンクをコピー</string>

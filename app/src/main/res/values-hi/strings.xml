@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">इस लिंक की जानकारी नहीं पढ़ी जा सकी।</string>
     <string name="search_in_destination">%1$s में खोजें</string>
     <string name="history_open">%1$s खोलें</string>
-    <string name="history_copy">%1$s का लिंक कॉपी करें</string>
     <string name="privacy_policy">गोपनीयता नीति</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/hi/privacy/</string>
     <string name="handoff_opening">%1$s में खोला जा रहा है…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">%1$s अब भी अपने लिंक खुद खोलता है</string>
     <string name="fix_button">ठीक करें</string>
     <string name="history_cleared">इतिहास मिटाया गया</string>
+    <string name="history_removed">हटाया गया</string>
     <string name="undo_button">वापस लें</string>
     <string name="empty_hint">किसी भी ऐप में संगीत लिंक पर टैप करें, या उसे Crosstune पर शेयर करें।</string>
     <string name="copy_link_button">लिंक कॉपी करें</string>

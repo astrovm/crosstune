@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">无法读取此链接的详细信息。</string>
     <string name="search_in_destination">在%1$s中搜索</string>
     <string name="history_open">打开%1$s</string>
-    <string name="history_copy">复制%1$s的链接</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/zh-cn/privacy/</string>
     <string name="handoff_opening">正在用 %1$s 打开…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">%1$s 仍会打开自己的链接</string>
     <string name="fix_button">修复</string>
     <string name="history_cleared">已清除历史记录</string>
+    <string name="history_removed">已移除</string>
     <string name="undo_button">撤销</string>
     <string name="empty_hint">在任意应用中点按音乐链接，或将其分享给 Crosstune。</string>
     <string name="copy_link_button">复制链接</string>

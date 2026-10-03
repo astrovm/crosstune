@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">이 링크의 정보를 읽을 수 없어요.</string>
     <string name="search_in_destination">%1$s에서 검색</string>
     <string name="history_open">%1$s 열기</string>
-    <string name="history_copy">%1$s 링크 복사</string>
     <string name="privacy_policy">개인정보처리방침</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ko/privacy/</string>
     <string name="handoff_opening">%1$s에서 여는 중…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">%1$s 앱이 아직 자체 링크를 열어요</string>
     <string name="fix_button">해결</string>
     <string name="history_cleared">기록을 지웠어요</string>
+    <string name="history_removed">삭제했어요</string>
     <string name="undo_button">실행취소</string>
     <string name="empty_hint">아무 앱에서나 음악 링크를 탭하거나 Crosstune으로 공유하세요.</string>
     <string name="copy_link_button">링크 복사</string>

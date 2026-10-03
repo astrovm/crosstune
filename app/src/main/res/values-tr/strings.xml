@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">Bu bağlantının ayrıntıları okunamadı.</string>
     <string name="search_in_destination">%1$s içinde ara</string>
     <string name="history_open">%1$s aç</string>
-    <string name="history_copy">%1$s bağlantısını kopyala</string>
     <string name="privacy_policy">Gizlilik politikası</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/tr/privacy/</string>
     <string name="handoff_opening">%1$s uygulamasında açılıyor…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">%1$s kendi bağlantılarını hâlâ açıyor</string>
     <string name="fix_button">Düzelt</string>
     <string name="history_cleared">Geçmiş temizlendi</string>
+    <string name="history_removed">Kaldırıldı</string>
     <string name="undo_button">Geri al</string>
     <string name="empty_hint">Herhangi bir uygulamada bir müzik bağlantısına dokun ya da Crosstune ile paylaş.</string>
     <string name="copy_link_button">Bağlantıyı kopyala</string>

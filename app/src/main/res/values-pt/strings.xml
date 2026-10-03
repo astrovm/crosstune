@@ -103,7 +103,6 @@
     <string name="error_metadata_unavailable">Não foi possível ler os detalhes deste link.</string>
     <string name="search_in_destination">Buscar em %1$s</string>
     <string name="history_open">Abrir %1$s</string>
-    <string name="history_copy">Copiar link de %1$s</string>
     <string name="privacy_policy">Política de privacidade</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/pt-br/privacy/</string>
     <string name="handoff_opening">Abrindo no %1$s…</string>
@@ -113,6 +112,7 @@
     <string name="notice_app_still_opens">O %1$s ainda abre os próprios links</string>
     <string name="fix_button">Corrigir</string>
     <string name="history_cleared">Histórico apagado</string>
+    <string name="history_removed">Removido</string>
     <string name="undo_button">Desfazer</string>
     <string name="empty_hint">Toque em um link de música em qualquer app ou compartilhe com o Crosstune.</string>
     <string name="copy_link_button">Copiar link</string>
