@@ -89,6 +89,7 @@
     <string name="tile_label">Открыть скопированную ссылку</string>
     <string name="shortcut_paste_short">Открыть ссылку</string>
     <string name="shortcut_paste_long">Открыть скопированную ссылку</string>
+    <string name="widget_description">Недавние треки и открытие скопированной ссылки</string>
     <string name="error_clipboard_empty">Сначала скопируйте музыкальную ссылку.</string>
     <string name="copy_search_action">Копировать текст поиска</string>
     <string name="share_search_link">Поделиться ссылкой на поиск</string>

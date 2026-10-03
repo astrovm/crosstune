@@ -89,6 +89,7 @@
     <string name="tile_label">Ouvrir le lien musical copié</string>
     <string name="shortcut_paste_short">Ouvrir le lien copié</string>
     <string name="shortcut_paste_long">Ouvrir le lien musical copié</string>
+    <string name="widget_description">Titres récents, et ouvrir un lien copié</string>
     <string name="error_clipboard_empty">Copiez d\'abord un lien musical.</string>
     <string name="copy_search_action">Copier le texte de recherche</string>
     <string name="share_search_link">Partager le lien de recherche</string>

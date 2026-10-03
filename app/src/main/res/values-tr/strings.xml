@@ -89,6 +89,7 @@
     <string name="tile_label">Kopyalanan müzik bağlantısını aç</string>
     <string name="shortcut_paste_short">Kopyalanan bağlantıyı aç</string>
     <string name="shortcut_paste_long">Kopyalanan müzik bağlantısını aç</string>
+    <string name="widget_description">Son şarkılar ve kopyalanan bağlantıyı açma</string>
     <string name="error_clipboard_empty">Önce bir müzik bağlantısı kopyalayın.</string>
     <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>

@@ -588,11 +588,23 @@ internal class MainViewModel(
         prepareResultDestination()
     }
 
-    fun openHistoryEntry(entry: HistoryEntry) {
+    fun openHistoryEntry(entry: HistoryEntry) = openSaved(entry, finishAfterOpen = false)
+
+    /**
+     * A Recent song from the widget's ▶: opened in the user's app like Recent's own ▶, from what
+     * was saved, with Crosstune going away after. Gone from Recent meanwhile, it's looked up again.
+     */
+    fun openRecent(url: String?) {
+        val entry = uiState.history.firstOrNull { it.link.url == url } ?: return resolveIncoming(url)
+        uiState = uiState.copy(handlingIncomingLink = true, handingOff = true, leaveSettings = true)
+        openSaved(entry, finishAfterOpen = true)
+    }
+
+    private fun openSaved(entry: HistoryEntry, finishAfterOpen: Boolean) {
         viewModelScope.launch {
             val destination = destinationFor(entry)
             val url = urlForHistory(entry, destination) ?: return@launch
-            effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
+            effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
         }
     }
 

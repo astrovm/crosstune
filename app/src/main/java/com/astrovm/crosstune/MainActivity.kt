@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
+import androidx.glance.appwidget.updateAll
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -61,6 +62,10 @@ class MainActivity : ComponentActivity() {
 
         /** The unexported alias the tile and launcher shortcut use, so only they can trigger a clipboard read. */
         const val PASTE_ALIAS = "com.astrovm.crosstune.PasteFromClipboard"
+        /** The widget's ▶: opens a Recent song in the user's app, like Recent's own ▶. */
+        const val ACTION_OPEN_RECENT = "com.astrovm.crosstune.action.OPEN_RECENT"
+        /** On a link, shows it here first, as the widget's songs do when tapped. */
+        const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
 
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -99,7 +104,11 @@ class MainActivity : ComponentActivity() {
                 }
                     .filterNotNull()
                     .distinctUntilChanged()
-                    .collectLatest { (recent, entries, app) -> shortcuts.update(recent, entries, app) }
+                    .collectLatest { (recent, entries, app) ->
+                        shortcuts.update(recent, entries, app)
+                        // The widget shows Recent too.
+                        CrosstuneWidget().updateAll(applicationContext)
+                    }
             }
         }
         lifecycleScope.launch {
@@ -201,7 +210,12 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
 
         when (intent.action) {
-            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString, show = viewModel.uiState.showSongFirst)
+            // The widget's songs ask to be shown here rather than opened.
+            Intent.ACTION_VIEW -> viewModel.resolveIncoming(
+                intent.dataString,
+                show = viewModel.uiState.showSongFirst || intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
+            )
+            ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
             Intent.ACTION_SEND -> {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)

@@ -89,6 +89,7 @@
     <string name="tile_label">Kopierten Musik-Link öffnen</string>
     <string name="shortcut_paste_short">Kopierten Link öffnen</string>
     <string name="shortcut_paste_long">Kopierten Musik-Link öffnen</string>
+    <string name="widget_description">Zuletzt gehörte Songs und einen kopierten Link öffnen</string>
     <string name="error_clipboard_empty">Kopiere zuerst einen Musik-Link.</string>
     <string name="copy_search_action">Suchtext kopieren</string>
     <string name="share_search_link">Such-Link teilen</string>

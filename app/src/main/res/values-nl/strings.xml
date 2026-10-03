@@ -89,6 +89,7 @@
     <string name="tile_label">Gekopieerde muzieklink openen</string>
     <string name="shortcut_paste_short">Gekopieerde link openen</string>
     <string name="shortcut_paste_long">Gekopieerde muzieklink openen</string>
+    <string name="widget_description">Recente nummers, en een gekopieerde link openen</string>
     <string name="error_clipboard_empty">Kopieer eerst een muzieklink.</string>
     <string name="copy_search_action">Zoektekst kopiëren</string>
     <string name="share_search_link">Zoeklink delen</string>

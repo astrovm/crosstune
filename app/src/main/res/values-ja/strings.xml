@@ -90,6 +90,7 @@
     <string name="tile_label">コピーした音楽リンクを開く</string>
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>
     <string name="shortcut_paste_long">コピーした音楽リンクを開く</string>
+    <string name="widget_description">最近の曲と、コピーしたリンクを開く</string>
     <string name="error_clipboard_empty">先に音楽リンクをコピーしてください。</string>
     <string name="copy_search_action">検索テキストをコピー</string>
     <string name="share_search_link">検索リンクを共有</string>

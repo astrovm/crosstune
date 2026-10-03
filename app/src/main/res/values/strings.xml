@@ -104,6 +104,7 @@
     <string name="tile_label">Open copied music link</string>
     <string name="shortcut_paste_short">Open copied link</string>
     <string name="shortcut_paste_long">Open copied music link</string>
+    <string name="widget_description">Recent songs, and open a copied link</string>
     <string name="error_clipboard_empty">Copy a music link first.</string>
     <string name="copy_search_action">Copy search text</string>
     <string name="share_search_link">Share search link</string>

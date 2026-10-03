@@ -30,7 +30,6 @@ import android.content.pm.ShortcutManager
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import androidx.compose.ui.test.performTextInput
-import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
@@ -576,13 +575,35 @@ class MainActivityTest {
     }
 
     @Test
-    fun theWidgetOpensTheCopiedLink() {
-        val widgets = shadowOf(AppWidgetManager.getInstance(app))
-        val id = widgets.createWidget(OpenCopiedWidget::class.java, R.layout.widget_open_copied)
-        widgets.getViewFor(id).performClick()
-        val started = nextStartedActivity()!!
-        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, started.action)
-        assertEquals(MainActivity.PASTE_ALIAS, started.component!!.className)
+    fun aWidgetSongShowsInCrosstuneEvenWhenLinksOpenRightAway() {
+        respondWithTrack("Widget Song", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID"))
+                .putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        )
+        assertResultShown()
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun theWidgetsPlayOpensASavedSongInTheUsualAppWithoutLoadingItAgain() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist")))
+
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://www.deezer.com/search/Saved%20Artist", nextStartedActivity()!!.dataString)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun theWidgetsPlayOpensASongNoLongerInRecentLikeAnyLink() {
+        respondWithTrack("Gone", "Artist · Song")
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
     }
 
     @Test
