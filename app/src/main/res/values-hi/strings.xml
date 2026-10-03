@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">ऐप सपोर्ट करे तो सीधे गाना खोलता है, वरना खोजता है।</string>
     <string name="setting_clean_links">लिंक से ट्रैकिंग हटाएँ</string>
     <string name="setting_clean_links_description">आप जो लिंक खोलते, कॉपी करते या शेयर करते हैं, उनसे ?si= या utm_ जैसे ट्रैकिंग हिस्से हटा देता है।</string>
+    <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>
+    <string name="setting_share_sheet_apps_description">शेयर करते समय YouTube Music और दूसरे ऐप में खोलें। Android इन्हें किसी भी टेक्स्ट के लिए दिखाता है।</string>
     <string name="setting_language">भाषा</string>
     <string name="language_system_default">सिस्टम डिफ़ॉल्ट</string>
     <string name="matching_text">सटीक मैच खोजा जा रहा है…</string>

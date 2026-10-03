@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">Abre a própria música quando o app permite. Caso contrário, faz uma busca.</string>
     <string name="setting_clean_links">Remover rastreamento dos links</string>
     <string name="setting_clean_links_description">Tira partes de rastreamento, como ?si= ou utm_, dos links que você abre, copia ou compartilha.</string>
+    <string name="setting_share_sheet_apps">Apps ao compartilhar</string>
+    <string name="setting_share_sheet_apps_description">Abrir no YouTube Music e outros ao compartilhar. O Android mostra para qualquer texto.</string>
     <string name="setting_language">Idioma</string>
     <string name="language_system_default">Padrão do sistema</string>
     <string name="matching_text">Procurando o resultado exato…</string>

@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         onAskEachTimeChange = viewModel::setAskEachTime,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
+                        onShareSheetAppsChange = viewModel::setShareSheetApps,
                         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
                         onLanguageChange = { AppLanguage.set(this, it) },
                         onCopySearch = ::copySearch,

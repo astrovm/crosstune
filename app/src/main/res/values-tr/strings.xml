@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">Uygulama destekliyorsa şarkının kendisini açar. Desteklemiyorsa arar.</string>
     <string name="setting_clean_links">Bağlantılardan izlemeyi kaldır</string>
     <string name="setting_clean_links_description">Açtığınız, kopyaladığınız veya paylaştığınız bağlantılardan ?si= veya utm_ gibi izleme parçalarını kaldırır.</string>
+    <string name="setting_share_sheet_apps">Paylaşım menüsünde uygulamalar</string>
+    <string name="setting_share_sheet_apps_description">Paylaşırken YouTube Music ve diğerlerinde aç. Android bunları her metin için gösterir.</string>
     <string name="setting_language">Dil</string>
     <string name="language_system_default">Sistem varsayılanı</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>

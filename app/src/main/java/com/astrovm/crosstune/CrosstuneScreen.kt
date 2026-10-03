@@ -34,7 +34,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -128,6 +127,7 @@ internal data class ScreenActions(
     val onAskEachTimeChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
+    val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
     val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -899,18 +899,20 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
             // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
             key(entry.link.url) {
                 if (index > 0) GroupDivider()
-                HistoryRow(entry, state.ruleFor(entry.link) ?: state.defaultDestination, state.installed, actions)
+                // Only a row going somewhere other than the default app says where.
+                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions)
             }
         }
     }
 }
 
 /**
- * One item in Recent: its cover, what it is, and a round button with the icon of the app it
- * opens in. Tapping the rest shows the full result; swiping either way removes it.
+ * One item in Recent: its cover, what it is, and a play button, which shows the app's icon instead
+ * when it opens somewhere other than the default. Tapping the rest shows the full result; swiping
+ * either way removes it.
  */
 @Composable
-private fun HistoryRow(entry: HistoryEntry, destination: Destination, installed: Set<MusicService>, actions: ScreenActions) {
+private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions) {
     val swipe = rememberSwipeToDismissBoxState()
     val remove = stringResource(R.string.remove_button)
     SwipeToDismissBox(
@@ -952,15 +954,18 @@ private fun HistoryRow(entry: HistoryEntry, destination: Destination, installed:
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            // The app's own icon says where it opens, so there's no label on screen.
             val press = rememberPress()
             val openLabel = stringResource(R.string.history_open, entry.metadata.title)
-            FilledTonalIconButton(
+            IconButton(
                 onClick = { actions.onHistoryOpen(entry) },
                 interactionSource = press.source,
                 modifier = press.modifier.semantics { contentDescription = openLabel }
             ) {
-                DestinationIcon(destination, installed, size = 24.dp)
+                if (elsewhere != null) {
+                    DestinationIcon(elsewhere, installed, size = 24.dp)
+                } else {
+                    AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(28.dp))
+                }
             }
         }
     }

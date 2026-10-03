@@ -44,6 +44,8 @@ internal data class UiState(
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
+    /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
+    val shareSheetApps: Boolean = true,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
     val onlyMusicVideos: Boolean = true,
     val showDestinationPicker: Boolean = false,
@@ -93,7 +95,7 @@ internal data class UiState(
 ) {
     /** Apps the share sheet offers to open a link in directly: the default first, then other installed ones. */
     val shareTargets: List<MusicService>
-        get() = if (!setupComplete || !hasDefault) {
+        get() = if (!setupComplete || !hasDefault || !shareSheetApps) {
             emptyList()
         } else {
             (listOfNotNull((defaultDestination as? Destination.Service)?.service) + MusicService.entries.filter { it in installed }).distinct()
@@ -149,6 +151,7 @@ internal class MainViewModel(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
+            shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
@@ -706,6 +709,11 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_ONLY_MUSIC_VIDEOS, enabled) }
     }
 
+    fun setShareSheetApps(enabled: Boolean) {
+        uiState = uiState.copy(shareSheetApps = enabled)
+        preferences.edit { putBoolean(KEY_SHARE_SHEET_APPS, enabled) }
+    }
+
     fun setCleanLinks(enabled: Boolean) {
         uiState = uiState.copy(cleanLinks = enabled)
         preferences.edit { putBoolean(KEY_CLEAN_LINKS, enabled) }
@@ -729,6 +737,7 @@ internal class MainViewModel(
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
+        private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
         private const val KEY_SETUP_COMPLETE = "setup_complete"

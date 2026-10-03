@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">Ouvre directement le morceau quand l’application le permet. Sinon, lance une recherche.</string>
     <string name="setting_clean_links">Retirer le pistage des liens</string>
     <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
+    <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
+    <string name="setting_share_sheet_apps_description">Ouvrir dans YouTube Music et d’autres quand vous partagez. Android les affiche pour tout texte.</string>
     <string name="setting_language">Langue</string>
     <string name="language_system_default">Langue du système</string>
     <string name="matching_text">Recherche du résultat exact…</string>

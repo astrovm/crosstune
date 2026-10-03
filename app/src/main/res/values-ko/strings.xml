@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">앱이 지원하면 해당 곡을 바로 열고, 아니면 검색해요.</string>
     <string name="setting_clean_links">링크에서 추적 정보 제거</string>
     <string name="setting_clean_links_description">열거나 복사하거나 공유하는 링크에서 ?si=, utm_ 같은 추적 정보를 지워요.</string>
+    <string name="setting_share_sheet_apps">공유 메뉴의 앱</string>
+    <string name="setting_share_sheet_apps_description">공유할 때 YouTube Music 등에서 열기를 보여줘요. Android는 모든 텍스트에 보여줘요.</string>
     <string name="setting_language">언어</string>
     <string name="language_system_default">시스템 기본값</string>
     <string name="matching_text">정확한 항목을 찾는 중…</string>

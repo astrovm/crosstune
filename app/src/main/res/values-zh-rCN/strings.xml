@@ -69,6 +69,8 @@
     <string name="setting_exact_match_description">应用支持时直接打开歌曲本身，否则进行搜索。</string>
     <string name="setting_clean_links">去除链接中的跟踪参数</string>
     <string name="setting_clean_links_description">从你打开、复制或分享的链接中去掉 ?si=、utm_ 等跟踪参数。</string>
+    <string name="setting_share_sheet_apps">分享菜单中的应用</string>
+    <string name="setting_share_sheet_apps_description">分享时显示“在 YouTube Music 中打开”等选项。Android 会对任何文本显示它们。</string>
     <string name="setting_language">语言</string>
     <string name="language_system_default">跟随系统</string>
     <string name="matching_text">正在查找精确匹配…</string>

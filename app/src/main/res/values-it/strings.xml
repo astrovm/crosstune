@@ -70,6 +70,8 @@
     <string name="setting_exact_match_description">Apre direttamente il brano quando l\'app lo consente. Altrimenti lo cerca.</string>
     <string name="setting_clean_links">Rimuovi il tracciamento dai link</string>
     <string name="setting_clean_links_description">Toglie le parti di tracciamento, come ?si= o utm_, dai link che apri, copi o condividi.</string>
+    <string name="setting_share_sheet_apps">App nel menu di condivisione</string>
+    <string name="setting_share_sheet_apps_description">Apri in YouTube Music e altre quando condividi. Android le mostra per qualsiasi testo.</string>
     <string name="setting_language">Lingua</string>
     <string name="language_system_default">Predefinita di sistema</string>
     <string name="matching_text">Ricerca del risultato esatto…</string>

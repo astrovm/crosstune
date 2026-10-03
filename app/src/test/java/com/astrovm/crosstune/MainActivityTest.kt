@@ -496,35 +496,39 @@ class MainActivityTest {
     @Test
     fun recentItemsShowTheAppTheyOpenInAndCanBeSwipedAwayOneAtATime() {
         prefs().edit().putString("default_target", "DEEZER").commit()
+        // Apple Music links go to TIDAL instead of the default.
+        DestinationStore(prefs()).setRule(MusicService.APPLE_MUSIC, Destination.Service(MusicService.TIDAL))
         val store = HistoryStore(prefs())
         listOf("Third", "Second", "First").forEachIndexed { index, title ->
             store.add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "id$index", "https://open.spotify.com/track/id$index"), MusicMetadata(title, "Artist")))
         }
+        store.add(HistoryEntry(MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1", "https://music.apple.com/us/song/1"), MusicMetadata("Elsewhere", "Artist")))
         launch()
-        // Each row's button carries the icon of the app it opens in, here Deezer, the default.
-        composeRule.onAllNodesWithTag("destination-icon:DEEZER", useUnmergedTree = true).assertCountEquals(3)
+        // A plain play button on rows going to the default app; only the one going elsewhere shows where.
+        composeRule.onAllNodesWithTag("destination-icon:DEEZER", useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithTag("destination-icon:TIDAL", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onNode(hasContentDescription(string(R.string.history_open, "First"))).assertExists()
         fun titles() = HistoryStore(prefs()).load().map { it.metadata.title }
 
         // Swiped away, it goes, and undo puts it back where it was.
         composeRule.onNodeWithText("Second").performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
-        assertEquals(listOf("First", "Third"), titles())
+        assertEquals(listOf("Elsewhere", "First", "Third"), titles())
         assertTextShown(string(R.string.history_removed))
         click(string(R.string.undo_button))
-        assertEquals(listOf("First", "Second", "Third"), titles())
+        assertEquals(listOf("Elsewhere", "First", "Second", "Third"), titles())
 
         // Either way works. Removing another while the offer shows makes the offer about that one.
         composeRule.onNodeWithText("First").performTouchInput { swipeRight() }
         composeRule.waitForIdle()
-        assertEquals(listOf("Second", "Third"), titles())
+        assertEquals(listOf("Elsewhere", "Second", "Third"), titles())
         // TalkBack can't swipe a row, so it has Remove instead.
         val row = composeRule.onNodeWithText("Third").fetchSemanticsNode()
         composeRule.runOnUiThread { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() }
         composeRule.waitForIdle()
-        assertEquals(listOf("Second"), titles())
+        assertEquals(listOf("Elsewhere", "Second"), titles())
         click(string(R.string.undo_button))
-        assertEquals(listOf("Second", "Third"), titles())
+        assertEquals(listOf("Elsewhere", "Second", "Third"), titles())
     }
 
     @Test
@@ -543,6 +547,13 @@ class MainActivityTest {
         // Android drops shortcuts hidden from the launcher, so there they open the copied link.
         assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, deezer.intent!!.action)
         assertEquals(MainActivity.PASTE_ALIAS, deezer.intent!!.component!!.className)
+
+        // Android shows them for any shared text, so they can be turned off, leaving the song.
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_share_sheet_apps)).performScrollTo().performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 1 }
+        assertEquals("No Cover", dynamicShortcuts().single().shortLabel)
+        assertFalse(prefs().getBoolean("share_sheet_apps", true))
     }
 
     @Test

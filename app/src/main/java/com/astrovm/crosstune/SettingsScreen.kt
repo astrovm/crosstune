@@ -186,6 +186,13 @@ private fun SettingsList(
                 onCheckedChange = actions.onCleanLinksChange
             )
             GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_share_sheet_apps),
+                description = stringResource(R.string.setting_share_sheet_apps_description),
+                checked = state.shareSheetApps,
+                onCheckedChange = actions.onShareSheetAppsChange
+            )
+            GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
 

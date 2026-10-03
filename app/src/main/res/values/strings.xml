@@ -82,6 +82,8 @@
     <string name="setting_exact_match_description">Opens the song itself when the app supports it. Otherwise it searches.</string>
     <string name="setting_clean_links">Remove tracking from links</string>
     <string name="setting_clean_links_description">Drops tracking parts like ?si= or utm_ from links you open, copy or share.</string>
+    <string name="setting_share_sheet_apps">Apps in the share sheet</string>
+    <string name="setting_share_sheet_apps_description">Open in YouTube Music and others when you share. Android shows them for any text.</string>
     <string name="setting_language">Language</string>
     <string name="language_system_default">System default</string>
     <string name="matching_text">Finding the exact match…</string>

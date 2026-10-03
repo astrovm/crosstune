@@ -1,3 +1,4 @@
 Crosstune moves now: screens slide, results and errors fade in, buttons respond to your touch, and lists grow and shrink smoothly.
 Settings shows "Open links in" next to your default app again.
-Recent is cleaner: each song has one button with the icon of the app it opens in. Swipe a song away to remove it.
+Recent is cleaner: one play button per song, and swipe a song away to remove it.
+You can hide the "Open in" apps from the share sheet in Settings.
