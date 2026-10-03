@@ -12,7 +12,7 @@ import androidx.core.net.toUri
 
 /**
  * Keeps Crosstune's dynamic shortcuts in step with the app: the latest songs, and share sheet
- * targets that open a shared link in the default app, or share, copy or show it. Android drops
+ * targets that open a shared link in the default app, or share or show it. Android drops
  * shortcuts hidden from the launcher, so the targets show there too, after the songs, where they
  * do the same with the copied link.
  */
@@ -20,7 +20,7 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
 
     /**
      * With [shareSheet] on, the share sheet's top row offers to open a shared link in [app], the
-     * default, and to share, copy or show it instead. Android shows the ones used most.
+     * default, and to share or show it instead. Android shows the ones used most.
      */
     suspend fun update(recent: List<HistoryEntry>, shareSheet: Boolean, app: MusicService?) {
         val manager = context.getSystemService(ShortcutManager::class.java) ?: return
@@ -83,7 +83,6 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
     /** What a share sheet action does with the shared link instead of opening it. */
     enum class ShareAction(val labelRes: Int, val iconRes: Int) {
         SHARE(R.string.share_link_button, R.drawable.ic_shortcut_share),
-        COPY(R.string.copy_link_button, R.drawable.ic_shortcut_copy),
         SHOW(R.string.show_song_short, R.drawable.ic_shortcut_show)
     }
 

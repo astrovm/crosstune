@@ -125,7 +125,7 @@ internal data class UiState(
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
-internal enum class AfterLookup { OPEN, SHARE, COPY }
+internal enum class AfterLookup { OPEN, SHARE }
 
 /** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
 internal enum class LinkMode { OPEN, ASK, SHOW }
@@ -134,7 +134,6 @@ internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
     data class Share(val url: String) : Effect
-    data class Copy(val url: String) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -429,11 +428,11 @@ internal class MainViewModel(
         val ownService = uiState.link?.takeUnless { it.viaFrontend }?.service?.takeIf {
             uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
         }
-        // A share sheet action asked to share or copy the converted link rather than open it.
+        // A share sheet action asked to share the converted link rather than open it.
         if (pendingOpen && uiState.afterLookup != AfterLookup.OPEN) {
             pendingOpen = false
             val url = prepareDestination(uiState.resultDestination) ?: return
-            effectChannel.send(if (uiState.afterLookup == AfterLookup.SHARE) Effect.Share(url) else Effect.Copy(url))
+            effectChannel.send(Effect.Share(url))
             return
         }
         // Incoming links without a chosen destination must not search the default before asking.
