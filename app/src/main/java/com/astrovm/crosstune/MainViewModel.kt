@@ -414,10 +414,19 @@ internal class MainViewModel(
         }
     }
 
-    /** A song from Now Playing comes without a cover, so one is looked up by its name. */
+    /**
+     * The album cover, for songs that don't come with one: none from Now Playing, and a video frame
+     * from YouTube. A YouTube video keeps its frame when no song matches, e.g. a tutorial, and only
+     * waits briefly for the cover, since it has a picture either way.
+     */
     private suspend fun withCover(resolution: Resolution): Resolution {
-        if (resolution !is Resolution.Resolved || resolution.link.service != null || resolution.metadata.artworkUrl != null) return resolution
-        val cover = matcher.cover(resolution.metadata) ?: return resolution
+        if (resolution !is Resolution.Resolved || resolution.link.type != ItemType.TRACK) return resolution
+        val timeoutMs = when (resolution.link.service) {
+            null -> if (resolution.metadata.artworkUrl == null) COVER_TIMEOUT_MS else return resolution
+            MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> VIDEO_COVER_TIMEOUT_MS
+            else -> return resolution
+        }
+        val cover = matcher.cover(resolution.metadata, timeoutMs) ?: return resolution
         return resolution.copy(metadata = resolution.metadata.copy(artworkUrl = cover))
     }
 
@@ -866,6 +875,9 @@ internal class MainViewModel(
 
     companion object {
         const val PREFERENCES_NAME = "crosstune_preferences"
+        /** A song without any picture can wait a little longer for its cover than a video with a frame. */
+        private const val COVER_TIMEOUT_MS = 5_000L
+        private const val VIDEO_COVER_TIMEOUT_MS = 2_000L
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"

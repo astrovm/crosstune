@@ -159,11 +159,12 @@ internal class ExactMatcher(
     }
 
     /**
-     * A cover for a song known only by its name, like one from Now Playing. A cover doesn't need the
-     * exact recording, so "Song (2003 Remaster)" by "The Band" is close enough to "Song" by "Band".
-     * Null when no song is close, offline, or too slow.
+     * A song's album cover found by its name, for songs that come without one (Now Playing) or with
+     * a video frame instead (YouTube). A cover doesn't need the exact recording, so "Song (2003
+     * Remaster)" by "The Band" is close enough to "Song" by "Band". Null when no song is close,
+     * offline, or slower than [timeoutMs].
      */
-    suspend fun cover(metadata: MusicMetadata): String? = withTimeoutOrNull(TIMEOUT_MS) {
+    suspend fun cover(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): String? = withTimeoutOrNull(timeoutMs) {
         try {
             val title = normalize(metadata.title)
             val artist = normalize(metadata.artist)
@@ -171,7 +172,7 @@ internal class ExactMatcher(
                 val name = normalize(result.optString("title"))
                 val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
                 title.isNotEmpty() && artist.isNotEmpty() && name.startsWith(title) && artist in credit
-            }?.optJSONObject("album")?.optString("cover_xl")?.ifBlank { null }
+            }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {

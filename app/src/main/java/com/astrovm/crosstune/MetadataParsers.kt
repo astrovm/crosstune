@@ -177,8 +177,9 @@ internal object MetadataParsers {
             ""
         }
         // Albums have a cover and artists and playlists a picture; tracks use their album's cover.
-        val artwork = json.optString("cover_xl").ifEmpty { json.optString("picture_xl") }
-            .ifEmpty { json.optJSONObject("album")?.optString("cover_xl").orEmpty() }
+        // The 500px size is sharp at the biggest cover Crosstune shows; 1000px only costs more data.
+        val artwork = json.optString("cover_big").ifEmpty { json.optString("picture_big") }
+            .ifEmpty { json.optJSONObject("album")?.optString("cover_big").orEmpty() }
             .ifBlank { null }
         // An album's or playlist's object lists its songs, up to a few hundred.
         val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()

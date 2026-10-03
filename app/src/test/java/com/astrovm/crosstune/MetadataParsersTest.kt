@@ -229,16 +229,16 @@ class MetadataParsersTest {
             )?.artworkUrl
         )
         assertEquals(
-            "https://cdn-images.dzcdn.net/images/cover/a/1000x1000.jpg",
+            "https://cdn-images.dzcdn.net/images/cover/a/500x500.jpg",
             MetadataParsers.deezer(
-                JSONObject("""{"title":"Song","artist":{"name":"Artist"},"album":{"cover_xl":"https://cdn-images.dzcdn.net/images/cover/a/1000x1000.jpg"}}"""),
+                JSONObject("""{"title":"Song","artist":{"name":"Artist"},"album":{"cover_big":"https://cdn-images.dzcdn.net/images/cover/a/500x500.jpg"}}"""),
                 ItemType.TRACK
             )?.artworkUrl
         )
         assertEquals(
-            "https://cdn-images.dzcdn.net/images/artist/b/1000x1000.jpg",
+            "https://cdn-images.dzcdn.net/images/artist/b/500x500.jpg",
             MetadataParsers.deezer(
-                JSONObject("""{"name":"Artist","picture_xl":"https://cdn-images.dzcdn.net/images/artist/b/1000x1000.jpg"}"""),
+                JSONObject("""{"name":"Artist","picture_big":"https://cdn-images.dzcdn.net/images/artist/b/500x500.jpg"}"""),
                 ItemType.ARTIST
             )?.artworkUrl
         )

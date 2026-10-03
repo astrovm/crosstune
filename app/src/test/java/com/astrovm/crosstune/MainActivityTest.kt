@@ -298,9 +298,9 @@ class MainActivityTest {
     @Test
     fun aNowPlayingSongShowsAndSavesTheCoverFoundForIt() {
         prefs().edit().putBoolean("show_song_first", true).commit()
-        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/1000x1000-000000-80-0-0.jpg"
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         fake.handler = { request -> FakeSpotify.html(request,
-            """{"data":[{"title":"A Song (Remastered)","artist":{"name":"The Example Band"},"album":{"cover_xl":"$cover"}}]}""") }
+            """{"data":[{"title":"A Song (Remastered)","artist":{"name":"The Example Band"},"album":{"cover_big":"$cover"}}]}""") }
         launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
@@ -3954,6 +3954,33 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.setup_destination_title))
         composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+    }
+
+    @Test
+    fun aYouTubeSongShowsItsAlbumCoverInsteadOfTheVideoFrame() {
+        prefs().edit().putBoolean("show_song_first", true).commit()
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
+        fun respond(deezer: String) {
+            fake.handler = { request ->
+                when (request.url.host) {
+                    "api.deezer.com" -> FakeSpotify.html(request, deezer)
+                    else -> FakeSpotify.html(request,
+                        """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO","thumbnail_url":"https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"}""")
+                }
+            }
+        }
+        respond("""{"data":[{"title":"Blinding Lights","artist":{"name":"The Weeknd"},"album":{"cover_big":"$cover"}}]}""")
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=4NRXx6U8ABQ")))
+        waitForText("Blinding Lights")
+        assertEquals(cover, HistoryStore(prefs()).load().first().metadata.artworkUrl)
+
+        // A video no song matches, like a tutorial, keeps its own picture.
+        controller!!.pause().stop().destroy()
+        HistoryStore(prefs()).clear()
+        respond("""{"data":[{"title":"Blinding Lights","artist":{"name":"Someone Else"},"album":{"cover_big":"$cover"}}]}""")
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=4NRXx6U8ABQ")))
+        waitForText("Blinding Lights")
+        assertEquals("https://i.ytimg.com/vi/4NRXx6U8ABQ/mqdefault.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
     }
 
     @Test

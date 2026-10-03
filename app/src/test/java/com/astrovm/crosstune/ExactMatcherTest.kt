@@ -46,12 +46,12 @@ class ExactMatcherTest {
 
     @Test
     fun aNowPlayingSongGetsTheCoverOfTheClosestDeezerSong() {
-        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/1000x1000-000000-80-0-0.jpg"
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         respond(
             """{"data":[
-                {"title":"Other Song","artist":{"name":"The Hollies"},"album":{"cover_xl":"https://cdn/other.jpg"}},
-                {"title":"Long Cool Woman in a Black Dress","artist":{"name":"A Cover Band"},"album":{"cover_xl":"https://cdn/cover-band.jpg"}},
-                {"title":"Long Cool Woman (In a Black Dress) (2003 Remaster)","artist":{"name":"The Hollies"},"album":{"cover_xl":"$cover"}}
+                {"title":"Other Song","artist":{"name":"The Hollies"},"album":{"cover_big":"https://cdn/other.jpg"}},
+                {"title":"Long Cool Woman in a Black Dress","artist":{"name":"A Cover Band"},"album":{"cover_big":"https://cdn/cover-band.jpg"}},
+                {"title":"Long Cool Woman (In a Black Dress) (2003 Remaster)","artist":{"name":"The Hollies"},"album":{"cover_big":"$cover"}}
             ]}"""
         )
         val song = MusicMetadata("Long Cool Woman in a Black Dress", "Hollies")
@@ -59,9 +59,9 @@ class ExactMatcherTest {
         assertTrue(fake.requestedUrls.single().startsWith("https://api.deezer.com/search/track?q=Long%20Cool%20Woman"))
 
         // No close song, no answer, or offline: no cover.
-        respond("""{"data":[{"title":"Long Cool Woman","artist":{"name":"The Hollies"},"album":{"cover_xl":"$cover"}}]}""")
+        respond("""{"data":[{"title":"Long Cool Woman","artist":{"name":"The Hollies"},"album":{"cover_big":"$cover"}}]}""")
         assertNull(runBlocking { matcher().cover(song) })
-        respond("""{"data":[{"title":"Long Cool Woman in a Black Dress","artist":{"name":"The Hollies"},"album":{"cover_xl":""}}]}""")
+        respond("""{"data":[{"title":"Long Cool Woman in a Black Dress","artist":{"name":"The Hollies"},"album":{"cover_big":""}}]}""")
         assertNull(runBlocking { matcher().cover(song) })
         respond("not json")
         assertNull(runBlocking { matcher().cover(song) })

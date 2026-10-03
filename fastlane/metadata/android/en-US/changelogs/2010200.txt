@@ -1,1 +1,1 @@
-Songs shared from Pixel Now Playing now show their cover.
+Songs from Pixel Now Playing and YouTube now show their album cover.
