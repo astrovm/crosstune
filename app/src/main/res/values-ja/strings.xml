@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_tagline">音楽リンクを、お気に入りのアプリで開きます。</string>
     <string name="spotify_link_label">音楽リンク</string>
     <string name="spotify_link_placeholder">音楽リンクを貼り付け</string>
     <string name="resolve_button">変換</string>
@@ -18,14 +17,12 @@
     <string name="settings_button">設定</string>
     <string name="settings_title">設定</string>
     <string name="settings_default_title">デフォルトのアプリ</string>
-    <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="settings_links_description">ここでオンにしたサービスのリンクをタップすると Crosstune で開きます。共有と貼り付けはいつでも使えます。</string>
     <string name="rule_opens_in">%1$s で開く</string>
     <string name="rule_default">デフォルト（%1$s）</string>
     <string name="settings_custom_title">その他のアプリとサイト</string>
-    <string name="settings_custom_description">検索ページのあるアプリやウェブサイトを追加できます。</string>
     <string name="add_custom_destination_button">アプリ・サイトを追加</string>
     <string name="remove_button">削除</string>
     <string name="add_button">追加</string>
@@ -43,13 +40,11 @@
     <string name="setup_installed">インストール済み</string>
     <string name="setup_step">ステップ %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune で開くリンクは？</string>
-    <string name="setup_sources_body">リンクをよく受け取るサービスを選んでください。</string>
     <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
-    <string name="setup_destination_body">聴いているアプリを選んでください。あとから変更できます。</string>
+    <string name="setup_destination_body">あとから変更できます。</string>
     <string name="setup_allow_title">リンクを許可</string>
     <string name="setup_allow_none">サービスが選ばれていないため、許可するものはありません。リンクの共有や貼り付けは Crosstune でそのまま使えます。</string>
-    <string name="setup_allow_step_open">「リンク設定を開く」をタップします。</string>
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
     <string name="setup_apps_title">ほかのアプリのリンクをオフにする</string>
@@ -120,10 +115,9 @@
     <string name="copy_link_button">リンクをコピー</string>
     <string name="share_link_button">リンクを共有</string>
     <string name="settings_link_owners_title">これらのリンクを開くアプリ</string>
-    <string name="settings_link_owners_description">これらのアプリも同じリンクを開けます。タップして、そのアプリで開くかどうかを選べます。</string>
+    <string name="settings_link_owners_description">タップして変更できます。</string>
     <string name="link_owner_opens_them">自分でリンクを開く</string>
     <string name="link_owner_lets_crosstune">Crosstune に任せる</string>
-    <string name="setup_allow_taken_hint">リンクにチェックできない場合は、別のアプリが使っています。そのアプリで「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="frontend_address_title">%1$s のアドレス</string>
     <string name="save_button">保存</string>
     <string name="frontend_address_invalid">yewtu.be のようなウェブアドレスを入力してください</string>

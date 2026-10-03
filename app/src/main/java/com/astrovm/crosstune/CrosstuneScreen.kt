@@ -309,13 +309,8 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) {
-        Text(
-            text = stringResource(R.string.app_tagline),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
-
+        // The empty hint below says what the app does, so there's no tagline above it.
+        Spacer(Modifier.height(8.dp))
         LinkNotices(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
@@ -520,19 +515,17 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Open links in   YouTube Music ▾": the default app, in settings. */
+/** "YouTube Music ▾": the default app, in settings, under its section's title. */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
     onSelect: (Destination) -> Unit,
-    label: String,
     modifier: Modifier = Modifier,
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
                 DestinationIcon(selected, installed, size = 20.dp)

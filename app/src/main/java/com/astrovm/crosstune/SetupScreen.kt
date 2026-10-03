@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -269,7 +270,7 @@ internal fun UiState.listeningService(): MusicService? =
 private fun SourcesStep(state: UiState, actions: ScreenActions) {
     // Music services start ticked; it's what most people want.
     LaunchedEffect(Unit) { actions.onPreselectSources() }
-    StepHeader(R.string.setup_sources_title, R.string.setup_sources_body)
+    StepHeader(R.string.setup_sources_title, null)
     val listening = state.listeningService()
     SetupGroupTitle(R.string.setup_sources_music)
     Group {
@@ -359,7 +360,13 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
 
 /** A numbered instruction, short enough to read at a glance. */
 @Composable
-private fun NumberedStep(number: Int, text: String) {
+private fun NumberedStep(number: Int, text: String) = NumberedStep(number) {
+    Text(text = text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
+}
+
+/** A step's number beside what to do, a line of text or, when that's just a button, the button itself. */
+@Composable
+private fun NumberedStep(number: Int, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -375,7 +382,7 @@ private fun NumberedStep(number: Int, text: String) {
                 )
             }
         }
-        Text(text = text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
+        content()
     }
 }
 
@@ -469,19 +476,22 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
             )
         }
     }
-    NumberedStep(1, stringResource(R.string.setup_allow_step_open))
-    FilledTonalButton(
-        onClick = actions.onOpenLinkSettings,
-        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 16.dp)
-            .heightIn(min = 52.dp)
-    ) {
-        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Text(stringResource(R.string.open_link_settings_button), style = MaterialTheme.typography.labelLarge)
+    // The button says what to do, so step 1 is the button itself.
+    NumberedStep(1) {
+        FilledTonalButton(
+            onClick = actions.onOpenLinkSettings,
+            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 16.dp)
+                .heightIn(min = 52.dp)
+        ) {
+            AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+            Text(stringResource(R.string.open_link_settings_button), style = MaterialTheme.typography.labelLarge)
+        }
     }
+    Spacer(Modifier.height(10.dp))
     NumberedStep(2, stringResource(R.string.setup_allow_step_add))
     GuideShot(R.drawable.guide_add_link, Modifier.padding(vertical = 12.dp))
     NumberedStep(3, stringResource(R.string.setup_allow_step_tick))
@@ -501,15 +511,6 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
                 AllowRow(label, hosts)
             }
         }
-    }
-    // Some apps that keep links can't be found, but Android names them next to each link it greys out.
-    if (state.someLinksNotAllowed) {
-        Text(
-            text = stringResource(R.string.setup_allow_taken_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
-        )
     }
 }
 

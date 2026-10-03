@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">어떤 음악 링크든 원하는 앱에서 열어요.</string>
     <string name="spotify_link_label">음악 링크</string>
     <string name="spotify_link_placeholder">음악 링크 붙여넣기</string>
     <string name="resolve_button">링크 변환</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">설정</string>
     <string name="settings_title">설정</string>
     <string name="settings_default_title">기본 앱</string>
-    <string name="settings_default_label">링크를 열 앱</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
     <string name="settings_links_description">여기 서비스의 링크를 탭하면 Crosstune에서 열려요. 공유와 붙여넣기는 항상 돼요.</string>
     <string name="rule_opens_in">%1$s에서 열기</string>
     <string name="rule_default">기본값(%1$s)</string>
     <string name="settings_custom_title">다른 앱 및 사이트</string>
-    <string name="settings_custom_description">검색 페이지가 있는 앱이나 웹사이트를 추가하세요.</string>
     <string name="add_custom_destination_button">앱 또는 사이트 추가</string>
     <string name="remove_button">삭제</string>
     <string name="add_button">추가</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">설치됨</string>
     <string name="setup_step">%2$d단계 중 %1$d단계</string>
     <string name="setup_sources_title">어떤 링크를 Crosstune에서 열까요?</string>
-    <string name="setup_sources_body">링크를 받는 서비스를 선택하세요.</string>
     <string name="setup_sources_listening_note">%1$s에서 듣고 있으니 그 링크는 이미 그곳에서 열립니다.</string>
     <string name="setup_destination_title">어디서 음악을 들으세요?</string>
-    <string name="setup_destination_body">음악을 듣는 앱을 선택하세요. 나중에 변경할 수 있어요.</string>
+    <string name="setup_destination_body">나중에 변경할 수 있어요.</string>
     <string name="setup_allow_title">링크 허용</string>
     <string name="setup_allow_none">선택한 서비스가 없어서 허용할 항목이 없어요. 링크를 Crosstune에 공유하거나 붙여넣는 것은 그대로 가능해요.</string>
-    <string name="setup_allow_step_open">링크 설정 열기를 탭하세요.</string>
     <string name="setup_allow_step_add">링크 추가를 탭하세요.</string>
     <string name="setup_allow_step_tick">모든 링크를 선택한 다음 추가를 탭하세요.</string>
     <string name="setup_apps_title">다른 앱의 링크 끄기</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">링크 복사</string>
     <string name="share_link_button">링크 공유</string>
     <string name="settings_link_owners_title">이 링크를 여는 앱</string>
-    <string name="settings_link_owners_description">이 앱들도 같은 링크를 열 수 있어요. 탭해서 앱이 직접 열지 선택하세요.</string>
+    <string name="settings_link_owners_description">탭해서 변경하세요.</string>
     <string name="link_owner_opens_them">직접 링크를 열어요</string>
     <string name="link_owner_lets_crosstune">Crosstune이 열게 해요</string>
-    <string name="setup_allow_taken_hint">링크를 선택할 수 없나요? 다른 앱이 쓰고 있어요. 그 앱에서 \'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="frontend_address_title">%1$s 주소</string>
     <string name="save_button">저장</string>
     <string name="frontend_address_invalid">yewtu.be 같은 웹 주소를 입력하세요</string>

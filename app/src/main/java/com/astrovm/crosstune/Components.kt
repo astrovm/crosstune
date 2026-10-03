@@ -116,11 +116,11 @@ internal fun GroupDivider() {
     )
 }
 
-/** Label with a supporting line and a switch; the whole row toggles. */
+/** Label with an optional supporting line and a switch; the whole row toggles. */
 @Composable
 internal fun SettingSwitch(
     label: String,
-    description: String,
+    description: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -136,12 +136,14 @@ internal fun SettingSwitch(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = label, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            description?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }

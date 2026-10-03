@@ -78,7 +78,6 @@ internal fun SettingsScreen(
                 selected = state.defaultDestination,
                 onSelect = actions.onTargetChange,
                 installed = state.installed,
-                label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
         }
@@ -96,8 +95,7 @@ internal fun SettingsScreen(
 
 
         SectionHeader(
-            title = stringResource(R.string.settings_custom_title),
-            description = stringResource(R.string.settings_custom_description)
+            title = stringResource(R.string.settings_custom_title)
         )
         Group {
             state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
@@ -490,7 +488,7 @@ private fun SourcePage(
         Group(modifier = Modifier.padding(top = 8.dp)) {
             SettingSwitch(
                 label = stringResource(R.string.source_open_links),
-                description = item.listeningNote ?: stringResource(R.string.settings_links_description),
+                description = item.listeningNote,
                 checked = item.on,
                 onCheckedChange = item.onToggle,
                 enabled = !item.locked

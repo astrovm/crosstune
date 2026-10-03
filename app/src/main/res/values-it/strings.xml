@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_tagline">Apri qualsiasi link musicale nella tua app preferita.</string>
     <string name="spotify_link_label">Link musicale</string>
     <string name="spotify_link_placeholder">Incolla un link musicale</string>
     <string name="resolve_button">Converti link</string>
@@ -18,14 +17,12 @@
     <string name="settings_button">Impostazioni</string>
     <string name="settings_title">Impostazioni</string>
     <string name="settings_default_title">App predefinita</string>
-    <string name="settings_default_label">Apri i link in</string>
     <string name="settings_about_title">Informazioni</string>
     <string name="settings_links_title">Apri i link da</string>
     <string name="settings_links_description">I link di questi servizi che tocchi si aprono in Crosstune. Condividere e incollare funzionano sempre.</string>
     <string name="rule_opens_in">Si apre in: %1$s</string>
     <string name="rule_default">Predefinita (%1$s)</string>
     <string name="settings_custom_title">Altre app e siti</string>
-    <string name="settings_custom_description">Aggiungi qualsiasi app o sito con una pagina di ricerca.</string>
     <string name="add_custom_destination_button">Aggiungi app o sito</string>
     <string name="remove_button">Rimuovi</string>
     <string name="add_button">Aggiungi</string>
@@ -43,13 +40,11 @@
     <string name="setup_installed">Installata</string>
     <string name="setup_step">Passaggio %1$d di %2$d</string>
     <string name="setup_sources_title">Quali link deve aprire Crosstune?</string>
-    <string name="setup_sources_body">Scegli i servizi da cui ricevi i link.</string>
     <string name="setup_sources_listening_note">Ascolti su %1$s, quindi i suoi link si aprono già lì.</string>
     <string name="setup_destination_title">Dove ascolti la musica?</string>
-    <string name="setup_destination_body">Scegli l\'app che usi per ascoltare. Potrai cambiarla in seguito.</string>
+    <string name="setup_destination_body">Potrai cambiarla in seguito.</string>
     <string name="setup_allow_title">Consenti i link</string>
     <string name="setup_allow_none">Non hai scelto nessun servizio, quindi non c\'è nulla da consentire. Puoi comunque condividere o incollare i link in Crosstune.</string>
-    <string name="setup_allow_step_open">Tocca Apri impostazioni link.</string>
     <string name="setup_allow_step_add">Tocca Aggiungi link.</string>
     <string name="setup_allow_step_tick">Seleziona tutti i link, poi tocca Aggiungi.</string>
     <string name="setup_apps_title">Disattiva i link delle altre app</string>
@@ -120,10 +115,9 @@
     <string name="copy_link_button">Copia link</string>
     <string name="share_link_button">Condividi link</string>
     <string name="settings_link_owners_title">App con questi link</string>
-    <string name="settings_link_owners_description">Queste app possono aprire gli stessi link. Toccane una per scegliere se li apre lei.</string>
+    <string name="settings_link_owners_description">Toccane una per cambiare.</string>
     <string name="link_owner_opens_them">Tiene i suoi link</string>
     <string name="link_owner_lets_crosstune">Lascia che li apra Crosstune</string>
-    <string name="setup_allow_taken_hint">Non riesci a spuntare un link? Ce l\'ha un\'altra app. In quell\'app, scegli “Nel browser” o disattiva “Apri link supportati”.</string>
     <string name="frontend_address_title">Indirizzo di %1$s</string>
     <string name="save_button">Salva</string>
     <string name="frontend_address_invalid">Inserisci un indirizzo web, come yewtu.be</string>

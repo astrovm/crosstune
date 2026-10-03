@@ -4,7 +4,6 @@
     <string name="publisher_id" translatable="false">astrovm</string>
     <string name="publisher_name" translatable="false">astrovm</string>
 
-    <string name="app_tagline">Open any music link in your favorite app.</string>
     <string name="spotify_link_label">Music link</string>
     <string name="spotify_link_placeholder">Paste a music link</string>
     <string name="resolve_button">Convert link</string>
@@ -26,14 +25,12 @@
     <string name="settings_button">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_default_title">Default app</string>
-    <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
     <string name="settings_links_description">Tapped links from these open in Crosstune. Sharing and pasting always work.</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Other apps and sites</string>
-    <string name="settings_custom_description">Add any app or website that has a search page.</string>
     <string name="add_custom_destination_button">Add app or site</string>
     <string name="remove_button">Remove</string>
     <string name="add_button">Add</string>
@@ -51,13 +48,11 @@
     <string name="setup_installed">Installed</string>
     <string name="setup_step">Step %1$d of %2$d</string>
     <string name="setup_sources_title">Which links should Crosstune open?</string>
-    <string name="setup_sources_body">Pick the services you get links from.</string>
     <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
     <string name="setup_destination_title">Where do you listen?</string>
-    <string name="setup_destination_body">Pick the app you listen in. You can change it later.</string>
+    <string name="setup_destination_body">You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
     <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
-    <string name="setup_allow_step_open">Tap Open link settings.</string>
     <string name="setup_allow_step_add">Tap Add link.</string>
     <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
     <string name="setup_apps_title">Turn off other apps\' links</string>
@@ -135,10 +130,9 @@
     <string name="copy_link_button">Copy link</string>
     <string name="share_link_button">Share link</string>
     <string name="settings_link_owners_title">Apps with these links</string>
-    <string name="settings_link_owners_description">These apps can open the same links. Tap one to choose whether it opens them itself.</string>
+    <string name="settings_link_owners_description">Tap one to change it.</string>
     <string name="link_owner_opens_them">Keeps its links</string>
     <string name="link_owner_lets_crosstune">Lets Crosstune open them</string>
-    <string name="setup_allow_taken_hint">Can\'t tick a link? Another app has it. In that app, choose “In your browser” or turn off “Open supported links”.</string>
     <string name="frontend_address_title">%1$s address</string>
     <string name="save_button">Save</string>
     <string name="frontend_address_invalid">Enter a web address, like yewtu.be</string>

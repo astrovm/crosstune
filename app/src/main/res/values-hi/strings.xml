@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_tagline">कोई भी म्यूज़िक लिंक अपने पसंदीदा ऐप्लिकेशन में खोलें।</string>
     <string name="spotify_link_label">म्यूज़िक लिंक</string>
     <string name="spotify_link_placeholder">म्यूज़िक लिंक पेस्ट करें</string>
     <string name="resolve_button">लिंक बदलें</string>
@@ -17,14 +16,12 @@
     <string name="settings_button">सेटिंग</string>
     <string name="settings_title">सेटिंग</string>
     <string name="settings_default_title">डिफ़ॉल्ट ऐप्लिकेशन</string>
-    <string name="settings_default_label">लिंक इसमें खोलें</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
     <string name="settings_links_description">इनके जिन लिंक पर आप टैप करते हैं, वे Crosstune में खुलते हैं। शेयर और पेस्ट हमेशा काम करते हैं।</string>
     <string name="rule_opens_in">%1$s में खुलेगा</string>
     <string name="rule_default">डिफ़ॉल्ट (%1$s)</string>
     <string name="settings_custom_title">अन्य ऐप्लिकेशन और साइटें</string>
-    <string name="settings_custom_description">सर्च पेज वाला कोई भी ऐप्लिकेशन या वेबसाइट जोड़ें।</string>
     <string name="add_custom_destination_button">ऐप्लिकेशन या साइट जोड़ें</string>
     <string name="remove_button">हटाएँ</string>
     <string name="add_button">जोड़ें</string>
@@ -42,13 +39,11 @@
     <string name="setup_installed">इंस्टॉल है</string>
     <string name="setup_step">चरण %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune कौन-से लिंक खोले?</string>
-    <string name="setup_sources_body">वे सेवाएँ चुनें जिनके लिंक आपको मिलते हैं।</string>
     <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
-    <string name="setup_destination_body">वह ऐप्लिकेशन चुनें जिसमें आप सुनते हैं। इसे बाद में बदला जा सकता है।</string>
+    <string name="setup_destination_body">इसे बाद में बदला जा सकता है।</string>
     <string name="setup_allow_title">लिंक की अनुमति दें</string>
     <string name="setup_allow_none">आपने कोई सेवा नहीं चुनी, इसलिए अनुमति देने के लिए कुछ नहीं है। फिर भी आप Crosstune में लिंक शेयर या पेस्ट कर सकते हैं।</string>
-    <string name="setup_allow_step_open">“लिंक सेटिंग खोलें” पर टैप करें।</string>
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
     <string name="setup_apps_title">दूसरे ऐप के लिंक बंद करें</string>
@@ -119,10 +114,9 @@
     <string name="copy_link_button">लिंक कॉपी करें</string>
     <string name="share_link_button">लिंक शेयर करें</string>
     <string name="settings_link_owners_title">इन लिंक वाले ऐप</string>
-    <string name="settings_link_owners_description">ये ऐप भी यही लिंक खोल सकते हैं। किसी पर टैप करके चुनें कि वह उन्हें खुद खोले या नहीं।</string>
+    <string name="settings_link_owners_description">बदलने के लिए किसी पर टैप करें।</string>
     <string name="link_owner_opens_them">अपने लिंक खुद खोलता है</string>
     <string name="link_owner_lets_crosstune">Crosstune को खोलने देता है</string>
-    <string name="setup_allow_taken_hint">कोई लिंक टिक नहीं हो रहा? वह किसी और ऐप के पास है। उस ऐप में “ब्राउज़र में” चुनें या “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="frontend_address_title">%1$s का पता</string>
     <string name="save_button">सेव करें</string>
     <string name="frontend_address_invalid">कोई वेब पता डालें, जैसे yewtu.be</string>
