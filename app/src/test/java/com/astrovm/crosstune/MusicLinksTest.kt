@@ -13,28 +13,54 @@ class MusicLinksTest {
         assertEquals(text, MusicLink(service, type, id, url, region), link(text))
     }
 
+    /** What Now Playing shares: the song in words, then a search whose spaces became "+" and nothing else. */
+    private fun nowPlaying(song: String, search: String = song) = "$song\nhttps://www.google.com/search?q=${search.replace(' ', '+')}"
+
+    private fun recognized(text: String) = (MusicLinks.parse(text) as? LinkInput.RecognizedSong)?.metadata
+
     @Test
-    fun recognizedSongSearchLinksDecodeSongAndArtist() {
-        val url = "https://www.google.com/search?q=A+Song+by+Example+Band"
+    fun nowPlayingSharesDecodeSongAndArtist() {
         val expected = LinkInput.RecognizedSong(
             "https://www.google.com/search?q=A%20Song%20by%20Example%20Band",
             MusicMetadata("A Song", "Example Band")
         )
-        assertEquals(expected, MusicLinks.parse("A Song by Example Band\n$url"))
-        assertEquals(expected, MusicLinks.parse("  a song  BY example band https://google.com/search?q=A%20Song%20by%20Example%20Band&utm_source=test"))
+        assertEquals(expected, MusicLinks.parse(nowPlaying("A Song by Example Band")))
+        // The link box shows it on one line, which reads back as the same song.
         assertEquals(expected, MusicLinks.parse(expected.text))
-        val unicode = MusicLinks.parse("Canción & Sol by Artista https://www.google.com/search?q=Canci%C3%B3n+%26+Sol+by+Artista") as LinkInput.RecognizedSong
-        assertEquals(MusicMetadata("Canción & Sol", "Artista"), unicode.metadata)
-        assertEquals(MusicMetadata("Walk by Night", "Band"), (MusicLinks.parse("Walk by Night by Band https://www.google.com/search?q=Walk+by+Night+by+Band") as LinkInput.RecognizedSong).metadata)
+        assertEquals(MusicMetadata("Walk by Night", "Band"), recognized(nowPlaying("Walk by Night by Band")))
+        // The search isn't encoded, so "&" and "+" stay as they are.
+        assertEquals(MusicMetadata("Mrs. Robinson", "Simon & Garfunkel"), recognized(nowPlaying("Mrs. Robinson by Simon & Garfunkel")))
+        assertEquals(MusicMetadata("Gonna Make You Sweat", "C+C Music Factory"), recognized(nowPlaying("Gonna Make You Sweat by C+C Music Factory")))
+    }
+
+    @Test
+    fun nowPlayingSharesInEveryLanguage() {
+        assertEquals(MusicMetadata("Canción", "Artista"), recognized(nowPlaying("Canción de Artista")))
+        assertEquals(MusicMetadata("Lied", "Band"), recognized(nowPlaying("„Lied“ von Band")))
+        assertEquals(MusicMetadata("노래", "가수"), recognized(nowPlaying("가수의 노래")))
+        assertEquals(MusicMetadata("歌", "歌手"), recognized(nowPlaying("歌手的《歌》")))
+        // Some languages share one wording and search another.
+        assertEquals(MusicMetadata("Chanson", "Groupe"), recognized(nowPlaying("Chanson par Groupe", "Chanson (Groupe)")))
+        assertEquals(MusicMetadata("Şarkı", "Grup"), recognized(nowPlaying("Grup, Şarkı", "Şarkı, Grup")))
+        assertEquals(
+            MusicMetadata("Песня", "Группа"),
+            recognized(nowPlaying("\"Песня\", Группа", "Песня \"Песня\" исполнителя \"Группа\""))
+        )
+    }
+
+    @Test
+    fun otherGoogleSearchesAreNotSongs() {
         listOf(
-            // Only a search shared with its own query in front is a song, not any search with " by ".
-            url, "https://www.google.com/search?q=what+to+do+by+tomorrow",
+            "https://www.google.com/search?q=A+Song+by+Example+Band",
+            "https://www.google.com/search?q=A%20Song%20by%20Example%20Band",
+            "https://www.google.com/search?q=what+to+do+by+tomorrow",
             "Look at this https://www.google.com/search?q=A+Song+by+Example+Band",
-            "A Song by Other Band https://www.google.com/search?q=A+Song+by+Example+Band",
-            "weather https://www.google.com/search?q=weather",
-            "by Band https://www.google.com/search?q=+by+Band", "Song by https://www.google.com/search?q=Song+by+",
-            "Song by Band https://google.com.evil.example/search?q=Song+by+Band",
-            "Song by Band https://www.google.com/other?q=Song+by+Band"
+            nowPlaying("A Song by Other Band", "A Song by Example Band"),
+            nowPlaying("weather"),
+            nowPlaying(" by Band"),
+            nowPlaying("A Song by Example Band") + "&utm_source=test",
+            "A Song by Example Band\nhttps://google.com/search?q=A+Song+by+Example+Band",
+            "A Song by Example Band\nhttps://www.google.com.evil.example/search?q=A+Song+by+Example+Band"
         ).forEach { assertNull(it, MusicLinks.parse(it)) }
     }
 

@@ -24,15 +24,16 @@ internal data class MusicLink(
 internal sealed interface LinkInput {
     data class Link(val link: MusicLink) : LinkInput
     data class ShortLink(val url: String) : LinkInput
-    /** Pixel Now Playing shares "Song by Artist" followed by a Google search for that same text. */
+    /** A song shared by Pixel Now Playing: the song in words, then a Google search for it. */
     data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput {
         /** Shared text that parses back to this song, for the link field. */
-        val text get() = "${metadata.title} by ${metadata.artist} $url"
+        val text get() = MusicLinks.nowPlayingShare(metadata)
     }
 }
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
 internal object MusicLinks {
+    private const val NOW_PLAYING_SEARCH = "https://www.google.com/search?q="
     private val frontendSites = Frontend.SOURCES.flatMap { it.sites }.toSet()
 
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
@@ -61,15 +62,14 @@ internal object MusicLinks {
     )
 
     fun parse(text: String): LinkInput? {
-        val firstUrl = extractFirstUrl(text)
-        val value = (firstUrl ?: text).trim()
+        nowPlayingSong(text)?.let { return it }
+        val value = (extractFirstUrl(text) ?: text).trim()
         spotifyUriOrId(value)?.let { return LinkInput.Link(it) }
 
         // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
         val url = value.toHttpUrlOrNull()
             ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null }
             ?: return null
-        firstUrl?.let { recognizedSong(url, text.substringBefore(it)) }?.let { return it }
         fromUrl(url)?.let { return LinkInput.Link(it) }
         if (!url.host.isShortLinkHost()) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
@@ -77,24 +77,44 @@ internal object MusicLinks {
     }
 
     /**
-     * Only a search shared with its own query as the text before it, as Now Playing shares it.
-     * Any other Google search that happens to contain " by " isn't a song.
+     * A song as Now Playing shares it: the song in the phone's language, then a Google search
+     * for it. The search isn't encoded, only its spaces become "+", so it's compared as text.
+     * Any other search, like one that happens to contain " by ", isn't a song.
      */
-    private fun recognizedSong(url: HttpUrl, before: String): LinkInput.RecognizedSong? {
-        if (url.host !in setOf("google.com", "www.google.com") || url.encodedPath != "/search") return null
-        val query = url.queryParameter("q") ?: return null
-        if (!before.normalizedSpaces().equals(query.normalizedSpaces(), ignoreCase = true)) return null
-        val separator = query.lastIndexOf(" by ")
-        if (separator < 0) return null
-        val title = query.substring(0, separator).trim()
-        val artist = query.substring(separator + 4).trim()
-        if (title.isBlank() || artist.isBlank()) return null
-        val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
-            .addQueryParameter("q", "$title by $artist").build().toString()
-        return LinkInput.RecognizedSong(canonical, MusicMetadata(title, artist))
+    private fun nowPlayingSong(text: String): LinkInput.RecognizedSong? {
+        val start = text.indexOf(NOW_PLAYING_SEARCH)
+        if (start < 0) return null
+        val song = text.substring(0, start).trim()
+        val search = text.substring(start).trim()
+        return nowPlayingPatterns.firstNotNullOfOrNull { (shared, searched) ->
+            val groups = shared.regex.matchEntire(song)?.groupValues ?: return@firstNotNullOfOrNull null
+            val title = groups[shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            val artist = groups[3 - shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            if (search != nowPlayingSearch(searched.fill(title, artist))) return@firstNotNullOfOrNull null
+            val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
+                .addQueryParameter("q", "$title by $artist").build().toString()
+            LinkInput.RecognizedSong(canonical, MusicMetadata(title, artist))
+        }
     }
 
-    private fun String.normalizedSpaces() = trim().replace(Regex("\\s+"), " ")
+    /** One of Now Playing's wordings, "%1$s" being the title and "%2$s" the artist. */
+    private class SongPattern(val text: String) {
+        val titleGroup = if (text.indexOf("%1\$s") < text.indexOf("%2\$s")) 1 else 2
+        val regex = text.split("%1\$s", "%2\$s").joinToString("(.+)") { Regex.escape(it) }.toRegex()
+        fun fill(title: String, artist: String) = text.replace("%1\$s", title).replace("%2\$s", artist)
+    }
+
+    private val nowPlayingPatterns by lazy {
+        NowPlayingShares.patterns.map { (shared, searched) -> SongPattern(shared) to SongPattern(searched) }
+    }
+
+    /** What Now Playing shares for a song with the English wording, which every phone reads. */
+    fun nowPlayingShare(metadata: MusicMetadata): String {
+        val song = "${metadata.title} by ${metadata.artist}"
+        return "$song ${nowPlayingSearch(song)}"
+    }
+
+    private fun nowPlayingSearch(query: String) = NOW_PLAYING_SEARCH + query.replace(' ', '+')
 
     /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
     fun serviceFor(text: String): MusicService? = text.trim().toHttpUrlOrNull()?.host?.let(::serviceForHost)
