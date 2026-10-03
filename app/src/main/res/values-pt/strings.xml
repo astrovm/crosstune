@@ -16,6 +16,7 @@
     <string name="settings_button">Configurações</string>
     <string name="settings_title">Configurações</string>
     <string name="settings_default_title">App padrão</string>
+    <string name="settings_default_label">Abrir links no</string>
     <string name="settings_about_title">Sobre</string>
     <string name="settings_links_title">Abrir links de</string>
     <string name="settings_links_description">Links destes que você tocar abrem no Crosstune. Compartilhar e colar sempre funcionam.</string>

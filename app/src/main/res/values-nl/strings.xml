@@ -16,6 +16,7 @@
     <string name="settings_button">Instellingen</string>
     <string name="settings_title">Instellingen</string>
     <string name="settings_default_title">Standaardapp</string>
+    <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="settings_links_description">Aangetikte links van deze diensten openen in Crosstune. Delen en plakken werken altijd.</string>

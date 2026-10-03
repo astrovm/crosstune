@@ -1,0 +1,2 @@
+Crosstune moves now: screens slide, results and errors fade in, buttons respond to your touch, and lists grow and shrink smoothly.
+Settings shows "Open links in" next to your default app again.

@@ -16,6 +16,7 @@
     <string name="settings_button">Configuración</string>
     <string name="settings_title">Configuración</string>
     <string name="settings_default_title">App predeterminada</string>
+    <string name="settings_default_label">Abrir links en</string>
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_links_title">Abrir links de</string>
     <string name="settings_links_description">Los links de estos que toques se abren en Crosstune. Compartir y pegar siempre funcionan.</string>

@@ -25,6 +25,7 @@
     <string name="settings_button">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_default_title">Default app</string>
+    <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
     <string name="settings_links_description">Tapped links from these open in Crosstune. Sharing and pasting always work.</string>

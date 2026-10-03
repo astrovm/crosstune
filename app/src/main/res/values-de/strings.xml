@@ -16,6 +16,7 @@
     <string name="settings_button">Einstellungen</string>
     <string name="settings_title">Einstellungen</string>
     <string name="settings_default_title">Standard-App</string>
+    <string name="settings_default_label">Links öffnen in</string>
     <string name="settings_about_title">Info</string>
     <string name="settings_links_title">Links öffnen von</string>
     <string name="settings_links_description">Angetippte Links dieser Dienste öffnen sich in Crosstune. Teilen und Einfügen klappt immer.</string>

@@ -3,9 +3,10 @@ package com.astrovm.crosstune
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -105,8 +106,10 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .widthIn(max = 290.dp)
                     .heightIn(min = 52.dp)
+                val backPress = rememberPress()
+                val nextPress = rememberPress()
                 if (step != null) {
-                    OutlinedButton(onClick = back, enabled = ready, modifier = buttonModifier) {
+                    OutlinedButton(onClick = back, enabled = ready, interactionSource = backPress.source, modifier = buttonModifier.then(backPress.modifier)) {
                         Text(stringResource(R.string.back_button), style = MaterialTheme.typography.labelLarge)
                     }
                 }
@@ -119,11 +122,11 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                 // Leaving with links still to allow is skipping them, so the button says so and
                 // the guide's own button stays the main one.
                 if (step == SetupStep.ALLOW && state.someLinksNotAllowed) {
-                    FilledTonalButton(onClick = onNext, enabled = enabled, modifier = buttonModifier) {
+                    FilledTonalButton(onClick = onNext, enabled = enabled, interactionSource = nextPress.source, modifier = buttonModifier.then(nextPress.modifier)) {
                         Text(stringResource(R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
                     }
                 } else {
-                    Button(onClick = onNext, enabled = enabled, modifier = buttonModifier) {
+                    Button(onClick = onNext, enabled = enabled, interactionSource = nextPress.source, modifier = buttonModifier.then(nextPress.modifier)) {
                         Text(
                             stringResource(
                                 when {
@@ -139,7 +142,12 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
             }
         }
     ) {
-        AnimatedContent(targetState = step, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "setup") { shown ->
+        // Next slides the new step in from the end, Back from the start.
+        AnimatedContent(
+            targetState = step,
+            transitionSpec = { slide(forward = (targetState?.ordinal ?: -1) > (initialState?.ordinal ?: -1)) },
+            label = "setup"
+        ) { shown ->
             Column {
                 if (shown == null) return@Column Welcome()
                 StepProgress(steps.indexOf(shown) + 1, steps.size)
@@ -164,7 +172,9 @@ private fun StepProgress(step: Int, lastStep: Int) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        LinearProgressIndicator(progress = { step / lastStep.toFloat() }, modifier = Modifier.fillMaxWidth())
+        // The bar fills in rather than jumping from step to step.
+        val progress by animateFloatAsState(step / lastStep.toFloat(), spring(stiffness = Spring.StiffnessLow), label = "progress")
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -204,7 +214,10 @@ private fun Welcome() {
 /** A small rounded label, e.g. "Installed" or "Allowed". */
 @Composable
 private fun Tag(text: String, container: Color, content: Color) {
-    Surface(shape = MaterialTheme.shapes.small, color = container, contentColor = content) {
+    // E.g. "Still opens links" turning into "Fixed" changes color smoothly.
+    val shownContainer by animateColorAsState(container, label = "tag")
+    val shownContent by animateColorAsState(content, label = "tag text")
+    Surface(shape = MaterialTheme.shapes.small, color = shownContainer, contentColor = shownContent) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
@@ -474,13 +487,16 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
     }
     // The button says what to do, so step 1 is the button itself.
     NumberedStep(1) {
+        val press = rememberPress()
         Button(
             onClick = actions.onOpenLinkSettings,
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            interactionSource = press.source,
             modifier = Modifier
                 .weight(1f)
                 .padding(start = 16.dp)
                 .heightIn(min = 52.dp)
+                .then(press.modifier)
         ) {
             AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.size(ButtonDefaults.IconSpacing))
@@ -574,11 +590,14 @@ internal fun StopAppsGuide(apps: List<LinkApp>, blocking: Set<LinkApp>?, onOpen:
                 }
                 // What to pick goes under the screenshot, which shows it, instead of a paragraph above.
                 GuideShot(R.drawable.guide_stop_app, Modifier.padding(vertical = 16.dp), caption = stringResource(R.string.setup_apps_stop_body))
+                val press = rememberPress()
                 Button(
                     onClick = { onOpen(current) },
+                    interactionSource = press.source,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
+                        .then(press.modifier)
                 ) {
                     Text(stringResource(R.string.open_app_link_settings_button, current.label), style = MaterialTheme.typography.labelLarge)
                 }

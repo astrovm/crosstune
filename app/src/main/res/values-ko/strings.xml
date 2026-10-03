@@ -16,6 +16,7 @@
     <string name="settings_button">설정</string>
     <string name="settings_title">설정</string>
     <string name="settings_default_title">기본 앱</string>
+    <string name="settings_default_label">링크를 열 앱</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
     <string name="settings_links_description">여기 서비스의 링크를 탭하면 Crosstune에서 열려요. 공유와 붙여넣기는 항상 돼요.</string>

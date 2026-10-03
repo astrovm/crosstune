@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,11 +53,31 @@ internal fun SettingsScreen(
     openSource: String? = null,
     onOpenSource: (String?) -> Unit = {}
 ) {
-    var addingCustom by rememberSaveable { mutableStateOf(false) }
     val sources = sourceSettings(state, actions)
-    sources.firstOrNull { it.key == openSource }?.let { item ->
-        return SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
+    // A source's page slides in over the list, and back out the other way.
+    AnimatedContent(
+        targetState = sources.firstOrNull { it.key == openSource }?.key,
+        transitionSpec = { slide(forward = targetState != null) },
+        label = "source"
+    ) { key ->
+        val item = sources.firstOrNull { it.key == key }
+        if (item != null) {
+            SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
+        } else {
+            SettingsList(state, actions, sources, onBack, onOpenSource)
+        }
     }
+}
+
+@Composable
+private fun SettingsList(
+    state: UiState,
+    actions: ScreenActions,
+    sources: List<SourceSettings>,
+    onBack: () -> Unit,
+    onOpenSource: (String?) -> Unit
+) {
+    var addingCustom by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
@@ -78,6 +99,7 @@ internal fun SettingsScreen(
                 selected = state.defaultDestination,
                 onSelect = actions.onTargetChange,
                 installed = state.installed,
+                label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
         }
@@ -121,20 +143,22 @@ internal fun SettingsScreen(
                 }
                 GroupDivider()
             }
-            if (addingCustom) {
-                AddCustomDestinationForm(
-                    onAdd = { name, template ->
-                        actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
-                    },
-                    onCancel = { addingCustom = false }
-                )
-            } else {
-                TextButton(
-                    onClick = { addingCustom = true },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.add_custom_destination_button), modifier = Modifier.padding(start = 8.dp))
+            AnimatedContent(targetState = addingCustom, transitionSpec = { swap() }, label = "add") { adding ->
+                if (adding) {
+                    AddCustomDestinationForm(
+                        onAdd = { name, template ->
+                            actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
+                        },
+                        onCancel = { addingCustom = false }
+                    )
+                } else {
+                    TextButton(
+                        onClick = { addingCustom = true },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.add_custom_destination_button), modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }
@@ -316,7 +340,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp))
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 (listOf(null) + AppLanguage.tags).forEach { tag ->
@@ -563,6 +587,7 @@ private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: Li
                 modifier = Modifier
                     .padding(start = 2.dp)
                     .size(16.dp)
+                    .flipWhen(expanded)
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

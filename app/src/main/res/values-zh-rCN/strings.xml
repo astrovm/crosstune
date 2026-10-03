@@ -16,6 +16,7 @@
     <string name="settings_button">设置</string>
     <string name="settings_title">设置</string>
     <string name="settings_default_title">默认应用</string>
+    <string name="settings_default_label">用以下应用打开链接</string>
     <string name="settings_about_title">关于</string>
     <string name="settings_links_title">打开来自以下服务的链接</string>
     <string name="settings_links_description">点按这些服务的链接会在 Crosstune 中打开。分享和粘贴始终可用。</string>

@@ -16,6 +16,7 @@
     <string name="settings_button">Setelan</string>
     <string name="settings_title">Setelan</string>
     <string name="settings_default_title">Aplikasi default</string>
+    <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
     <string name="settings_links_description">Tautan dari layanan ini yang kamu ketuk terbuka di Crosstune. Berbagi dan menempel selalu berfungsi.</string>

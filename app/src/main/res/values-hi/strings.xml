@@ -16,6 +16,7 @@
     <string name="settings_button">सेटिंग</string>
     <string name="settings_title">सेटिंग</string>
     <string name="settings_default_title">डिफ़ॉल्ट ऐप्लिकेशन</string>
+    <string name="settings_default_label">लिंक इसमें खोलें</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
     <string name="settings_links_description">इनके जिन लिंक पर आप टैप करते हैं, वे Crosstune में खुलते हैं। शेयर और पेस्ट हमेशा काम करते हैं।</string>

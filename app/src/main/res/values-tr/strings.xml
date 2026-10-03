@@ -16,6 +16,7 @@
     <string name="settings_button">Ayarlar</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_default_title">Varsayılan uygulama</string>
+    <string name="settings_default_label">Bağlantıları şurada aç</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
     <string name="settings_links_description">Bunlardan dokunduğun bağlantılar Crosstune\'da açılır. Paylaşma ve yapıştırma her zaman çalışır.</string>

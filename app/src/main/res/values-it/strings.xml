@@ -17,6 +17,7 @@
     <string name="settings_button">Impostazioni</string>
     <string name="settings_title">Impostazioni</string>
     <string name="settings_default_title">App predefinita</string>
+    <string name="settings_default_label">Apri i link in</string>
     <string name="settings_about_title">Informazioni</string>
     <string name="settings_links_title">Apri i link da</string>
     <string name="settings_links_description">I link di questi servizi che tocchi si aprono in Crosstune. Condividere e incollare funzionano sempre.</string>

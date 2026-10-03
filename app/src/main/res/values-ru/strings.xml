@@ -16,6 +16,7 @@
     <string name="settings_button">Настройки</string>
     <string name="settings_title">Настройки</string>
     <string name="settings_default_title">Приложение по умолчанию</string>
+    <string name="settings_default_label">Открывать ссылки в</string>
     <string name="settings_about_title">О приложении</string>
     <string name="settings_links_title">Открывать ссылки из</string>
     <string name="settings_links_description">Ссылки этих сервисов по нажатию открываются в Crosstune. Поделиться и вставить работает всегда.</string>

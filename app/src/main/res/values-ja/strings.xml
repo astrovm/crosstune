@@ -17,6 +17,7 @@
     <string name="settings_button">設定</string>
     <string name="settings_title">設定</string>
     <string name="settings_default_title">デフォルトのアプリ</string>
+    <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="settings_links_description">ここでオンにしたサービスのリンクをタップすると Crosstune で開きます。共有と貼り付けはいつでも使えます。</string>

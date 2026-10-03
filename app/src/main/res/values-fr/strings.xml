@@ -16,6 +16,7 @@
     <string name="settings_button">Paramètres</string>
     <string name="settings_title">Paramètres</string>
     <string name="settings_default_title">Application par défaut</string>
+    <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
     <string name="settings_links_description">Les liens de ces services que vous touchez s’ouvrent dans Crosstune. Partager et coller fonctionnent toujours.</string>

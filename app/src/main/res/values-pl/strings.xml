@@ -16,6 +16,7 @@
     <string name="settings_button">Ustawienia</string>
     <string name="settings_title">Ustawienia</string>
     <string name="settings_default_title">Domyślna aplikacja</string>
+    <string name="settings_default_label">Otwieraj linki w</string>
     <string name="settings_about_title">Informacje</string>
     <string name="settings_links_title">Otwieraj linki z</string>
     <string name="settings_links_description">Kliknięte linki z tych serwisów otwierają się w Crosstune. Udostępnianie i wklejanie działa zawsze.</string>
