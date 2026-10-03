@@ -30,7 +30,7 @@ class LinkResolverTest {
 
     @Test
     fun recognizedSongNeedsNoMetadataNetworkRequest() {
-        val result = resolve("https://www.google.com/search?q=A+Song+by+Example+Band") as Resolution.Resolved
+        val result = resolve("A Song by Example Band https://www.google.com/search?q=A+Song+by+Example+Band") as Resolution.Resolved
         assertEquals(MusicMetadata("A Song", "Example Band"), result.metadata)
         assertEquals(null, result.link.service)
         assertEquals(ItemType.TRACK, result.link.type)

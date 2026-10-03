@@ -287,9 +287,21 @@ internal class MainViewModel(
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
         uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
-        val input = MusicLinks.parse(uiState.linkText) ?: return rejectInput()
+        val input = parse(uiState.linkText) ?: return rejectInput()
         resolve(input, openWhenReady = false)
     }
+
+    /** A recognized song keeps its "Song by Artist" text, so Convert reads it again from the box. */
+    private fun fieldText(link: MusicLink, metadata: MusicMetadata) =
+        if (link.service == null) LinkInput.RecognizedSong(link.url, metadata).text else link.url
+
+    /**
+     * A recognized song needs the text shared with its search link, but Recent and the widget
+     * reopen it from the link alone.
+     */
+    private fun parse(text: String): LinkInput? = MusicLinks.parse(text)
+        ?: uiState.history.firstOrNull { it.link.service == null && it.link.url == text.trim() }
+            ?.let { LinkInput.RecognizedSong(it.link.url, it.metadata) }
 
     fun settingsLeft() {
         uiState = uiState.copy(leaveSettings = false)
@@ -309,7 +321,7 @@ internal class MainViewModel(
             afterLookup = after,
             leaveSettings = true
         )
-        val input = MusicLinks.parse(incoming)
+        val input = parse(text.orEmpty())
         if (input == null) {
             // Intercepted services' links include pages Crosstune can't convert, such as a
             // SoundCloud feed; hand those straight to the service's app.
@@ -317,9 +329,8 @@ internal class MainViewModel(
             effectChannel.trySend(Effect.Open(incoming, service.packageName, finishAfterOpen = true))
             return
         }
-        if (input is LinkInput.Link) {
-            uiState = uiState.copy(linkText = input.link.url)
-        }
+        if (input is LinkInput.Link) uiState = uiState.copy(linkText = input.link.url)
+        if (input is LinkInput.RecognizedSong) uiState = uiState.copy(linkText = input.text)
         resolve(input, openWhenReady = !show, destination)
     }
 
@@ -341,7 +352,8 @@ internal class MainViewModel(
     /** Clipboard text pasted with the field's Paste button: looked up, but only opened on request. */
     fun pasteLink(text: String?) {
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
-        uiState = uiState.copy(linkText = MusicLinks.extractFirstUrl(text) ?: text.trim(), error = null)
+        val recognized = MusicLinks.parse(text) as? LinkInput.RecognizedSong
+        uiState = uiState.copy(linkText = recognized?.text ?: MusicLinks.extractFirstUrl(text) ?: text.trim(), error = null)
         resolveTypedInput()
     }
 
@@ -411,7 +423,7 @@ internal class MainViewModel(
             isLoading = false,
             result = resolution.metadata,
             link = resolution.link,
-            linkText = resolution.link.url,
+            linkText = fieldText(resolution.link, resolution.metadata),
             destinationUrls = savedDestinations(entry),
             history = history
         )
@@ -568,7 +580,7 @@ internal class MainViewModel(
         lastRequest = null
         pendingOpen = false
         uiState = uiState.copy(
-            linkText = entry.link.url,
+            linkText = fieldText(entry.link, entry.metadata),
             isLoading = false,
             isMatching = false,
             result = entry.metadata,

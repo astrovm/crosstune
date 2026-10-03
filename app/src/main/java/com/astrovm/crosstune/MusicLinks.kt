@@ -24,8 +24,11 @@ internal data class MusicLink(
 internal sealed interface LinkInput {
     data class Link(val link: MusicLink) : LinkInput
     data class ShortLink(val url: String) : LinkInput
-    /** Pixel Now Playing shares a Google search containing the song and artist. */
-    data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput
+    /** Pixel Now Playing shares "Song by Artist" followed by a Google search for that same text. */
+    data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput {
+        /** Shared text that parses back to this song, for the link field. */
+        val text get() = "${metadata.title} by ${metadata.artist} $url"
+    }
 }
 
 /** Parses links, URIs and IDs from every supported source service. Pure Kotlin, no Android APIs. */
@@ -58,23 +61,29 @@ internal object MusicLinks {
     )
 
     fun parse(text: String): LinkInput? {
-        val value = (extractFirstUrl(text) ?: text).trim()
+        val firstUrl = extractFirstUrl(text)
+        val value = (firstUrl ?: text).trim()
         spotifyUriOrId(value)?.let { return LinkInput.Link(it) }
 
         // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
         val url = value.toHttpUrlOrNull()
             ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null }
             ?: return null
-        recognizedSong(url)?.let { return it }
+        firstUrl?.let { recognizedSong(url, text.substringBefore(it)) }?.let { return it }
         fromUrl(url)?.let { return LinkInput.Link(it) }
         if (!url.host.isShortLinkHost()) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
         return LinkInput.ShortLink(url.newBuilder().scheme("https").build().toString())
     }
 
-    private fun recognizedSong(url: HttpUrl): LinkInput.RecognizedSong? {
+    /**
+     * Only a search shared with its own query as the text before it, as Now Playing shares it.
+     * Any other Google search that happens to contain " by " isn't a song.
+     */
+    private fun recognizedSong(url: HttpUrl, before: String): LinkInput.RecognizedSong? {
         if (url.host !in setOf("google.com", "www.google.com") || url.encodedPath != "/search") return null
         val query = url.queryParameter("q") ?: return null
+        if (!before.normalizedSpaces().equals(query.normalizedSpaces(), ignoreCase = true)) return null
         val separator = query.lastIndexOf(" by ")
         if (separator < 0) return null
         val title = query.substring(0, separator).trim()
@@ -84,6 +93,8 @@ internal object MusicLinks {
             .addQueryParameter("q", "$title by $artist").build().toString()
         return LinkInput.RecognizedSong(canonical, MusicMetadata(title, artist))
     }
+
+    private fun String.normalizedSpaces() = trim().replace(Regex("\\s+"), " ")
 
     /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
     fun serviceFor(text: String): MusicService? = text.trim().toHttpUrlOrNull()?.host?.let(::serviceForHost)
