@@ -46,10 +46,10 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
             .setClassName(context, MainActivity.PASTE_ALIAS)
             .putExtra(Intent.EXTRA_SHORTCUT_ID, id)
         return ShortcutInfo.Builder(context, id)
-            // The share sheet and launchers both show the long label when it fits, so it can't
-            // say "copied link" for the launcher alone; there it sits under "Open copied link".
+            // Just the app's name: "Open in …" got cut off to "Open in You…" for both YouTube Music
+            // and YouTube, and Android badges the icon with Crosstune's, which says the rest. In
+            // launchers it sits under "Open copied link".
             .setShortLabel(context.getString(service.labelRes))
-            .setLongLabel(context.getString(service.openLabelRes))
             .setIcon(Icon.createWithResource(context, service.iconRes))
             .setCategories(setOf(SHARE_CATEGORY))
             .setIntent(openCopied)
@@ -60,7 +60,8 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
 
     companion object {
         const val MAX_RECENT = 3
-        const val MAX_SHARE_TARGETS = 3
+        /** Android's top row is shared with people and chats, so Crosstune takes little of it. */
+        const val MAX_SHARE_TARGETS = 2
         private const val RECENT_PREFIX = "recent:"
         private const val SHARE_PREFIX = "open_in:"
 

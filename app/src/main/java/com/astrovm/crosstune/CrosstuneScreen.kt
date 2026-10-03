@@ -41,6 +41,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -124,11 +125,10 @@ internal data class ScreenActions(
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onPreselectSources: () -> Unit = {},
-    val onAskEachTimeChange: (Boolean) -> Unit = {},
+    val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
-    val onOpenSharedLinksChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
     val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -431,7 +431,7 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                 text = if (result == null) {
                     stringResource(R.string.loading_text)
                 } else {
-                    stringResource(if (state.sharingLink) R.string.handoff_sharing else R.string.handoff_opening, state.resultDestination.label())
+                    stringResource(R.string.handoff_opening, state.resultDestination.label())
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -590,24 +590,33 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** "Open links in   YouTube Music ▾": the default app, in settings. */
+/**
+ * "Open links in   YouTube Music ▾": what tapped and shared links do, in settings. Opening in an
+ * app is the usual; asking which app, or showing the song here first, sit at the top of the menu.
+ */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
+    mode: LinkMode,
     onSelect: (Destination) -> Unit,
+    onMode: (LinkMode) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val modeLabels = mapOf(
+        LinkMode.ASK to stringResource(R.string.setting_ask_each_time),
+        LinkMode.SHOW to stringResource(R.string.show_song_first)
+    )
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
-                DestinationIcon(selected, installed, size = 20.dp)
+                if (mode == LinkMode.OPEN) DestinationIcon(selected, installed, size = 20.dp) else ModeIcon(mode, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(selected.label())
+                Text(modeLabels[mode] ?: selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
@@ -618,26 +627,46 @@ internal fun DefaultDestinationMenu(
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                destinations.installedFirst(installed).forEach { destination ->
-                    val isSelected = destination == selected
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(
-                                    destination.label(),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        },
-                        leadingIcon = { DestinationIcon(destination, installed) },
-                        onClick = {
-                            expanded = false
-                            onSelect(destination)
-                        },
-                        // The color alone doesn't tell TalkBack which one is chosen.
-                        modifier = Modifier.semantics { this.selected = isSelected }
-                    )
+                modeLabels.forEach { (itemMode, itemLabel) ->
+                    MenuChoice(itemLabel, mode == itemMode, icon = { ModeIcon(itemMode) }) {
+                        expanded = false
+                        onMode(itemMode)
+                    }
                 }
+                HorizontalDivider()
+                destinations.installedFirst(installed).forEach { destination ->
+                    MenuChoice(destination.label(), mode == LinkMode.OPEN && destination == selected, icon = { DestinationIcon(destination, installed) }) {
+                        expanded = false
+                        onSelect(destination)
+                        onMode(LinkMode.OPEN)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice in a dropdown, the chosen one in the accent color. */
+@Composable
+private fun MenuChoice(text: String, isSelected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
+        leadingIcon = icon,
+        onClick = onClick,
+        // The color alone doesn't tell TalkBack which one is chosen.
+        modifier = Modifier.semantics { this.selected = isSelected }
+    )
+}
+
+/** Asking shows a grid of apps; showing first, Crosstune's own logo. */
+@Composable
+private fun ModeIcon(mode: LinkMode, size: Dp = 32.dp) {
+    Surface(modifier = Modifier.size(size), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+        Box(contentAlignment = Alignment.Center) {
+            if (mode == LinkMode.ASK) {
+                AppIcon(R.drawable.ic_ask, contentDescription = null, modifier = Modifier.size(size * 0.6f))
+            } else {
+                AppLogo(size = size * 0.7f)
             }
         }
     }

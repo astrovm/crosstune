@@ -64,16 +64,13 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_ask_each_time">Nach der App fragen</string>
-    <string name="setting_ask_each_time_description">Wähle bei jedem angetippten oder geteilten Link eine App.</string>
+    <string name="show_song_first">Zuerst den Song zeigen</string>
     <string name="setting_exact_match">Genauen Treffer öffnen</string>
     <string name="setting_exact_match_description">Öffnet direkt den Song, wenn die App das unterstützt. Sonst wird gesucht.</string>
     <string name="setting_clean_links">Tracking aus Links entfernen</string>
     <string name="setting_clean_links_description">Entfernt Tracking-Teile wie ?si= oder utm_ aus Links, die du öffnest, kopierst oder teilst.</string>
     <string name="setting_share_sheet_apps">Apps beim Teilen</string>
     <string name="setting_share_sheet_apps_description">In YouTube Music öffnen und weitere beim Teilen. Android zeigt sie bei jedem Text.</string>
-    <string name="setting_open_shared_links">Geteilte Links sofort öffnen</string>
-    <string name="setting_open_shared_links_description">Ausschalten, um zuerst den Song zu sehen.</string>
-    <string name="convert_and_share">Umwandeln und teilen</string>
     <string name="setting_language">Sprache</string>
     <string name="language_system_default">Systemstandard</string>
     <string name="matching_text">Genauer Treffer wird gesucht…</string>
@@ -111,7 +108,6 @@
     <string name="privacy_policy">Datenschutzerklärung</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/de/privacy/</string>
     <string name="handoff_opening">Wird in %1$s geöffnet…</string>
-    <string name="handoff_sharing">%1$s-Link wird geholt…</string>
     <string name="notice_links_not_allowed">Manche Links öffnen sich noch nicht in Crosstune</string>
     <string name="notice_own_links_off">Angetippte Links öffnen sich im Browser, nicht in Crosstune</string>
     <string name="allow_button">Zulassen</string>

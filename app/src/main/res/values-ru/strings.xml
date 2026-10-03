@@ -64,16 +64,13 @@
     <string name="type_playlist">Плейлист</string>
 
     <string name="setting_ask_each_time">Спрашивать, где открыть</string>
-    <string name="setting_ask_each_time_description">Выбирать приложение при каждом нажатии на ссылку или отправке.</string>
+    <string name="show_song_first">Сначала показать трек</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
     <string name="setting_exact_match_description">Открывает сам трек, если приложение это поддерживает. Иначе ищет его.</string>
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
     <string name="setting_clean_links_description">Удаляет метки отслеживания вроде ?si= или utm_ из ссылок, которые вы открываете, копируете или отправляете.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>
     <string name="setting_share_sheet_apps_description">Открыть в YouTube Music и других при отправке. Android показывает их для любого текста.</string>
-    <string name="setting_open_shared_links">Сразу открывать присланные ссылки</string>
-    <string name="setting_open_shared_links_description">Выключите, чтобы сначала увидеть трек.</string>
-    <string name="convert_and_share">Преобразовать и отправить</string>
     <string name="setting_language">Язык</string>
     <string name="language_system_default">Как в системе</string>
     <string name="matching_text">Ищем точное совпадение…</string>
@@ -111,7 +108,6 @@
     <string name="privacy_policy">Политика конфиденциальности</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ru/privacy/</string>
     <string name="handoff_opening">Открываем в %1$s…</string>
-    <string name="handoff_sharing">Получаем ссылку %1$s…</string>
     <string name="notice_links_not_allowed">Некоторые ссылки пока не открываются в Crosstune</string>
     <string name="notice_own_links_off">Ссылки открываются в браузере, а не в Crosstune</string>
     <string name="allow_button">Разрешить</string>

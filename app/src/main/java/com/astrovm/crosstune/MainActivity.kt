@@ -65,8 +65,6 @@ class MainActivity : ComponentActivity() {
 
         /** The unexported alias the tile and launcher shortcut use, so only they can trigger a clipboard read. */
         const val PASTE_ALIAS = "com.astrovm.crosstune.PasteFromClipboard"
-        /** "Convert and share" in the share sheet: shares the link converted instead of opening it. */
-        const val CONVERT_AND_SHARE_ALIAS = "com.astrovm.crosstune.ConvertAndShare"
 
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -114,10 +112,6 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         is Effect.Open -> open(effect)
-                        is Effect.Share -> {
-                            startActivity(shareChooser(effect.url, effect.original, effect.source))
-                            finish()
-                        }
                     }
                 }
             }
@@ -149,11 +143,10 @@ class MainActivity : ComponentActivity() {
                         onFrontendInstanceChange = viewModel::setFrontendInstance,
                         onCompleteSetup = viewModel::completeSetup,
                         onPreselectSources = viewModel::preselectSources,
-                        onAskEachTimeChange = viewModel::setAskEachTime,
+                        onLinkModeChange = viewModel::setLinkMode,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
                         onShareSheetAppsChange = viewModel::setShareSheetApps,
-                        onOpenSharedLinksChange = viewModel::setOpenSharedLinks,
                         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
                         onLanguageChange = { AppLanguage.set(this, it) },
                         onCopySearch = ::copySearch,
@@ -205,21 +198,23 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
 
         when (intent.action) {
-            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString)
+            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString, show = viewModel.uiState.showSongFirst)
             Intent.ACTION_SEND -> {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
-                // A share sheet target picked an app to open it in.
+                // A share sheet target picked an app to open it in, which beats showing it first.
                 val chosen = AppShortcuts.chosenDestination(intent)
-                val then = when {
-                    intent.component?.className == CONVERT_AND_SHARE_ALIAS -> Incoming.SHARE
-                    chosen == null && !viewModel.uiState.openSharedLinks -> Incoming.SHOW
-                    else -> Incoming.OPEN
-                }
-                viewModel.resolveIncoming(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return, chosen, then)
+                viewModel.resolveIncoming(
+                    shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return,
+                    chosen,
+                    show = chosen == null && viewModel.uiState.showSongFirst
+                )
             }
-            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString())
+            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString(),
+                show = viewModel.uiState.showSongFirst
+            )
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
         }
     }

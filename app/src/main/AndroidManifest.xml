@@ -273,22 +273,6 @@
             android:targetActivity=".MainActivity" />
 
         <!--
-            "Convert and share" in the share sheet: converts a shared music link to the app the
-            user listens in and offers it to share on, instead of opening it.
-        -->
-        <activity-alias
-            android:name=".ConvertAndShare"
-            android:exported="true"
-            android:label="@string/convert_and_share"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-        </activity-alias>
-
-        <!--
             One alias per source service so each can be turned on or off during setup or in
             Crosstune's settings (see LinkInterception). All start disabled. Third-party apps can't verify these domains, so Android asks the
             user to allow them under "Open by default". Keep each alias's hosts in sync with LinkInterception.HOSTS.

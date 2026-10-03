@@ -1,5 +1,4 @@
 Crosstune moves now: screens slide, results fade in, buttons respond to your touch.
 Recent is cleaner: one play button per song, and swipe a song away to remove it.
-New "Convert and share" in the share sheet sends a friend the link for your app.
-In Settings: show shared songs first instead of opening them, and hide the "Open in" apps from the share sheet.
-"Open links in" is back next to your default app.
+"Open links in" can now also ask which app to use, or show the song first.
+The share sheet no longer repeats your default app, and you can hide its "Open in" apps in Settings.

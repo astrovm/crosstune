@@ -97,7 +97,9 @@ private fun SettingsList(
             DefaultDestinationMenu(
                 destinations = state.destinations,
                 selected = state.defaultDestination,
+                mode = state.linkMode,
                 onSelect = actions.onTargetChange,
+                onMode = actions.onLinkModeChange,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
@@ -166,13 +168,6 @@ private fun SettingsList(
         SectionHeader(stringResource(R.string.settings_behaviour_title))
         Group {
             SettingSwitch(
-                label = stringResource(R.string.setting_ask_each_time),
-                description = stringResource(R.string.setting_ask_each_time_description),
-                checked = state.askEachTime,
-                onCheckedChange = actions.onAskEachTimeChange
-            )
-            GroupDivider()
-            SettingSwitch(
                 label = stringResource(R.string.setting_exact_match),
                 description = stringResource(R.string.setting_exact_match_description),
                 checked = state.exactMatch,
@@ -184,13 +179,6 @@ private fun SettingsList(
                 description = stringResource(R.string.setting_clean_links_description),
                 checked = state.cleanLinks,
                 onCheckedChange = actions.onCleanLinksChange
-            )
-            GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_open_shared_links),
-                description = stringResource(R.string.setting_open_shared_links_description),
-                checked = state.openSharedLinks,
-                onCheckedChange = actions.onOpenSharedLinksChange
             )
             GroupDivider()
             SettingSwitch(

@@ -64,16 +64,13 @@
     <string name="type_playlist">प्लेलिस्ट</string>
 
     <string name="setting_ask_each_time">हर बार ऐप्लिकेशन पूछें</string>
-    <string name="setting_ask_each_time_description">लिंक पर टैप करने या शेयर करने पर हर बार ऐप्लिकेशन चुनें।</string>
+    <string name="show_song_first">पहले गाना दिखाएं</string>
     <string name="setting_exact_match">सटीक मैच खोलें</string>
     <string name="setting_exact_match_description">ऐप सपोर्ट करे तो सीधे गाना खोलता है, वरना खोजता है।</string>
     <string name="setting_clean_links">लिंक से ट्रैकिंग हटाएँ</string>
     <string name="setting_clean_links_description">आप जो लिंक खोलते, कॉपी करते या शेयर करते हैं, उनसे ?si= या utm_ जैसे ट्रैकिंग हिस्से हटा देता है।</string>
     <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>
     <string name="setting_share_sheet_apps_description">शेयर करते समय YouTube Music और दूसरे ऐप में खोलें। Android इन्हें किसी भी टेक्स्ट के लिए दिखाता है।</string>
-    <string name="setting_open_shared_links">शेयर किए गए लिंक तुरंत खोलें</string>
-    <string name="setting_open_shared_links_description">पहले गाना देखने के लिए बंद करें।</string>
-    <string name="convert_and_share">बदलें और शेयर करें</string>
     <string name="setting_language">भाषा</string>
     <string name="language_system_default">सिस्टम डिफ़ॉल्ट</string>
     <string name="matching_text">सटीक मैच खोजा जा रहा है…</string>
@@ -111,7 +108,6 @@
     <string name="privacy_policy">गोपनीयता नीति</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/hi/privacy/</string>
     <string name="handoff_opening">%1$s में खोला जा रहा है…</string>
-    <string name="handoff_sharing">%1$s लिंक ला रहे हैं…</string>
     <string name="notice_links_not_allowed">कुछ लिंक अभी Crosstune में नहीं खुलते</string>
     <string name="notice_own_links_off">टैप किए गए लिंक Crosstune में नहीं, ब्राउज़र में खुलते हैं</string>
     <string name="allow_button">अनुमति दें</string>

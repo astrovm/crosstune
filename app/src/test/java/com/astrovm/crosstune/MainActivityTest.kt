@@ -332,46 +332,16 @@ class MainActivityTest {
     }
 
     @Test
-    fun convertAndShareHandsTheConvertedLinkBackToTheShareSheet() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
-        respondWithTrack("Shared On", "Artist · Song")
-        val activity = launch(
-            Intent(Intent.ACTION_SEND).apply {
-                setClassName(app, MainActivity.CONVERT_AND_SHARE_ALIAS)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
-            }
-        )
-
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
-        val chooser = nextStartedActivity()!!
-        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-        val shared = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
-        assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", shared.getStringExtra(Intent.EXTRA_TEXT))
-    }
-
-    @Test
-    fun convertAndShareSaysSoWhenTheTextIsntAMusicLink() {
-        val activity = launch(
-            Intent(Intent.ACTION_SEND).apply {
-                setClassName(app, MainActivity.CONVERT_AND_SHARE_ALIAS)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "https://github.com/astrovm")
-            }
-        )
-        assertTextShown(string(R.string.error_invalid_url))
-        assertFalse(activity.isFinishing)
-        assertNull(nextStartedActivity())
-    }
-
-    @Test
     fun sharedLinksCanShowTheSongFirstInsteadOfOpeningIt() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         respondWithTrack("Shown First", "Artist · Song")
         launch()
-        click(string(R.string.settings_button))
-        composeRule.onNodeWithText(string(R.string.setting_open_shared_links)).performScrollTo().performClick()
-        assertFalse(prefs().getBoolean("open_shared_links", true))
+        // Picked where the default app is, it's what the menu then shows.
+        inSettings {
+            chooseDefaultHere(string(R.string.show_song_first))
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.show_song_first)))
+        }
+        assertTrue(prefs().getBoolean("show_song_first", false))
         controller!!.pause().stop().destroy()
 
         val activity = launch(
@@ -384,6 +354,25 @@ class MainActivityTest {
         assertTextShown(string(R.string.open_in_deezer))
         assertFalse(activity.isFinishing)
         assertNull(nextStartedActivity())
+        controller!!.pause().stop().destroy()
+
+        // Tapped links too.
+        val tapped = launch(trackLink())
+        waitForText("Shown First")
+        assertFalse(tapped.isFinishing)
+        assertNull(nextStartedActivity())
+        controller!!.pause().stop().destroy()
+
+        // An "Open in" app picked in the share sheet still opens right away.
+        val picked = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+                putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
+            }
+        )
+        composeRule.waitUntil(TIMEOUT_MS) { picked.isFinishing }
+        assertEquals("deezer.android.app", nextStartedActivity()!!.`package`)
     }
 
     @Test
@@ -590,18 +579,31 @@ class MainActivityTest {
     fun theShareSheetOffersAppsToOpenLinksInAfterTheRecentSongs() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.TIDAL.packageName })
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SOUNDCLOUD.packageName })
         respondWithTrack("No Cover", "Artist · Song")
         launch()
         resolveTyped()
 
+        // Crosstune's own entry opens in Deezer, the default, so only the other apps are offered.
         composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 3 }
-        val (song, deezer, tidal) = dynamicShortcuts().sortedBy { it.rank }
+        val (song, tidal, soundcloud) = dynamicShortcuts().sortedBy { it.rank }
         assertEquals("No Cover", song.shortLabel)
-        assertEquals(listOf("Deezer", "TIDAL"), listOf(deezer.shortLabel, tidal.shortLabel))
-        assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), deezer.categories)
+        assertEquals("SoundCloud", soundcloud.shortLabel)
+        // Named by the app alone, so a long "Open in …" isn't cut off in the share sheet.
+        assertEquals("TIDAL", tidal.shortLabel)
+        assertNull(tidal.longLabel)
+        assertEquals(setOf(AppShortcuts.SHARE_CATEGORY), tidal.categories)
         // Android drops shortcuts hidden from the launcher, so there they open the copied link.
-        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, deezer.intent!!.action)
-        assertEquals(MainActivity.PASTE_ALIAS, deezer.intent!!.component!!.className)
+        assertEquals(MainActivity.ACTION_PASTE_FROM_CLIPBOARD, tidal.intent!!.action)
+        assertEquals(MainActivity.PASTE_ALIAS, tidal.intent!!.component!!.className)
+
+        // When Crosstune's own entry asks or shows first, the default is offered as well, first.
+        // Two at most, leaving the row for people and chats: SoundCloud doesn't make it.
+        inSettings { chooseDefaultHere(string(R.string.setting_ask_each_time)) }
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 3 }
+        assertEquals(listOf("No Cover", "Deezer", "TIDAL"), dynamicShortcuts().sortedBy { it.rank }.map { it.shortLabel })
+        inSettings { chooseDefaultHere(string(R.string.target_deezer)) }
+        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().any { it.shortLabel == "SoundCloud" } }
 
         // Android shows them for any shared text, so they can be turned off, leaving the song.
         click(string(R.string.settings_button))
@@ -614,7 +616,7 @@ class MainActivityTest {
     @Test
     @Config(sdk = [29])
     fun beforeAndroid11ShareSheetTargetsAreNotKeptLongLived() {
-        prefs().edit().putString("default_target", "DEEZER").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("ask_each_time", true).commit()
         launch()
         composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
         assertEquals("Deezer", dynamicShortcuts().single().shortLabel)
@@ -1664,7 +1666,7 @@ class MainActivityTest {
     fun askEachTimeOffersDestinationsForIncomingLinks() {
         respondWithTrack("Pick Me", "Artist · Song")
         launch()
-        inSettings { click(string(R.string.setting_ask_each_time)) }
+        inSettings { chooseDefaultHere(string(R.string.setting_ask_each_time)) }
         assertTrue(prefs().getBoolean("ask_each_time", false))
         controller!!.pause().stop().destroy()
 
@@ -1723,7 +1725,8 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.picker_title))
         assertResultShown()
         assertFalse(activity.isFinishing)
-        inSettings { click(string(R.string.setting_ask_each_time)) }
+        // Picking an app as the default goes back to opening in it.
+        inSettings { chooseDefaultHere(string(R.string.target_youtube_music)) }
         assertFalse(prefs().getBoolean("ask_each_time", true))
     }
 

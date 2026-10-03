@@ -65,16 +65,13 @@
     <string name="type_playlist">プレイリスト</string>
 
     <string name="setting_ask_each_time">使うアプリを毎回選ぶ</string>
-    <string name="setting_ask_each_time_description">リンクをタップまたは共有するたびに、アプリを選びます。</string>
+    <string name="show_song_first">先に曲を表示</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
     <string name="setting_exact_match_description">アプリが対応していれば曲そのものを開きます。そうでなければ検索します。</string>
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
     <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
     <string name="setting_share_sheet_apps">共有メニューのアプリ</string>
     <string name="setting_share_sheet_apps_description">共有するときに「YouTube Music で開く」などを表示します。Android はどんなテキストでも表示します。</string>
-    <string name="setting_open_shared_links">共有されたリンクをすぐに開く</string>
-    <string name="setting_open_shared_links_description">オフにすると先に曲を表示します。</string>
-    <string name="convert_and_share">変換して共有</string>
     <string name="setting_language">言語</string>
     <string name="language_system_default">システムのデフォルト</string>
     <string name="matching_text">一致する項目を探しています…</string>
@@ -112,7 +109,6 @@
     <string name="privacy_policy">プライバシーポリシー</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
     <string name="handoff_opening">%1$s で開いています…</string>
-    <string name="handoff_sharing">%1$s のリンクを取得しています…</string>
     <string name="notice_links_not_allowed">Crosstune でまだ開けないリンクがあります</string>
     <string name="notice_own_links_off">タップしたリンクが Crosstune ではなくブラウザで開きます</string>
     <string name="allow_button">許可</string>
