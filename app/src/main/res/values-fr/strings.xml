@@ -40,6 +40,7 @@
     <string name="setup_step">Étape %1$d sur %2$d</string>
     <string name="setup_sources_title">Quels liens Crosstune doit-il ouvrir ?</string>
     <string name="setup_sources_listening_note">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà.</string>
+    <string name="settings_listening_locked">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà. Choisissez une autre appli ci-dessous pour l’activer.</string>
     <string name="setup_destination_title">Où écoutez-vous ?</string>
     <string name="setup_destination_body">Vous pourrez la changer plus tard.</string>
     <string name="setup_allow_title">Autoriser les liens</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">Vidéos</string>
     <string name="setting_only_music_videos_note">Seules les vidéos musicales vont dans votre application. Les autres s’ouvrent comme d’habitude.</string>
     <string name="guide_may_differ">Votre téléphone peut être un peu différent.</string>
-    <string name="setup_allow_progress">%1$d liens autorisés sur %2$d</string>
     <string name="setup_apps_stop_body">Choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="setup_apps_progress">Application %1$d sur %2$d</string>
-    <string name="setup_apps_all_done">C’est fait. Ces liens s’ouvrent maintenant dans Crosstune.</string>
+    <string name="setup_apps_all_done">C’est fait. Ces applis n’ouvrent plus les liens.</string>
+    <string name="setup_allow_all_done">C’est fait. Ces liens s’ouvrent maintenant dans Crosstune.</string>
     <string name="setup_skip_for_now">Plus tard</string>
     <string name="setup_fixed">Réglé</string>
     <string name="choose_app_button">Choisir l’application</string>

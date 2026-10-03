@@ -298,6 +298,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { expanded = true }
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -307,10 +308,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
             modifier = Modifier.weight(1f)
         )
         Box {
-            Row(
-                modifier = Modifier.clickable { expanded = true },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = current?.let(AppLanguage::displayName) ?: systemDefault,
                     style = MaterialTheme.typography.bodyMedium,
@@ -382,7 +380,12 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             on = intercepted,
             // Already on from before the rule existed: it can still be turned off.
             locked = listeningHere && !intercepted,
-            listeningNote = if (listeningHere) stringResource(R.string.setup_sources_listening_note, label) else null,
+            // Off and locked, the note also says how to turn it on.
+            listeningNote = if (listeningHere) {
+                stringResource(if (intercepted) R.string.setup_sources_listening_note else R.string.settings_listening_locked, label)
+            } else {
+                null
+            },
             notAllowed = intercepted && state.unapprovedHosts?.get(source).orEmpty().isNotEmpty(),
             rule = rule,
             fallback = state.defaultDestination,
@@ -512,7 +515,8 @@ private fun SourcePage(
             }
         }
         // Kept here even once they let Crosstune open the links, so the choice can be undone.
-        val owners = claimingApps[item.key].orEmpty()
+        // Locked, the app the user listens in keeping its links is just what should happen.
+        val owners = if (item.locked) emptyMap() else claimingApps[item.key].orEmpty()
         if (owners.isNotEmpty()) {
             SectionHeader(
                 title = stringResource(R.string.settings_link_owners_title),

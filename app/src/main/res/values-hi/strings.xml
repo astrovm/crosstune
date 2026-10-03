@@ -40,6 +40,7 @@
     <string name="setup_step">चरण %1$d/%2$d</string>
     <string name="setup_sources_title">Crosstune कौन-से लिंक खोले?</string>
     <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
+    <string name="settings_listening_locked">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं। इसे चालू करने के लिए नीचे कोई दूसरा ऐप चुनें।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
     <string name="setup_destination_body">इसे बाद में बदला जा सकता है।</string>
     <string name="setup_allow_title">लिंक की अनुमति दें</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">वीडियो</string>
     <string name="setting_only_music_videos_note">सिर्फ़ संगीत वीडियो आपके ऐप में जाते हैं। बाकी पहले की तरह खुलते हैं।</string>
     <string name="guide_may_differ">आपके फ़ोन पर यह थोड़ा अलग दिख सकता है।</string>
-    <string name="setup_allow_progress">%2$d में से %1$d लिंक की अनुमति है</string>
     <string name="setup_apps_stop_body">“ब्राउज़र में” चुनें या “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="setup_apps_progress">ऐप %1$d / %2$d</string>
-    <string name="setup_apps_all_done">हो गया। अब ये लिंक Crosstune में खुलते हैं।</string>
+    <string name="setup_apps_all_done">हो गया। अब ये ऐप ये लिंक नहीं खोलते।</string>
+    <string name="setup_allow_all_done">हो गया। अब ये लिंक Crosstune में खुलते हैं।</string>
     <string name="setup_skip_for_now">अभी नहीं</string>
     <string name="setup_fixed">ठीक हो गया</string>
     <string name="choose_app_button">ऐप चुनें</string>

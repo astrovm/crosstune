@@ -67,6 +67,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -463,6 +465,14 @@ private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDi
 @Composable
 private fun LinkField(state: UiState, actions: ScreenActions) {
     val busy = state.isLoading || state.isMatching
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    // The keyboard would cover the result, so it goes once the link is looked up.
+    val resolve = {
+        keyboard?.hide()
+        focus.clearFocus()
+        actions.onResolve()
+    }
     TextField(
         value = state.linkText,
         onValueChange = actions.onUrlChange,
@@ -487,7 +497,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             keyboardType = KeyboardType.Uri,
             imeAction = ImeAction.Go
         ),
-        keyboardActions = KeyboardActions(onGo = { actions.onResolve() }),
+        keyboardActions = KeyboardActions(onGo = { resolve() }),
         enabled = !busy,
         shape = MaterialTheme.shapes.large,
         colors = TextFieldDefaults.colors(
@@ -507,11 +517,13 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         .heightIn(min = 52.dp)
     val canConvert = !busy && state.linkText.isNotBlank()
     val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
+    // The text the result on screen came from: converting it again would change nothing.
+    val resultText = rememberSaveable(state.result) { state.linkText }
     // The main action until there's a result; then the result's Open button is.
     if (state.result == null) {
-        Button(onClick = actions.onResolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
-    } else {
-        FilledTonalButton(onClick = actions.onResolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
+        Button(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
+    } else if (state.linkText != resultText) {
+        FilledTonalButton(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
     }
 }
 
@@ -599,15 +611,17 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
+                // The theme's accent color is hard to read on the error color.
+                val onError = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (state.canRetry) {
-                        TextButton(onClick = actions.onRetry) {
+                        TextButton(onClick = actions.onRetry, colors = onError) {
                             Text(stringResource(R.string.retry_button))
                         }
                     }
                     // A link Crosstune couldn't read can still be opened in the app it belongs to.
                     state.link?.let { link ->
-                        TextButton(onClick = actions.onOpenOriginal) {
+                        TextButton(onClick = actions.onOpenOriginal, colors = onError) {
                             Text(stringResource(link.service.openLabelRes))
                         }
                     }
@@ -811,8 +825,10 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
+                        // Most are songs, so only other kinds say what they are, which leaves room
+                        // for the service before the line is cut.
                         text = listOf(
-                            stringResource(entry.link.type.labelRes),
+                            if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
                             entry.metadata.artist,
                             stringResource(entry.link.service.labelRes)
                         )

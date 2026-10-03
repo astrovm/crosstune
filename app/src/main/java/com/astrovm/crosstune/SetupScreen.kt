@@ -29,7 +29,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -112,24 +111,30 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
                 val isLast = current == steps.size
-                Button(
-                    onClick = {
-                        if (isLast) actions.onCompleteSetup() else position = (current + 1).let { if (skipped(it)) it + 1 else it }
-                    },
-                    // There's no built-in default any more, so one has to be picked.
-                    enabled = ready && (step != SetupStep.DESTINATION || state.hasDefault),
-                    modifier = buttonModifier
-                ) {
-                    Text(
-                        stringResource(
-                            when {
-                                step == null -> R.string.setup_get_started
-                                isLast -> R.string.setup_finish
-                                else -> R.string.next_button
-                            }
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                val onNext = {
+                    if (isLast) actions.onCompleteSetup() else position = (current + 1).let { if (skipped(it)) it + 1 else it }
+                }
+                // There's no built-in default any more, so one has to be picked.
+                val enabled = ready && (step != SetupStep.DESTINATION || state.hasDefault)
+                // Leaving with links still to allow is skipping them, so the button says so and
+                // the guide's own button stays the main one.
+                if (step == SetupStep.ALLOW && state.someLinksNotAllowed) {
+                    FilledTonalButton(onClick = onNext, enabled = enabled, modifier = buttonModifier) {
+                        Text(stringResource(R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
+                    }
+                } else {
+                    Button(onClick = onNext, enabled = enabled, modifier = buttonModifier) {
+                        Text(
+                            stringResource(
+                                when {
+                                    step == null -> R.string.setup_get_started
+                                    isLast -> R.string.setup_finish
+                                    else -> R.string.next_button
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
             }
         }
@@ -186,14 +191,9 @@ private fun StepHeader(title: Int, body: String?) {
 @Composable
 private fun Welcome() {
     Column(modifier = Modifier.padding(top = 72.dp)) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(88.dp)) {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(88.dp)) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    painterResource(R.drawable.ic_music_note),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(44.dp)
-                )
+                AppLogo(size = 48.dp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -340,6 +340,13 @@ private fun SourceChoice(label: String, icon: Destination, installed: Set<MusicS
 
 @Composable
 private fun DestinationStep(state: UiState, actions: ScreenActions) {
+    // With just one music app installed, that's most likely where the user listens. YouTube
+    // doesn't count: it comes with most phones and is mostly videos.
+    LaunchedEffect(state.installed) {
+        if (state.hasDefault) return@LaunchedEffect
+        val only = (state.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)
+        if (only != null && only in state.destinations) actions.onTargetChange(only)
+    }
     StepHeader(R.string.setup_destination_title, R.string.setup_destination_body)
     Group {
         state.destinations.installedFirst(state.installed) { (it as? Destination.Service)?.service }
@@ -390,8 +397,8 @@ private fun NumberedStep(number: Int, content: @Composable RowScope.() -> Unit) 
 private fun StatusTag(done: Boolean, doneText: String, todoText: String) {
     Tag(
         if (done) doneText else todoText,
-        if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-        if (done) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+        if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+        if (done) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
     )
 }
 
@@ -460,25 +467,14 @@ internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier, c
  */
 @Composable
 internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
-    // First, so coming back from Android's settings shows the result without scrolling.
-    state.unapprovedHosts?.let { unapproved ->
-        val sources = MusicService.entries.filter { it in state.intercepted }
-        val frontends = Frontend.SOURCES.filter { it in state.frontendSources }
-        val total = sources.sumOf { LinkInterception.HOSTS[it].orEmpty().size } + frontends.sumOf { it.sites.size }
-        val missing = sources.sumOf { unapproved[it].orEmpty().size } +
-            frontends.sumOf { state.unapprovedFrontendHosts?.get(it).orEmpty().size }
-        Box(modifier = Modifier.padding(bottom = 16.dp)) {
-            // Not a warning: links still to allow are what the steps below are for.
-            Tag(
-                stringResource(R.string.setup_allow_progress, total - missing, total),
-                if (missing == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                if (missing == 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
+    // Once Android says every link is allowed, that's all there is to show.
+    if (state.unapprovedHosts != null && !state.someLinksNotAllowed) {
+        Text(stringResource(R.string.setup_allow_all_done), style = MaterialTheme.typography.titleMedium)
+        return
     }
     // The button says what to do, so step 1 is the button itself.
     NumberedStep(1) {
-        FilledTonalButton(
+        Button(
             onClick = actions.onOpenLinkSettings,
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
             modifier = Modifier

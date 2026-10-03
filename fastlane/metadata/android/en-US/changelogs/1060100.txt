@@ -1,3 +1,4 @@
 Faster: no pause when you open or come back to the app, and YouTube links and links already in Recent open sooner. Startup is quicker too, also for F-Droid and GitHub installs.
 Share Spotify link (and the like) in the share sheet works again on phones with their own share sheet.
 Simpler link guides: less text, only what's left to do, and the right app at each step.
+Clearer setup, and the keyboard closes after converting a link.

@@ -40,6 +40,7 @@
     <string name="setup_step">Paso %1$d de %2$d</string>
     <string name="setup_sources_title">¿Qué links tiene que abrir Crosstune?</string>
     <string name="setup_sources_listening_note">Escuchás en %1$s, así que sus links ya se abren ahí.</string>
+    <string name="settings_listening_locked">Escuchás en %1$s, así que sus links ya se abren ahí. Elegí otra app abajo para activarlo.</string>
     <string name="setup_destination_title">¿Dónde escuchás?</string>
     <string name="setup_destination_body">Después lo podés cambiar.</string>
     <string name="setup_allow_title">Permitir los links</string>
@@ -128,10 +129,10 @@
     <string name="setup_sources_videos">Videos</string>
     <string name="setting_only_music_videos_note">Solo los videos de música van a tu app. Los demás se abren como siempre.</string>
     <string name="guide_may_differ">Tu teléfono puede verse un poco distinto.</string>
-    <string name="setup_allow_progress">%1$d de %2$d links permitidos</string>
     <string name="setup_apps_stop_body">Elegí “En un navegador” o desactivá “Abrir vínculos admitidos”.</string>
     <string name="setup_apps_progress">App %1$d de %2$d</string>
-    <string name="setup_apps_all_done">Listo. Estos links ahora se abren en Crosstune.</string>
+    <string name="setup_apps_all_done">Listo. Estas apps ya no abren los links.</string>
+    <string name="setup_allow_all_done">Listo. Estos links ahora se abren en Crosstune.</string>
     <string name="setup_skip_for_now">Ahora no</string>
     <string name="setup_fixed">Resuelto</string>
     <string name="choose_app_button">Elegir app</string>

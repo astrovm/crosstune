@@ -56,7 +56,7 @@ class SystemStateNotKnownTest {
         composeRule.onNodeWithText(app.getString(R.string.setup_allow_title)).assertExists()
         composeRule.onNodeWithText(openSettings).assertDoesNotExist()
 
-        state = state.copy(systemStateKnown = true, unapprovedHosts = mapOf(MusicService.SPOTIFY to emptyList()))
+        state = state.copy(systemStateKnown = true, unapprovedHosts = mapOf(MusicService.SPOTIFY to listOf("spotify.link")))
         composeRule.onNodeWithText(openSettings).assertExists()
     }
 }
