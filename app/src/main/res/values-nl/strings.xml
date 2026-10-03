@@ -71,6 +71,9 @@
     <string name="setting_clean_links_description">Haalt trackingonderdelen zoals ?si= of utm_ uit links die je opent, kopieert of deelt.</string>
     <string name="setting_share_sheet_apps">Apps in het deelmenu</string>
     <string name="setting_share_sheet_apps_description">Openen in YouTube Music en andere als je deelt. Android toont ze bij elke tekst.</string>
+    <string name="setting_open_shared_links">Gedeelde links meteen openen</string>
+    <string name="setting_open_shared_links_description">Zet uit om eerst het nummer te zien.</string>
+    <string name="convert_and_share">Omzetten en delen</string>
     <string name="setting_language">Taal</string>
     <string name="language_system_default">Systeemstandaard</string>
     <string name="matching_text">Exacte match zoeken…</string>
@@ -108,6 +111,7 @@
     <string name="privacy_policy">Privacybeleid</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/nl/privacy/</string>
     <string name="handoff_opening">Openen in %1$s…</string>
+    <string name="handoff_sharing">%1$s-link ophalen…</string>
     <string name="notice_links_not_allowed">Sommige links openen nog niet in Crosstune</string>
     <string name="notice_own_links_off">Getikte links openen in je browser, niet in Crosstune</string>
     <string name="allow_button">Toestaan</string>

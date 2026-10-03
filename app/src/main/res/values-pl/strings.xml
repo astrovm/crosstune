@@ -71,6 +71,9 @@
     <string name="setting_clean_links_description">Usuwa elementy śledzące, takie jak ?si= czy utm_, z linków, które otwierasz, kopiujesz lub udostępniasz.</string>
     <string name="setting_share_sheet_apps">Aplikacje w menu udostępniania</string>
     <string name="setting_share_sheet_apps_description">Otwórz w YouTube Music i innych przy udostępnianiu. Android pokazuje je dla każdego tekstu.</string>
+    <string name="setting_open_shared_links">Od razu otwieraj udostępnione linki</string>
+    <string name="setting_open_shared_links_description">Wyłącz, aby najpierw zobaczyć utwór.</string>
+    <string name="convert_and_share">Przekonwertuj i udostępnij</string>
     <string name="setting_language">Język</string>
     <string name="language_system_default">Domyślny systemu</string>
     <string name="matching_text">Szukanie dokładnego dopasowania…</string>
@@ -108,6 +111,7 @@
     <string name="privacy_policy">Polityka prywatności</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/pl/privacy/</string>
     <string name="handoff_opening">Otwieranie w %1$s…</string>
+    <string name="handoff_sharing">Pobieranie linku %1$s…</string>
     <string name="notice_links_not_allowed">Niektóre linki jeszcze nie otwierają się w Crosstune</string>
     <string name="notice_own_links_off">Kliknięte linki otwierają się w przeglądarce, nie w Crosstune</string>
     <string name="allow_button">Zezwól</string>

@@ -187,6 +187,13 @@ private fun SettingsList(
             )
             GroupDivider()
             SettingSwitch(
+                label = stringResource(R.string.setting_open_shared_links),
+                description = stringResource(R.string.setting_open_shared_links_description),
+                checked = state.openSharedLinks,
+                onCheckedChange = actions.onOpenSharedLinksChange
+            )
+            GroupDivider()
+            SettingSwitch(
                 label = stringResource(R.string.setting_share_sheet_apps),
                 description = stringResource(R.string.setting_share_sheet_apps_description),
                 checked = state.shareSheetApps,

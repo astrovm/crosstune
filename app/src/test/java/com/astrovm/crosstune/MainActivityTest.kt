@@ -332,6 +332,61 @@ class MainActivityTest {
     }
 
     @Test
+    fun convertAndShareHandsTheConvertedLinkBackToTheShareSheet() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        respondWithTrack("Shared On", "Artist · Song")
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                setClassName(app, MainActivity.CONVERT_AND_SHARE_ALIAS)
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+            }
+        )
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        val chooser = nextStartedActivity()!!
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        val shared = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", shared.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
+    @Test
+    fun convertAndShareSaysSoWhenTheTextIsntAMusicLink() {
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                setClassName(app, MainActivity.CONVERT_AND_SHARE_ALIAS)
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://github.com/astrovm")
+            }
+        )
+        assertTextShown(string(R.string.error_invalid_url))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun sharedLinksCanShowTheSongFirstInsteadOfOpeningIt() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        respondWithTrack("Shown First", "Artist · Song")
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_open_shared_links)).performScrollTo().performClick()
+        assertFalse(prefs().getBoolean("open_shared_links", true))
+        controller!!.pause().stop().destroy()
+
+        val activity = launch(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
+            }
+        )
+        waitForText("Shown First")
+        assertTextShown(string(R.string.open_in_deezer))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
     fun sharedTextOpensPreferredYouTubeTarget() {
         prefs().edit().putString("default_target", "YOUTUBE").commit()
         respondWithTrack("Song &amp; Dance", "The Band · Song · 2020")

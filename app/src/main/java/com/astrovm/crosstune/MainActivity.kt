@@ -65,6 +65,8 @@ class MainActivity : ComponentActivity() {
 
         /** The unexported alias the tile and launcher shortcut use, so only they can trigger a clipboard read. */
         const val PASTE_ALIAS = "com.astrovm.crosstune.PasteFromClipboard"
+        /** "Convert and share" in the share sheet: shares the link converted instead of opening it. */
+        const val CONVERT_AND_SHARE_ALIAS = "com.astrovm.crosstune.ConvertAndShare"
 
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -112,6 +114,10 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         is Effect.Open -> open(effect)
+                        is Effect.Share -> {
+                            startActivity(shareChooser(effect.url, effect.original, effect.source))
+                            finish()
+                        }
                     }
                 }
             }
@@ -147,6 +153,7 @@ class MainActivity : ComponentActivity() {
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
                         onShareSheetAppsChange = viewModel::setShareSheetApps,
+                        onOpenSharedLinksChange = viewModel::setOpenSharedLinks,
                         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
                         onLanguageChange = { AppLanguage.set(this, it) },
                         onCopySearch = ::copySearch,
@@ -203,11 +210,14 @@ class MainActivity : ComponentActivity() {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
-                viewModel.resolveIncoming(
-                    shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return,
-                    // A share sheet target picked an app to open it in.
-                    AppShortcuts.chosenDestination(intent)
-                )
+                // A share sheet target picked an app to open it in.
+                val chosen = AppShortcuts.chosenDestination(intent)
+                val then = when {
+                    intent.component?.className == CONVERT_AND_SHARE_ALIAS -> Incoming.SHARE
+                    chosen == null && !viewModel.uiState.openSharedLinks -> Incoming.SHOW
+                    else -> Incoming.OPEN
+                }
+                viewModel.resolveIncoming(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return, chosen, then)
             }
             Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString())
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
@@ -292,21 +302,20 @@ class MainActivity : ComponentActivity() {
 
     private fun shareSearch() {
         val url = viewModel.destinationUrl() ?: return
-        val chooser = shareChooser(url)
-        val source = viewModel.uiState.link?.service
-        val original = viewModel.originalUrl()?.takeIf { it != url }
-        if (source != null && original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original, getString(source.labelRes)))
-        }
-        startActivity(chooser)
+        startActivity(shareChooser(url, viewModel.originalUrl()?.takeIf { it != url }, viewModel.uiState.link?.service))
     }
 
-    private fun shareChooser(url: String): Intent {
+    /** The share sheet for [url], with buttons for the [original] link too when there's one. */
+    private fun shareChooser(url: String, original: String?, source: MusicService?): Intent {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
         }
-        return Intent.createChooser(shareIntent, getString(R.string.share_search_link))
+        val chooser = Intent.createChooser(shareIntent, getString(R.string.share_search_link))
+        if (source != null && original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original, getString(source.labelRes)))
+        }
+        return chooser
     }
 
     /**
@@ -326,7 +335,7 @@ class MainActivity : ComponentActivity() {
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_share),
                 getString(R.string.share_service_link, service),
-                PendingIntent.getActivity(this, 0, shareChooser(original), flags, startFromShareSheet())
+                PendingIntent.getActivity(this, 0, shareChooser(original, null, null), flags, startFromShareSheet())
             ).build()
         )
     }

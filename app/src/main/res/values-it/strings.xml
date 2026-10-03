@@ -72,6 +72,9 @@
     <string name="setting_clean_links_description">Toglie le parti di tracciamento, come ?si= o utm_, dai link che apri, copi o condividi.</string>
     <string name="setting_share_sheet_apps">App nel menu di condivisione</string>
     <string name="setting_share_sheet_apps_description">Apri in YouTube Music e altre quando condividi. Android le mostra per qualsiasi testo.</string>
+    <string name="setting_open_shared_links">Apri subito i link condivisi</string>
+    <string name="setting_open_shared_links_description">Disattiva per vedere prima il brano.</string>
+    <string name="convert_and_share">Converti e condividi</string>
     <string name="setting_language">Lingua</string>
     <string name="language_system_default">Predefinita di sistema</string>
     <string name="matching_text">Ricerca del risultato esatto…</string>
@@ -109,6 +112,7 @@
     <string name="privacy_policy">Informativa sulla privacy</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/it/privacy/</string>
     <string name="handoff_opening">Apertura in %1$s…</string>
+    <string name="handoff_sharing">Recupero del link %1$s…</string>
     <string name="notice_links_not_allowed">Alcuni link non si aprono ancora in Crosstune</string>
     <string name="notice_own_links_off">I link toccati si aprono nel browser, non in Crosstune</string>
     <string name="allow_button">Consenti</string>

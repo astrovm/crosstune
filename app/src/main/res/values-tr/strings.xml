@@ -71,6 +71,9 @@
     <string name="setting_clean_links_description">Açtığınız, kopyaladığınız veya paylaştığınız bağlantılardan ?si= veya utm_ gibi izleme parçalarını kaldırır.</string>
     <string name="setting_share_sheet_apps">Paylaşım menüsünde uygulamalar</string>
     <string name="setting_share_sheet_apps_description">Paylaşırken YouTube Music ve diğerlerinde aç. Android bunları her metin için gösterir.</string>
+    <string name="setting_open_shared_links">Paylaşılan bağlantıları hemen aç</string>
+    <string name="setting_open_shared_links_description">Önce şarkıyı görmek için kapat.</string>
+    <string name="convert_and_share">Dönüştür ve paylaş</string>
     <string name="setting_language">Dil</string>
     <string name="language_system_default">Sistem varsayılanı</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>
@@ -108,6 +111,7 @@
     <string name="privacy_policy">Gizlilik politikası</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/tr/privacy/</string>
     <string name="handoff_opening">%1$s uygulamasında açılıyor…</string>
+    <string name="handoff_sharing">%1$s bağlantısı alınıyor…</string>
     <string name="notice_links_not_allowed">Bazı bağlantılar henüz Crosstune\'da açılmıyor</string>
     <string name="notice_own_links_off">Dokunulan bağlantılar Crosstune yerine tarayıcıda açılıyor</string>
     <string name="allow_button">İzin ver</string>

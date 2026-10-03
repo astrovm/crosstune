@@ -128,6 +128,7 @@ internal data class ScreenActions(
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
+    val onOpenSharedLinksChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
     val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -430,7 +431,7 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                 text = if (result == null) {
                     stringResource(R.string.loading_text)
                 } else {
-                    stringResource(R.string.handoff_opening, state.resultDestination.label())
+                    stringResource(if (state.sharingLink) R.string.handoff_sharing else R.string.handoff_opening, state.resultDestination.label())
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -1,4 +1,5 @@
-Crosstune moves now: screens slide, results and errors fade in, buttons respond to your touch, and lists grow and shrink smoothly.
-Settings shows "Open links in" next to your default app again.
+Crosstune moves now: screens slide, results fade in, buttons respond to your touch.
 Recent is cleaner: one play button per song, and swipe a song away to remove it.
-You can hide the "Open in" apps from the share sheet in Settings.
+New "Convert and share" in the share sheet sends a friend the link for your app.
+In Settings: show shared songs first instead of opening them, and hide the "Open in" apps from the share sheet.
+"Open links in" is back next to your default app.

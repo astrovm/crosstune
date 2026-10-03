@@ -71,6 +71,9 @@
     <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
     <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
     <string name="setting_share_sheet_apps_description">Ouvrir dans YouTube Music et d’autres quand vous partagez. Android les affiche pour tout texte.</string>
+    <string name="setting_open_shared_links">Ouvrir tout de suite les liens partagés</string>
+    <string name="setting_open_shared_links_description">Désactivez pour voir d’abord le titre.</string>
+    <string name="convert_and_share">Convertir et partager</string>
     <string name="setting_language">Langue</string>
     <string name="language_system_default">Langue du système</string>
     <string name="matching_text">Recherche du résultat exact…</string>
@@ -108,6 +111,7 @@
     <string name="privacy_policy">Politique de confidentialité</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/fr/privacy/</string>
     <string name="handoff_opening">Ouverture dans %1$s…</string>
+    <string name="handoff_sharing">Récupération du lien %1$s…</string>
     <string name="notice_links_not_allowed">Certains liens ne s’ouvrent pas encore dans Crosstune</string>
     <string name="notice_own_links_off">Les liens touchés s’ouvrent dans le navigateur, pas dans Crosstune</string>
     <string name="allow_button">Autoriser</string>

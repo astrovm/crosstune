@@ -71,6 +71,9 @@
     <string name="setting_clean_links_description">열거나 복사하거나 공유하는 링크에서 ?si=, utm_ 같은 추적 정보를 지워요.</string>
     <string name="setting_share_sheet_apps">공유 메뉴의 앱</string>
     <string name="setting_share_sheet_apps_description">공유할 때 YouTube Music 등에서 열기를 보여줘요. Android는 모든 텍스트에 보여줘요.</string>
+    <string name="setting_open_shared_links">공유한 링크 바로 열기</string>
+    <string name="setting_open_shared_links_description">끄면 노래를 먼저 보여줘요.</string>
+    <string name="convert_and_share">변환해서 공유</string>
     <string name="setting_language">언어</string>
     <string name="language_system_default">시스템 기본값</string>
     <string name="matching_text">정확한 항목을 찾는 중…</string>
@@ -108,6 +111,7 @@
     <string name="privacy_policy">개인정보처리방침</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ko/privacy/</string>
     <string name="handoff_opening">%1$s에서 여는 중…</string>
+    <string name="handoff_sharing">%1$s 링크를 가져오는 중…</string>
     <string name="notice_links_not_allowed">아직 Crosstune에서 열리지 않는 링크가 있어요</string>
     <string name="notice_own_links_off">탭한 링크가 Crosstune이 아닌 브라우저에서 열려요</string>
     <string name="allow_button">허용</string>
