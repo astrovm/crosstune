@@ -1679,8 +1679,32 @@ class MainActivityTest {
         waitUntil { activity.isFinishing }
         val opened = nextStartedActivity()!!
         assertEquals("deezer.android.app", opened.`package`)
-        // Picking a destination for one link doesn't change the default.
-        assertNull(prefs().getString("default_target", null))
+        // Asking each time, the app picked is remembered for next time, while links keep asking.
+        assertEquals("DEEZER", prefs().getString("default_target", null))
+        assertTrue(prefs().getBoolean("ask_each_time", false))
+    }
+
+    @Test
+    fun askingOrShowingFirstFreesTheUsualAppsLinksAndRemembersTheLastAppInstead() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("show_song_first", true).commit()
+        respondWithTrack("Last One", "Artist · Song")
+        launch()
+
+        // No app gets links by itself, so YouTube Music's links can be opened in Crosstune too.
+        click(string(R.string.settings_button))
+        sourceSwitch(string(R.string.target_youtube_music)).assertIsEnabled()
+        click(string(R.string.back_button))
+
+        // There's no default to make: picking another app for a result just remembers it.
+        resolveTyped()
+        assertResultShown()
+        composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText(string(R.string.target_deezer)).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.make_default_named, string(R.string.target_deezer)))
+        assertEquals("DEEZER", prefs().getString("default_target", null))
+        assertTrue(prefs().getBoolean("show_song_first", false))
     }
 
     @Test

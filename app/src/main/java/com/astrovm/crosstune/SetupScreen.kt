@@ -273,7 +273,8 @@ private fun ChoiceRow(
 
 /** The service the user listens in, whose links already open where they should. */
 internal fun UiState.listeningService(): MusicService? =
-    if (hasDefault) (defaultDestination as? Destination.Service)?.service else null
+    // Asking or showing first, links don't go to one app by themselves, so none is the one listened in.
+    if (hasDefault && linkMode == LinkMode.OPEN) (defaultDestination as? Destination.Service)?.service else null
 
 /**
  * The services the user gets links from. The one they listen in isn't offered: its links already

@@ -820,7 +820,8 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
                 DestinationMenuButton(state, actions)
             }
-            if (destination != state.defaultDestination) {
+            // Asking or showing first, the app picked last is remembered instead.
+            if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
                 TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text(stringResource(R.string.make_default_named, destination.label()))
                 }

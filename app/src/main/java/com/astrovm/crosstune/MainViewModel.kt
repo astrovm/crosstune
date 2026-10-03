@@ -445,6 +445,7 @@ internal class MainViewModel(
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
         val chosen = destination ?: uiState.resultDestination
+        destination?.let(::rememberLastApp)
         pendingOpen = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
@@ -626,8 +627,20 @@ internal class MainViewModel(
     }
 
     fun selectResultDestination(destination: Destination) {
+        rememberLastApp(destination)
         uiState = uiState.copy(selectedDestination = destination)
         prepareResultDestination()
+    }
+
+    /**
+     * Asking which app, or showing the song first, there's no default to make; the app picked last
+     * is offered next time instead. It's stored as the default, which is what the Open button,
+     * Recent and the share sheet use, without changing what tapped links do.
+     */
+    private fun rememberLastApp(destination: Destination) {
+        if (uiState.linkMode == LinkMode.OPEN) return
+        destinationStore.setDefault(destination)
+        uiState = uiState.withDestinations()
     }
 
     fun selectDefault(destination: Destination) {
