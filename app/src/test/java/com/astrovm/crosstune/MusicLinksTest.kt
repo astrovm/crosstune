@@ -21,15 +21,20 @@ class MusicLinksTest {
             MusicMetadata("A Song", "Example Band")
         )
         assertEquals(expected, MusicLinks.parse("A Song by Example Band\n$url"))
-        assertEquals(expected, MusicLinks.parse("https://google.com/search?q=A%20Song%20by%20Example%20Band&utm_source=test"))
-        val unicode = MusicLinks.parse("https://www.google.com/search?q=Canci%C3%B3n+%26+Sol+by+Artista") as LinkInput.RecognizedSong
+        assertEquals(expected, MusicLinks.parse("  a song  BY example band https://google.com/search?q=A%20Song%20by%20Example%20Band&utm_source=test"))
+        assertEquals(expected, MusicLinks.parse(expected.text))
+        val unicode = MusicLinks.parse("Canción & Sol by Artista https://www.google.com/search?q=Canci%C3%B3n+%26+Sol+by+Artista") as LinkInput.RecognizedSong
         assertEquals(MusicMetadata("Canción & Sol", "Artista"), unicode.metadata)
-        assertEquals(MusicMetadata("Walk by Night", "Band"), (MusicLinks.parse("https://www.google.com/search?q=Walk+by+Night+by+Band") as LinkInput.RecognizedSong).metadata)
+        assertEquals(MusicMetadata("Walk by Night", "Band"), (MusicLinks.parse("Walk by Night by Band https://www.google.com/search?q=Walk+by+Night+by+Band") as LinkInput.RecognizedSong).metadata)
         listOf(
-            "https://www.google.com/search", "https://www.google.com/search?q=weather",
-            "https://www.google.com/search?q=+by+Band", "https://www.google.com/search?q=Song+by+",
-            "https://google.com.evil.example/search?q=Song+by+Band",
-            "https://www.google.com/other?q=Song+by+Band"
+            // Only a search shared with its own query in front is a song, not any search with " by ".
+            url, "https://www.google.com/search?q=what+to+do+by+tomorrow",
+            "Look at this https://www.google.com/search?q=A+Song+by+Example+Band",
+            "A Song by Other Band https://www.google.com/search?q=A+Song+by+Example+Band",
+            "weather https://www.google.com/search?q=weather",
+            "by Band https://www.google.com/search?q=+by+Band", "Song by https://www.google.com/search?q=Song+by+",
+            "Song by Band https://google.com.evil.example/search?q=Song+by+Band",
+            "Song by Band https://www.google.com/other?q=Song+by+Band"
         ).forEach { assertNull(it, MusicLinks.parse(it)) }
     }
 

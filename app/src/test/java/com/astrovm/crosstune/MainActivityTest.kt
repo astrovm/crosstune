@@ -233,7 +233,7 @@ class MainActivityTest {
             """{"data":[{"id":123,"title":"A Song","artist":{"name":"Example Band"},"link":"https://www.deezer.com/track/123"}]}""") }
         val activity = launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
             putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
         })
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
@@ -246,7 +246,7 @@ class MainActivityTest {
         DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
         val activity = launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
@@ -263,7 +263,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         val activity = launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "A Song by Example Band\nhttps://www.google.com/search?q=A+Song+by+Example+Band")
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         val opened = nextStartedActivity()!!
@@ -280,11 +280,46 @@ class MainActivityTest {
     }
 
     @Test
+    fun aGoogleSearchThatOnlyContainsByIsNotASong() {
+        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=what+to+do+by+tomorrow")
+        })
+        assertTextShown(string(R.string.error_invalid_url))
+        assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
+    }
+
+    @Test
+    fun aRecognizedSongFromTheWidgetShowsFromItsSearchLinkAlone() {
+        val url = "https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)).putExtra(MainActivity.EXTRA_SHOW_SONG, true))
+        waitForText("A Song")
+        composeRule.onNodeWithTag(RESULT_TEXT_TAG).assertIsDisplayed()
+        assertFalse(activity.isFinishing)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aCopiedNowPlayingShareOpensFromTheClipboard() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
+        launch(pasteIntent())
+        controller!!.windowFocusChanged(true)
+        val activity = controller!!.get()
+        waitUntil { activity.isFinishing }
+        assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
     fun recognizedSongDisplaysWithoutInventingASourceService() {
         prefs().edit().putBoolean("show_song_first", true).commit()
         launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, "https://www.google.com/search?q=A+Song+by+Example+Band")
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         waitForText("A Song")
         assertNull(nextStartedActivity())
@@ -1095,6 +1130,19 @@ class MainActivityTest {
 
         typeUrl("nope again")
         assertTextAbsent(string(R.string.error_invalid_url))
+    }
+
+    @Test
+    fun aPastedNowPlayingShareKeepsTheSongTextSoConvertWorksAgain() {
+        launch()
+        app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
+        click(string(R.string.paste_button))
+        waitForText("A Song")
+        val shown = "A Song by Example Band https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        composeRule.onNode(hasSetTextAction()).assert(hasText(shown, substring = false)).performImeAction()
+        waitForText("A Song")
+        assertTextAbsent(string(R.string.error_invalid_url))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test
@@ -4072,5 +4120,6 @@ class MainActivityTest {
         const val TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
         const val OTHER_TRACK_ID = "0VjIjW4GlUZAMYd2vXMi3b"
         const val TIMEOUT_MS = 5_000L
+        const val NOW_PLAYING_SHARE = "A Song by Example Band\nhttps://www.google.com/search?q=A+Song+by+Example+Band"
     }
 }
