@@ -431,7 +431,7 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                 text = if (result == null) {
                     stringResource(R.string.loading_text)
                 } else {
-                    stringResource(R.string.handoff_opening, state.resultDestination.label())
+                    stringResource(if (state.afterLookup == AfterLookup.OPEN) R.string.handoff_opening else R.string.handoff_getting_link, state.resultDestination.label())
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

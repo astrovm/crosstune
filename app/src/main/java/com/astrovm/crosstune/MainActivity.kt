@@ -112,6 +112,14 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         is Effect.Open -> open(effect)
+                        is Effect.Share -> {
+                            startActivity(shareChooser(effect.url, effect.original, effect.source))
+                            finish()
+                        }
+                        is Effect.Copy -> {
+                            copyToClipboard("Crosstune link", effect.url, R.string.link_copied_to_clipboard)
+                            finish()
+                        }
                     }
                 }
             }
@@ -205,10 +213,16 @@ class MainActivity : ComponentActivity() {
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
                 // A share sheet target picked an app to open it in, which beats showing it first.
                 val chosen = AppShortcuts.chosenDestination(intent)
+                val action = AppShortcuts.chosenAction(intent)
                 viewModel.resolveIncoming(
                     shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return,
                     chosen,
-                    show = chosen == null && viewModel.uiState.showSongFirst
+                    show = action == AppShortcuts.ShareAction.SHOW || chosen == null && action == null && viewModel.uiState.showSongFirst,
+                    after = when (action) {
+                        AppShortcuts.ShareAction.SHARE -> AfterLookup.SHARE
+                        AppShortcuts.ShareAction.COPY -> AfterLookup.COPY
+                        else -> AfterLookup.OPEN
+                    }
                 )
             }
             Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(

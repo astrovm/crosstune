@@ -48,6 +48,8 @@ internal data class UiState(
     val shareSheetApps: Boolean = true,
     /** Whether a tapped or shared link shows here first instead of opening; see [linkMode]. */
     val showSongFirst: Boolean = false,
+    /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
+    val afterLookup: AfterLookup = AfterLookup.OPEN,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
     val onlyMusicVideos: Boolean = true,
     val showDestinationPicker: Boolean = false,
@@ -107,9 +109,7 @@ internal data class UiState(
             emptyList()
         } else {
             val default = (defaultDestination as? Destination.Service)?.service
-            (listOfNotNull(default) + MusicService.entries.filter { it in installed })
-                .distinct()
-                .filterNot { it == default && linkMode == LinkMode.OPEN }
+            (listOfNotNull(default) + MusicService.entries.filter { it in installed }).distinct()
         }
 
     /** Whether Crosstune opens any links at all. */
@@ -129,12 +129,16 @@ internal data class UiState(
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
+internal enum class AfterLookup { OPEN, SHARE, COPY }
+
 /** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
 internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
+    data class Share(val url: String, val original: String?, val source: MusicService?) : Effect
+    data class Copy(val url: String) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -290,12 +294,13 @@ internal class MainViewModel(
      * ready; in [destination] when the user already chose one, e.g. with a share sheet target.
      * With [show], it only shows the result, for the user to pick what to do.
      */
-    fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false) {
+    fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
             handingOff = !show,
+            afterLookup = after,
             leaveSettings = true
         )
         val input = MusicLinks.parse(incoming)
@@ -427,6 +432,14 @@ internal class MainViewModel(
         // A frontend's link, e.g. Invidious's, is worth opening in the service's own app.
         val ownService = uiState.link?.takeUnless { it.viaFrontend }?.service?.takeIf {
             uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
+        }
+        // A share sheet action asked to share or copy the converted link rather than open it.
+        if (pendingOpen && uiState.afterLookup != AfterLookup.OPEN) {
+            pendingOpen = false
+            val url = prepareDestination(uiState.resultDestination) ?: return
+            val original = originalUrl()?.takeIf { it != url }
+            effectChannel.send(if (uiState.afterLookup == AfterLookup.SHARE) Effect.Share(url, original, uiState.link?.service) else Effect.Copy(url))
+            return
         }
         // Incoming links without a chosen destination must not search the default before asking.
         val ask = uiState.selectedDestination == null &&

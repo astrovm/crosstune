@@ -20,7 +20,10 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
     suspend fun update(recent: List<HistoryEntry>, shareTargets: List<MusicService>) {
         val manager = context.getSystemService(ShortcutManager::class.java) ?: return
         val songs = recent.take(MAX_RECENT).mapIndexed { rank, entry -> songShortcut(entry, rank) }
-        val targets = shareTargets.take(MAX_SHARE_TARGETS).mapIndexed { rank, service -> shareTarget(service, rank) }
+        // Preview: the default app, then each thing the share sheet could do with the link instead.
+        val opens = shareTargets.take(1).mapIndexed { rank, service -> shareTarget(service, rank) }
+        val actions = if (shareTargets.isEmpty()) emptyList() else ShareAction.entries.mapIndexed { rank, action -> actionTarget(action, opens.size + rank) }
+        val targets = opens + actions
         // Some devices allow as few as five per activity, counting the one in shortcuts.xml.
         manager.dynamicShortcuts = (songs + targets).take(manager.maxShortcutCountPerActivity - manager.manifestShortcuts.size)
     }
@@ -58,7 +61,36 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
             .build()
     }
 
+    private fun actionTarget(action: ShareAction, rank: Int): ShortcutInfo {
+        val id = ACTION_PREFIX + action.name
+        val fromLauncher = Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD)
+            .setClassName(context, MainActivity.PASTE_ALIAS)
+            .putExtra(Intent.EXTRA_SHORTCUT_ID, id)
+        return ShortcutInfo.Builder(context, id)
+            .setShortLabel(context.getString(action.labelRes))
+            .setIcon(Icon.createWithResource(context, action.iconRes))
+            .setCategories(setOf(SHARE_CATEGORY))
+            .setIntent(fromLauncher)
+            .setRank(MAX_RECENT + rank)
+            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) setLongLived(true) }
+            .build()
+    }
+
+    /** What a share sheet action does with the shared link instead of opening it. */
+    enum class ShareAction(val labelRes: Int, val iconRes: Int) {
+        SHARE(R.string.share_link_button, R.drawable.ic_shortcut_share),
+        COPY(R.string.copy_link_button, R.drawable.ic_shortcut_copy),
+        SHOW(R.string.show_song_short, R.drawable.ic_shortcut_show)
+    }
+
     companion object {
+        private const val ACTION_PREFIX = "action:"
+
+        fun chosenAction(intent: Intent): ShareAction? {
+            val name = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.removePrefix(ACTION_PREFIX) ?: return null
+            return ShareAction.entries.firstOrNull { it.name == name }
+        }
+
         const val MAX_RECENT = 3
         /** Android's top row is shared with people and chats, so Crosstune takes little of it. */
         const val MAX_SHARE_TARGETS = 2
