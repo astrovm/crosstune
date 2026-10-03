@@ -17,6 +17,7 @@
     <string name="settings_button">設定</string>
     <string name="settings_title">設定</string>
     <string name="settings_default_title">デフォルトのアプリ</string>
+    <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="settings_links_description">ここでオンにしたサービスのリンクをタップすると Crosstune で開きます。共有と貼り付けはいつでも使えます。</string>
@@ -64,11 +65,14 @@
     <string name="type_playlist">プレイリスト</string>
 
     <string name="setting_ask_each_time">使うアプリを毎回選ぶ</string>
-    <string name="setting_ask_each_time_description">リンクをタップまたは共有するたびに、アプリを選びます。</string>
+    <string name="show_song_first">先に曲を表示</string>
+    <string name="show_song_short">曲を表示</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
     <string name="setting_exact_match_description">アプリが対応していれば曲そのものを開きます。そうでなければ検索します。</string>
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
     <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
+    <string name="setting_share_sheet_apps">共有メニューのアプリ</string>
+    <string name="setting_share_sheet_apps_description">共有するときに「YouTube Music で開く」などを表示します。Android はどんなテキストでも表示します。</string>
     <string name="setting_language">言語</string>
     <string name="language_system_default">システムのデフォルト</string>
     <string name="matching_text">一致する項目を探しています…</string>
@@ -83,8 +87,6 @@
     <string name="error_clipboard_empty">先に音楽リンクをコピーしてください。</string>
     <string name="copy_search_action">検索テキストをコピー</string>
     <string name="share_search_link">検索リンクを共有</string>
-    <string name="copy_service_link">%1$s のリンクをコピー</string>
-    <string name="share_service_link">%1$s のリンクを共有</string>
     <string name="search_copied_to_clipboard">検索テキストをコピーしました</string>
     <string name="link_copied_to_clipboard">リンクをコピーしました</string>
     <string name="link_settings_helper_title">新しいリンクを許可</string>
@@ -103,16 +105,17 @@
     <string name="error_metadata_unavailable">このリンクの詳細を読み取れませんでした。</string>
     <string name="search_in_destination">%1$sで検索</string>
     <string name="history_open">%1$sを開く</string>
-    <string name="history_copy">%1$sのリンクをコピー</string>
     <string name="privacy_policy">プライバシーポリシー</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/ja/privacy/</string>
     <string name="handoff_opening">%1$s で開いています…</string>
+    <string name="handoff_getting_link">%1$s のリンクを取得しています…</string>
     <string name="notice_links_not_allowed">Crosstune でまだ開けないリンクがあります</string>
     <string name="notice_own_links_off">タップしたリンクが Crosstune ではなくブラウザで開きます</string>
     <string name="allow_button">許可</string>
     <string name="notice_app_still_opens">%1$s がまだ自分のリンクを開いています</string>
     <string name="fix_button">修正</string>
     <string name="history_cleared">履歴を削除しました</string>
+    <string name="history_removed">削除しました</string>
     <string name="undo_button">元に戻す</string>
     <string name="empty_hint">どのアプリでも音楽リンクをタップするか、Crosstune に共有してください。</string>
     <string name="copy_link_button">リンクをコピー</string>

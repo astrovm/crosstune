@@ -25,6 +25,7 @@
     <string name="settings_button">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="settings_default_title">Default app</string>
+    <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
     <string name="settings_links_description">Tapped links from these open in Crosstune. Sharing and pasting always work.</string>
@@ -76,11 +77,14 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_ask_each_time">Ask which app to use</string>
-    <string name="setting_ask_each_time_description">Pick an app each time you tap or share a link.</string>
+    <string name="show_song_first">Show the song first</string>
+    <string name="show_song_short">Show song</string>
     <string name="setting_exact_match">Open the exact match</string>
     <string name="setting_exact_match_description">Opens the song itself when the app supports it. Otherwise it searches.</string>
     <string name="setting_clean_links">Remove tracking from links</string>
     <string name="setting_clean_links_description">Drops tracking parts like ?si= or utm_ from links you open, copy or share.</string>
+    <string name="setting_share_sheet_apps">Apps in the share sheet</string>
+    <string name="setting_share_sheet_apps_description">Open in YouTube Music and others when you share. Android shows them for any text.</string>
     <string name="setting_language">Language</string>
     <string name="language_system_default">System default</string>
     <string name="matching_text">Finding the exact match…</string>
@@ -95,8 +99,6 @@
     <string name="error_clipboard_empty">Copy a music link first.</string>
     <string name="copy_search_action">Copy search text</string>
     <string name="share_search_link">Share search link</string>
-    <string name="copy_service_link">Copy %1$s link</string>
-    <string name="share_service_link">Share %1$s link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_copied_to_clipboard">Link copied</string>
     <string name="link_settings_helper_title">Allow the new links</string>
@@ -120,14 +122,15 @@
     <string name="error_metadata_unavailable">Couldn\'t read the details of this link.</string>
     <string name="search_in_destination">Search in %1$s</string>
     <string name="history_open">Open %1$s</string>
-    <string name="history_copy">Copy link for %1$s</string>
     <string name="handoff_opening">Opening in %1$s…</string>
+    <string name="handoff_getting_link">Getting the %1$s link…</string>
     <string name="notice_links_not_allowed">Some links can\'t open in Crosstune yet</string>
     <string name="notice_own_links_off">Tapped links open in your browser, not Crosstune</string>
     <string name="allow_button">Allow</string>
     <string name="notice_app_still_opens">%1$s still opens its own links</string>
     <string name="fix_button">Fix</string>
     <string name="history_cleared">History cleared</string>
+    <string name="history_removed">Removed</string>
     <string name="undo_button">Undo</string>
     <string name="empty_hint">Tap a music link in any app, or share one to Crosstune.</string>
     <string name="copy_link_button">Copy link</string>

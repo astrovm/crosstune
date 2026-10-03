@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -96,11 +97,14 @@ internal fun SectionHeader(
     }
 }
 
-/** Rounded container that groups related rows, separated by hairline dividers. */
+/**
+ * Rounded container that groups related rows, separated by hairline dividers. It grows and shrinks
+ * smoothly as rows come and go, so nothing jumps.
+ */
 @Composable
 internal fun Group(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().animateContentSize(Motion.size),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {

@@ -16,6 +16,7 @@
     <string name="settings_button">Instellingen</string>
     <string name="settings_title">Instellingen</string>
     <string name="settings_default_title">Standaardapp</string>
+    <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="settings_links_description">Aangetikte links van deze diensten openen in Crosstune. Delen en plakken werken altijd.</string>
@@ -63,11 +64,14 @@
     <string name="type_playlist">Afspeellijst</string>
 
     <string name="setting_ask_each_time">Vragen welke app</string>
-    <string name="setting_ask_each_time_description">Kies een app telkens als je op een link tikt of deze deelt.</string>
+    <string name="show_song_first">Eerst het nummer tonen</string>
+    <string name="show_song_short">Nummer tonen</string>
     <string name="setting_exact_match">Exacte match openen</string>
     <string name="setting_exact_match_description">Opent het nummer zelf als de app dat ondersteunt. Anders wordt er gezocht.</string>
     <string name="setting_clean_links">Tracking uit links halen</string>
     <string name="setting_clean_links_description">Haalt trackingonderdelen zoals ?si= of utm_ uit links die je opent, kopieert of deelt.</string>
+    <string name="setting_share_sheet_apps">Apps in het deelmenu</string>
+    <string name="setting_share_sheet_apps_description">Openen in YouTube Music en andere als je deelt. Android toont ze bij elke tekst.</string>
     <string name="setting_language">Taal</string>
     <string name="language_system_default">Systeemstandaard</string>
     <string name="matching_text">Exacte match zoeken…</string>
@@ -82,8 +86,6 @@
     <string name="error_clipboard_empty">Kopieer eerst een muzieklink.</string>
     <string name="copy_search_action">Zoektekst kopiëren</string>
     <string name="share_search_link">Zoeklink delen</string>
-    <string name="copy_service_link">%1$s-link kopiëren</string>
-    <string name="share_service_link">%1$s-link delen</string>
     <string name="search_copied_to_clipboard">Zoektekst gekopieerd</string>
     <string name="link_copied_to_clipboard">Link gekopieerd</string>
     <string name="link_settings_helper_title">Nieuwe links toestaan</string>
@@ -102,16 +104,17 @@
     <string name="error_metadata_unavailable">De gegevens van deze link kunnen niet worden gelezen.</string>
     <string name="search_in_destination">Zoeken in %1$s</string>
     <string name="history_open">%1$s openen</string>
-    <string name="history_copy">Link voor %1$s kopiëren</string>
     <string name="privacy_policy">Privacybeleid</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/nl/privacy/</string>
     <string name="handoff_opening">Openen in %1$s…</string>
+    <string name="handoff_getting_link">%1$s-link ophalen…</string>
     <string name="notice_links_not_allowed">Sommige links openen nog niet in Crosstune</string>
     <string name="notice_own_links_off">Getikte links openen in je browser, niet in Crosstune</string>
     <string name="allow_button">Toestaan</string>
     <string name="notice_app_still_opens">%1$s opent zijn eigen links nog</string>
     <string name="fix_button">Oplossen</string>
     <string name="history_cleared">Geschiedenis gewist</string>
+    <string name="history_removed">Verwijderd</string>
     <string name="undo_button">Ongedaan maken</string>
     <string name="empty_hint">Tik in een app op een muzieklink, of deel hem met Crosstune.</string>
     <string name="copy_link_button">Link kopiëren</string>

@@ -1,7 +1,5 @@
 package com.astrovm.crosstune
 
-import android.app.ActivityOptions
-import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -9,19 +7,17 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Icon
+import android.content.pm.ShortcutManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.service.chooser.ChooserAction
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.snapshotFlow
-import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -96,15 +92,14 @@ class MainActivity : ComponentActivity() {
                 // Converted links saved on an entry don't change its shortcut, so they don't restart it.
                 snapshotFlow {
                     val state = viewModel.uiState
-                    // Share targets are the installed apps, so they wait for those to be known
-                    // rather than drop out for a moment and come back.
+                    // They wait for what Android says about apps, rather than drop out for a moment and come back.
                     if (!state.systemStateKnown) return@snapshotFlow null
                     val recent = state.history.take(AppShortcuts.MAX_RECENT).map { it.copy(destinationLinks = emptyMap()) }
-                    recent to state.shareTargets
+                    Triple(recent, state.shareSheetEntries, state.shareSheetApp)
                 }
                     .filterNotNull()
                     .distinctUntilChanged()
-                    .collectLatest { (recent, targets) -> shortcuts.update(recent, targets) }
+                    .collectLatest { (recent, entries, app) -> shortcuts.update(recent, entries, app) }
             }
         }
         lifecycleScope.launch {
@@ -112,7 +107,14 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         is Effect.Open -> open(effect)
-                        is Effect.Copy -> copyToClipboard("Crosstune link", effect.url, R.string.link_copied_to_clipboard)
+                        is Effect.Share -> {
+                            startActivity(shareChooser(effect.url))
+                            finish()
+                        }
+                        is Effect.Copy -> {
+                            copyToClipboard("Crosstune link", effect.url, R.string.link_copied_to_clipboard)
+                            finish()
+                        }
                     }
                 }
             }
@@ -144,9 +146,10 @@ class MainActivity : ComponentActivity() {
                         onFrontendInstanceChange = viewModel::setFrontendInstance,
                         onCompleteSetup = viewModel::completeSetup,
                         onPreselectSources = viewModel::preselectSources,
-                        onAskEachTimeChange = viewModel::setAskEachTime,
+                        onLinkModeChange = viewModel::setLinkMode,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
+                        onShareSheetAppsChange = viewModel::setShareSheetApps,
                         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
                         onLanguageChange = { AppLanguage.set(this, it) },
                         onCopySearch = ::copySearch,
@@ -154,7 +157,7 @@ class MainActivity : ComponentActivity() {
                         onShareSearch = ::shareSearch,
                         onHistoryEntryClick = viewModel::showHistoryEntry,
                         onHistoryOpen = viewModel::openHistoryEntry,
-                        onHistoryCopy = viewModel::copyHistoryEntry,
+                        onRemoveHistory = viewModel::removeHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
                         onUndoClearHistory = viewModel::undoClearHistory,
                         onForgetClearedHistory = viewModel::forgetClearedHistory,
@@ -198,18 +201,17 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
 
         when (intent.action) {
-            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString)
+            Intent.ACTION_VIEW -> viewModel.resolveIncoming(intent.dataString, show = viewModel.uiState.showSongFirst)
             Intent.ACTION_SEND -> {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
-                viewModel.resolveIncoming(
-                    shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return,
-                    // A share sheet target picked an app to open it in.
-                    AppShortcuts.chosenDestination(intent)
-                )
+                resolveShared(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return, fromClipboard = false)
             }
-            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString())
+            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString(),
+                show = viewModel.uiState.showSongFirst
+            )
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
         }
     }
@@ -218,7 +220,25 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (!hasFocus || !pendingClipboardRead) return
         pendingClipboardRead = false
-        viewModel.resolveClipboard(clipboardText(), AppShortcuts.chosenDestination(intent))
+        resolveShared(clipboardText(), fromClipboard = true)
+    }
+
+    /**
+     * A link shared to Crosstune, or copied and opened from a launcher shortcut. A share sheet
+     * entry may have picked an app to open it in, or to share, copy or show it instead; either beats
+     * showing it first. Each use is reported, so Android puts the entries used most up front.
+     */
+    private fun resolveShared(text: String?, fromClipboard: Boolean) {
+        val chosen = AppShortcuts.chosenDestination(intent)
+        val action = AppShortcuts.chosenAction(intent)
+        intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.let { getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(it) }
+        val show = action == AppShortcuts.ShareAction.SHOW || chosen == null && action == null && viewModel.uiState.showSongFirst
+        val after = when (action) {
+            AppShortcuts.ShareAction.SHARE -> AfterLookup.SHARE
+            AppShortcuts.ShareAction.COPY -> AfterLookup.COPY
+            else -> AfterLookup.OPEN
+        }
+        if (fromClipboard) viewModel.resolveClipboard(text, chosen, show, after) else viewModel.resolveIncoming(text, chosen, show, after)
     }
 
     /** Android only lets the focused app read the clipboard, which it is here: after focus or a tap. */
@@ -292,59 +312,20 @@ class MainActivity : ComponentActivity() {
 
     private fun shareSearch() {
         val url = viewModel.destinationUrl() ?: return
-        val chooser = shareChooser(url)
-        val source = viewModel.uiState.link?.service
-        val original = viewModel.originalUrl()?.takeIf { it != url }
-        if (source != null && original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original, getString(source.labelRes)))
-        }
-        startActivity(chooser)
+        startActivity(shareChooser(url))
     }
 
+    /**
+     * The share sheet for [url]. Crosstune itself is left out, its share sheet entries included:
+     * sharing to it from here would only loop.
+     */
     private fun shareChooser(url: String): Intent {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
         }
         return Intent.createChooser(shareIntent, getString(R.string.share_search_link))
-    }
-
-    /**
-     * Share sheet buttons for the link the song came from, for a friend who uses that service:
-     * one copies it, the other shares it instead of the converted link.
-     */
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun originalLinkActions(original: String, service: String): Array<ChooserAction> {
-        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        val copy = Intent(this, CopyLinkReceiver::class.java).putExtra(Intent.EXTRA_TEXT, original)
-        return arrayOf(
-            ChooserAction.Builder(
-                Icon.createWithResource(this, R.drawable.ic_content_copy),
-                getString(R.string.copy_service_link, service),
-                PendingIntent.getBroadcast(this, 0, copy, flags)
-            ).build(),
-            ChooserAction.Builder(
-                Icon.createWithResource(this, R.drawable.ic_share),
-                getString(R.string.share_service_link, service),
-                PendingIntent.getActivity(this, 0, shareChooser(original), flags, startFromShareSheet())
-            ).build()
-        )
-    }
-
-    /**
-     * Lets the share sheet start an activity for Crosstune. Since Android 15, Android only uses the
-     * creator's permission to start one when the creator opts in, and some phones' own share sheets
-     * don't lend theirs, so without this the share action silently does nothing there.
-     */
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun startFromShareSheet(): Bundle {
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
-        } else {
-            @Suppress("DEPRECATION")
-            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-        }
-        return ActivityOptions.makeBasic().setPendingIntentCreatorBackgroundActivityStartMode(mode).toBundle()
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(this, MainActivity::class.java)))
     }
 
     private fun openAppLinkSettings() {

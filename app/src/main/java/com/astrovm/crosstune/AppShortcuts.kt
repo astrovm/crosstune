@@ -12,15 +12,22 @@ import androidx.core.net.toUri
 
 /**
  * Keeps Crosstune's dynamic shortcuts in step with the app: the latest songs, and share sheet
- * targets that open a shared link straight in one app. Android drops shortcuts hidden from the
- * launcher, so the targets show there too, after the songs, where they open the copied link.
+ * targets that open a shared link in the default app, or share, copy or show it. Android drops
+ * shortcuts hidden from the launcher, so the targets show there too, after the songs, where they
+ * do the same with the copied link.
  */
 internal class AppShortcuts(private val context: Context, private val loadArtwork: suspend (String) -> ImageBitmap?) {
 
-    suspend fun update(recent: List<HistoryEntry>, shareTargets: List<MusicService>) {
+    /**
+     * With [shareSheet] on, the share sheet's top row offers to open a shared link in [app], the
+     * default, and to share, copy or show it instead. Android shows the ones used most.
+     */
+    suspend fun update(recent: List<HistoryEntry>, shareSheet: Boolean, app: MusicService?) {
         val manager = context.getSystemService(ShortcutManager::class.java) ?: return
         val songs = recent.take(MAX_RECENT).mapIndexed { rank, entry -> songShortcut(entry, rank) }
-        val targets = shareTargets.take(MAX_SHARE_TARGETS).mapIndexed { rank, service -> shareTarget(service, rank) }
+        val opens = listOfNotNull(app.takeIf { shareSheet }).map { shareTarget(it, 0) }
+        val actions = if (shareSheet) ShareAction.entries.mapIndexed { rank, action -> actionTarget(action, opens.size + rank) } else emptyList()
+        val targets = opens + actions
         // Some devices allow as few as five per activity, counting the one in shortcuts.xml.
         manager.dynamicShortcuts = (songs + targets).take(manager.maxShortcutCountPerActivity - manager.manifestShortcuts.size)
     }
@@ -46,10 +53,10 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
             .setClassName(context, MainActivity.PASTE_ALIAS)
             .putExtra(Intent.EXTRA_SHORTCUT_ID, id)
         return ShortcutInfo.Builder(context, id)
-            // The share sheet and launchers both show the long label when it fits, so it can't
-            // say "copied link" for the launcher alone; there it sits under "Open copied link".
+            // Just the app's name: "Open in …" got cut off to "Open in You…" for both YouTube Music
+            // and YouTube, and Android badges the icon with Crosstune's, which says the rest. In
+            // launchers it sits under "Open copied link".
             .setShortLabel(context.getString(service.labelRes))
-            .setLongLabel(context.getString(service.openLabelRes))
             .setIcon(Icon.createWithResource(context, service.iconRes))
             .setCategories(setOf(SHARE_CATEGORY))
             .setIntent(openCopied)
@@ -58,9 +65,37 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
             .build()
     }
 
+    private fun actionTarget(action: ShareAction, rank: Int): ShortcutInfo {
+        val id = ACTION_PREFIX + action.name
+        val fromLauncher = Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD)
+            .setClassName(context, MainActivity.PASTE_ALIAS)
+            .putExtra(Intent.EXTRA_SHORTCUT_ID, id)
+        return ShortcutInfo.Builder(context, id)
+            .setShortLabel(context.getString(action.labelRes))
+            .setIcon(Icon.createWithResource(context, action.iconRes))
+            .setCategories(setOf(SHARE_CATEGORY))
+            .setIntent(fromLauncher)
+            .setRank(MAX_RECENT + rank)
+            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) setLongLived(true) }
+            .build()
+    }
+
+    /** What a share sheet action does with the shared link instead of opening it. */
+    enum class ShareAction(val labelRes: Int, val iconRes: Int) {
+        SHARE(R.string.share_link_button, R.drawable.ic_shortcut_share),
+        COPY(R.string.copy_link_button, R.drawable.ic_shortcut_copy),
+        SHOW(R.string.show_song_short, R.drawable.ic_shortcut_show)
+    }
+
     companion object {
+        private const val ACTION_PREFIX = "action:"
+
+        fun chosenAction(intent: Intent): ShareAction? {
+            val name = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.removePrefix(ACTION_PREFIX) ?: return null
+            return ShareAction.entries.firstOrNull { it.name == name }
+        }
+
         const val MAX_RECENT = 3
-        const val MAX_SHARE_TARGETS = 3
         private const val RECENT_PREFIX = "recent:"
         private const val SHARE_PREFIX = "open_in:"
 

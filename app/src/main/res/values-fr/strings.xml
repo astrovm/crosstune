@@ -16,6 +16,7 @@
     <string name="settings_button">Paramètres</string>
     <string name="settings_title">Paramètres</string>
     <string name="settings_default_title">Application par défaut</string>
+    <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
     <string name="settings_links_description">Les liens de ces services que vous touchez s’ouvrent dans Crosstune. Partager et coller fonctionnent toujours.</string>
@@ -63,11 +64,14 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_ask_each_time">Demander quelle application utiliser</string>
-    <string name="setting_ask_each_time_description">Choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</string>
+    <string name="show_song_first">Afficher d’abord le titre</string>
+    <string name="show_song_short">Voir le titre</string>
     <string name="setting_exact_match">Ouvrir le résultat exact</string>
     <string name="setting_exact_match_description">Ouvre directement le morceau quand l’application le permet. Sinon, lance une recherche.</string>
     <string name="setting_clean_links">Retirer le pistage des liens</string>
     <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
+    <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
+    <string name="setting_share_sheet_apps_description">Ouvrir dans YouTube Music et d’autres quand vous partagez. Android les affiche pour tout texte.</string>
     <string name="setting_language">Langue</string>
     <string name="language_system_default">Langue du système</string>
     <string name="matching_text">Recherche du résultat exact…</string>
@@ -82,8 +86,6 @@
     <string name="error_clipboard_empty">Copiez d\'abord un lien musical.</string>
     <string name="copy_search_action">Copier le texte de recherche</string>
     <string name="share_search_link">Partager le lien de recherche</string>
-    <string name="copy_service_link">Copier le lien %1$s</string>
-    <string name="share_service_link">Partager le lien %1$s</string>
     <string name="search_copied_to_clipboard">Texte de recherche copié</string>
     <string name="link_copied_to_clipboard">Lien copié</string>
     <string name="link_settings_helper_title">Autoriser les nouveaux liens</string>
@@ -102,16 +104,17 @@
     <string name="error_metadata_unavailable">Impossible de lire les détails de ce lien.</string>
     <string name="search_in_destination">Rechercher dans %1$s</string>
     <string name="history_open">Ouvrir %1$s</string>
-    <string name="history_copy">Copier le lien de %1$s</string>
     <string name="privacy_policy">Politique de confidentialité</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/fr/privacy/</string>
     <string name="handoff_opening">Ouverture dans %1$s…</string>
+    <string name="handoff_getting_link">Récupération du lien %1$s…</string>
     <string name="notice_links_not_allowed">Certains liens ne s’ouvrent pas encore dans Crosstune</string>
     <string name="notice_own_links_off">Les liens touchés s’ouvrent dans le navigateur, pas dans Crosstune</string>
     <string name="allow_button">Autoriser</string>
     <string name="notice_app_still_opens">%1$s ouvre encore ses propres liens</string>
     <string name="fix_button">Corriger</string>
     <string name="history_cleared">Historique effacé</string>
+    <string name="history_removed">Supprimé</string>
     <string name="undo_button">Annuler</string>
     <string name="empty_hint">Touchez un lien musical dans n’importe quelle application, ou partagez-le avec Crosstune.</string>
     <string name="copy_link_button">Copier le lien</string>

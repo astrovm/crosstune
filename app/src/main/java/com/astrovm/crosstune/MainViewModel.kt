@@ -44,6 +44,12 @@ internal data class UiState(
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
+    /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
+    val shareSheetApps: Boolean = true,
+    /** Whether a tapped or shared link shows here first instead of opening; see [linkMode]. */
+    val showSongFirst: Boolean = false,
+    /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
+    val afterLookup: AfterLookup = AfterLookup.OPEN,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
     val onlyMusicVideos: Boolean = true,
     val showDestinationPicker: Boolean = false,
@@ -82,18 +88,25 @@ internal data class UiState(
      * instead of all of Crosstune; cleared once the user has something to do here.
      */
     val handingOff: Boolean = false,
-    /** Set right after history is cleared, while it can still be brought back. */
+    /** Set right after history is cleared, or one item removed, while it can still be brought back. */
     val canUndoClearHistory: Boolean = false,
+    /** Whether what can be undone is one item removed rather than all of it cleared. */
+    val removedOneFromHistory: Boolean = false,
+    /** Counts removals and clears, so each one offers its own undo even while the last offer shows. */
+    val historyUndoId: Int = 0,
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
-    /** Apps the share sheet offers to open a link in directly: the default first, then other installed ones. */
-    val shareTargets: List<MusicService>
-        get() = if (!setupComplete || !hasDefault) {
-            emptyList()
-        } else {
-            (listOfNotNull((defaultDestination as? Destination.Service)?.service) + MusicService.entries.filter { it in installed }).distinct()
-        }
+    val linkMode: LinkMode
+        get() = if (showSongFirst) LinkMode.SHOW else if (askEachTime) LinkMode.ASK else LinkMode.OPEN
+
+    /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
+    val shareSheetEntries: Boolean
+        get() = setupComplete && hasDefault && shareSheetApps
+
+    /** The app the top row offers to open a shared link in, when the default is one. */
+    val shareSheetApp: MusicService?
+        get() = (defaultDestination as? Destination.Service)?.service
 
     /** Whether Crosstune opens any links at all. */
     val interceptsAnything: Boolean get() = intercepted.isNotEmpty() || frontendSources.isNotEmpty()
@@ -112,9 +125,15 @@ internal data class UiState(
 }
 
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
+internal enum class AfterLookup { OPEN, SHARE, COPY }
+
+/** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
+internal enum class LinkMode { OPEN, ASK, SHOW }
+
 internal sealed interface Effect {
     /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
+    data class Share(val url: String) : Effect
     data class Copy(val url: String) : Effect
 }
 
@@ -146,6 +165,8 @@ internal class MainViewModel(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
+            shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
+            showSongFirst = preferences.getBoolean(KEY_SHOW_SONG_FIRST, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
@@ -267,13 +288,15 @@ internal class MainViewModel(
     /**
      * Resolves a link from another app and opens it (or offers destinations) as soon as it is
      * ready; in [destination] when the user already chose one, e.g. with a share sheet target.
+     * With [show], it only shows the result, for the user to pick what to do.
      */
-    fun resolveIncoming(text: String?, destination: Destination? = null) {
+    fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
-            handingOff = true,
+            handingOff = !show,
+            afterLookup = after,
             leaveSettings = true
         )
         val input = MusicLinks.parse(incoming)
@@ -287,7 +310,7 @@ internal class MainViewModel(
         if (input is LinkInput.Link) {
             uiState = uiState.copy(linkText = input.link.url)
         }
-        resolve(input, openWhenReady = true, destination)
+        resolve(input, openWhenReady = !show, destination)
     }
 
     /**
@@ -313,9 +336,9 @@ internal class MainViewModel(
     }
 
     /** Clipboard text from the Quick Settings tile or a launcher shortcut, which may name the app to open it in. */
-    fun resolveClipboard(text: String?, destination: Destination?) {
+    fun resolveClipboard(text: String?, destination: Destination?, show: Boolean, after: AfterLookup) {
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
-        resolveIncoming(text, destination)
+        resolveIncoming(text, destination, show, after)
     }
 
     fun retry() {
@@ -406,6 +429,13 @@ internal class MainViewModel(
         val ownService = uiState.link?.takeUnless { it.viaFrontend }?.service?.takeIf {
             uiState.hasDefault && (uiState.resultDestination as? Destination.Service)?.service == it
         }
+        // A share sheet action asked to share or copy the converted link rather than open it.
+        if (pendingOpen && uiState.afterLookup != AfterLookup.OPEN) {
+            pendingOpen = false
+            val url = prepareDestination(uiState.resultDestination) ?: return
+            effectChannel.send(if (uiState.afterLookup == AfterLookup.SHARE) Effect.Share(url) else Effect.Copy(url))
+            return
+        }
         // Incoming links without a chosen destination must not search the default before asking.
         val ask = uiState.selectedDestination == null &&
             (uiState.askEachTime || !uiState.setupComplete || ownService != null)
@@ -423,6 +453,7 @@ internal class MainViewModel(
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
         val chosen = destination ?: uiState.resultDestination
+        destination?.let(::rememberLastApp)
         pendingOpen = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
@@ -507,14 +538,7 @@ internal class MainViewModel(
         }
     }
 
-    fun copyHistoryEntry(entry: HistoryEntry) {
-        viewModelScope.launch {
-            val url = urlForHistory(entry, destinationFor(entry)) ?: return@launch
-            effectChannel.send(Effect.Copy(url))
-        }
-    }
-
-    /** Recent Open and Copy use the saved default, not whatever result is on screen. */
+    /** Recent's Open uses the saved default, not whatever result is on screen. */
     private fun destinationFor(entry: HistoryEntry): Destination =
         uiState.ruleFor(entry.link) ?: uiState.defaultDestination
 
@@ -535,12 +559,29 @@ internal class MainViewModel(
     fun clearHistory() {
         clearedHistory = uiState.history
         historyStore.clear()
-        uiState = uiState.copy(history = emptyList(), canUndoClearHistory = true)
+        uiState = uiState.copy(
+            history = emptyList(),
+            canUndoClearHistory = true,
+            removedOneFromHistory = false,
+            historyUndoId = uiState.historyUndoId + 1
+        )
+    }
+
+    /** Drops one item, e.g. swiped away; undo puts it back where it was. */
+    fun removeHistoryEntry(entry: HistoryEntry) {
+        clearedHistory = uiState.history
+        uiState = uiState.copy(
+            history = historyStore.replace(uiState.history.filterNot { it.link.url == entry.link.url }),
+            canUndoClearHistory = true,
+            removedOneFromHistory = true,
+            historyUndoId = uiState.historyUndoId + 1
+        )
     }
 
     fun undoClearHistory() {
-        // Anything looked up since clearing stays on top.
-        val restored = (uiState.history + clearedHistory).distinctBy { it.link.url }
+        // Anything looked up since stays on top, and the rest goes back in its old order.
+        val kept = clearedHistory.map { it.link.url }.toSet()
+        val restored = uiState.history.filterNot { it.link.url in kept } + clearedHistory
         uiState = uiState.copy(history = historyStore.replace(restored), canUndoClearHistory = false)
         clearedHistory = emptyList()
     }
@@ -566,8 +607,6 @@ internal class MainViewModel(
         return uiState.destinationUrls[destination]?.url?.forSharing()
     }
 
-    /** The link the result came from, as Crosstune would share it. */
-    fun originalUrl(): String? = uiState.link?.url?.forSharing()
 
     fun clear() {
         job?.cancel()
@@ -594,8 +633,20 @@ internal class MainViewModel(
     }
 
     fun selectResultDestination(destination: Destination) {
+        rememberLastApp(destination)
         uiState = uiState.copy(selectedDestination = destination)
         prepareResultDestination()
+    }
+
+    /**
+     * Asking which app, or showing the song first, there's no default to make; the app picked last
+     * is offered next time instead. It's stored as the default, which is what the Open button,
+     * Recent and the share sheet use, without changing what tapped links do.
+     */
+    private fun rememberLastApp(destination: Destination) {
+        if (uiState.linkMode == LinkMode.OPEN) return
+        destinationStore.setDefault(destination)
+        uiState = uiState.withDestinations()
     }
 
     fun selectDefault(destination: Destination) {
@@ -670,11 +721,6 @@ internal class MainViewModel(
         refreshSystemState()
     }
 
-    fun setAskEachTime(enabled: Boolean) {
-        uiState = uiState.copy(askEachTime = enabled)
-        preferences.edit { putBoolean(KEY_ASK_EACH_TIME, enabled) }
-    }
-
     fun setExactMatch(enabled: Boolean) {
         uiState = uiState.copy(exactMatch = enabled, destinationUrls = emptyMap())
         preferences.edit { putBoolean(KEY_EXACT_MATCH, enabled) }
@@ -691,6 +737,20 @@ internal class MainViewModel(
     fun setOnlyMusicVideos(enabled: Boolean) {
         uiState = uiState.copy(onlyMusicVideos = enabled)
         preferences.edit { putBoolean(KEY_ONLY_MUSIC_VIDEOS, enabled) }
+    }
+
+    /** What a tapped or shared link does, picked with the default app: open in it, ask, or show here first. */
+    fun setLinkMode(mode: LinkMode) {
+        uiState = uiState.copy(askEachTime = mode == LinkMode.ASK, showSongFirst = mode == LinkMode.SHOW)
+        preferences.edit {
+            putBoolean(KEY_ASK_EACH_TIME, mode == LinkMode.ASK)
+            putBoolean(KEY_SHOW_SONG_FIRST, mode == LinkMode.SHOW)
+        }
+    }
+
+    fun setShareSheetApps(enabled: Boolean) {
+        uiState = uiState.copy(shareSheetApps = enabled)
+        preferences.edit { putBoolean(KEY_SHARE_SHEET_APPS, enabled) }
     }
 
     fun setCleanLinks(enabled: Boolean) {
@@ -716,6 +776,8 @@ internal class MainViewModel(
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
+        private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
+        private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
         private const val KEY_SETUP_COMPLETE = "setup_complete"

@@ -16,6 +16,7 @@
     <string name="settings_button">Setelan</string>
     <string name="settings_title">Setelan</string>
     <string name="settings_default_title">Aplikasi default</string>
+    <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
     <string name="settings_links_description">Tautan dari layanan ini yang kamu ketuk terbuka di Crosstune. Berbagi dan menempel selalu berfungsi.</string>
@@ -63,11 +64,14 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_ask_each_time">Tanya aplikasi yang dipakai</string>
-    <string name="setting_ask_each_time_description">Pilih aplikasi setiap kali kamu mengetuk atau membagikan link.</string>
+    <string name="show_song_first">Tampilkan lagunya dulu</string>
+    <string name="show_song_short">Lihat lagu</string>
     <string name="setting_exact_match">Buka yang persis sama</string>
     <string name="setting_exact_match_description">Membuka lagunya langsung jika aplikasinya mendukung. Jika tidak, mencarinya.</string>
     <string name="setting_clean_links">Hapus pelacakan dari link</string>
     <string name="setting_clean_links_description">Membuang bagian pelacak seperti ?si= atau utm_ dari link yang kamu buka, salin, atau bagikan.</string>
+    <string name="setting_share_sheet_apps">Aplikasi di menu bagikan</string>
+    <string name="setting_share_sheet_apps_description">Buka di YouTube Music dan lainnya saat berbagi. Android menampilkannya untuk teks apa pun.</string>
     <string name="setting_language">Bahasa</string>
     <string name="language_system_default">Default sistem</string>
     <string name="matching_text">Mencari yang persis sama…</string>
@@ -82,8 +86,6 @@
     <string name="error_clipboard_empty">Salin link musik dulu.</string>
     <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_link">Bagikan link pencarian</string>
-    <string name="copy_service_link">Salin tautan %1$s</string>
-    <string name="share_service_link">Bagikan tautan %1$s</string>
     <string name="search_copied_to_clipboard">Teks pencarian disalin</string>
     <string name="link_copied_to_clipboard">Link disalin</string>
     <string name="link_settings_helper_title">Izinkan link baru</string>
@@ -102,16 +104,17 @@
     <string name="error_metadata_unavailable">Tidak bisa membaca detail link ini.</string>
     <string name="search_in_destination">Cari di %1$s</string>
     <string name="history_open">Buka %1$s</string>
-    <string name="history_copy">Salin link untuk %1$s</string>
     <string name="privacy_policy">Kebijakan privasi</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/id/privacy/</string>
     <string name="handoff_opening">Membuka di %1$s…</string>
+    <string name="handoff_getting_link">Mengambil link %1$s…</string>
     <string name="notice_links_not_allowed">Beberapa tautan belum bisa dibuka di Crosstune</string>
     <string name="notice_own_links_off">Link yang diketuk terbuka di browser, bukan di Crosstune</string>
     <string name="allow_button">Izinkan</string>
     <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
     <string name="history_cleared">Riwayat dihapus</string>
+    <string name="history_removed">Dihapus</string>
     <string name="undo_button">Urungkan</string>
     <string name="empty_hint">Ketuk tautan musik di aplikasi apa pun, atau bagikan ke Crosstune.</string>
     <string name="copy_link_button">Salin tautan</string>

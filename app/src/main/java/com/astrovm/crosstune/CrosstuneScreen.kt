@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -32,6 +33,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.key
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -115,9 +125,10 @@ internal data class ScreenActions(
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onPreselectSources: () -> Unit = {},
-    val onAskEachTimeChange: (Boolean) -> Unit = {},
+    val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
+    val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
     val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},
@@ -125,7 +136,7 @@ internal data class ScreenActions(
     val onShareSearch: () -> Unit = {},
     val onHistoryEntryClick: (HistoryEntry) -> Unit = {},
     val onHistoryOpen: (HistoryEntry) -> Unit = {},
-    val onHistoryCopy: (HistoryEntry) -> Unit = {},
+    val onRemoveHistory: (HistoryEntry) -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
     val onForgetClearedHistory: () -> Unit = {},
@@ -158,16 +169,40 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var guide by rememberSaveable { mutableStateOf<String?>(null) }
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val guided = actions.copy(onShowAllowGuide = { guide = GUIDE_ALLOW }, onShowAppsGuide = { guide = GUIDE_APPS })
-    // A link from another app is handled right away; setup waits for the next regular launch.
-    if (!state.setupComplete && !state.handlingIncomingLink) {
-        SetupScreen(state, actions)
-    } else if (guide != null && !state.handingOff) {
-        GuidePage(guide == GUIDE_ALLOW, state, actions, onDone = { guide = null })
-    } else if (showSettings) {
-        SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
-    } else {
-        MainScreen(state, guided, onOpenSettings = { showSettings = true })
+    val screen = when {
+        // A link from another app is handled right away; setup waits for the next regular launch.
+        !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
+        guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
+        showSettings -> Screen.SETTINGS
+        state.handingOff -> Screen.HANDOFF
+        else -> Screen.MAIN
     }
+    AnimatedContent(
+        targetState = screen,
+        transitionSpec = {
+            // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
+            if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
+        },
+        label = "screen"
+    ) { shown ->
+        // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
+        if (shown == Screen.SETUP) {
+            SetupScreen(state, actions)
+        } else if (shown == Screen.ALLOW_GUIDE || shown == Screen.APPS_GUIDE) {
+            GuidePage(shown == Screen.ALLOW_GUIDE, state, actions, onDone = { guide = null })
+        } else if (shown == Screen.SETTINGS) {
+            SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
+        } else if (shown == Screen.HANDOFF) {
+            Handoff(state, actions)
+        } else {
+            MainScreen(state, guided, onOpenSettings = { showSettings = true })
+        }
+    }
+}
+
+/** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
+private enum class Screen(val depth: Int) {
+    SETUP(-1), HANDOFF(-1), MAIN(0), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
 }
 
 private const val GUIDE_ALLOW = "allow"
@@ -197,12 +232,15 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
             StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
             appsGuideDone(apps, state.blockingApps)
         }
+        val press = rememberPress()
         FilledTonalButton(
             onClick = onDone,
+            interactionSource = press.source,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 24.dp)
                 .heightIn(min = 52.dp)
+                .then(press.modifier)
         ) {
             Text(stringResource(if (done) R.string.setup_done else R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
         }
@@ -285,17 +323,16 @@ internal fun Page(
 
 @Composable
 private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
-    // A link from another app on its way out shows just that, not all of Crosstune.
-    if (state.handingOff) return Handoff(state, actions)
     // The picker lists installed apps first, so it waits for Android to say which those are rather
     // than move a row from under the user's finger.
     if (state.showDestinationPicker && state.systemStateKnown) {
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
     val snackbar = remember { SnackbarHostState() }
-    val clearedMessage = stringResource(R.string.history_cleared)
+    val clearedMessage = stringResource(if (state.removedOneFromHistory) R.string.history_removed else R.string.history_cleared)
     val undoLabel = stringResource(R.string.undo_button)
-    LaunchedEffect(state.canUndoClearHistory) {
+    // Each removal or clear gets its own offer, replacing one still showing.
+    LaunchedEffect(state.canUndoClearHistory, state.historyUndoId) {
         if (!state.canUndoClearHistory) return@LaunchedEffect
         val result = snackbar.showSnackbar(clearedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Long)
         if (result == SnackbarResult.ActionPerformed) actions.onUndoClearHistory() else actions.onForgetClearedHistory()
@@ -316,10 +353,13 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkNotices(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
-        state.result?.let { ResultCard(it, state, actions) }
+        // A new result grows in where the last one was; the space for it opens and closes smoothly.
+        AnimatedContent(targetState = state.result, transitionSpec = { swap() }, label = "result") { result ->
+            result?.let { ResultCard(it, state, actions) }
+        }
 
         val idle = state.result == null && state.error == null && !state.isLoading
-        if (idle && state.history.isEmpty()) {
+        AnimatedVisibility(visible = idle && state.history.isEmpty(), enter = fadeIn(Motion.fadeIn), exit = fadeOut(Motion.fadeOut)) {
             Text(
                 text = stringResource(R.string.empty_hint),
                 style = MaterialTheme.typography.bodyMedium,
@@ -332,8 +372,9 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         }
         // The song on screen isn't listed again right below it.
         val history = state.history.filterNot { state.result != null && it.link.url == state.link?.url }
-        if (history.isNotEmpty()) {
-            HistorySection(history, actions)
+        // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
+        AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
+            if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
         }
     }
 }
@@ -352,28 +393,33 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                 .padding(top = 120.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (result != null) {
-                CoverArt(result.artworkUrl, actions.loadArtwork, size = 160.dp)
-                Text(
-                    text = result.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 24.dp)
-                )
-                if (result.artist.isNotBlank()) {
-                    Text(
-                        text = result.artist,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            // The logo gives way to the song as soon as it's known.
+            AnimatedContent(targetState = result, transitionSpec = { swap() }, label = "handoff") { shown ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (shown != null) {
+                        CoverArt(shown.artworkUrl, actions.loadArtwork, size = 160.dp)
+                        Text(
+                            text = shown.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 24.dp)
+                        )
+                        if (shown.artist.isNotBlank()) {
+                            Text(
+                                text = shown.artist,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else {
+                        AppLogo(size = 64.dp)
+                    }
                 }
-            } else {
-                AppLogo(size = 64.dp)
             }
             LinearProgressIndicator(
                 modifier = Modifier
@@ -385,7 +431,7 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                 text = if (result == null) {
                     stringResource(R.string.loading_text)
                 } else {
-                    stringResource(R.string.handoff_opening, state.resultDestination.label())
+                    stringResource(if (state.afterLookup == AfterLookup.OPEN) R.string.handoff_opening else R.string.handoff_getting_link, state.resultDestination.label())
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -408,6 +454,12 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
  */
 @Composable
 internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
+    // Notices come and go as things are fixed, so the space they take follows smoothly.
+    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, includeNotAllowed) }
+}
+
+@Composable
+private fun Notices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean) {
     // Nothing is known to be wrong until Android has been asked.
     if (!state.systemStateKnown) return
     // Settings marks each service that isn't allowed yet instead.
@@ -484,13 +536,16 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         placeholder = { Text(stringResource(R.string.spotify_link_placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { AppIcon(R.drawable.ic_link, contentDescription = null) },
         trailingIcon = {
-            if (state.linkText.isEmpty()) {
-                IconButton(onClick = actions.onPaste, enabled = !busy) {
-                    AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
-                }
-            } else {
-                IconButton(onClick = actions.onClear, enabled = !busy) {
-                    AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.clear_button))
+            // Paste turns into clear as soon as there's text, and back.
+            AnimatedContent(targetState = state.linkText.isEmpty(), transitionSpec = { swap() }, label = "trailing") { empty ->
+                if (empty) {
+                    IconButton(onClick = actions.onPaste, enabled = !busy) {
+                        AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
+                    }
+                } else {
+                    IconButton(onClick = actions.onClear, enabled = !busy) {
+                        AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.clear_button))
+                    }
                 }
             }
         },
@@ -524,60 +579,94 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     // and an error that's worth retrying has its own Try again.
     val shownText = rememberSaveable(state.result, state.error) { state.linkText }
     val shown = (state.result != null || state.error != null) && state.linkText == shownText
-    if (shown) return
-    // The main action until there's a result; then the result's Open button is.
-    if (state.result == null) {
-        Button(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
-    } else {
-        FilledTonalButton(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
+    val press = rememberPress()
+    AnimatedVisibility(visible = !shown, enter = Motion.appear, exit = Motion.disappear) {
+        // The main action until there's a result; then the result's Open button is.
+        if (state.result == null) {
+            Button(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
+        } else {
+            FilledTonalButton(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
+        }
     }
 }
 
-/** "YouTube Music ▾": the default app, in settings, under its section's title. */
+/**
+ * "Open links in   YouTube Music ▾": what tapped and shared links do, in settings. Opening in an
+ * app is the usual; asking which app, or showing the song here first, sit at the top of the menu.
+ */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
+    mode: LinkMode,
     onSelect: (Destination) -> Unit,
+    onMode: (LinkMode) -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
     installed: Set<MusicService> = emptySet()
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val modeLabels = mapOf(
+        LinkMode.ASK to stringResource(R.string.setting_ask_each_time),
+        LinkMode.SHOW to stringResource(R.string.show_song_first)
+    )
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
-                DestinationIcon(selected, installed, size = 20.dp)
+                if (mode == LinkMode.OPEN) DestinationIcon(selected, installed, size = 20.dp) else ModeIcon(mode, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(selected.label())
+                Text(modeLabels[mode] ?: selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
                     modifier = Modifier
                         .padding(start = 4.dp)
                         .size(18.dp)
+                        .flipWhen(expanded)
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                destinations.installedFirst(installed).forEach { destination ->
-                    val isSelected = destination == selected
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(
-                                    destination.label(),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        },
-                        leadingIcon = { DestinationIcon(destination, installed) },
-                        onClick = {
-                            expanded = false
-                            onSelect(destination)
-                        },
-                        // The color alone doesn't tell TalkBack which one is chosen.
-                        modifier = Modifier.semantics { this.selected = isSelected }
-                    )
+                modeLabels.forEach { (itemMode, itemLabel) ->
+                    MenuChoice(itemLabel, mode == itemMode, icon = { ModeIcon(itemMode) }) {
+                        expanded = false
+                        onMode(itemMode)
+                    }
                 }
+                HorizontalDivider()
+                destinations.installedFirst(installed).forEach { destination ->
+                    MenuChoice(destination.label(), mode == LinkMode.OPEN && destination == selected, icon = { DestinationIcon(destination, installed) }) {
+                        expanded = false
+                        onSelect(destination)
+                        onMode(LinkMode.OPEN)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One choice in a dropdown, the chosen one in the accent color. */
+@Composable
+private fun MenuChoice(text: String, isSelected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) },
+        leadingIcon = icon,
+        onClick = onClick,
+        // The color alone doesn't tell TalkBack which one is chosen.
+        modifier = Modifier.semantics { this.selected = isSelected }
+    )
+}
+
+/** Asking shows a grid of apps; showing first, Crosstune's own logo. */
+@Composable
+private fun ModeIcon(mode: LinkMode, size: Dp = 32.dp) {
+    Surface(modifier = Modifier.size(size), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
+        Box(contentAlignment = Alignment.Center) {
+            if (mode == LinkMode.ASK) {
+                AppIcon(R.drawable.ic_ask, contentDescription = null, modifier = Modifier.size(size * 0.6f))
+            } else {
+                AppLogo(size = size * 0.7f)
             }
         }
     }
@@ -585,7 +674,7 @@ internal fun DefaultDestinationMenu(
 
 @Composable
 private fun StatusSection(state: UiState, actions: ScreenActions) {
-    AnimatedVisibility(visible = state.isLoading || state.isMatching, enter = fadeIn(), exit = fadeOut()) {
+    AnimatedVisibility(visible = state.isLoading || state.isMatching, enter = Motion.appear, exit = Motion.disappear) {
         Column(modifier = Modifier.padding(top = 20.dp)) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(
@@ -599,7 +688,14 @@ private fun StatusSection(state: UiState, actions: ScreenActions) {
         }
     }
 
-    val error = state.error ?: return
+    // Keyed on whether there's one, so a fixed error fades out with its message still on it.
+    AnimatedContent(targetState = state.error, contentKey = { it != null }, transitionSpec = { fade() }, label = "error") { error ->
+        if (error != null) ErrorCard(error, state, actions)
+    }
+}
+
+@Composable
+private fun ErrorCard(error: AppError, state: UiState, actions: ScreenActions) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -700,25 +796,32 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+                val press = rememberPress()
+                val openLabel = if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel()
                 Button(
                     onClick = actions.onOpen,
                     enabled = destinationReady,
                     shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
                     contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                    interactionSource = press.source,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp)
+                        .then(press.modifier)
                 ) {
-                    DestinationIcon(destination, state.installed, size = 24.dp)
-                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text(
-                        if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel(),
-                        style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center
-                    )
+                    // Picking another app swaps the icon and label in place.
+                    AnimatedContent(targetState = destination to openLabel, transitionSpec = { swap() }, label = "open") { (shown, text) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            DestinationIcon(shown, state.installed, size = 24.dp)
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                            Text(text, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+                        }
+                    }
                 }
                 DestinationMenuButton(state, actions)
             }
-            if (destination != state.defaultDestination) {
+            // Asking or showing first, the app picked last is remembered instead.
+            if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
                 TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text(stringResource(R.string.make_default_named, destination.label()))
                 }
@@ -758,16 +861,19 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
 @Composable
 private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
     var expanded by remember { mutableStateOf(false) }
+    val press = rememberPress()
     Box {
         Button(
             onClick = { expanded = true },
             shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
             contentPadding = PaddingValues(horizontal = 14.dp),
+            interactionSource = press.source,
             modifier = Modifier
                 .fillMaxHeight()
                 .testTag(DEFAULT_MENU_TAG)
+                .then(press.modifier)
         ) {
-            AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.choose_app_button))
+            AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.choose_app_button), modifier = Modifier.flipWhen(expanded))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             state.destinations.installedFirst(state.installed).forEach { destination ->
@@ -793,7 +899,14 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
 
 @Composable
 private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    FilledTonalButton(onClick = onClick, enabled = enabled, contentPadding = ButtonDefaults.ButtonWithIconContentPadding, modifier = modifier) {
+    val press = rememberPress()
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        interactionSource = press.source,
+        modifier = modifier.then(press.modifier)
+    ) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.size(ButtonDefaults.IconSpacing))
         // Long translations wrap to a second line instead of being cut off.
@@ -802,7 +915,7 @@ private fun SecondaryAction(icon: Int, label: String, onClick: () -> Unit, modif
 }
 
 @Composable
-private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) {
+private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
     SectionHeader(
         title = stringResource(R.string.history_title),
         action = {
@@ -814,46 +927,92 @@ private fun HistorySection(history: List<HistoryEntry>, actions: ScreenActions) 
     )
     Group {
         history.forEachIndexed { index, entry ->
-            if (index > 0) GroupDivider()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { actions.onHistoryEntryClick(entry) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
+            key(entry.link.url) {
+                if (index > 0) GroupDivider()
+                // Only a row going somewhere other than the default app says where.
+                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions)
+            }
+        }
+    }
+}
+
+/**
+ * One item in Recent: its cover, what it is, and a play button, which shows the app's icon instead
+ * when it opens somewhere other than the default. Tapping the rest shows the full result; swiping
+ * either way removes it.
+ */
+@Composable
+private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions) {
+    val swipe = rememberSwipeToDismissBoxState()
+    val remove = stringResource(R.string.remove_button)
+    SwipeToDismissBox(
+        state = swipe,
+        onDismiss = { actions.onRemoveHistory(entry) },
+        backgroundContent = { RemoveBackground(swipe.dismissDirection) }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .clickable { actions.onHistoryEntryClick(entry) }
+                // Swiping isn't something TalkBack can do, so removing is an action of its own there.
+                .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
+            Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp).weight(1f)) {
+                Text(
+                    text = entry.metadata.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    // Most are songs, so only other kinds say what they are, which leaves room
+                    // for the service before the line is cut.
+                    text = listOf(
+                        if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
+                        entry.metadata.artist,
+                        stringResource(entry.link.service.labelRes)
+                    )
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            val press = rememberPress()
+            val openLabel = stringResource(R.string.history_open, entry.metadata.title)
+            IconButton(
+                onClick = { actions.onHistoryOpen(entry) },
+                interactionSource = press.source,
+                modifier = press.modifier.semantics { contentDescription = openLabel }
             ) {
-                CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
-                Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                    Text(
-                        text = entry.metadata.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        // Most are songs, so only other kinds say what they are, which leaves room
-                        // for the service before the line is cut.
-                        text = listOf(
-                            if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
-                            entry.metadata.artist,
-                            stringResource(entry.link.service.labelRes)
-                        )
-                            .filter { it.isNotBlank() }
-                            .joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                IconButton(onClick = { actions.onHistoryOpen(entry) }) {
-                    AppIcon(R.drawable.ic_open_in_new, contentDescription = stringResource(R.string.history_open, entry.metadata.title))
-                }
-                IconButton(onClick = { actions.onHistoryCopy(entry) }) {
-                    AppIcon(R.drawable.ic_content_copy, contentDescription = stringResource(R.string.history_copy, entry.metadata.title))
+                if (elsewhere != null) {
+                    DestinationIcon(elsewhere, installed, size = 24.dp)
+                } else {
+                    AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(28.dp))
                 }
             }
         }
+    }
+}
+
+/** What shows under a row as it's swiped: the error color, and a bin on the side it's going to. */
+@Composable
+private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 24.dp),
+        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+    ) {
+        AppIcon(R.drawable.ic_delete, contentDescription = null, modifier = Modifier.size(24.dp))
     }
 }
 
