@@ -85,8 +85,8 @@
     <string name="error_clipboard_empty">Kopiere zuerst einen Musik-Link.</string>
     <string name="copy_search_action">Suchtext kopieren</string>
     <string name="share_search_link">Such-Link teilen</string>
-    <string name="copy_service_link">%1$s-Link kopieren</string>
-    <string name="share_service_link">%1$s-Link teilen</string>
+    <string name="copy_original_link">Originallink kopieren</string>
+    <string name="share_original_link">Originallink teilen</string>
     <string name="search_copied_to_clipboard">Suchtext kopiert</string>
     <string name="link_copied_to_clipboard">Link kopiert</string>
     <string name="link_settings_helper_title">Neue Links erlauben</string>

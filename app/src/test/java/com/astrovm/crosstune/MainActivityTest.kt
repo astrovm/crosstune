@@ -430,10 +430,15 @@ class MainActivityTest {
         launch()
         resolveTyped()
 
-        val (copy, share) = shareChooser().customActions()
-        val spotify = string(R.string.service_spotify)
-        assertEquals(string(R.string.copy_service_link, spotify), copy.label)
-        assertEquals(string(R.string.share_service_link, spotify), share.label)
+        val chooser = shareChooser()
+        // Crosstune isn't offered in its own share sheet, which would only loop back here.
+        assertEquals(
+            listOf(ComponentName(app, MainActivity::class.java)),
+            chooser.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ComponentName::class.java)!!.toList()
+        )
+        val (copy, share) = chooser.customActions()
+        assertEquals(string(R.string.copy_original_link), copy.label)
+        assertEquals(string(R.string.share_original_link), share.label)
         val original = "https://open.spotify.com/track/$TRACK_ID"
 
         CopyLinkReceiver().onReceive(app, shadowOf(copy.action).savedIntent)

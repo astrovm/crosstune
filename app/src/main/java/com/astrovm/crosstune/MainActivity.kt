@@ -297,40 +297,45 @@ class MainActivity : ComponentActivity() {
 
     private fun shareSearch() {
         val url = viewModel.destinationUrl() ?: return
-        startActivity(shareChooser(url, viewModel.originalUrl()?.takeIf { it != url }, viewModel.uiState.link?.service))
+        startActivity(shareChooser(url, viewModel.originalUrl()?.takeIf { it != url }))
     }
 
-    /** The share sheet for [url], with buttons for the [original] link too when there's one. */
-    private fun shareChooser(url: String, original: String?, source: MusicService?): Intent {
+    /**
+     * The share sheet for [url], with buttons for the [original] link too when there's one. Crosstune
+     * itself is left out, its share sheet entries included: sharing to it from here would only loop.
+     */
+    private fun shareChooser(url: String, original: String?): Intent {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
         }
         val chooser = Intent.createChooser(shareIntent, getString(R.string.share_search_link))
-        if (source != null && original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original, getString(source.labelRes)))
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(this, MainActivity::class.java)))
+        if (original != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, originalLinkActions(original))
         }
         return chooser
     }
 
     /**
      * Share sheet buttons for the link the song came from, for a friend who uses that service:
-     * one copies it, the other shares it instead of the converted link.
+     * one copies it, the other shares it instead of the converted link. "Original" rather than the
+     * service's name, which read like the converted one's when it's e.g. YouTube and YouTube Music.
      */
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun originalLinkActions(original: String, service: String): Array<ChooserAction> {
+    private fun originalLinkActions(original: String): Array<ChooserAction> {
         val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         val copy = Intent(this, CopyLinkReceiver::class.java).putExtra(Intent.EXTRA_TEXT, original)
         return arrayOf(
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_content_copy),
-                getString(R.string.copy_service_link, service),
+                getString(R.string.copy_original_link),
                 PendingIntent.getBroadcast(this, 0, copy, flags)
             ).build(),
             ChooserAction.Builder(
                 Icon.createWithResource(this, R.drawable.ic_share),
-                getString(R.string.share_service_link, service),
-                PendingIntent.getActivity(this, 0, shareChooser(original, null, null), flags, startFromShareSheet())
+                getString(R.string.share_original_link),
+                PendingIntent.getActivity(this, 0, shareChooser(original, null), flags, startFromShareSheet())
             ).build()
         )
     }

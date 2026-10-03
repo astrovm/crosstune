@@ -85,8 +85,8 @@
     <string name="error_clipboard_empty">पहले कोई म्यूज़िक लिंक कॉपी करें।</string>
     <string name="copy_search_action">सर्च टेक्स्ट कॉपी करें</string>
     <string name="share_search_link">सर्च लिंक शेयर करें</string>
-    <string name="copy_service_link">%1$s लिंक कॉपी करें</string>
-    <string name="share_service_link">%1$s लिंक शेयर करें</string>
+    <string name="copy_original_link">मूल लिंक कॉपी करें</string>
+    <string name="share_original_link">मूल लिंक शेयर करें</string>
     <string name="search_copied_to_clipboard">सर्च टेक्स्ट कॉपी हो गया</string>
     <string name="link_copied_to_clipboard">लिंक कॉपी हो गया</string>
     <string name="link_settings_helper_title">नए लिंक की अनुमति दें</string>

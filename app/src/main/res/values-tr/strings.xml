@@ -85,8 +85,8 @@
     <string name="error_clipboard_empty">Önce bir müzik bağlantısı kopyalayın.</string>
     <string name="copy_search_action">Arama metnini kopyala</string>
     <string name="share_search_link">Arama bağlantısını paylaş</string>
-    <string name="copy_service_link">%1$s bağlantısını kopyala</string>
-    <string name="share_service_link">%1$s bağlantısını paylaş</string>
+    <string name="copy_original_link">Orijinal bağlantıyı kopyala</string>
+    <string name="share_original_link">Orijinal bağlantıyı paylaş</string>
     <string name="search_copied_to_clipboard">Arama metni kopyalandı</string>
     <string name="link_copied_to_clipboard">Bağlantı kopyalandı</string>
     <string name="link_settings_helper_title">Yeni bağlantılara izin verin</string>

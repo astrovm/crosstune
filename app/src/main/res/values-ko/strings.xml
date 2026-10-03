@@ -85,8 +85,8 @@
     <string name="error_clipboard_empty">먼저 음악 링크를 복사하세요.</string>
     <string name="copy_search_action">검색어 복사</string>
     <string name="share_search_link">검색 링크 공유</string>
-    <string name="copy_service_link">%1$s 링크 복사</string>
-    <string name="share_service_link">%1$s 링크 공유</string>
+    <string name="copy_original_link">원래 링크 복사</string>
+    <string name="share_original_link">원래 링크 공유</string>
     <string name="search_copied_to_clipboard">검색어를 복사했어요</string>
     <string name="link_copied_to_clipboard">링크를 복사했어요</string>
     <string name="link_settings_helper_title">새 링크 허용</string>
