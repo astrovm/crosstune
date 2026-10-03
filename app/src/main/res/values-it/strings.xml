@@ -134,7 +134,7 @@
     <string name="guide_may_differ">Sul tuo telefono potrebbe apparire un po\' diverso.</string>
     <string name="setup_apps_stop_body">Scegli “Nel browser” o disattiva “Apri link supportati”.</string>
     <string name="setup_apps_progress">App %1$d di %2$d</string>
-    <string name="setup_apps_all_done">Fatto. Queste app non aprono più i link.</string>
+    <string name="setup_apps_all_done">Fatto. Nessun’altra app apre più i link.</string>
     <string name="setup_allow_all_done">Fatto. Ora questi link si aprono in Crosstune.</string>
     <string name="setup_skip_for_now">Non ora</string>
     <string name="setup_fixed">Risolto</string>

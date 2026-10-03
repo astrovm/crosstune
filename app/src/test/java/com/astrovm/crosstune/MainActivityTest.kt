@@ -1154,10 +1154,12 @@ class MainActivityTest {
         typeUrl(TRACK_ID)
         click(string(R.string.resolve_button))
         waitForText(string(R.string.error_network))
+        // Converting the same text again is what Try again is for, so there's one button for it.
+        assertTextAbsent(string(R.string.resolve_button))
 
         // Retry without editing the input, so only the resolution itself can clear the error.
         respondWithTrack("Recovered", "Artist · Song")
-        click(string(R.string.resolve_button))
+        click(string(R.string.retry_button))
         waitForText("Recovered")
         assertTextAbsent(string(R.string.error_network))
     }
@@ -1339,6 +1341,8 @@ class MainActivityTest {
         )
         for ((code, message) in cases) {
             fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Error", "Page"), code = code) }
+            // Typed afresh, as converting the text an error is shown for again isn't offered.
+            typeUrl("")
             typeUrl(TRACK_ID)
             click(string(R.string.resolve_button))
             waitForText(string(message))

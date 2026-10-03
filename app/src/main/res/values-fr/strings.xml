@@ -133,7 +133,7 @@
     <string name="guide_may_differ">Votre téléphone peut être un peu différent.</string>
     <string name="setup_apps_stop_body">Choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="setup_apps_progress">Application %1$d sur %2$d</string>
-    <string name="setup_apps_all_done">C’est fait. Ces applis n’ouvrent plus les liens.</string>
+    <string name="setup_apps_all_done">C’est fait. Aucune autre appli n’ouvre plus les liens.</string>
     <string name="setup_allow_all_done">C’est fait. Ces liens s’ouvrent maintenant dans Crosstune.</string>
     <string name="setup_skip_for_now">Plus tard</string>
     <string name="setup_fixed">Réglé</string>

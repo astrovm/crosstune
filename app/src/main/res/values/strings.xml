@@ -149,7 +149,7 @@
     <string name="guide_may_differ">Your phone may look a bit different.</string>
     <string name="setup_apps_stop_body">Pick “In your browser”, or turn off “Open supported links”.</string>
     <string name="setup_apps_progress">App %1$d of %2$d</string>
-    <string name="setup_apps_all_done">Done. These apps don\'t open the links anymore.</string>
+    <string name="setup_apps_all_done">Done. No other app opens the links now.</string>
     <string name="setup_allow_all_done">All set. These links open in Crosstune now.</string>
     <string name="setup_skip_for_now">Skip for now</string>
     <string name="setup_fixed">Fixed</string>

@@ -133,7 +133,7 @@
     <string name="guide_may_differ">Seu celular pode parecer um pouco diferente.</string>
     <string name="setup_apps_stop_body">Escolha “No navegador” ou desative “Abrir links compatíveis”.</string>
     <string name="setup_apps_progress">App %1$d de %2$d</string>
-    <string name="setup_apps_all_done">Pronto. Esses apps não abrem mais os links.</string>
+    <string name="setup_apps_all_done">Pronto. Nenhum outro app abre os links agora.</string>
     <string name="setup_allow_all_done">Pronto. Esses links agora abrem no Crosstune.</string>
     <string name="setup_skip_for_now">Agora não</string>
     <string name="setup_fixed">Resolvido</string>

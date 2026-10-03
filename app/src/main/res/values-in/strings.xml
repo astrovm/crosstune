@@ -133,7 +133,7 @@
     <string name="guide_may_differ">Tampilan di ponselmu mungkin sedikit berbeda.</string>
     <string name="setup_apps_stop_body">Pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
-    <string name="setup_apps_all_done">Beres. Aplikasi ini tidak membuka link itu lagi.</string>
+    <string name="setup_apps_all_done">Beres. Sekarang tidak ada aplikasi lain yang membuka link itu.</string>
     <string name="setup_allow_all_done">Beres. Link ini sekarang terbuka di Crosstune.</string>
     <string name="setup_skip_for_now">Nanti saja</string>
     <string name="setup_fixed">Beres</string>

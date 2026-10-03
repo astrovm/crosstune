@@ -133,7 +133,7 @@
     <string name="guide_may_differ">На вашем телефоне экран может немного отличаться.</string>
     <string name="setup_apps_stop_body">Выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
     <string name="setup_apps_progress">Приложение %1$d из %2$d</string>
-    <string name="setup_apps_all_done">Готово. Эти приложения больше не открывают ссылки.</string>
+    <string name="setup_apps_all_done">Готово. Другие приложения больше не открывают ссылки.</string>
     <string name="setup_allow_all_done">Готово. Теперь эти ссылки открываются в Crosstune.</string>
     <string name="setup_skip_for_now">Не сейчас</string>
     <string name="setup_fixed">Исправлено</string>

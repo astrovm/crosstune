@@ -103,7 +103,9 @@ internal fun SettingsScreen(
                     modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    // Like every other app and site, it's shown with its icon: its first letter.
+                    DestinationIcon(custom, state.installed)
+                    Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
                         Text(custom.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             custom.template,

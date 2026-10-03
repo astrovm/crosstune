@@ -520,12 +520,15 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         .heightIn(min = 52.dp)
     val canConvert = !busy && state.linkText.isNotBlank()
     val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
-    // The text the result on screen came from: converting it again would change nothing.
-    val resultText = rememberSaveable(state.result) { state.linkText }
+    // The text the result or error on screen came from: converting it again would change nothing,
+    // and an error that's worth retrying has its own Try again.
+    val shownText = rememberSaveable(state.result, state.error) { state.linkText }
+    val shown = (state.result != null || state.error != null) && state.linkText == shownText
+    if (shown) return
     // The main action until there's a result; then the result's Open button is.
     if (state.result == null) {
         Button(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
-    } else if (state.linkText != resultText) {
+    } else {
         FilledTonalButton(onClick = resolve, enabled = canConvert, modifier = convertModifier) { convertLabel() }
     }
 }

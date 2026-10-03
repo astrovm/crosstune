@@ -133,7 +133,7 @@
     <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
     <string name="setup_apps_stop_body">\'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="setup_apps_progress">앱 %1$d/%2$d</string>
-    <string name="setup_apps_all_done">완료했어요. 이제 이 앱들은 링크를 열지 않아요.</string>
+    <string name="setup_apps_all_done">완료했어요. 이제 다른 앱이 링크를 열지 않아요.</string>
     <string name="setup_allow_all_done">완료했어요. 이제 이 링크는 Crosstune에서 열려요.</string>
     <string name="setup_skip_for_now">나중에</string>
     <string name="setup_fixed">해결됨</string>

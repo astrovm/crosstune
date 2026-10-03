@@ -134,7 +134,7 @@
     <string name="guide_may_differ">お使いのスマートフォンでは少し違って見えることがあります。</string>
     <string name="setup_apps_stop_body">「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_apps_progress">アプリ %1$d / %2$d</string>
-    <string name="setup_apps_all_done">完了しました。これらのアプリはもうリンクを開きません。</string>
+    <string name="setup_apps_all_done">完了しました。ほかのアプリはもうリンクを開きません。</string>
     <string name="setup_allow_all_done">完了しました。これらのリンクは Crosstune で開くようになりました。</string>
     <string name="setup_skip_for_now">後で</string>
     <string name="setup_fixed">解決済み</string>

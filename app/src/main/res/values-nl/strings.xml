@@ -133,7 +133,7 @@
     <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
     <string name="setup_apps_stop_body">Kies ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
-    <string name="setup_apps_all_done">Klaar. Deze apps openen de links niet meer.</string>
+    <string name="setup_apps_all_done">Klaar. Geen andere app opent de links nog.</string>
     <string name="setup_allow_all_done">Klaar. Deze links openen nu in Crosstune.</string>
     <string name="setup_skip_for_now">Later</string>
     <string name="setup_fixed">Opgelost</string>
