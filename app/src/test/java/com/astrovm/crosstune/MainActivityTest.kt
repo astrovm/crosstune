@@ -280,6 +280,18 @@ class MainActivityTest {
     }
 
     @Test
+    fun aNowPlayingShareInSpanishWithAnAmpersandOpensInTheMusicApp() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Canción de Simon & Garfunkel\nhttps://www.google.com/search?q=Canción+de+Simon+&+Garfunkel")
+        })
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://music.youtube.com/search?q=Canci%C3%B3n%20Simon%20%26%20Garfunkel", nextStartedActivity()!!.dataString)
+        assertEquals(MusicMetadata("Canción", "Simon & Garfunkel"), HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
     fun aGoogleSearchThatOnlyContainsByIsNotASong() {
         val activity = launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
@@ -1138,7 +1150,7 @@ class MainActivityTest {
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
         click(string(R.string.paste_button))
         waitForText("A Song")
-        val shown = "A Song by Example Band https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        val shown = "A Song by Example Band https://www.google.com/search?q=A+Song+by+Example+Band"
         composeRule.onNode(hasSetTextAction()).assert(hasText(shown, substring = false)).performImeAction()
         waitForText("A Song")
         assertTextAbsent(string(R.string.error_invalid_url))
