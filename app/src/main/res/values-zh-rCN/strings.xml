@@ -89,6 +89,7 @@
     <string name="tile_label">打开已复制的音乐链接</string>
     <string name="shortcut_paste_short">打开已复制的链接</string>
     <string name="shortcut_paste_long">打开已复制的音乐链接</string>
+    <string name="widget_description">最近的歌曲，以及打开复制的链接</string>
     <string name="error_clipboard_empty">请先复制音乐链接。</string>
     <string name="copy_search_action">复制搜索文字</string>
     <string name="share_search_link">分享搜索链接</string>

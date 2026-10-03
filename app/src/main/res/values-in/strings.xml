@@ -89,6 +89,7 @@
     <string name="tile_label">Buka link musik yang disalin</string>
     <string name="shortcut_paste_short">Buka link disalin</string>
     <string name="shortcut_paste_long">Buka link musik yang disalin</string>
+    <string name="widget_description">Lagu terbaru, dan buka link yang disalin</string>
     <string name="error_clipboard_empty">Salin link musik dulu.</string>
     <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_link">Bagikan link pencarian</string>

@@ -89,6 +89,7 @@
     <string name="tile_label">कॉपी किया म्यूज़िक लिंक खोलें</string>
     <string name="shortcut_paste_short">कॉपी किया लिंक खोलें</string>
     <string name="shortcut_paste_long">कॉपी किया म्यूज़िक लिंक खोलें</string>
+    <string name="widget_description">हाल के गाने, और कॉपी किया लिंक खोलें</string>
     <string name="error_clipboard_empty">पहले कोई म्यूज़िक लिंक कॉपी करें।</string>
     <string name="copy_search_action">सर्च टेक्स्ट कॉपी करें</string>
     <string name="share_search_link">सर्च लिंक शेयर करें</string>

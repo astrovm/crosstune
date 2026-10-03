@@ -89,6 +89,7 @@
     <string name="tile_label">Otwórz skopiowany link muzyczny</string>
     <string name="shortcut_paste_short">Otwórz skopiowany link</string>
     <string name="shortcut_paste_long">Otwórz skopiowany link muzyczny</string>
+    <string name="widget_description">Ostatnie utwory i otwieranie skopiowanego linku</string>
     <string name="error_clipboard_empty">Najpierw skopiuj link muzyczny.</string>
     <string name="copy_search_action">Kopiuj tekst wyszukiwania</string>
     <string name="share_search_link">Udostępnij link wyszukiwania</string>

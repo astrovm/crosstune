@@ -89,6 +89,7 @@
     <string name="tile_label">복사한 음악 링크 열기</string>
     <string name="shortcut_paste_short">복사한 링크 열기</string>
     <string name="shortcut_paste_long">복사한 음악 링크 열기</string>
+    <string name="widget_description">최근 노래와 복사한 링크 열기</string>
     <string name="error_clipboard_empty">먼저 음악 링크를 복사하세요.</string>
     <string name="copy_search_action">검색어 복사</string>
     <string name="share_search_link">검색 링크 공유</string>
