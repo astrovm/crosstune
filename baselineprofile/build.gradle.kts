@@ -37,6 +37,6 @@ dependencies {
     constraints {
         // benchmark-macro 1.5.0 brings Wire 6.4.0, which has a decoder crash (Dependabot alert 56).
         // Drop this once a newer benchmark-macro brings 6.4.5 or later.
-        implementation("com.squareup.wire:wire-runtime:6.4.7")
+        implementation("com.squareup.wire:wire-runtime:7.1.0")
     }
 }
