@@ -41,12 +41,20 @@
       "Sin cuenta. El historial se queda en tu celular."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Bajala de Google Play",
+  "play_steps": [
+    "Unite al grupo <a href=\"{group}\">Crosstune testers</a> con tu cuenta de Google Play.",
+    "Abrí la <a href=\"{testing}\">página de prueba</a> y tocá <b>Become a tester</b>.",
+    "Instalá Crosstune desde <a href=\"{store}\">Google Play</a>."
+  ],
+  "play_note": "Crosstune está en prueba en Google Play. Puede tardar unos minutos en aparecer.",
   "works_with": "Funciona con",
   "made_with": "Hecho con {heart} por astro",
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 1 de octubre de 2026",
+  "updated": "Última actualización: 3 de octubre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "Para resolver un link de música, Crosstune le pide su página pública o su API pública al servicio de origen. También carga la portada desde los servidores de imágenes del servicio. Los servicios de origen compatibles incluyen Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud y Bandcamp."
+      "Para resolver un link de música, Crosstune le pide su página pública o su API pública al servicio de origen. También carga la portada desde los servidores de imágenes del servicio. Los servicios de origen compatibles incluyen Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp y Audiomack."
     ],
     [
       "p",
-      "Cuando “Abrir la coincidencia exacta” está activado, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube o Bandcamp. Podés desactivar esta opción en Configuración. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
+      "Cuando “Abrir la coincidencia exacta” está activado, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube o Bandcamp. Podés desactivar esta opción en Configuración. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Cuando usás “Reproducir todo” en una playlist o un álbum, la app envía el título y el artista de cada canción a la búsqueda de YouTube Music, y después envía la lista de videos encontrados a YouTube, que devuelve una playlist temporal. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
     ],
     [
       "p",

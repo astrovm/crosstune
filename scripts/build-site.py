@@ -34,6 +34,12 @@ SERVICES = [
 ]
 # Web frontends with no logo of their own: their first letter on a tile, as in the app (Frontend.color).
 FRONTENDS = [("Invidious", "#2E8FE0"), ("Piped", "#E5482F")]
+# Links in the Google Play steps. The app is in closed testing, so testers join the group first.
+PLAY_LINKS = {
+    "group": "https://groups.google.com/g/crosstune-testers",
+    "testing": "https://play.google.com/apps/testing/com.astrovm.crosstune",
+    "store": "https://play.google.com/store/apps/details?id=com.astrovm.crosstune",
+}
 
 
 def services():
@@ -123,10 +129,11 @@ def main():
             f'<div><h3>{h}</h3><p>{p}</p></div></div>'
             for icon, (h, p) in zip(FEATURE_ICONS, s["cards"])
         )
+        play_steps = "\n".join(f"        <li>{step.format(**PLAY_LINKS)}</li>" for step in s["play_steps"])
         out = DOCS if code == "en" else DOCS / code
         out.mkdir(parents=True, exist_ok=True)
         (out / "index.html").write_text(fill(index, {
-            **text, **common, "cards": cards, "services": services(),
+            **text, **common, "cards": cards, "play_steps": play_steps, "services": services(),
             "alternates": alternates(strings, ""),
             "language_picker": picker(strings, code, ""),
             "language_script": script(strings, code, ""),

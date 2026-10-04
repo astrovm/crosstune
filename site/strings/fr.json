@@ -41,12 +41,20 @@
       "Aucun compte. L'historique reste sur votre téléphone."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Disponible sur Google Play",
+  "play_steps": [
+    "Rejoins le groupe <a href=\"{group}\">Crosstune testers</a> avec ton compte Google Play.",
+    "Ouvre la <a href=\"{testing}\">page de test</a> et appuie sur <b>Become a tester</b>.",
+    "Installe Crosstune depuis <a href=\"{store}\">Google Play</a>."
+  ],
+  "play_note": "Crosstune est en test sur Google Play. Il peut mettre quelques minutes à apparaître.",
   "works_with": "Compatible avec",
   "made_with": "Fait avec {heart} par astro",
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 1er octobre 2026",
+  "updated": "Dernière mise à jour : 3 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud et Bandcamp."
+      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack."
     ],
     [
       "p",
-      "Quand « Ouvrir le résultat exact » est activé, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube ou Bandcamp. Vous pouvez désactiver cette option dans les Paramètres. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
+      "Quand « Ouvrir le résultat exact » est activé, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube ou Bandcamp. Vous pouvez désactiver cette option dans les Paramètres. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Quand vous utilisez « Tout lire » sur une playlist ou un album, l'application envoie le titre et l'artiste de chaque morceau à la recherche de YouTube Music, puis envoie la liste des vidéos trouvées à YouTube, qui renvoie une playlist temporaire. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
     ],
     [
       "p",

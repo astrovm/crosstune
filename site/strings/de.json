@@ -41,12 +41,20 @@
       "Kein Konto. Der Verlauf bleibt auf deinem Handy."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Bei Google Play holen",
+  "play_steps": [
+    "Tritt der Gruppe <a href=\"{group}\">Crosstune testers</a> mit deinem Google-Play-Konto bei.",
+    "Öffne die <a href=\"{testing}\">Testseite</a> und tippe auf <b>Become a tester</b>.",
+    "Installiere Crosstune über <a href=\"{store}\">Google Play</a>."
+  ],
+  "play_note": "Crosstune ist bei Google Play im Test. Es kann ein paar Minuten dauern, bis es erscheint.",
   "works_with": "Funktioniert mit",
   "made_with": "Mit {heart} gemacht von astro",
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 1. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 3. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud und Bandcamp."
+      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack."
     ],
     [
       "p",
-      "Wenn „Genauen Treffer öffnen“ aktiviert ist, sendet die App Titel und Künstler des Eintrags an den Suchdienst des Ziels: Apple Music, Deezer, YouTube Music, YouTube oder Bandcamp. Du kannst diese Option in den Einstellungen deaktivieren. Wenn du ein Ziel öffnest, erhält die gewählte App oder Website den Ziel-Link oder die Suchbegriffe. Eigene Ziele erhalten die Suchbegriffe in der URL-Vorlage, die du einrichtest. Wenn du ein Ergebnis teilst, geht es an die App oder Person, die du auswählst."
+      "Wenn „Genauen Treffer öffnen“ aktiviert ist, sendet die App Titel und Künstler des Eintrags an den Suchdienst des Ziels: Apple Music, Deezer, YouTube Music, YouTube oder Bandcamp. Du kannst diese Option in den Einstellungen deaktivieren. Wenn du ein Ziel öffnest, erhält die gewählte App oder Website den Ziel-Link oder die Suchbegriffe. Wenn du „Alle abspielen“ bei einer Playlist oder einem Album nutzt, sendet die App Titel und Künstler jedes Songs an die Suche von YouTube Music und danach die Liste der gefundenen Videos an YouTube, das eine temporäre Playlist zurückgibt. Eigene Ziele erhalten die Suchbegriffe in der URL-Vorlage, die du einrichtest. Wenn du ein Ergebnis teilst, geht es an die App oder Person, die du auswählst."
     ],
     [
       "p",
