@@ -44,7 +44,8 @@ class MainActivity : ComponentActivity() {
                 val client = httpClientFactory()
                 MainViewModel(
                     LinkResolver(client),
-                    ExactMatcher(client),
+                    // What was found for songs is kept, so a playlist played again needs no lookups.
+                    ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher)),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
@@ -76,6 +77,10 @@ class MainActivity : ComponentActivity() {
         /** Where Android is asked about apps and links; tests run it in step with the screen. */
         @VisibleForTesting
         internal var systemDispatcher: CoroutineDispatcher = Dispatchers.Default
+
+        /** Where what's found for songs is read and written; tests do it in step with the screen. */
+        @VisibleForTesting
+        internal var lookupDispatcher: CoroutineDispatcher = Dispatchers.IO
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

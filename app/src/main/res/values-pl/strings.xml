@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">Utwory</string>
     <string name="play_all_button">Odtwórz wszystko</string>
     <string name="play_all_progress">Szukanie utworów… %1$d z %2$d</string>
+    <string name="play_all_in">Odtwórz wszystko w %1$s</string>
+    <string name="play_first_in">Odtwórz pierwszy utwór w %1$s</string>
+    <string name="play_part">Odtwórz od %1$d do %2$d</string>
+    <string name="songs_shown">Pierwsze %1$d z %2$d</string>
     <string name="clear_history_button">Wyczyść historię</string>
     <string name="tile_label">Otwórz skopiowany link muzyczny</string>
     <string name="shortcut_paste_short">Otwórz skopiowany link</string>

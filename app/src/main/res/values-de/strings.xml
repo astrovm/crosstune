@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">Songs</string>
     <string name="play_all_button">Alle abspielen</string>
     <string name="play_all_progress">Songs werden gesucht… %1$d von %2$d</string>
+    <string name="play_all_in">Alle in %1$s abspielen</string>
+    <string name="play_first_in">Ersten Song in %1$s abspielen</string>
+    <string name="play_part">%1$d bis %2$d abspielen</string>
+    <string name="songs_shown">Erste %1$d von %2$d</string>
     <string name="clear_history_button">Verlauf löschen</string>
     <string name="tile_label">Kopierten Musik-Link öffnen</string>
     <string name="shortcut_paste_short">Kopierten Link öffnen</string>

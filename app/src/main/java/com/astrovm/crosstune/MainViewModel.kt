@@ -50,6 +50,8 @@ internal data class UiState(
     val showSongFirst: Boolean = false,
     /** While Play all matches a collection's songs: how many have been looked up, out of how many. */
     val queueProgress: Pair<Int, Int>? = null,
+    /** Where in the list the songs Play all is matching start, so a later part shows its progress by itself. */
+    val queueFrom: Int = 0,
     /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
     val afterLookup: AfterLookup = AfterLookup.OPEN,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */
@@ -99,6 +101,14 @@ internal data class UiState(
     /** Set for every link from another app until the screen has left settings, even for a repeated link. */
     val leaveSettings: Boolean = false
 ) {
+    /**
+     * A playlist with its songs listed, which play from here: elsewhere than its own service, or
+     * YouTube's, where it opens as itself, a search for its name rarely finds it.
+     */
+    val isSongList: Boolean
+        get() = result?.type == ItemType.PLAYLIST && result.tracks.isNotEmpty() && link?.service != resultDestination.matchService &&
+            link?.youtubePlaylistOn(resultDestination.matchService) == null
+
     /**
      * Whether a collection's songs can play as one queue where it goes: YouTube Music and YouTube
      * make one for any list of videos. A YouTube playlist opens as itself there instead.
@@ -443,7 +453,31 @@ internal class MainViewModel(
             destinationUrls = savedDestinations(entry),
             history = history
         )
+        loadTrackCovers()
         prepareResult()
+    }
+
+    private var coverJob: Job? = null
+
+    /**
+     * Covers for a playlist's songs that came without one, shown as they're found and kept with
+     * it in Recent, so it shows them all straight away next time.
+     */
+    private fun loadTrackCovers() {
+        coverJob?.cancel()
+        val link = uiState.link ?: return
+        val result = uiState.result?.takeIf { it.type == ItemType.PLAYLIST } ?: return
+        val missing = result.tracks.indices.filter { result.tracks[it].artworkUrl == null }.take(MAX_COVER_LOOKUPS)
+        if (missing.isEmpty()) return
+        coverJob = viewModelScope.launch {
+            val tracks = result.tracks.toMutableList()
+            matcher.covers(missing.map(tracks::get)) { found, cover ->
+                tracks[missing[found]] = tracks[missing[found]].copy(artworkUrl = cover)
+                // Only while it's still the one on screen.
+                if (uiState.link?.url == link.url) uiState = uiState.copy(result = uiState.result?.copy(tracks = tracks.toList()))
+            }
+            uiState = uiState.copy(history = historyStore.update(link.url, result.copy(tracks = tracks.toList())))
+        }
     }
 
     /** The links saved with [entry] that are still good: found with exact matching as it's set now. */
@@ -499,14 +533,17 @@ internal class MainViewModel(
 
     private var trackJob: Job? = null
 
-    /** Plays the result's songs, up to [MAX_QUEUE], as one queue in YouTube Music or YouTube. */
-    fun playAll() {
+    /**
+     * Plays the result's songs as one queue in YouTube Music or YouTube, [MAX_QUEUE] at most, which
+     * is all YouTube takes: a longer list plays in parts, [from] the first song of one.
+     */
+    fun playAll(from: Int) {
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
-        val tracks = uiState.result?.tracks.orEmpty().take(MAX_QUEUE)
+        val tracks = uiState.result?.tracks.orEmpty().drop(from).take(MAX_QUEUE)
         trackJob?.cancel()
         trackJob = viewModelScope.launch {
-            uiState = uiState.copy(queueProgress = 0 to tracks.size)
+            uiState = uiState.copy(queueProgress = 0 to tracks.size, queueFrom = from)
             try {
                 val url = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
                 if (url == null) showError(AppError.NOT_FOUND) else effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
@@ -521,6 +558,11 @@ internal class MainViewModel(
         val destination = uiState.resultDestination
         trackJob?.cancel()
         trackJob = viewModelScope.launch {
+            // A song from a playlist on the same service is opened by its own link.
+            track.url?.takeIf { destination.matchService != null && MusicLinks.serviceFor(it) == destination.matchService }?.let { url ->
+                effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
+                return@launch
+            }
             val exactUrl = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
                 uiState = uiState.copy(isMatching = true)
                 try {
@@ -613,6 +655,7 @@ internal class MainViewModel(
 
     fun showHistoryEntry(entry: HistoryEntry) {
         selectHistoryEntry(entry)
+        loadTrackCovers()
         prepareResultDestination()
     }
 
@@ -886,6 +929,8 @@ internal class MainViewModel(
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
+        /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */
+        private const val MAX_COVER_LOOKUPS = 100
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
         private const val KEY_SETUP_COMPLETE = "setup_complete"

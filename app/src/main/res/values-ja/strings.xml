@@ -86,6 +86,10 @@
     <string name="playlist_songs_title">曲</string>
     <string name="play_all_button">すべて再生</string>
     <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>
+    <string name="play_all_in">%1$s ですべて再生</string>
+    <string name="play_first_in">%1$s で最初の曲を再生</string>
+    <string name="play_part">%1$d〜%2$d 曲目を再生</string>
+    <string name="songs_shown">%2$d 曲中 最初の %1$d 曲</string>
     <string name="clear_history_button">履歴を消去</string>
     <string name="tile_label">コピーした音楽リンクを開く</string>
     <string name="shortcut_paste_short">コピーしたリンクを開く</string>

@@ -86,6 +86,10 @@
     <string name="playlist_songs_title">Brani</string>
     <string name="play_all_button">Riproduci tutto</string>
     <string name="play_all_progress">Ricerca dei brani… %1$d di %2$d</string>
+    <string name="play_all_in">Riproduci tutto in %1$s</string>
+    <string name="play_first_in">Riproduci il primo brano in %1$s</string>
+    <string name="play_part">Riproduci da %1$d a %2$d</string>
+    <string name="songs_shown">Primi %1$d di %2$d</string>
     <string name="clear_history_button">Cancella cronologia</string>
     <string name="tile_label">Apri link musicale copiato</string>
     <string name="shortcut_paste_short">Apri link copiato</string>

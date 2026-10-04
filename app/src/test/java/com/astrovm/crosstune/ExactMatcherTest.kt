@@ -331,4 +331,44 @@ class ExactMatcherTest {
         // Nothing matched, nothing to play.
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
     }
+
+    @Test
+    fun aPlaylistsSongsGetTheirOwnCoversAndWhatsFoundIsRemembered() = runBlocking {
+        val file = kotlin.io.path.createTempDirectory("lookups").toFile().resolve("lookups.json")
+        fake.handler = { request ->
+            when (request.url.host) {
+                // A Spotify song's cover comes from its own link.
+                "open.spotify.com" -> FakeSpotify.html(request, """{"thumbnail_url":"https://i.scdn.co/image/own"}""")
+                else -> FakeSpotify.html(request, """{"data":[{"title":"Named","artist":{"name":"Band"},"album":{"cover_big":"https://cdn/named.jpg"}}]}""")
+            }
+        }
+        val tracks = listOf(
+            MusicMetadata("Own", "Band", url = "https://open.spotify.com/track/own"),
+            MusicMetadata("Named", "Band"),
+            MusicMetadata("Unknown", "Nobody")
+        )
+        val found = mutableMapOf<Int, String>()
+        val matcher = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, LookupCache(file, kotlinx.coroutines.Dispatchers.Unconfined))
+        matcher.covers(tracks) { index, cover -> found[index] = cover }
+        assertEquals(mapOf(0 to "https://i.scdn.co/image/own", 1 to "https://cdn/named.jpg"), found)
+        assertTrue(fake.requestedUrls.first { "spotify" in it }.startsWith("https://open.spotify.com/oembed?url=https"))
+
+        // Found again without asking, even after a restart; what wasn't found is asked again.
+        fake.requestedUrls.clear()
+        val restarted = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, LookupCache(file, kotlinx.coroutines.Dispatchers.Unconfined))
+        found.clear()
+        restarted.covers(tracks) { index, cover -> found[index] = cover }
+        assertEquals(2, found.size)
+        assertEquals(1, fake.requestedUrls.size)
+        assertEquals("https://cdn/named.jpg", restarted.cover(tracks[1]))
+
+        // A song matched once is found again the same way.
+        respond("""{"data":[{"title":"Named","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
+        assertEquals("https://www.deezer.com/track/1", restarted.find(MusicService.DEEZER, tracks[1]))
+        fake.handler = { throw IOException("offline") }
+        assertEquals("https://www.deezer.com/track/1", restarted.find(MusicService.DEEZER, tracks[1]))
+        // Apps that need an account to search aren't asked.
+        assertNull(restarted.find(MusicService.TIDAL, tracks[1]))
+        assertNull(restarted.cover(tracks[2]))
+    }
 }

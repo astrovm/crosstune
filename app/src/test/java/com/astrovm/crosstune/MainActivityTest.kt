@@ -53,6 +53,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import okhttp3.Request
+import java.io.File
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -90,8 +92,11 @@ class MainActivityTest {
         MainActivity.httpClientFactory = { fake.client() }
         // What Android says about apps and links is read as the screen asks, so each step sees it.
         MainActivity.systemDispatcher = Dispatchers.Unconfined
+        MainActivity.lookupDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
         prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
+        // What an earlier test found for a song would be found again without asking.
+        File(app.cacheDir, "lookups.json").delete()
     }
 
     @After
@@ -99,6 +104,7 @@ class MainActivityTest {
         runCatching { controller?.pause()?.stop()?.destroy() }
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
+        MainActivity.lookupDispatcher = Dispatchers.IO
     }
 
     // region helpers
@@ -665,11 +671,119 @@ class MainActivityTest {
         val chooser = nextStartedActivity()!!
         assertEquals("Band - First Song\nSecond Song", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
 
+        // Playing them all is the main button, rather than a search for the playlist's name.
+        assertTextAbsent(string(R.string.search_in_destination, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         // Play all matches each song and opens YouTube's temporary playlist of them.
-        click(string(R.string.play_all_button))
+        click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
         assertFalse(activity.isFinishing)
+
+        // The songs found are remembered, so playing them again only asks YouTube for the queue.
+        fake.requestBodies.clear()
+        click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+        assertEquals(listOf("Second Song"), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
+    }
+
+    @Test
+    fun anAlbumOpensAsItselfAndItsSongsCanStillPlayAllAtOnce() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        collectionWithSongs(title = "Album", type = "album")
+        launch()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        waitForText("First Song")
+        assertTextShown(string(R.string.search_in_destination, string(MusicService.YOUTUBE_MUSIC.labelRes)))
+        click(string(R.string.play_all_button))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aPlaylistShowsEachSongsCoverAndPlaysFromItsFirstSongElsewhere() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        val firstCover = "https://i.scdn.co/image/first"
+        val secondCover = "https://image-cdn-ak.spotifycdn.com/image/second"
+        // The playlist's page has its first songs' covers, in base64-encoded data.
+        val state = """{"entities":{"items":{"spotify:playlist:x":{"content":{"items":[{"itemV2":{"data":{"uri":"spotify:track:first",
+            "albumOfTrack":{"coverArt":{"sources":[{"width":640,"url":"https://i.scdn.co/image/big"},{"width":300,"url":"$firstCover"}]}}}}}]}}}}}"""
+        val page = FakeSpotify.trackPage("Road Trip | Spotify", "Playlist") + """<meta name="music:song_count" content="150"/>""" +
+            """<script id="initialState" type="text/plain">${java.util.Base64.getEncoder().encodeToString(state.toByteArray())}</script>"""
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band","uri":"spotify:track:first"},{"title":"Second Song","subtitle":"Band","uri":"spotify:track:second"}]}}}}}}</script>"""
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                // The rest are looked up by their own link.
+                request.url.encodedPath == "/oembed" -> FakeSpotify.html(request, """{"thumbnail_url":"$secondCover"}""")
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, page)
+                else -> FakeSpotify.image(request, FakeSpotify.png())
+            }
+        }
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        // Spotify only shows the first ones without signing in.
+        assertTextShown(string(R.string.songs_shown, 2, 150))
+        // Every song's cover shows, and is kept with the playlist in Recent.
+        waitUntil { HistoryStore(prefs()).load().first().metadata.tracks.map { it.artworkUrl } == listOf(firstCover, secondCover) }
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(ARTWORK_TAG, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
+
+        // Deezer can't queue them, so the button plays the first.
+        click(string(R.string.play_first_in, string(MusicService.DEEZER.labelRes)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/First%20Song%20Band", nextStartedActivity()!!.dataString)
+        assertFalse(activity.isFinishing)
+
+        // Shown again from Recent, it needs no lookups.
+        click(string(R.string.clear_button))
+        fake.requestedUrls.clear()
+        composeRule.onNodeWithText("Road Trip").performScrollTo().performClick()
+        waitForText("Second Song")
+        assertTrue(fake.requestedUrls.none { "spotify.com" in it })
+
+        // On Spotify itself it opens as itself, and each song by its own link.
+        ViewModelProvider(activity)[MainViewModel::class.java].selectResultDestination(Destination.Service(MusicService.SPOTIFY))
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.play_first_in, string(MusicService.SPOTIFY.labelRes)))
+        composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://open.spotify.com/track/second", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aLongPlaylistPlaysInPartsOfWhatYouTubeTakes() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
+        fake.handler = { request ->
+            val body = fake.requestBodies.last()
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
+                    .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
+                // Each song is found as itself, its video named after its number.
+                request.url.host == "music.youtube.com" -> {
+                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                        "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                        "playlistItemData":{"videoId":"${number.padStart(11, '0')}"}}}]}""")
+                }
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Long | Spotify", "Playlist"))
+                // Covers, which don't matter here.
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
+        }
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("Song 1")
+        composeRule.onNodeWithText(string(R.string.play_part, 51, 60)).performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=00000000051&list=TLGGpart", nextStartedActivity()!!.dataString)
+        // Only those ten were looked up.
+        assertEquals(10, fake.requestedUrls.count { "music.youtube.com" in it })
     }
 
     @Test
@@ -680,7 +794,7 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("First Song")
         fake.handler = { request -> FakeSpotify.html(request, """{"contents":[]}""") }
-        click(string(R.string.play_all_button))
+        click(string(R.string.play_all_in, string(MusicService.YOUTUBE.labelRes)))
         waitForText(string(R.string.error_not_found))
         assertNull(nextStartedActivity())
 
@@ -3977,6 +4091,7 @@ class MainActivityTest {
         // A video no song matches, like a tutorial, keeps its own picture.
         controller!!.pause().stop().destroy()
         HistoryStore(prefs()).clear()
+        File(app.cacheDir, "lookups.json").delete()
         respond("""{"data":[{"title":"Blinding Lights","artist":{"name":"Someone Else"},"album":{"cover_big":"$cover"}}]}""")
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=4NRXx6U8ABQ")))
         waitForText("Blinding Lights")

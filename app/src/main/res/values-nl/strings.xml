@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">Nummers</string>
     <string name="play_all_button">Alles afspelen</string>
     <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>
+    <string name="play_all_in">Alles afspelen in %1$s</string>
+    <string name="play_first_in">Eerste nummer afspelen in %1$s</string>
+    <string name="play_part">%1$d tot %2$d afspelen</string>
+    <string name="songs_shown">Eerste %1$d van %2$d</string>
     <string name="clear_history_button">Geschiedenis wissen</string>
     <string name="tile_label">Gekopieerde muzieklink openen</string>
     <string name="shortcut_paste_short">Gekopieerde link openen</string>

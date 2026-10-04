@@ -44,7 +44,6 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -140,7 +139,8 @@ internal data class ScreenActions(
     val onRemoveHistory: (HistoryEntry) -> Unit = {},
     val onOpenTrack: (MusicMetadata) -> Unit = {},
     val onCopySongs: () -> Unit = {},
-    val onPlayAll: () -> Unit = {},
+    /** Plays the songs as one queue, from the given one, as many as YouTube takes. */
+    val onPlayAll: (Int) -> Unit = {},
     val onShareSongs: () -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
@@ -359,11 +359,12 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkField(state, actions)
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
-        AnimatedContent(targetState = state.result, transitionSpec = { swap() }, label = "result") { result ->
+        // Covers found for a playlist's songs fill in where they are rather than bring a new result.
+        AnimatedContent(targetState = state.result, contentKey = { it?.copy(tracks = emptyList()) }, transitionSpec = { swap() }, label = "result") { result ->
             result?.let {
                 Column {
                     ResultCard(it, state, actions)
-                    if (it.tracks.isNotEmpty()) PlaylistSongs(it.tracks, state, actions)
+                    if (it.tracks.isNotEmpty()) PlaylistSongs(it, state, actions)
                 }
             }
         }
@@ -798,6 +799,13 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
             val searchFallback = prepared?.exact == false
+            // A playlist's songs play, since a search for its name elsewhere rarely finds it.
+            val songList = state.isSongList
+            val onOpen = when {
+                songList && state.canPlayAll -> { { actions.onPlayAll(0) } }
+                songList -> { { actions.onOpenTrack(result.tracks.first()) } }
+                else -> actions.onOpen
+            }
             // One split button: the main part opens it, the arrow picks another app for just this result.
             Row(
                 modifier = Modifier
@@ -807,11 +815,15 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 val press = rememberPress()
-                val openLabel = if (searchFallback) stringResource(R.string.search_in_destination, destination.label()) else destination.openLabel()
+                val openLabel = when {
+                    songList && state.canPlayAll -> stringResource(R.string.play_all_in, destination.label())
+                    songList -> stringResource(R.string.play_first_in, destination.label())
+                    searchFallback -> stringResource(R.string.search_in_destination, destination.label())
+                    else -> destination.openLabel()
+                }
                 Button(
-                    onClick = actions.onOpen,
-                    enabled = destinationReady,
-                    colors = openButtonColors(state),
+                    onClick = onOpen,
+                    enabled = destinationReady && state.queueProgress == null,
                     shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
                     contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                     interactionSource = press.source,
@@ -831,6 +843,8 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
                 DestinationMenuButton(state, actions)
             }
+            // A later part shows its own, down by its button.
+            QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
             // Asking or showing first, the app picked last is remembered instead.
             if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
                 TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
@@ -871,13 +885,27 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
     }
 }
 
-/**
- * A playlist only searches its name elsewhere, so with its songs listed below, they come first
- * and the Open button steps back.
- */
+/** Matching every song for Play all takes a moment, so it shows how far it got. */
 @Composable
-private fun openButtonColors(state: UiState): ButtonColors =
-    if (state.result?.type == ItemType.PLAYLIST && state.result.tracks.isNotEmpty()) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.buttonColors()
+private fun QueueProgress(progress: Pair<Int, Int>?, modifier: Modifier = Modifier) {
+    // The last count stays on while it fades out.
+    var last by remember { mutableStateOf(0 to 1) }
+    LaunchedEffect(progress) { progress?.let { last = it } }
+    val shown = progress ?: last
+    AnimatedVisibility(visible = progress != null, enter = Motion.appear, exit = Motion.disappear) {
+        Column(modifier = modifier.padding(top = 16.dp)) {
+            LinearProgressIndicator(progress = { shown.first.toFloat() / shown.second }, modifier = Modifier.fillMaxWidth())
+            Text(
+                stringResource(R.string.play_all_progress, shown.first, shown.second),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
+    }
+}
 
 /** The split button's arrow: lists the apps to open this result in instead. */
 @Composable
@@ -887,7 +915,6 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
     Box {
         Button(
             onClick = { expanded = true },
-            colors = openButtonColors(state),
             shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
             contentPadding = PaddingValues(horizontal = 14.dp),
             interactionSource = press.source,
@@ -1066,54 +1093,69 @@ private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
     }
 }
 
-/** A playlist's songs, each opening on its own where the result goes. */
+/**
+ * A collection's songs, each opening on its own where the result goes. A playlist's show their
+ * covers; an album's, which share one, their number. Past what YouTube takes in one queue, each
+ * part of a long list can be played on its own.
+ */
 @Composable
-private fun PlaylistSongs(tracks: List<MusicMetadata>, state: UiState, actions: ScreenActions) {
-    val progress = state.queueProgress
+private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: ScreenActions) {
+    val tracks = result.tracks
+    val busy = state.queueProgress != null
     SectionHeader(
         title = stringResource(R.string.playlist_songs_title),
         modifier = Modifier.padding(top = 8.dp),
-        action = if (!state.canPlayAll) null else {
-            {
-                // Matching every song takes a moment, so it shows how far it got.
-                AnimatedContent(targetState = progress, contentKey = { it != null }, transitionSpec = { swap() }, label = "play all") { shown ->
-                    if (shown != null) {
-                        Text(
-                            stringResource(R.string.play_all_progress, shown.first, shown.second),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .semantics { liveRegion = LiveRegionMode.Polite }
-                        )
-                    } else {
-                        TextButton(onClick = actions.onPlayAll) {
-                            AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text(stringResource(R.string.play_all_button), modifier = Modifier.padding(start = 6.dp))
-                        }
+        action = when {
+            // A playlist plays from the button above; an album opens as itself there.
+            state.canPlayAll && !state.isSongList -> {
+                {
+                    TextButton(onClick = { actions.onPlayAll(0) }, enabled = !busy) {
+                        AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.play_all_button), modifier = Modifier.padding(start = 6.dp))
                     }
                 }
             }
+            // Its service only shows the first ones without signing in.
+            result.trackCount != null -> {
+                {
+                    Text(
+                        stringResource(R.string.songs_shown, tracks.size, result.trackCount),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            else -> null
         }
     )
+    val covers = result.type == ItemType.PLAYLIST
     Group {
         tracks.forEachIndexed { index, track ->
             if (index > 0) GroupDivider()
+            if (index > 0 && index % MainViewModel.MAX_QUEUE == 0 && state.canPlayAll) {
+                PlayPart(index, minOf(index + MainViewModel.MAX_QUEUE, tracks.size), enabled = !busy) { actions.onPlayAll(index) }
+                QueueProgress(state.queueProgress?.takeIf { state.queueFrom == index }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp))
+                GroupDivider()
+            }
             val openLabel = stringResource(R.string.history_open, track.title)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClickLabel = openLabel) { actions.onOpenTrack(track) }
-                    .padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                    .padding(start = if (covers) 12.dp else 20.dp, end = 12.dp, top = if (covers) 8.dp else 10.dp, bottom = if (covers) 8.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(min = 28.dp)
-                )
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                if (covers) {
+                    CoverArt(track.artworkUrl, actions.loadArtwork, size = 44.dp)
+                } else {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(min = 28.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f).padding(horizontal = if (covers) 12.dp else 8.dp)) {
                     Text(track.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (track.artist.isNotBlank()) {
                         Text(
@@ -1128,6 +1170,21 @@ private fun PlaylistSongs(tracks: List<MusicMetadata>, state: UiState, actions: 
                 AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(24.dp))
             }
         }
+    }
+}
+
+/** "▶ Play 51 to 100": the next part of a list longer than one queue. */
+@Composable
+private fun PlayPart(from: Int, to: Int, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp))
+        Text(stringResource(R.string.play_part, from + 1, to), modifier = Modifier.padding(start = 6.dp))
     }
 }
 

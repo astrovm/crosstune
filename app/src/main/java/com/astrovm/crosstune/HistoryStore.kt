@@ -38,6 +38,13 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         return updated
     }
 
+    /** Updates what's known about an item, e.g. covers found for its songs, without changing recency. */
+    fun update(sourceUrl: String, metadata: MusicMetadata): List<HistoryEntry> {
+        val updated = load().map { entry -> if (entry.link.url == sourceUrl) entry.copy(metadata = metadata) else entry }
+        save(updated)
+        return updated
+    }
+
     /** Drops the links saved for [destinationKey], e.g. once they point at a site that's no longer used. */
     fun forget(destinationKey: String): List<HistoryEntry> {
         val updated = load().map { entry -> entry.copy(destinationLinks = entry.destinationLinks - destinationKey) }
@@ -66,8 +73,11 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("title", entry.metadata.title)
                     .put("artist", entry.metadata.artist)
                     .putOpt("artwork", entry.metadata.artworkUrl)
-                    // A playlist's songs as [title, artist] pairs, kept short.
-                    .put("tracks", JSONArray().apply { entry.metadata.tracks.forEach { put(JSONArray().put(it.title).put(it.artist)) } })
+                    // A playlist's songs as [title, artist, cover, link] lists, kept short.
+                    .put("tracks", JSONArray().apply {
+                        entry.metadata.tracks.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.artworkUrl.orEmpty()).put(it.url.orEmpty())) }
+                    })
+                    .putOpt("trackCount", entry.metadata.trackCount)
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
@@ -96,11 +106,15 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         }.toMap()
         val tracks = optJSONArray("tracks")?.let { list ->
             (0 until list.length()).mapNotNull { index ->
-                val pair = list.optJSONArray(index) ?: return@mapNotNull null
-                MusicMetadata(pair.optString(0).ifEmpty { return@mapNotNull null }, pair.optString(1))
+                val song = list.optJSONArray(index) ?: return@mapNotNull null
+                MusicMetadata(
+                    song.optString(0).ifEmpty { return@mapNotNull null }, song.optString(1),
+                    artworkUrl = song.optString(2).ifEmpty { null }, url = song.optString(3).ifEmpty { null }
+                )
             }
         }.orEmpty()
-        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks), prepared)
+        val count = optInt("trackCount").takeIf { it > 0 }
+        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count), prepared)
     }
 
     private companion object {

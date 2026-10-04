@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.util.Base64
 
 /** What Crosstune knows about an item; [artist] is blank for artists and playlists. */
 internal data class MusicMetadata(
@@ -12,7 +13,11 @@ internal data class MusicMetadata(
     /** Cover art, thumbnail or artist picture, when the service gives one. */
     val artworkUrl: String? = null,
     /** A playlist's songs, as far as its service shows them without signing in; empty otherwise. */
-    val tracks: List<MusicMetadata> = emptyList()
+    val tracks: List<MusicMetadata> = emptyList(),
+    /** A playlist's song on its own service, which some covers are looked up by. */
+    val url: String? = null,
+    /** How many songs a playlist has, when its service says and lists fewer of them. */
+    val trackCount: Int? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -54,8 +59,35 @@ internal object MetadataParsers {
         } else {
             rawTitle
         }
-        return MusicMetadata(title, artist, type, tags.image())
+        val count = Regex("""<meta name="music:song_count" content="(\d+)"""").find(html)?.groupValues?.get(1)?.toIntOrNull()
+        return MusicMetadata(title, artist, type, tags.image(), trackCount = count)
     }
+
+    private val spotifyStateRegex = Regex("""<script id="initialState" type="text/plain">([^<]*)</script>""")
+
+    /**
+     * Spotify's playlist page lists its first songs with their album covers, by song link, in its
+     * own data, which is base64-encoded JSON.
+     */
+    fun spotifyCovers(html: String): Map<String, String> {
+        val encoded = spotifyStateRegex.find(html)?.groupValues?.get(1) ?: return emptyMap()
+        val state = runCatching { JSONObject(String(Base64.getDecoder().decode(encoded.trim()))) }.getOrNull() ?: return emptyMap()
+        val items = state.optJSONObject("entities")?.optJSONObject("items") ?: return emptyMap()
+        return items.keys().asSequence().mapNotNull { items.optJSONObject(it)?.optJSONObject("content")?.optJSONArray("items") }
+            .flatMap { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it)?.optJSONObject("itemV2")?.optJSONObject("data") } }
+            .mapNotNull { song ->
+                val url = spotifyTrackUrl(song.optString("uri")) ?: return@mapNotNull null
+                val sources = song.optJSONObject("albumOfTrack")?.optJSONObject("coverArt")?.optJSONArray("sources") ?: return@mapNotNull null
+                // The 300px one: sharp in a list without downloading the 640px one.
+                val cover = (0 until sources.length()).mapNotNull(sources::optJSONObject)
+                    .minByOrNull { kotlin.math.abs(it.optInt("width") - 300) }?.optString("url")?.ifBlank { null }
+                cover?.let { url to it }
+            }.toMap()
+    }
+
+    /** "spotify:track:ID" as the song's link. */
+    private fun spotifyTrackUrl(uri: String): String? =
+        uri.removePrefix("spotify:track:").takeIf { it != uri && it.isNotBlank() }?.let { "https://open.spotify.com/track/$it" }
 
     /** YouTube oEmbed: "Artist - Song (Official Video)" by "ArtistVEVO", or "Song" by "Artist - Topic". */
     fun youtube(json: JSONObject): MusicMetadata? {
@@ -97,7 +129,13 @@ internal object MetadataParsers {
             val channel = metadata?.optJSONObject("metadata")?.optJSONObject("contentMetadataViewModel")
                 ?.optJSONArray("metadataRows")?.optJSONObject(0)?.optJSONArray("metadataParts")?.optJSONObject(0)
                 ?.optJSONObject("text")?.optString("content").orEmpty()
-            listOfNotNull(youtubeVideo(metadata?.optJSONObject("title")?.optString("content").orEmpty(), channel))
+            val id = lockup.optString("contentId").ifBlank { null }
+            listOfNotNull(
+                youtubeVideo(metadata?.optJSONObject("title")?.optString("content").orEmpty(), channel)?.copy(
+                    artworkUrl = id?.let { "https://i.ytimg.com/vi/$it/mqdefault.jpg" },
+                    url = id?.let { "https://www.youtube.com/watch?v=$it" }
+                )
+            )
         } ?: value.keys().asSequence().flatMap { youtubeVideos(value.opt(it)) }.toList()
         is JSONArray -> (0 until value.length()).flatMap { youtubeVideos(value.opt(it)) }
         else -> emptyList()
@@ -145,7 +183,10 @@ internal object MetadataParsers {
             val isSong = value.optJSONObject("contentDescriptor")?.optString("kind") == "song"
             val title = value.optString("title")
             if (isSong && title.isNotBlank()) {
-                listOf(MusicMetadata(title, value.optString("artistName")))
+                // The cover's address has its size left for the app to fill in.
+                val artwork = value.optJSONObject("artwork")?.optJSONObject("dictionary")?.optString("url")
+                    ?.replace("{w}x{h}bb.{f}", "300x300bb.jpg")?.ifBlank { null }
+                listOf(MusicMetadata(title, value.optString("artistName"), artworkUrl = artwork))
             } else {
                 value.keys().asSequence().flatMap { appleSongs(value.opt(it)) }.toList()
             }
@@ -161,7 +202,7 @@ internal object MetadataParsers {
             ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList") ?: return emptyList()
         return (0 until list.length()).mapNotNull { index ->
             val track = list.optJSONObject(index) ?: return@mapNotNull null
-            MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"))
+            MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"), url = spotifyTrackUrl(track.optString("uri")))
         }
     }
 
@@ -183,12 +224,18 @@ internal object MetadataParsers {
             .ifBlank { null }
         // An album's or playlist's object lists its songs, up to a few hundred.
         val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()
-        return MusicMetadata(title, artist, type, artwork, tracks).takeIf { title.isNotBlank() }
+        val count = json.optInt("nb_tracks").takeIf { it > tracks.size }
+        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count).takeIf { title.isNotBlank() }
     }
 
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
         val track = data.optJSONObject(index) ?: return@mapNotNull null
-        MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optJSONObject("artist")?.optString("name").orEmpty())
+        MusicMetadata(
+            track.optString("title").ifBlank { return@mapNotNull null },
+            track.optJSONObject("artist")?.optString("name").orEmpty(),
+            // The 250px size: sharp in a list.
+            artworkUrl = track.optJSONObject("album")?.optString("cover_medium")?.ifBlank { null }
+        )
     }
 
     /** Audiomack oEmbed: the song, album or playlist's name, its artist and its cover. */
