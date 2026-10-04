@@ -100,6 +100,10 @@
     <string name="playlist_songs_title">Songs</string>
     <string name="play_all_button">Play all</string>
     <string name="play_all_progress">Finding songs… %1$d of %2$d</string>
+    <string name="play_all_in">Play all in %1$s</string>
+    <string name="play_first_in">Play first song in %1$s</string>
+    <string name="play_part">Play %1$d to %2$d</string>
+    <string name="songs_shown">First %1$d of %2$d</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
     <string name="shortcut_paste_short">Open copied link</string>

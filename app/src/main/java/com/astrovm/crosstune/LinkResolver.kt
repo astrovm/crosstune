@@ -62,15 +62,16 @@ internal class LinkResolver(
         }
         when (val metadata = parse(link, body)) {
             null -> Resolution.Failed(if (isApiNotFound(link)) AppError.NOT_FOUND else AppError.METADATA_UNAVAILABLE, link)
-            else -> Resolution.Resolved(link, withSpotifyTracks(link, metadata))
+            else -> Resolution.Resolved(link, withSpotifyTracks(link, metadata, body))
         }
     }
 
     /**
      * Spotify's album and playlist pages don't list the songs, but their embed pages do. They're
-     * extra, so the album or playlist still shows without them when that page can't be read.
+     * extra, so the album or playlist still shows without them when that page can't be read. A
+     * playlist's own [page] has its first songs' covers.
      */
-    private suspend fun withSpotifyTracks(link: MusicLink, metadata: MusicMetadata): MusicMetadata {
+    private suspend fun withSpotifyTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
         if (link.service != MusicService.SPOTIFY || (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM)) return metadata
         val tracks = try {
             val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
@@ -80,7 +81,11 @@ internal class LinkResolver(
         } catch (_: JSONException) {
             emptyList()
         }
-        return metadata.copy(tracks = tracks)
+        val covers = if (link.type == ItemType.PLAYLIST) MetadataParsers.spotifyCovers(page) else emptyMap()
+        return metadata.copy(
+            tracks = tracks.map { track -> covers[track.url]?.let { track.copy(artworkUrl = it) } ?: track },
+            trackCount = metadata.trackCount?.takeIf { it > tracks.size }
+        )
     }
 
     /** The iTunes Lookup API reports missing items as an empty result inside a successful response. */

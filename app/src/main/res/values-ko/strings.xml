@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">노래</string>
     <string name="play_all_button">모두 재생</string>
     <string name="play_all_progress">노래를 찾는 중… %1$d/%2$d</string>
+    <string name="play_all_in">%1$s에서 모두 재생</string>
+    <string name="play_first_in">%1$s에서 첫 곡 재생</string>
+    <string name="play_part">%1$d~%2$d번 재생</string>
+    <string name="songs_shown">%2$d곡 중 처음 %1$d곡</string>
     <string name="clear_history_button">기록 삭제</string>
     <string name="tile_label">복사한 음악 링크 열기</string>
     <string name="shortcut_paste_short">복사한 링크 열기</string>

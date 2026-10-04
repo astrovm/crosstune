@@ -152,4 +152,19 @@ class HistoryStoreTest {
         ).commit()
         assertEquals(listOf(MusicMetadata("One", "Band")), HistoryStore(preferences).load().single().metadata.tracks)
     }
+
+    @Test
+    fun aPlaylistKeepsItsSongsCoversAndLinksAndCanBeUpdatedInPlace() {
+        val store = HistoryStore(preferences)
+        val link = MusicLink(MusicService.SPOTIFY, ItemType.PLAYLIST, "1", "https://open.spotify.com/playlist/1")
+        val song = MusicMetadata("One", "Band", url = "https://open.spotify.com/track/1")
+        store.add(HistoryEntry(link, MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(song), trackCount = 150)))
+        store.add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "2", "https://www.deezer.com/track/2"), MusicMetadata("Newer", "Band")))
+        val covered = MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(song.copy(artworkUrl = "https://i.scdn.co/image/1")), trackCount = 150)
+
+        // Found covers don't move it up.
+        val updated = store.update(link.url, covered)
+        assertEquals(listOf("Newer", "Top"), updated.map { it.metadata.title })
+        assertEquals(covered, HistoryStore(preferences).load()[1].metadata)
+    }
 }

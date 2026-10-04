@@ -26,7 +26,10 @@ internal class ArtworkLoader(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val cacheDir: File? = null
 ) {
-    private val cache = LruCache<String, ImageBitmap>(MAX_CACHED)
+    /** Sized by memory rather than count, since a playlist's covers come by the hundred. */
+    private val cache = object : LruCache<String, ImageBitmap>(MAX_CACHED_BYTES) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * BYTES_PER_PIXEL
+    }
 
     suspend fun load(url: String): ImageBitmap? {
         cache[url]?.let { return it }
@@ -54,7 +57,7 @@ internal class ArtworkLoader(
     private fun readCached(file: File): Bitmap? =
         if (file.isFile) file.readBytes().let(::decode) else null
 
-    /** Keeps the newest few covers: about two full Recent lists. */
+    /** Keeps the newest covers: a few long playlists' worth, besides Recent. */
     private fun save(file: File, bytes: ByteArray) {
         try {
             file.parentFile?.mkdirs()
@@ -78,9 +81,10 @@ internal class ArtworkLoader(
     }
 
     private companion object {
-        /** Room for the result plus a full history list. */
-        const val MAX_CACHED = 32
-        const val MAX_ON_DISK = 48
+        /** Room for the result, Recent and a screenful or two of a playlist's songs. */
+        const val MAX_CACHED_BYTES = 24 * 1024 * 1024
+        const val BYTES_PER_PIXEL = 4
+        const val MAX_ON_DISK = 600
         const val MAX_SIZE_PX = 400
     }
 }

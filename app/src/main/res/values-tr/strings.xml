@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">Şarkılar</string>
     <string name="play_all_button">Tümünü çal</string>
     <string name="play_all_progress">Şarkılar aranıyor… %2$d şarkıdan %1$d</string>
+    <string name="play_all_in">Tümünü %1$s ile çal</string>
+    <string name="play_first_in">İlk şarkıyı %1$s ile çal</string>
+    <string name="play_part">%1$d ile %2$d arasını çal</string>
+    <string name="songs_shown">%2$d şarkının ilk %1$d tanesi</string>
     <string name="clear_history_button">Geçmişi temizle</string>
     <string name="tile_label">Kopyalanan müzik bağlantısını aç</string>
     <string name="shortcut_paste_short">Kopyalanan bağlantıyı aç</string>

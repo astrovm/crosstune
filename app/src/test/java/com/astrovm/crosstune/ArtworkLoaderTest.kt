@@ -69,8 +69,8 @@ class ArtworkLoaderTest {
 
         // Only the newest are kept.
         val many = ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = dir)
-        repeat(60) { many.load("https://img.example/$it.jpg") }
-        assertTrue(dir.listFiles()!!.size <= 48)
+        repeat(610) { many.load("https://img.example/$it.jpg") }
+        assertTrue(dir.listFiles()!!.size <= 600)
 
         // A cover that can't be saved still shows.
         val notADirectory = File(dir, "file").apply { writeText("x") }

@@ -372,4 +372,50 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Mix", "", ItemType.PLAYLIST), MetadataParsers.audiomack(json("""{"title":"Mix","author_name":"Someone"}"""), ItemType.PLAYLIST))
         assertNull(MetadataParsers.audiomack(json("""{"title":""}"""), ItemType.TRACK))
     }
+
+    @Test
+    fun playlistSongsComeWithTheirCoversLinksAndTheTotal() {
+        // Spotify: the embed's songs by link; the page's first ones with covers, in base64 data; and how many there are.
+        val embed = """{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[{"title":"First","subtitle":"Band","uri":"spotify:track:one"},
+            {"title":"Second","subtitle":"Band","uri":"spotify:episode:x"}]}}}}}}"""
+        assertEquals(
+            listOf(MusicMetadata("First", "Band", url = "https://open.spotify.com/track/one"), MusicMetadata("Second", "Band")),
+            MetadataParsers.spotifyEmbedTracks("""<script id="__NEXT_DATA__" type="application/json">$embed</script>""")
+        )
+        val state = """{"entities":{"items":{"spotify:playlist:x":{"content":{"items":[
+            {"itemV2":{"data":{"uri":"spotify:track:one","albumOfTrack":{"coverArt":{"sources":[{"width":64,"url":"small"},{"width":300,"url":"medium"},{"width":640,"url":"big"}]}}}}},
+            {"itemV2":{"data":{"uri":"spotify:track:two"}}},{"itemV2":{"data":{"uri":"spotify:track:"}}},
+            {"itemV2":{"data":{"uri":"spotify:track:three","albumOfTrack":{"coverArt":{"sources":[{"width":300,"url":""}]}}}}}]}},
+            "spotify:user:x":{"name":"Someone"}}}}"""
+        fun page(data: String) = """<script id="initialState" type="text/plain">${java.util.Base64.getEncoder().encodeToString(data.toByteArray())}</script>"""
+        assertEquals(mapOf("https://open.spotify.com/track/one" to "medium"), MetadataParsers.spotifyCovers(page(state)))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers(page("{nope")))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers(page("{}")))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers("<html></html>"))
+        val playlist = """<meta property="og:title" content="Road Trip"/><meta name="music:song_count" content="150"/>"""
+        assertEquals(150, MetadataParsers.spotify(playlist, ItemType.PLAYLIST)!!.trackCount)
+
+        // Apple Music: each song's cover, at a size for a list.
+        val pageData = """{"x":[{"title":"Uno","artistName":"Artist","contentDescriptor":{"kind":"song"},
+            "artwork":{"dictionary":{"url":"https://is1-ssl.mzstatic.com/image/thumb/a.jpg/{w}x{h}bb.{f}"}}}]}"""
+        assertEquals(
+            listOf(MusicMetadata("Uno", "Artist", artworkUrl = "https://is1-ssl.mzstatic.com/image/thumb/a.jpg/300x300bb.jpg")),
+            MetadataParsers.applePlaylist("""<meta property="og:title" content="Hits"><script type="application/json" id="serialized-server-data">$pageData</script>""")!!.tracks
+        )
+
+        // Deezer: each song's album cover, and how many there are past the ones listed.
+        val deezer = json("""{"title":"Top","nb_tracks":500,"tracks":{"data":[{"title":"Boston","artist":{"name":"Stella"},"album":{"cover_medium":"https://cdn/boston.jpg"}}]}}""")
+        assertEquals(
+            MusicMetadata("Top", "", ItemType.PLAYLIST, tracks = listOf(MusicMetadata("Boston", "Stella", artworkUrl = "https://cdn/boston.jpg")), trackCount = 500),
+            MetadataParsers.deezer(deezer, ItemType.PLAYLIST)
+        )
+
+        // YouTube: each video's frame and link.
+        val lockup = """{"lockupViewModel":{"contentType":"LOCKUP_CONTENT_TYPE_VIDEO","contentId":"abcdefghijk","metadata":{"lockupMetadataViewModel":{"title":{"content":"Song"},
+            "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"Band - Topic"}}]}]}}}}}}"""
+        assertEquals(
+            listOf(MusicMetadata("Song", "Band", artworkUrl = "https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg", url = "https://www.youtube.com/watch?v=abcdefghijk")),
+            MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {"a":[$lockup]};</script>""")!!.tracks
+        )
+    }
 }

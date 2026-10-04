@@ -85,6 +85,10 @@
     <string name="playlist_songs_title">歌曲</string>
     <string name="play_all_button">全部播放</string>
     <string name="play_all_progress">正在查找歌曲… %1$d/%2$d</string>
+    <string name="play_all_in">在 %1$s 中全部播放</string>
+    <string name="play_first_in">在 %1$s 中播放第一首</string>
+    <string name="play_part">播放第 %1$d 到 %2$d 首</string>
+    <string name="songs_shown">共 %2$d 首，显示前 %1$d 首</string>
     <string name="clear_history_button">清除历史记录</string>
     <string name="tile_label">打开已复制的音乐链接</string>
     <string name="shortcut_paste_short">打开已复制的链接</string>

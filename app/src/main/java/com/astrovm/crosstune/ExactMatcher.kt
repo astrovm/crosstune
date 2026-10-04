@@ -33,13 +33,18 @@ import java.util.concurrent.atomic.AtomicInteger
 internal class ExactMatcher(
     private val client: OkHttpClient,
     private val country: String = Locale.getDefault().country,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Where what's found is remembered, so the same song isn't looked up again. */
+    private val cache: LookupCache? = null
 ) {
     private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
     private val artistSeparator = Regex(
         """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
         RegexOption.IGNORE_CASE
     )
+
+    /** The apps whose search needs no account. */
+    private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -63,17 +68,24 @@ internal class ExactMatcher(
 
     private val musicVideoTypeRegex = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
 
-    suspend fun find(target: MusicService, metadata: MusicMetadata): String? {
-        if (metadata.type == ItemType.PLAYLIST) return null
-        return withTimeoutOrNull(TIMEOUT_MS) {
+    suspend fun find(target: MusicService, metadata: MusicMetadata): String? = match(target, metadata).also { cache?.save() }
+
+    private suspend fun match(target: MusicService, metadata: MusicMetadata): String? {
+        // Other apps need an account to search, so there's nothing to look up or remember.
+        if (metadata.type == ItemType.PLAYLIST || target !in matchable) return null
+        return remembered("find", target.name, metadata) { lookUp(target, metadata) }
+    }
+
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata): String? =
+        withTimeoutOrNull(TIMEOUT_MS) {
             try {
                 when (target) {
                     MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
                     MusicService.DEEZER -> findOnDeezer(metadata)
                     MusicService.BANDCAMP -> findOnBandcamp(metadata)
                     MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL)
-                    MusicService.YOUTUBE -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL)
-                    else -> null
+                    // YouTube.
+                    else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL)
                 }
             } catch (_: IOException) {
                 null
@@ -81,6 +93,12 @@ internal class ExactMatcher(
                 null
             }
         }
+
+    /** What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found something. */
+    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> String?): String? {
+        val key = listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
+        cache?.get(key)?.let { return it }
+        return lookUp()?.also { cache?.put(key, it) }
     }
 
     /**
@@ -94,10 +112,11 @@ internal class ExactMatcher(
         val ids = coroutineScope {
             tracks.map { track ->
                 async {
-                    lookups.withPermit { find(target, track) }.also { onProgress(looked.incrementAndGet()) }
+                    lookups.withPermit { match(target, track) }.also { onProgress(looked.incrementAndGet()) }
                 }
             }.awaitAll()
         }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }
+        cache?.save()
         if (ids.isEmpty()) return null
         val watch = if (target == MusicService.YOUTUBE_MUSIC) YOUTUBE_MUSIC_WATCH_URL else YOUTUBE_WATCH_URL
         val list = try {
@@ -164,20 +183,52 @@ internal class ExactMatcher(
      * Remaster)" by "The Band" is close enough to "Song" by "Band". Null when no song is close,
      * offline, or slower than [timeoutMs].
      */
-    suspend fun cover(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): String? = withTimeoutOrNull(timeoutMs) {
+    suspend fun cover(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): String? = coverOf(metadata, timeoutMs).also { cache?.save() }
+
+    /**
+     * Covers for a playlist's [tracks] that came without one, a few at a time; [onFound] hears each
+     * one's index and cover as it's found.
+     */
+    suspend fun covers(tracks: List<MusicMetadata>, onFound: (Int, String) -> Unit) {
+        val lookups = Semaphore(QUEUE_LOOKUPS_AT_ONCE)
         try {
-            val title = normalize(metadata.title)
-            val artist = normalize(metadata.artist)
-            searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
-                val name = normalize(result.optString("title"))
-                val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
-                title.isNotEmpty() && artist.isNotEmpty() && name.startsWith(title) && artist in credit
-            }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
-        } catch (_: IOException) {
-            null
-        } catch (_: JSONException) {
-            null
+            coroutineScope {
+                tracks.forEachIndexed { index, track ->
+                    async { lookups.withPermit { coverOf(track, TIMEOUT_MS) }?.let { onFound(index, it) } }
+                }
+            }
+        } finally {
+            // Stopped partway, e.g. for another playlist, what was found is still kept.
+            cache?.save()
         }
+    }
+
+    private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = remembered("cover", "", metadata) {
+        withTimeoutOrNull(timeoutMs) {
+            try {
+                // A Spotify song's own cover is known by its link, with no guessing by name.
+                if (metadata.url?.startsWith(SPOTIFY_TRACK_URL) == true) spotifyCover(metadata.url) else deezerCover(metadata)
+            } catch (_: IOException) {
+                null
+            } catch (_: JSONException) {
+                null
+            }
+        }
+    }
+
+    private suspend fun spotifyCover(url: String): String? {
+        val oEmbed = "https://open.spotify.com/oembed".toHttpUrl().newBuilder().addQueryParameter("url", url).build()
+        return fetchJson(oEmbed.toString()).optString("thumbnail_url").ifBlank { null }
+    }
+
+    private suspend fun deezerCover(metadata: MusicMetadata): String? {
+        val title = normalize(metadata.title)
+        val artist = normalize(metadata.artist)
+        return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
+            val name = normalize(result.optString("title"))
+            val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
+            title.isNotEmpty() && artist.isNotEmpty() && name.startsWith(title) && artist in credit
+        }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
     }
 
     /**
@@ -305,6 +356,7 @@ internal class ExactMatcher(
     private companion object {
         const val TIMEOUT_MS = 5_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
+        const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
