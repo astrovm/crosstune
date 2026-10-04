@@ -394,7 +394,7 @@ internal class MainViewModel(
                 openWhenReady && destination == null && uiState.onlyMusicVideos && it.service == MusicService.YOUTUBE
             }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
-            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: resolver.resolve(input) }
+            val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
             if (video != null && matcher.isMusicVideo(video.id) == false) {
                 lookup.cancel()
                 return@launch openAsIs(video)
@@ -412,6 +412,22 @@ internal class MainViewModel(
                 is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
             }
         }
+    }
+
+    /**
+     * The album cover, for songs that don't come with one: none from Now Playing, and a video frame
+     * from YouTube. A YouTube video keeps its frame when no song matches, e.g. a tutorial, and only
+     * waits briefly for the cover, since it has a picture either way.
+     */
+    private suspend fun withCover(resolution: Resolution): Resolution {
+        if (resolution !is Resolution.Resolved || resolution.link.type != ItemType.TRACK) return resolution
+        val timeoutMs = when (resolution.link.service) {
+            null -> if (resolution.metadata.artworkUrl == null) COVER_TIMEOUT_MS else return resolution
+            MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> VIDEO_COVER_TIMEOUT_MS
+            else -> return resolution
+        }
+        val cover = matcher.cover(resolution.metadata, timeoutMs) ?: return resolution
+        return resolution.copy(metadata = resolution.metadata.copy(artworkUrl = cover))
     }
 
     /** [prepared] are the links already found for it, when it came from Recent. */
@@ -859,6 +875,9 @@ internal class MainViewModel(
 
     companion object {
         const val PREFERENCES_NAME = "crosstune_preferences"
+        /** A song without any picture can wait a little longer for its cover than a video with a frame. */
+        private const val COVER_TIMEOUT_MS = 5_000L
+        private const val VIDEO_COVER_TIMEOUT_MS = 2_000L
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"

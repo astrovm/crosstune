@@ -138,7 +138,14 @@ internal class ExactMatcher(
         }?.optString(urlKey)?.ifBlank { null }
     }
 
-    private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
+    private suspend fun findOnDeezer(metadata: MusicMetadata): String? =
+        searchDeezer(metadata).firstOrNull { result ->
+            val name = result.optString("title").ifEmpty { result.optString("name") }
+            val artist = result.optJSONObject("artist")?.optString("name") ?: name
+            matches(metadata, name, artist)
+        }?.optString("link")?.ifBlank { null }
+
+    private suspend fun searchDeezer(metadata: MusicMetadata): List<JSONObject> {
         val path = when (metadata.type) {
             ItemType.TRACK -> "search/track"
             ItemType.ALBUM -> "search/album"
@@ -148,12 +155,29 @@ internal class ExactMatcher(
             .addQueryParameter("q", searchQuery(metadata))
             .addQueryParameter("limit", "10")
             .build()
-        val results = fetchJson(url.toString()).optJSONArray("data") ?: return null
-        return results.objects().firstOrNull { result ->
-            val name = result.optString("title").ifEmpty { result.optString("name") }
-            val artist = result.optJSONObject("artist")?.optString("name") ?: name
-            matches(metadata, name, artist)
-        }?.optString("link")?.ifBlank { null }
+        return fetchJson(url.toString()).optJSONArray("data")?.objects().orEmpty()
+    }
+
+    /**
+     * A song's album cover found by its name, for songs that come without one (Now Playing) or with
+     * a video frame instead (YouTube). A cover doesn't need the exact recording, so "Song (2003
+     * Remaster)" by "The Band" is close enough to "Song" by "Band". Null when no song is close,
+     * offline, or slower than [timeoutMs].
+     */
+    suspend fun cover(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): String? = withTimeoutOrNull(timeoutMs) {
+        try {
+            val title = normalize(metadata.title)
+            val artist = normalize(metadata.artist)
+            searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
+                val name = normalize(result.optString("title"))
+                val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
+                title.isNotEmpty() && artist.isNotEmpty() && name.startsWith(title) && artist in credit
+            }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
+        } catch (_: IOException) {
+            null
+        } catch (_: JSONException) {
+            null
+        }
     }
 
     /**
