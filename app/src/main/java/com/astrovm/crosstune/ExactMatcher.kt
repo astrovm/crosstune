@@ -58,6 +58,9 @@ internal class ExactMatcher(
     /** A guest credited in the title, as "(feat. Emel)", which services that credit it as an artist leave out. */
     private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
 
+    /** "Zion y Lennox" and "Hall and Oates" are two names, whichever language says so. */
+    private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
+
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
 
@@ -97,26 +100,40 @@ internal class ExactMatcher(
     private suspend fun matchForQueue(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) return match(target, metadata)
         cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
-        return remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true) }
+        return remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) }
     }
 
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false): String? =
-        withTimeoutOrNull(TIMEOUT_MS) {
-            try {
-                when (target) {
-                    MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
-                    MusicService.DEEZER -> findOnDeezer(metadata)
-                    MusicService.BANDCAMP -> findOnBandcamp(metadata)
-                    MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
-                    // YouTube.
-                    else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
+    private class Answer(val url: String?)
+
+    /**
+     * What [target] has for [metadata], null if nothing or no answer. A search that failed or timed
+     * out is asked once more when [retrying], e.g. for a queue, where one song in fifty must not be
+     * lost to a slow moment; an answer of "none" is final.
+     */
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): String? {
+        repeat(if (retrying) 2 else 1) {
+            val answer = withTimeoutOrNull(TIMEOUT_MS) {
+                try {
+                    Answer(
+                        when (target) {
+                            MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
+                            MusicService.DEEZER -> findOnDeezer(metadata)
+                            MusicService.BANDCAMP -> findOnBandcamp(metadata)
+                            MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
+                            // YouTube.
+                            else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
+                        }
+                    )
+                } catch (_: IOException) {
+                    null
+                } catch (_: JSONException) {
+                    null
                 }
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
             }
+            if (answer != null) return answer.url
         }
+        return null
+    }
 
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
         listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
@@ -388,7 +405,9 @@ internal class ExactMatcher(
 
     private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean {
         val wanted = artists(metadata.artist)
-        if (wanted.isNotEmpty() && artists(artist).none(wanted::contains)) return false
+        // A group credited with a guest, or a name with a tag around it: "Randy" is in "Randy Nota Loca".
+        fun sameArtist(a: String, b: String) = a == b || (minOf(a.length, b.length) >= MIN_PARTIAL_ARTIST && (a in b || b in a))
+        if (wanted.isNotEmpty() && artists(artist).none { theirs -> wanted.any { sameArtist(it, theirs) } }) return false
         val ours = words(withoutEditionTag(metadata.title))
         val theirs = words(withoutEditionTag(name))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
@@ -414,7 +433,7 @@ internal class ExactMatcher(
 
     /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and "The" doesn't count. */
     private fun artists(credit: String): Set<String> =
-        artistNames(credit).map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
+        artistNames(credit).flatMap { it.split(conjunction) }.map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
 
     private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -425,6 +444,8 @@ internal class ExactMatcher(
             .replace(Regex("""[^\p{L}\p{N}]+"""), "")
 
     private companion object {
+        /** A shorter artist name has to be at least this long to count when it is inside another's. */
+        const val MIN_PARTIAL_ARTIST = 5
         const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
         const val TIMEOUT_MS = 5_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6

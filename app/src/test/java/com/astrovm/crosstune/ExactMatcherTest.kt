@@ -466,6 +466,14 @@ class ExactMatcherTest {
             "Ellens Gesang III, Op. 52 No. 6, D. 839 \"Ave Maria\" (Hymne an die Jungfrau)", "Franz Schubert, Daniel Perret",
             "Ellens Gesang III, D. 839, Op. 52 No. 6, Ave Maria", "Daniel Perret & Franz Schubert"
         ))
+        // The artist credited with a guest, a tag or a "y", on one service and not the other.
+        assertEquals(played, queueFinds("La Locura Automática", "La Secta AllStar, Eddie Dee", "La Locura Automática (Reggaeton) (feat. Eddie Dee)", "La Secta"))
+        assertEquals(played, queueFinds("Soy una Gargola", "Alex Gargolas, Randy Nota Loca", "Soy Una Gargola", "Randy"))
+        assertEquals(played, queueFinds("Holdin' On - Skrillex & Nero Remix", "I See MONSTAS, NERO, Skrillex", "Holdin' On (Skrillex & Nero Remix)", "Monsta"))
+        assertEquals(played, queueFinds("Yo Voy (feat. Daddy Yankee)", "Zion & Lennox", "Yo Voy (feat. Daddy Yankee)", "Zion Y Lennox"))
+        // A short name inside another's is no match: "Sia" is not "Asia", nor "Ed" in "Eddie".
+        assertEquals(null, queueFinds("Heat of the Moment", "Sia", "Heat of the Moment", "Asia"))
+        assertEquals(null, queueFinds("Love Me Do", "Ed", "Love Me Do", "Eddie"))
         // The song of another artist, or one that shares too little, is not taken.
         assertEquals(null, queueFinds("Perfect", "The Smashing Pumpkins", "Perfect", "Simple Plan"))
         assertEquals(null, queueFinds("Perfect Day", "Band", "Another Song Entirely", "Band"))
@@ -503,6 +511,33 @@ class ExactMatcherTest {
         val romaji = MusicMetadata("ガラスのPALM TREE", "Band")
         assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} })
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, romaji) })
+    }
+
+    @Test
+    fun aQueueAsksAgainOnceWhenASongsSearchFailsButNotWhenItFindsNothing() {
+        var asked = 0
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else if (++asked == 1) throw IOException("slow moment")
+            else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("Song", "Band • Album • 3:00", videoId = "video000000")))
+        }
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} })
+        assertEquals(2, asked)
+
+        // Nothing found is an answer, so it is not asked twice; failing twice gives up.
+        asked = 0
+        fake.handler = { request -> asked++; FakeSpotify.html(request, """{"contents":{}}""") }
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
+        assertEquals(1, asked)
+        asked = 0
+        fake.handler = { asked++; throw IOException("offline") }
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
+        assertEquals(2, asked)
+
+        // A single song is asked once, so opening it doesn't wait longer on a slow network.
+        asked = 0
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Missing", "Nobody")) })
+        assertEquals(1, asked)
     }
 
     @Test
