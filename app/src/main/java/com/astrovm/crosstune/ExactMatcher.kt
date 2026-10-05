@@ -46,9 +46,12 @@ internal class ExactMatcher(
     /** The apps whose search needs no account. */
     private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
 
-    /** A trailing remaster, mono or stereo tag, as " - Remastered 2012" or "(2003 Remaster)". */
+    /**
+     * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in it, or
+     * a whole "Album Version" or "Original". "Live", "Acoustic" or "Remix" are other recordings.
+     */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*|\s*[(\[][^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*[)\]])$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -124,7 +127,7 @@ internal class ExactMatcher(
                     lookups.withPermit { match(target, track) }.also { onProgress(looked.incrementAndGet()) }
                 }
             }.awaitAll()
-        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }
+        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }.distinct()
         cache?.save()
         if (ids.isEmpty()) return null
         val watch = if (target == MusicService.YOUTUBE_MUSIC) YOUTUBE_MUSIC_WATCH_URL else YOUTUBE_WATCH_URL
@@ -243,11 +246,11 @@ internal class ExactMatcher(
     }
 
     private suspend fun deezerCover(metadata: MusicMetadata): String? {
-        val title = normalize(metadata.title)
+        val title = normalize(withoutEditionTag(metadata.title))
         // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
         val artists = artists(metadata.artist)
         return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
-            val name = normalize(result.optString("title"))
+            val name = normalize(withoutEditionTag(result.optString("title")))
             val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
@@ -365,11 +368,19 @@ internal class ExactMatcher(
     }
 
     /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself, which other services list without the tag. */
-    private fun withoutEditionTag(title: String): String = title.replace(featuring, "").replace(editionTag, "")
+    private fun withoutEditionTag(title: String): String {
+        var stripped = title
+        // "Song - 2012 Remaster (Mono)" has two, and a title that is only a tag is left as it is.
+        while (true) {
+            val shorter = stripped.replace(featuring, "").replace(editionTag, "")
+            if (shorter == stripped || shorter.isBlank()) return stripped
+            stripped = shorter
+        }
+    }
 
     /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and "The" doesn't count. */
     private fun artists(credit: String): Set<String> =
-        artistNames(credit).map { normalize(it.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
+        artistNames(credit).map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
 
     private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -380,6 +391,7 @@ internal class ExactMatcher(
             .replace(Regex("""[^\p{L}\p{N}]+"""), "")
 
     private companion object {
+        const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
         const val TIMEOUT_MS = 5_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
