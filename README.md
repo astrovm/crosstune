@@ -15,6 +15,14 @@ Got a link from one music service but listen on another? Tap it and the same son
 - Get the APK from [Releases](https://github.com/astrovm/crosstune/releases).
 - Or add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
 
+### Get it on Google Play
+
+Crosstune is in testing on Google Play. It can take a few minutes to show up.
+
+1. Join the [Crosstune testers](https://groups.google.com/g/crosstune-testers) group with your Google Play account.
+2. Open the [testing page](https://play.google.com/apps/testing/com.astrovm.crosstune) and tap **Become a tester**.
+3. Install Crosstune from [Google Play](https://play.google.com/store/apps/details?id=com.astrovm.crosstune).
+
 Needs Android 8.0 or newer.
 
 ## 🚀 Set up
