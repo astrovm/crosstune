@@ -44,9 +44,12 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
@@ -206,8 +209,9 @@ class MainActivityTest {
         assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(resultActionText(text)) > 0)
     }
 
+    /** Neither shown nor read out: a button with a short label says its whole name to screen readers. */
     private fun assertTextAbsent(text: String) {
-        composeRule.onNodeWithText(text).assertDoesNotExist()
+        composeRule.onNode(hasText(text) or hasContentDescription(text)).assertDoesNotExist()
     }
 
     private fun nextStartedActivity(): Intent? = shadowOf(app).nextStartedActivity
@@ -664,6 +668,10 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("First Song")
 
+        // The buttons' labels are short, since the app's icon and the songs below say the rest; screen
+        // readers hear it all.
+        composeRule.onNodeWithText(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes))).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.copy_songs_button)).assertDoesNotExist()
         // The songs, not a search for the playlist's name, are what's copied and shared.
         click(string(R.string.copy_songs_button))
         assertEquals("Band - First Song\nSecond Song", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
@@ -782,7 +790,21 @@ class MainActivityTest {
         launch()
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("Song 1")
-        composeRule.onNodeWithText(string(R.string.play_part, 51, 60)).performScrollTo().performClick()
+        // The main button says which part it plays; screen readers hear where.
+        val youTubeMusic = string(MusicService.YOUTUBE_MUSIC.labelRes)
+        val firstPart = string(R.string.play_part_in, 1, 50, youTubeMusic)
+        composeRule.onNodeWithContentDescription(firstPart).assertExists()
+        assertTextShown(string(R.string.part_range, 1, 50))
+        val secondPart = composeRule.onNodeWithText(string(R.string.part_range, 51, 60)).performScrollTo()
+        // With the card scrolled away, a floating button stands in for its main one. The second part
+        // only just showed at the bottom, so it still plays the first.
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(firstPart, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
+        // Scrolled into the second part, it plays that one.
+        composeRule.onNodeWithText("Song 60").performScrollTo()
+        val secondPartIn = string(R.string.play_part_in, 51, 60, youTubeMusic)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(secondPartIn, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
+        // Each part's header plays it. The floating button may cover it at the bottom edge, so it's tapped by its action.
+        secondPart.performSemanticsAction(SemanticsActions.OnClick)
         // It shows how far it got while it looks the songs up.
         waitForText(string(R.string.play_all_progress, 0, 10))
         release.countDown()

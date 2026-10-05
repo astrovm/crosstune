@@ -88,6 +88,9 @@
     <string name="play_all_in">Слушать всё в %1$s</string>
     <string name="play_first_in">Включить первый трек в %1$s</string>
     <string name="play_part">Слушать с %1$d по %2$d</string>
+    <string name="play_part_in">Слушать с %1$d по %2$d в %3$s</string>
+    <string name="part_range">С %1$d по %2$d</string>
+    <string name="play_first_button">Включить первый трек</string>
     <string name="songs_shown">Первые %1$d из %2$d</string>
     <string name="clear_history_button">Очистить историю</string>
     <string name="tile_label">Открыть скопированную ссылку</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">Поделиться ссылкой</string>
     <string name="copy_songs_button">Копировать треки</string>
     <string name="share_songs_button">Поделиться треками</string>
+    <string name="copy_button">Копировать</string>
+    <string name="share_button">Поделиться</string>
     <string name="songs_copied">Треки скопированы</string>
     <string name="settings_link_owners_title">Приложения с этими ссылками</string>
     <string name="settings_link_owners_description">Нажмите на приложение, чтобы изменить.</string>

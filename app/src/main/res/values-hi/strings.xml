@@ -88,6 +88,9 @@
     <string name="play_all_in">%1$s में सभी चलाएं</string>
     <string name="play_first_in">%1$s में पहला गाना चलाएं</string>
     <string name="play_part">%1$d से %2$d तक चलाएं</string>
+    <string name="play_part_in">%3$s में %1$d से %2$d तक चलाएं</string>
+    <string name="part_range">%1$d से %2$d तक</string>
+    <string name="play_first_button">पहला गाना चलाएं</string>
     <string name="songs_shown">%2$d में से पहले %1$d</string>
     <string name="clear_history_button">इतिहास मिटाएँ</string>
     <string name="tile_label">कॉपी किया म्यूज़िक लिंक खोलें</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">लिंक शेयर करें</string>
     <string name="copy_songs_button">गाने कॉपी करें</string>
     <string name="share_songs_button">गाने शेयर करें</string>
+    <string name="copy_button">कॉपी करें</string>
+    <string name="share_button">शेयर करें</string>
     <string name="songs_copied">गाने कॉपी हो गए</string>
     <string name="settings_link_owners_title">इन लिंक वाले ऐप</string>
     <string name="settings_link_owners_description">बदलने के लिए किसी पर टैप करें।</string>

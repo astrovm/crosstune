@@ -103,6 +103,9 @@
     <string name="play_all_in">Play all in %1$s</string>
     <string name="play_first_in">Play first song in %1$s</string>
     <string name="play_part">Play %1$d to %2$d</string>
+    <string name="play_part_in">Play %1$d to %2$d in %3$s</string>
+    <string name="part_range">%1$d to %2$d</string>
+    <string name="play_first_button">Play first song</string>
     <string name="songs_shown">First %1$d of %2$d</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
@@ -150,6 +153,8 @@
     <string name="share_link_button">Share link</string>
     <string name="copy_songs_button">Copy songs</string>
     <string name="share_songs_button">Share songs</string>
+    <string name="copy_button">Copy</string>
+    <string name="share_button">Share</string>
     <string name="songs_copied">Songs copied</string>
     <string name="settings_link_owners_title">Apps with these links</string>
     <string name="settings_link_owners_description">Tap one to change it.</string>

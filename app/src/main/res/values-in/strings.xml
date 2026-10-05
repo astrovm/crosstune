@@ -88,6 +88,9 @@
     <string name="play_all_in">Putar semua di %1$s</string>
     <string name="play_first_in">Putar lagu pertama di %1$s</string>
     <string name="play_part">Putar %1$d sampai %2$d</string>
+    <string name="play_part_in">Putar %1$d sampai %2$d di %3$s</string>
+    <string name="part_range">%1$d sampai %2$d</string>
+    <string name="play_first_button">Putar lagu pertama</string>
     <string name="songs_shown">%1$d pertama dari %2$d</string>
     <string name="clear_history_button">Hapus riwayat</string>
     <string name="tile_label">Buka link musik yang disalin</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">Bagikan tautan</string>
     <string name="copy_songs_button">Salin lagu</string>
     <string name="share_songs_button">Bagikan lagu</string>
+    <string name="copy_button">Salin</string>
+    <string name="share_button">Bagikan</string>
     <string name="songs_copied">Lagu disalin</string>
     <string name="settings_link_owners_title">Aplikasi dengan tautan ini</string>
     <string name="settings_link_owners_description">Ketuk salah satunya untuk mengubahnya.</string>

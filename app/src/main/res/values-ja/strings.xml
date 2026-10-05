@@ -89,6 +89,9 @@
     <string name="play_all_in">%1$s ですべて再生</string>
     <string name="play_first_in">%1$s で最初の曲を再生</string>
     <string name="play_part">%1$d〜%2$d 曲目を再生</string>
+    <string name="play_part_in">%3$s で %1$d〜%2$d 曲目を再生</string>
+    <string name="part_range">%1$d〜%2$d 曲目</string>
+    <string name="play_first_button">最初の曲を再生</string>
     <string name="songs_shown">%2$d 曲中 最初の %1$d 曲</string>
     <string name="clear_history_button">履歴を消去</string>
     <string name="tile_label">コピーした音楽リンクを開く</string>
@@ -133,6 +136,8 @@
     <string name="share_link_button">リンクを共有</string>
     <string name="copy_songs_button">曲をコピー</string>
     <string name="share_songs_button">曲を共有</string>
+    <string name="copy_button">コピー</string>
+    <string name="share_button">共有</string>
     <string name="songs_copied">曲をコピーしました</string>
     <string name="settings_link_owners_title">これらのリンクを開くアプリ</string>
     <string name="settings_link_owners_description">タップして変更できます。</string>

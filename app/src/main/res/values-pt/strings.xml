@@ -88,6 +88,9 @@
     <string name="play_all_in">Tocar tudo em %1$s</string>
     <string name="play_first_in">Tocar a primeira em %1$s</string>
     <string name="play_part">Tocar da %1$d à %2$d</string>
+    <string name="play_part_in">Tocar da %1$d à %2$d em %3$s</string>
+    <string name="part_range">Da %1$d à %2$d</string>
+    <string name="play_first_button">Tocar a primeira</string>
     <string name="songs_shown">Primeiras %1$d de %2$d</string>
     <string name="clear_history_button">Limpar histórico</string>
     <string name="tile_label">Abrir link de música copiado</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">Compartilhar link</string>
     <string name="copy_songs_button">Copiar músicas</string>
     <string name="share_songs_button">Compartilhar músicas</string>
+    <string name="copy_button">Copiar</string>
+    <string name="share_button">Compartilhar</string>
     <string name="songs_copied">Músicas copiadas</string>
     <string name="settings_link_owners_title">Apps com esses links</string>
     <string name="settings_link_owners_description">Toque em um para mudar.</string>
