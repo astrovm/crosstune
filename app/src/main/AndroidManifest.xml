@@ -276,6 +276,15 @@
             The Quick Settings tile and launcher shortcut read the clipboard through this alias.
             It isn't exported, so other apps can't make Crosstune read the clipboard for them.
         -->
+        <!-- The widget's song recognition button: opens the chosen app, then closes, unseen. -->
+        <activity
+            android:name=".RecognizeSongActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <activity-alias
             android:name=".PasteFromClipboard"
             android:exported="false"

@@ -1,0 +1,1 @@
+The widget has a button to name a song playing nearby, and tapping its logo or name opens Crosstune.
