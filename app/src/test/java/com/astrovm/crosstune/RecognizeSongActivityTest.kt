@@ -36,7 +36,7 @@ class RecognizeSongActivityTest {
 
     private fun pick(packageName: String) {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
-            .putString(SongRecognizers.KEY_PICK, packageName).commit()
+            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).putString(SongRecognizers.KEY_PICK, packageName).commit()
     }
 
     private fun assertListens(started: Intent?) {
@@ -64,5 +64,23 @@ class RecognizeSongActivityTest {
         // One that's gone listens here.
         pick("missing.recognizer")
         assertListens(tap())
+    }
+
+    @Test
+    fun aPickFromBeforeCrosstuneCouldListenIsDroppedOnceThenKept() {
+        install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
+        val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        // An older version saved Shazam, and nothing says it's been dropped.
+        preferences.edit().clear().putString(SongRecognizers.KEY_PICK, SongRecognizers.SHAZAM).commit()
+        assertListens(tap())
+        assertEquals(null, preferences.getString(SongRecognizers.KEY_PICK, null))
+        // Picked again, it's the user's choice and stays.
+        pick(SongRecognizers.SHAZAM)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, tap()!!.action)
+        assertEquals(SongRecognizers.SHAZAM, preferences.getString(SongRecognizers.KEY_PICK, null))
+        // A new install has nothing to drop.
+        preferences.edit().clear().commit()
+        assertListens(tap())
+        assertEquals(true, preferences.getBoolean(SongRecognizers.KEY_PICK_RESET, false))
     }
 }

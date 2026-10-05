@@ -1,0 +1,1 @@
+Crosstune names songs playing nearby by itself, and it's now the default again: if you chose Shazam or Google before, tap Recognize and it listens in Crosstune. You can pick them again in Settings.
