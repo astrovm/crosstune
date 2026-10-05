@@ -14,43 +14,34 @@
   "note": "Kostenlos, Open Source und werbefrei. Läuft ab Android 8.",
   "alt_home": "Ein Song aus Apple Music, bereit zum Öffnen in YouTube Music",
   "alt_list": "Eine Deezer-Playlist, bereit zum Abspielen in YouTube Music",
+  "how_h2": "So funktioniert's",
+  "how_steps": [
+    [
+      "Tipp auf einen Musik-Link",
+      "Von Freunden, aus einem Chat oder Post."
+    ],
+    [
+      "Crosstune findet den Song",
+      "Denselben, in der App, die du nutzt."
+    ],
+    [
+      "Er läuft in deiner App",
+      "Ohne Kopieren, ohne Suchen."
+    ]
+  ],
   "features_h2": "Was die App kann",
   "cards": [
     [
-      "Tippen und los",
-      "Links öffnen sich direkt in deiner Lieblings-App."
+      "Ganze Playlists",
+      "Sieh alle Songs und spiel alle auf einmal ab."
     ],
     [
-      "Genauer Treffer",
-      "Unterstützte Apps öffnen den Song selbst statt einer Suche."
-    ],
-    [
-      "Playlists und Alben",
-      "Sieh dir alle Songs an und öffne einen davon, oder spiel alle ab."
-    ],
-    [
-      "Deine Regeln",
-      "Wähle eine App pro Dienst oder lass dich jedes Mal fragen."
-    ],
-    [
-      "Jede App",
-      "Füge jede App oder Website mit Suchseite hinzu."
-    ],
-    [
-      "Now Playing",
-      "Auch Songs, die du aus Now Playing auf dem Pixel teilst, funktionieren."
-    ],
-    [
-      "Kurzbefehle",
-      "Widget auf dem Startbildschirm, Einfügen mit einem Tipp, Schnelleinstellungen-Kachel."
-    ],
-    [
-      "Kein Tracking",
-      "Entfernt Tracking-Teile wie ?si= aus Links."
+      "Welcher Song ist das?",
+      "Shazam oder Google erkennt ihn, Crosstune öffnet ihn."
     ],
     [
       "Privat",
-      "Kein Konto. Der Verlauf bleibt auf deinem Handy."
+      "Kein Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
     ]
   ],
   "play_button": "Google Play",

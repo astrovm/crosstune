@@ -14,43 +14,34 @@
   "note": "Ücretsiz, açık kaynak ve reklamsız. Android 8 ve sonrasında çalışır.",
   "alt_home": "YouTube Music'te açılmaya hazır bir Apple Music şarkısı",
   "alt_list": "YouTube Music'te çalmaya hazır bir Deezer çalma listesi",
+  "how_h2": "Nasıl çalışır",
+  "how_steps": [
+    [
+      "Bir müzik bağlantısına dokunun",
+      "Bir arkadaştan, sohbetten ya da gönderiden."
+    ],
+    [
+      "Crosstune şarkıyı bulur",
+      "Aynı şarkıyı, kullandığınız uygulamada."
+    ],
+    [
+      "Uygulamanızda çalar",
+      "Kopyalamadan, aramadan."
+    ]
+  ],
   "features_h2": "Neler yapar",
   "cards": [
     [
-      "Dokun ve dinle",
-      "Bağlantılar doğrudan favori uygulamanızda açılır."
+      "Çalma listelerinin tamamı",
+      "Tüm şarkıları görün, hepsini birden çalın."
     ],
     [
-      "Tam eşleşme",
-      "Desteklenen uygulamalar arama yerine şarkının kendisini açar."
-    ],
-    [
-      "Çalma listeleri ve albümler",
-      "Tüm şarkıları görün, istediğinizi açın ya da hepsini çalın."
-    ],
-    [
-      "Sizin kurallarınız",
-      "Her servis için bir uygulama seçin ya da her seferinde sorulsun."
-    ],
-    [
-      "Her uygulama",
-      "Arama sayfası olan her uygulamayı veya siteyi ekleyin."
-    ],
-    [
-      "Now Playing",
-      "Pixel'deki Now Playing'den paylaşılan şarkılar da çalışır."
-    ],
-    [
-      "Kısayollar",
-      "Ana ekran widget'ı, tek dokunuşla yapıştırma, Hızlı Ayarlar kutucuğu."
-    ],
-    [
-      "İzleme yok",
-      "Bağlantılardaki ?si= gibi izleme kısımlarını kaldırır."
+      "Bu şarkı ne?",
+      "Shazam ya da Google tanır, Crosstune açar."
     ],
     [
       "Gizli",
-      "Hesap yok. Geçmiş telefonunuzda kalır."
+      "Hesap yok, izleme yok. Geçmiş telefonunuzda kalır."
     ]
   ],
   "play_button": "Google Play",

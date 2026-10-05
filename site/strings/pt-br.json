@@ -14,43 +14,34 @@
   "note": "Grátis, de código aberto e sem anúncios. Funciona no Android 8 ou mais recente.",
   "alt_home": "Uma música do Apple Music pronta para abrir no YouTube Music",
   "alt_list": "Uma playlist do Deezer pronta para tocar tudo no YouTube Music",
+  "how_h2": "Como funciona",
+  "how_steps": [
+    [
+      "Toque em qualquer link de música",
+      "De um amigo, uma conversa ou um post."
+    ],
+    [
+      "O Crosstune acha a música",
+      "A mesma, no app que você usa."
+    ],
+    [
+      "Ela toca no seu app",
+      "Sem copiar, sem buscar."
+    ]
+  ],
   "features_h2": "O que ele faz",
   "cards": [
     [
-      "Toque e pronto",
-      "Os links abrem direto no seu app favorito."
+      "Playlists inteiras",
+      "Veja todas as músicas e toque todas de uma vez."
     ],
     [
-      "Resultado exato",
-      "Os apps compatíveis abrem a própria música em vez de uma busca."
-    ],
-    [
-      "Playlists e álbuns",
-      "Veja todas as músicas e abra qualquer uma, ou toque todas."
-    ],
-    [
-      "Suas regras",
-      "Escolha um app para cada serviço ou peça para perguntar sempre."
-    ],
-    [
-      "Qualquer app",
-      "Adicione qualquer app ou site com uma página de busca."
-    ],
-    [
-      "Now Playing",
-      "Músicas compartilhadas pelo Now Playing do Pixel também funcionam."
-    ],
-    [
-      "Atalhos",
-      "Widget na tela inicial, colar com um toque, bloco das Configurações rápidas."
-    ],
-    [
-      "Sem rastreamento",
-      "Remove partes de rastreamento como ?si= dos links."
+      "Que música é essa?",
+      "O Shazam ou o Google reconhece e o Crosstune abre."
     ],
     [
       "Privado",
-      "Sem conta. O histórico fica no seu celular."
+      "Sem conta, sem rastreamento. O histórico fica no seu celular."
     ]
   ],
   "play_button": "Google Play",

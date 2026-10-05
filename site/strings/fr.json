@@ -14,43 +14,34 @@
   "note": "Gratuite, open source et sans publicité. Fonctionne sur Android 8 ou version ultérieure.",
   "alt_home": "Un morceau d'Apple Music prêt à s'ouvrir dans YouTube Music",
   "alt_list": "Une playlist Deezer prête à être lue dans YouTube Music",
+  "how_h2": "Comment ça marche",
+  "how_steps": [
+    [
+      "Touchez un lien musical",
+      "D'un ami, d'une discussion ou d'un post."
+    ],
+    [
+      "Crosstune trouve le titre",
+      "Le même, dans l'app que vous utilisez."
+    ],
+    [
+      "Il se lance dans votre app",
+      "Sans copier ni chercher."
+    ]
+  ],
   "features_h2": "Ce qu'elle fait",
   "cards": [
     [
-      "Un geste suffit",
-      "Les liens s'ouvrent directement dans votre application préférée."
+      "Playlists entières",
+      "Voyez tous les titres et lisez-les d'un coup."
     ],
     [
-      "Résultat exact",
-      "Les applications compatibles ouvrent le morceau lui-même au lieu d'une recherche."
-    ],
-    [
-      "Playlists et albums",
-      "Voyez tous les titres et ouvrez celui que vous voulez, ou lisez tout."
-    ],
-    [
-      "Vos règles",
-      "Choisissez une application par service, ou laissez-la vous demander à chaque fois."
-    ],
-    [
-      "Toute application",
-      "Ajoutez n'importe quelle application ou site doté d'une page de recherche."
-    ],
-    [
-      "Now Playing",
-      "Les titres partagés depuis Now Playing sur Pixel fonctionnent aussi."
-    ],
-    [
-      "Raccourcis",
-      "Widget sur l'écran d'accueil, coller d'un geste, tuile des réglages rapides."
-    ],
-    [
-      "Sans pistage",
-      "Retire les éléments de pistage comme ?si= des liens."
+      "Quel est ce titre ?",
+      "Shazam ou Google le reconnaît, Crosstune l'ouvre."
     ],
     [
       "Privé",
-      "Aucun compte. L'historique reste sur votre téléphone."
+      "Sans compte ni pistage. L'historique reste sur votre téléphone."
     ]
   ],
   "play_button": "Google Play",

@@ -14,43 +14,34 @@
   "note": "Gratis, open source, dan tanpa iklan. Berfungsi di Android 8 atau yang lebih baru.",
   "alt_home": "Lagu dari Apple Music yang siap dibuka di YouTube Music",
   "alt_list": "Playlist Deezer yang siap diputar di YouTube Music",
+  "how_h2": "Cara kerjanya",
+  "how_steps": [
+    [
+      "Ketuk link musik apa saja",
+      "Dari teman, chat, atau postingan."
+    ],
+    [
+      "Crosstune menemukan lagunya",
+      "Lagu yang sama, di aplikasi yang kamu pakai."
+    ],
+    [
+      "Diputar di aplikasimu",
+      "Tanpa menyalin, tanpa mencari."
+    ]
+  ],
   "features_h2": "Yang bisa dilakukan",
   "cards": [
     [
-      "Ketuk dan langsung buka",
-      "Link langsung terbuka di aplikasi favoritmu."
+      "Satu playlist penuh",
+      "Lihat semua lagu dan putar semuanya sekaligus."
     ],
     [
-      "Persis sama",
-      "Aplikasi yang didukung membuka lagunya langsung, bukan hasil pencarian."
-    ],
-    [
-      "Playlist dan album",
-      "Lihat semua lagu dan buka yang mana saja, atau putar semuanya."
-    ],
-    [
-      "Aturanmu sendiri",
-      "Pilih aplikasi untuk tiap layanan, atau tanya setiap kali."
-    ],
-    [
-      "Aplikasi apa pun",
-      "Tambahkan aplikasi atau situs apa pun yang punya halaman pencarian."
-    ],
-    [
-      "Now Playing",
-      "Lagu yang dibagikan dari Now Playing di Pixel juga bisa."
-    ],
-    [
-      "Pintasan",
-      "Widget di layar utama, tempel dengan satu ketukan, kartu Setelan Cepat."
-    ],
-    [
-      "Tanpa pelacakan",
-      "Menghapus bagian pelacakan seperti ?si= dari link."
+      "Lagu apa ini?",
+      "Shazam atau Google mengenalinya, Crosstune membukanya."
     ],
     [
       "Privat",
-      "Tanpa akun. Riwayat tetap di ponselmu."
+      "Tanpa akun, tanpa pelacakan. Riwayat tetap di ponselmu."
     ]
   ],
   "play_button": "Google Play",

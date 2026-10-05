@@ -14,43 +14,34 @@
   "note": "Gratis, open source en zonder advertenties. Werkt op Android 8 of hoger.",
   "alt_home": "Een nummer uit Apple Music, klaar om te openen in YouTube Music",
   "alt_list": "Een Deezer-playlist, klaar om af te spelen in YouTube Music",
+  "how_h2": "Zo werkt het",
+  "how_steps": [
+    [
+      "Tik op een muzieklink",
+      "Van een vriend, uit een chat of post."
+    ],
+    [
+      "Crosstune vindt het nummer",
+      "Hetzelfde, in de app die jij gebruikt."
+    ],
+    [
+      "Het speelt in jouw app",
+      "Zonder kopiëren of zoeken."
+    ]
+  ],
   "features_h2": "Wat het doet",
   "cards": [
     [
-      "Tik en klaar",
-      "Links openen direct in je favoriete app."
+      "Hele playlists",
+      "Zie alle nummers en speel ze allemaal af."
     ],
     [
-      "Exacte match",
-      "Ondersteunde apps openen het nummer zelf in plaats van een zoekopdracht."
-    ],
-    [
-      "Playlists en albums",
-      "Bekijk alle nummers en open er een, of speel ze allemaal af."
-    ],
-    [
-      "Jouw regels",
-      "Kies een app per service, of laat het elke keer vragen."
-    ],
-    [
-      "Elke app",
-      "Voeg elke app of site met een zoekpagina toe."
-    ],
-    [
-      "Now Playing",
-      "Nummers gedeeld vanuit Now Playing op je Pixel werken ook."
-    ],
-    [
-      "Snelkoppelingen",
-      "Widget op je startscherm, plakken met één tik, tegel in Snelle instellingen."
-    ],
-    [
-      "Geen tracking",
-      "Haalt trackingdelen zoals ?si= uit links."
+      "Welk nummer is dit?",
+      "Shazam of Google herkent het, Crosstune opent het."
     ],
     [
       "Privé",
-      "Geen account. Je geschiedenis blijft op je telefoon."
+      "Geen account, geen tracking. Je geschiedenis blijft op je telefoon."
     ]
   ],
   "play_button": "Google Play",

@@ -14,43 +14,34 @@
   "note": "Darmowa, open source i bez reklam. Działa na Androidzie 8 lub nowszym.",
   "alt_home": "Utwór z Apple Music gotowy do otwarcia w YouTube Music",
   "alt_list": "Playlista ze Deezer gotowa do odtworzenia w YouTube Music",
+  "how_h2": "Jak to działa",
+  "how_steps": [
+    [
+      "Kliknij link do muzyki",
+      "Od znajomego, z czatu albo posta."
+    ],
+    [
+      "Crosstune znajduje utwór",
+      "Ten sam, w aplikacji, której używasz."
+    ],
+    [
+      "Gra w Twojej aplikacji",
+      "Bez kopiowania i szukania."
+    ]
+  ],
   "features_h2": "Co robi",
   "cards": [
     [
-      "Kliknij i gotowe",
-      "Linki otwierają się od razu w ulubionej aplikacji."
+      "Całe playlisty",
+      "Zobacz wszystkie utwory i odtwórz je naraz."
     ],
     [
-      "Dokładne dopasowanie",
-      "Obsługiwane aplikacje otwierają sam utwór zamiast wyszukiwania."
-    ],
-    [
-      "Playlisty i albumy",
-      "Zobacz wszystkie utwory i otwórz dowolny albo odtwórz wszystkie."
-    ],
-    [
-      "Twoje zasady",
-      "Wybierz aplikację dla każdego serwisu albo pytaj za każdym razem."
-    ],
-    [
-      "Dowolna aplikacja",
-      "Dodaj dowolną aplikację lub stronę z wyszukiwarką."
-    ],
-    [
-      "Now Playing",
-      "Działają też utwory udostępnione z Now Playing na Pixelu."
-    ],
-    [
-      "Skróty",
-      "Widżet na ekranie głównym, wklejanie jednym kliknięciem, kafelek w Szybkich ustawieniach."
-    ],
-    [
-      "Bez śledzenia",
-      "Usuwa z linków elementy śledzące, takie jak ?si=."
+      "Co to za utwór?",
+      "Shazam lub Google go rozpozna, a Crosstune otworzy."
     ],
     [
       "Prywatność",
-      "Bez konta. Historia zostaje na Twoim telefonie."
+      "Bez konta i śledzenia. Historia zostaje na Twoim telefonie."
     ]
   ],
   "play_button": "Google Play",

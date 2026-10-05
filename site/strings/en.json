@@ -14,43 +14,34 @@
   "note": "Free, open source and ad-free. Works on Android 8 or newer.",
   "alt_home": "A song from Apple Music ready to open in YouTube Music",
   "alt_list": "A Deezer playlist, ready to play all in YouTube Music",
+  "how_h2": "How it works",
+  "how_steps": [
+    [
+      "Tap any music link",
+      "From a friend, a chat or a post."
+    ],
+    [
+      "Crosstune finds the song",
+      "The same one, on the app you use."
+    ],
+    [
+      "It plays in your app",
+      "No copying, no searching."
+    ]
+  ],
   "features_h2": "What it does",
   "cards": [
     [
-      "Tap and go",
-      "Links open straight in your favorite app."
+      "Playlists too",
+      "See every song and play them all at once."
     ],
     [
-      "Exact match",
-      "Supported apps open the song itself instead of a search."
-    ],
-    [
-      "Playlists and albums",
-      "See every song and open any one, or play them all."
-    ],
-    [
-      "Your rules",
-      "Pick an app per service, or ask each time."
-    ],
-    [
-      "Any app",
-      "Add any app or site with a search page."
-    ],
-    [
-      "Now Playing",
-      "Songs shared from Pixel Now Playing work too."
-    ],
-    [
-      "Shortcuts",
-      "Home screen widget, one-tap paste, Quick Settings tile."
-    ],
-    [
-      "No tracking",
-      "Drops tracking bits like ?si= from links."
+      "Name that song",
+      "Shazam or Google finds it, Crosstune opens it."
     ],
     [
       "Private",
-      "No account. History stays on your phone."
+      "No account, no tracking. History stays on your phone."
     ]
   ],
   "play_button": "Google Play",
