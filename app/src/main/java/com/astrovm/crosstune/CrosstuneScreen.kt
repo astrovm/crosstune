@@ -99,6 +99,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -1070,19 +1072,36 @@ private fun SecondaryAction(
 
 @Composable
 private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val closeSearch = {
+        searchExpanded = false
+        query = ""
+        keyboard?.hide()
+        focus.clearFocus()
+    }
+    BackHandler(enabled = searchExpanded) { closeSearch() }
     SectionHeader(
         title = stringResource(R.string.history_title),
         action = {
-            TextButton(onClick = actions.onClearHistory) {
-                Text(stringResource(R.string.clear_history_button))
+            Row {
+                IconButton(onClick = { if (searchExpanded) closeSearch() else searchExpanded = true }) {
+                    AppIcon(
+                        if (searchExpanded) R.drawable.ic_close else R.drawable.ic_search,
+                        contentDescription = stringResource(if (searchExpanded) R.string.dismiss_button else R.string.search_recent)
+                    )
+                }
+                IconButton(onClick = actions.onClearHistory) {
+                    AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.clear_history_button))
+                }
             }
         },
         modifier = Modifier.padding(top = 8.dp)
     )
-    // A longer list gets a search, by title or artist.
-    var query by rememberSaveable { mutableStateOf("") }
-    val searchable = history.size > SEARCHABLE_HISTORY
-    if (searchable) {
+    AnimatedVisibility(visible = searchExpanded, enter = expandVertically(Motion.size) + fadeIn(Motion.fadeIn), exit = shrinkVertically(Motion.size) + fadeOut(Motion.fadeOut)) {
         TextField(
             value = query,
             onValueChange = { query = it },
@@ -1099,10 +1118,12 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
+                .focusRequester(focusRequester)
         )
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
     }
     val words = query.trim().lowercase().split(" ").filter { it.isNotEmpty() }
-    val shown = if (!searchable) history else history.filter { entry ->
+    val shown = history.filter { entry ->
         val text = "${entry.metadata.title} ${entry.metadata.artist}".lowercase()
         words.all { it in text }
     }
@@ -1311,7 +1332,6 @@ private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier 
 }
 
 /** How many Recent items fit at a glance; past that, a search shows above them. */
-private const val SEARCHABLE_HISTORY = 5
 
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =

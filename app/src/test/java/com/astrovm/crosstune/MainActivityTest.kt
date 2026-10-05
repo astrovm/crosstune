@@ -939,10 +939,49 @@ class MainActivityTest {
             store.add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "$n", "https://www.deezer.com/track/$n"), MusicMetadata("Song $n", if (n == 3) "Special Band" else "Band")))
         }
         launch()
-        composeRule.onNodeWithText(string(R.string.search_recent)).performScrollTo().performTextInput("special song")
+        val search = string(R.string.search_recent)
+        // The toolbar uses labelled icons; the field appears only when Search is tapped.
+        composeRule.onNodeWithText(search).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.clear_history_button)).assertExists()
+        composeRule.onNodeWithText(string(R.string.clear_history_button)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(search).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(search).performTextInput("special song")
         composeRule.waitForIdle()
         assertTextShown("Song 3")
         assertTextAbsent("Song 4")
+        // Keep the open search and query through a configuration change.
+        controller!!.recreate()
+        composeRule.waitForIdle()
+        assertTextShown("Song 3")
+        assertTextAbsent("Song 4")
+        composeRule.onNodeWithText("special song").performTextReplacement("不存在 🎵")
+        composeRule.waitForIdle()
+        assertTextAbsent("Song 3")
+        // Closing search clears the filter; reopening starts with an empty field.
+        click(string(R.string.dismiss_button))
+        assertTextShown("Song 3")
+        assertTextShown("Song 4")
+        composeRule.onNodeWithText(search).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(search).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(search).assertExists()
+        assertTextShown("Song 4")
+    }
+
+    @Test
+    fun evenOneRecentSongCanBeSearchedAndBackClosesTheSearch() {
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "1", "https://www.deezer.com/track/1"), MusicMetadata("A Song", "Band")))
+        val activity = launch()
+        click(string(R.string.search_recent))
+        composeRule.onNodeWithText(string(R.string.search_recent)).performTextInput("missing")
+        composeRule.waitForIdle()
+        assertTextAbsent("A Song")
+        composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.waitForIdle()
+        assertTextShown("A Song")
+        composeRule.onNodeWithText(string(R.string.search_recent)).assertDoesNotExist()
+        assertFalse(activity.isFinishing)
     }
 
     @Test
@@ -4149,7 +4188,7 @@ class MainActivityTest {
         android.runAll()
         resolveTyped()
         click(string(R.string.clear_button))
-        assertTextShown(string(R.string.clear_history_button))
+        composeRule.onNodeWithContentDescription(string(R.string.clear_history_button)).assertExists()
 
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         // Recent is cleared after it was read with the rest, but before that answer arrives.
