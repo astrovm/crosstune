@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">म्यूज़िक लिंक</string>
-    <string name="spotify_link_placeholder">म्यूज़िक लिंक पेस्ट करें</string>
+    <string name="spotify_link_placeholder">म्यूज़िक लिंक या गाने का नाम पेस्ट करें</string>
     <string name="resolve_button">लिंक बदलें</string>
     <string name="paste_button">पेस्ट करें</string>
     <string name="recognize_button">गाना पहचानें</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">“%1$s” के लिए कोई गाना नहीं मिला।</string>
     <string name="song_search_placeholder">गाना या कलाकार</string>
     <string name="song_search_label">गाने का नाम</string>
+    <string name="song_search_label_for">“%1$s” के लिए मिला</string>
 </resources>

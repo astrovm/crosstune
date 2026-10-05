@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">음악 링크</string>
-    <string name="spotify_link_placeholder">음악 링크 붙여넣기</string>
+    <string name="spotify_link_placeholder">음악 링크 또는 노래 제목을 붙여넣으세요</string>
     <string name="resolve_button">링크 변환</string>
     <string name="paste_button">붙여넣기</string>
     <string name="recognize_button">노래 인식</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">“%1$s”에 해당하는 노래가 없어요.</string>
     <string name="song_search_placeholder">노래 또는 아티스트</string>
     <string name="song_search_label">노래 제목</string>
+    <string name="song_search_label_for">“%1$s” 검색 결과</string>
 </resources>

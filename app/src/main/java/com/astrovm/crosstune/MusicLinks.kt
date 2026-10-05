@@ -131,6 +131,33 @@ internal object MusicLinks {
     /** What [text] is a link to, without fetching anything about it. */
     fun linkFor(text: String): MusicLink? = text.trim().toHttpUrlOrNull()?.let(::fromUrl)
 
+    private val schemeRegex = Regex("""^[a-z][a-z0-9+.-]*:""", RegexOption.IGNORE_CASE)
+
+    /**
+ * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters is
+ * well past any title anyone types, and short enough to catch an id with a character added or lost.
+ */
+    private val bareIdRegex = Regex("""[A-Za-z0-9]{20,}""")
+
+    /**
+     * Whether [text] was meant as a link rather than as a song's name: it carries a scheme, or a
+     * host with a dot in it, e.g. "spotify:track:x" or "open.spotify.com/track/x", or it is an ID
+     * pasted on its own. A link Crosstune can't open is still a link, so it is reported as one
+     * instead of being looked up as a song that happens to be named "open.spotify.com/track/x".
+     */
+    fun looksLikeALink(text: String): Boolean {
+        val value = text.trim()
+        // Names have spaces in them, and nothing else typed here does.
+        if (value.isEmpty() || value.any { it.isWhitespace() }) return false
+        if (schemeRegex.containsMatchIn(value)) return true
+        // A bare path, e.g. "/track/11dFg", is a link with its address left off.
+        if (value.startsWith('/')) return true
+        // A bare id, e.g. one copied from a Spotify url, is a link with its address left off.
+        if (bareIdRegex.matches(value)) return true
+        val host = value.substringBefore('/').substringBefore('?').substringBefore(':')
+        return host.contains('.') && host.substringAfterLast('.').length >= 2
+    }
+
     private fun serviceForHost(host: String): MusicService? = when {
         host.isOn("spotify.com") || host.isOn("spotify.link") -> MusicService.SPOTIFY
         host == "music.youtube.com" -> MusicService.YOUTUBE_MUSIC

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Muzieklink</string>
-    <string name="spotify_link_placeholder">Plak een muzieklink</string>
+    <string name="spotify_link_placeholder">Plak een muzieklink of een songnaam</string>
     <string name="resolve_button">Link omzetten</string>
     <string name="paste_button">Plakken</string>
     <string name="recognize_button">Nummer herkennen</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
     <string name="song_search_placeholder">Nummer of artiest</string>
     <string name="song_search_label">Naam van het nummer</string>
+    <string name="song_search_label_for">Gevonden voor “%1$s”</string>
 </resources>

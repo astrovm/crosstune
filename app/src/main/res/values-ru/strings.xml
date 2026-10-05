@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Музыкальная ссылка</string>
-    <string name="spotify_link_placeholder">Вставьте музыкальную ссылку</string>
+    <string name="spotify_link_placeholder">Вставьте музыкальную ссылку или название трека</string>
     <string name="resolve_button">Преобразовать ссылку</string>
     <string name="paste_button">Вставить</string>
     <string name="recognize_button">Распознать трек</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">Треки для «%1$s» не найдены.</string>
     <string name="song_search_placeholder">Трек или исполнитель</string>
     <string name="song_search_label">Название трека</string>
+    <string name="song_search_label_for">Найдено по запросу «%1$s»</string>
 </resources>

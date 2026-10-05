@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Müzik bağlantısı</string>
-    <string name="spotify_link_placeholder">Müzik bağlantısı yapıştırın</string>
+    <string name="spotify_link_placeholder">Bir müzik bağlantısı veya şarkı adı yapıştırın</string>
     <string name="resolve_button">Bağlantıyı dönüştür</string>
     <string name="paste_button">Yapıştır</string>
     <string name="recognize_button">Şarkıyı tanı</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
     <string name="song_search_placeholder">Şarkı veya sanatçı</string>
     <string name="song_search_label">Şarkı adı</string>
+    <string name="song_search_label_for">“%1$s” için bulundu</string>
 </resources>

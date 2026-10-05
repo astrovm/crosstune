@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
                     // What was found for songs is kept, so a playlist played again needs no lookups.
                     ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher)),
                     LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
+                    SongSearcher(client),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
@@ -183,6 +184,8 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onDismissLyrics = viewModel::dismissLyrics,
+                        onPickSong = viewModel::chooseSong,
+                        onDismissSongSearch = viewModel::dismissSongSearch,
                         onTargetChange = viewModel::selectDefault,
                         onResultTargetChange = viewModel::selectResultDestination,
                         onMakeDefault = { viewModel.selectDefault(viewModel.uiState.resultDestination) },

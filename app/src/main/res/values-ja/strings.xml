@@ -2,7 +2,7 @@
 <resources>
 
     <string name="spotify_link_label">音楽リンク</string>
-    <string name="spotify_link_placeholder">音楽リンクを貼り付け</string>
+    <string name="spotify_link_placeholder">音楽リンクまたは曲名を貼り付け</string>
     <string name="resolve_button">変換</string>
     <string name="paste_button">貼り付け</string>
     <string name="recognize_button">曲を認識</string>
@@ -180,4 +180,5 @@
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
     <string name="song_search_placeholder">曲またはアーティスト</string>
     <string name="song_search_label">曲名</string>
+    <string name="song_search_label_for">「%1$s」の検索結果</string>
 </resources>

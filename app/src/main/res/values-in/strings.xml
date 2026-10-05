@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Link musik</string>
-    <string name="spotify_link_placeholder">Tempel link musik</string>
+    <string name="spotify_link_placeholder">Tempel tautan musik atau nama lagu</string>
     <string name="resolve_button">Konversi link</string>
     <string name="paste_button">Tempel</string>
     <string name="recognize_button">Kenali lagu</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
     <string name="song_search_placeholder">Lagu atau artis</string>
     <string name="song_search_label">Nama lagu</string>
+    <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>
 </resources>

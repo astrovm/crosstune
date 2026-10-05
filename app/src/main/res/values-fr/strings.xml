@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Lien musical</string>
-    <string name="spotify_link_placeholder">Collez un lien musical</string>
+    <string name="spotify_link_placeholder">Collez un lien musical ou un titre de chanson</string>
     <string name="resolve_button">Convertir le lien</string>
     <string name="paste_button">Coller</string>
     <string name="recognize_button">Reconnaître un titre</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">Aucun titre trouvé pour « %1$s ».</string>
     <string name="song_search_placeholder">Titre ou artiste</string>
     <string name="song_search_label">Nom du titre</string>
+    <string name="song_search_label_for">Trouvées pour « %1$s »</string>
 </resources>

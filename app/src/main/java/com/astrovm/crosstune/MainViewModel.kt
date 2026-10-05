@@ -70,6 +70,12 @@ internal data class UiState(
     val isLoadingLyrics: Boolean = false,
     /** Set when the service wouldn't answer, which isn't the same as the song having no words. */
     val lyricsFailed: Boolean = false,
+    /** Songs found for typed text that wasn't a link, offered to pick from. */
+    val songSearch: List<MusicMetadata> = emptyList(),
+    /** What was searched for, so an empty list can say what it found nothing for. */
+    val songSearchQuery: String = "",
+    /** Set while the songs for typed text are being looked up. */
+    val isSearchingSongs: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
@@ -174,6 +180,8 @@ internal class MainViewModel(
     private val matcher: ExactMatcher,
     /** Where a song's words come from; nullable so tests need no lyrics service. */
     private val lyricsFinder: LyricsFinder? = null,
+    /** Where a song typed by name is looked up; nullable so tests need no catalogue. */
+    private val songSearcher: SongSearcher? = null,
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
@@ -312,7 +320,67 @@ internal class MainViewModel(
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
         uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
-        val input = parse(uiState.linkText) ?: return rejectInput()
+        val input = parse(uiState.linkText)
+        if (input == null) {
+            // Not a link, so it may be a song's name. One with a catalogue behind it gets a list to
+            // pick from; anything else is still not something Crosstune can open.
+            searchSongs(uiState.linkText)
+            return
+        }
+        resolve(input, openWhenReady = false)
+    }
+
+    private var searchJob: Job? = null
+
+    /**
+     * Looks [query] up as a song's name and offers what was found to pick from, so a song can be
+     * converted without its link. Nothing is searched for a link, which is already all it needs.
+     */
+    fun searchSongs(query: String) {
+        val searcher = songSearcher
+        val words = query.trim()
+        // A link Crosstune can't open is reported as one, not looked up as a song named after it.
+        if (searcher == null || words.isEmpty() || MusicLinks.looksLikeALink(words)) return rejectInput()
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            // Whatever was shown before is gone, so the songs found are what the screen is about.
+            uiState = uiState.copy(
+                isSearchingSongs = true,
+                songSearch = emptyList(),
+                result = null,
+                destinationUrls = emptyMap(),
+                link = null
+            )
+            val songs = searcher.search(words)
+            uiState = uiState.copy(isSearchingSongs = false, songSearch = songs, songSearchQuery = words)
+            // Nothing by that name: say so, rather than showing an empty list with no reason in it.
+            if (songs.isEmpty()) uiState = uiState.copy(error = AppError.NOT_FOUND)
+        }
+    }
+
+    /** Closes the songs offered, leaving the typed text as it was. */
+    fun dismissSongSearch() {
+        searchJob?.cancel()
+        uiState = uiState.copy(isSearchingSongs = false, songSearch = emptyList(), songSearchQuery = "")
+    }
+
+    /**
+     * Opens the chosen song where the result goes, matched like a song of its own. Its own link,
+     * where it has one, is what gets resolved, so it opens in the default app exactly as if that
+     * link had been pasted.
+     */
+    fun chooseSong(song: MusicMetadata) {
+        dismissSongSearch()
+        // A song found by name carries its own service's link, which is what gets resolved, so it
+        // opens in the default app exactly as if that link had been pasted.
+        song.url?.let { MusicLinks.parse(it) }?.let { parsed ->
+            uiState = uiState.copy(linkText = (parsed as? LinkInput.Link)?.link?.url ?: song.url)
+            resolve(parsed, openWhenReady = false)
+            return
+        }
+        val input = MusicLinks.recognizedSong(song)
+        job?.cancel()
+        uiState = uiState.copy(linkText = (input as LinkInput.RecognizedSong).text)
         resolve(input, openWhenReady = false)
     }
 

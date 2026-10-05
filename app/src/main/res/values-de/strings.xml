@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Musik-Link</string>
-    <string name="spotify_link_placeholder">Musik-Link einfügen</string>
+    <string name="spotify_link_placeholder">Musik-Link oder Songname einfügen</string>
     <string name="resolve_button">Link umwandeln</string>
     <string name="paste_button">Einfügen</string>
     <string name="recognize_button">Song erkennen</string>
@@ -179,4 +179,5 @@
     <string name="song_search_none">Keine Songs für „%1$s“ gefunden.</string>
     <string name="song_search_placeholder">Song oder Künstler</string>
     <string name="song_search_label">Songname</string>
+    <string name="song_search_label_for">Gefunden für „%1$s“</string>
 </resources>

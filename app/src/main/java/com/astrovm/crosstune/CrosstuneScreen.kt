@@ -180,6 +180,10 @@ internal data class ScreenActions(
     val onShowLyrics: () -> Unit = {},
     /** Closes the words. */
     val onDismissLyrics: () -> Unit = {},
+    /** Opens the chosen song from the list of songs a typed name turned up. */
+    val onPickSong: (MusicMetadata) -> Unit = {},
+    /** Closes the list of songs. */
+    val onDismissSongSearch: () -> Unit = {},
     val loadArtwork: suspend (String) -> ImageBitmap? = { null }
 )
 
@@ -366,6 +370,10 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
     LyricsSheet(state, actions.onDismissLyrics, actions.onShowLyrics)
+    // Only while a name is being looked up: a song picked or dismissed leaves nothing to show.
+    if (state.isSearchingSongs || state.songSearch.isNotEmpty() || state.songSearchQuery.isNotBlank()) {
+        SongSearchSheet(state, actions.loadArtwork, actions.onPickSong, actions.onDismissSongSearch)
+    }
     val snackbar = remember { SnackbarHostState() }
     val clearedMessage = stringResource(if (state.removedOneFromHistory) R.string.history_removed else R.string.history_cleared)
     val undoLabel = stringResource(R.string.undo_button)
@@ -766,6 +774,79 @@ private fun LyricsSheet(state: UiState, onDismiss: () -> Unit, onRetry: () -> Un
                         // The words are the point, so they read as one block rather than by line.
                         .semantics(mergeDescendants = true) {}
                 )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss_button)) }
+        }
+    )
+}
+
+/**
+ * The songs a typed name turned up, to pick from, since a song can be converted without its link.
+ * The name searched for is on the sheet, so a list of songs says what it is a list of.
+ */
+@Composable
+private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, onPick: (MusicMetadata) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(stringResource(R.string.song_search_title))
+                Text(
+                    stringResource(R.string.song_search_label_for, state.songSearchQuery),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        text = {
+            if (state.isSearchingSongs) {
+                Column {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        stringResource(R.string.loading_text),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                }
+            } else {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    state.songSearch.forEach { song ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(song) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CoverArt(song.artworkUrl, loadArtwork, size = 48.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    song.artist,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    if (state.songSearch.isEmpty()) {
+                        Text(
+                            stringResource(R.string.song_search_none, state.songSearchQuery),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
