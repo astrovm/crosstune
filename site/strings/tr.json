@@ -13,7 +13,7 @@
   "download": "Android için indir",
   "note": "Ücretsiz, açık kaynak ve reklamsız. Android 8 ve sonrasında çalışır.",
   "alt_home": "YouTube Music'te açılmaya hazır bir Apple Music şarkısı",
-  "alt_picker": "Bağlantıyı hangi uygulamanın açacağını seçme",
+  "alt_list": "YouTube Music'te çalmaya hazır bir Spotify çalma listesi",
   "features_h2": "Neler yapar",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Desteklenen uygulamalar arama yerine şarkının kendisini açar."
     ],
     [
+      "Çalma listeleri ve albümler",
+      "Tüm şarkıları görün, istediğinizi açın ya da hepsini çalın."
+    ],
+    [
       "Sizin kurallarınız",
       "Her servis için bir uygulama seçin ya da her seferinde sorulsun."
     ],
@@ -33,8 +37,16 @@
       "Arama sayfası olan her uygulamayı veya siteyi ekleyin."
     ],
     [
+      "Now Playing",
+      "Pixel'deki Now Playing'den paylaşılan şarkılar da çalışır."
+    ],
+    [
       "Kısayollar",
-      "Tek dokunuşla yapıştırma, son bağlantılar, Hızlı Ayarlar kutucuğu."
+      "Ana ekran widget'ı, tek dokunuşla yapıştırma, Hızlı Ayarlar kutucuğu."
+    ],
+    [
+      "İzleme yok",
+      "Bağlantılardaki ?si= gibi izleme kısımlarını kaldırır."
     ],
     [
       "Gizli",
@@ -44,9 +56,9 @@
   "play_button": "Google Play",
   "play_h2": "Google Play'den indir",
   "play_steps": [
-    "Google Play hesabınla <a href=\"{group}\">Crosstune testers</a> grubuna katıl.",
-    "<a href=\"{testing}\">Test sayfasını</a> aç ve <b>Become a tester</b> düğmesine dokun.",
-    "Crosstune'u <a href=\"{store}\">Google Play</a>'den yükle."
+    "Google Play hesabınızla <a href=\"{group}\">Crosstune testers</a> grubuna katılın.",
+    "<a href=\"{testing}\">Test sayfasını</a> açın ve <b>Become a tester</b> düğmesine dokunun.",
+    "Crosstune'u <a href=\"{store}\">Google Play</a>'den yükleyin."
   ],
   "play_note": "Crosstune, Google Play'de test aşamasında. Görünmesi birkaç dakika sürebilir.",
   "works_with": "Uyumlu servisler",

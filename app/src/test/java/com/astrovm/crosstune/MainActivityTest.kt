@@ -757,6 +757,8 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
         val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
+        // Holds the song lookups so the progress can be seen.
+        val release = CountDownLatch(1)
         fake.handler = { request ->
             val body = fake.requestBodies.last()
             when {
@@ -765,6 +767,7 @@ class MainActivityTest {
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
                 // Each song is found as itself, its video named after its number.
                 request.url.host == "music.youtube.com" -> {
+                    release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
@@ -780,6 +783,9 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("Song 1")
         composeRule.onNodeWithText(string(R.string.play_part, 51, 60)).performScrollTo().performClick()
+        // It shows how far it got while it looks the songs up.
+        waitForText(string(R.string.play_all_progress, 0, 10))
+        release.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=00000000051&list=TLGGpart", nextStartedActivity()!!.dataString)
         // Only those ten were looked up.
