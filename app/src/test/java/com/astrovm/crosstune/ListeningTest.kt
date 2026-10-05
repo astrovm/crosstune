@@ -50,7 +50,8 @@ class ListeningTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.microphoneFactory = { microphone }
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
+            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
         shazamAnswers(MATCH)
     }

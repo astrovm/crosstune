@@ -232,7 +232,7 @@ class MainActivity : ComponentActivity() {
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
         recognizers = SongRecognizers.available(this)
-        recognizerPick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(SongRecognizers.KEY_PICK, null)
+        recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
     }
 
     /** Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it. */

@@ -98,7 +98,8 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
+            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
     }
@@ -324,6 +325,19 @@ class MainActivityTest {
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)
         assertTextAbsent(recognize)
+    }
+
+    @Test
+    fun aRecognizerPickedBeforeCrosstuneCouldListenGoesBackToCrosstune() {
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
+        installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), IntentFilter(SongRecognizers.GOOGLE_SONG_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        prefs().edit().remove(SongRecognizers.KEY_PICK_RESET).putString("song_recognizer", SongRecognizers.GOOGLE).commit()
+        val activity = launch()
+        click(string(R.string.recognize_button))
+        // It listens here, asking for the microphone, instead of opening Google.
+        assertEquals(android.Manifest.permission.RECORD_AUDIO, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
+        assertNull(prefs().getString("song_recognizer", null))
+        inSettings { composeRule.onNodeWithText(string(R.string.setting_recognizer)).assertExists() }
     }
 
     @Test

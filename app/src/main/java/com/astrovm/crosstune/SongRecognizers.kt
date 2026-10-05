@@ -3,8 +3,10 @@ package com.astrovm.crosstune
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.core.content.edit
 
 /**
  * An app that names a song playing nearby, and how to start it listening. [listensHere] for
@@ -25,6 +27,20 @@ internal object SongRecognizers {
     const val GOOGLE_SONG_SEARCH = "com.google.android.googlequicksearchbox.MUSIC_SEARCH"
     /** The app picked in Settings, by package name. */
     const val KEY_PICK = "song_recognizer"
+    /** Set once the pick from before Crosstune could listen itself has been dropped, see [pick]. */
+    const val KEY_PICK_RESET = "song_recognizer_reset"
+
+    /**
+     * The app picked in Settings. Before Crosstune could listen itself, Shazam or Google was the
+     * only choice and came first, so what's picked from those days isn't a choice for Crosstune:
+     * it's dropped once, and from then on the pick is the user's.
+     */
+    fun pick(preferences: SharedPreferences): String? {
+        if (!preferences.getBoolean(KEY_PICK_RESET, false)) {
+            preferences.edit { remove(KEY_PICK).putBoolean(KEY_PICK_RESET, true) }
+        }
+        return preferences.getString(KEY_PICK, null)
+    }
 
     /**
      * Crosstune first, so it's the one used unless another is picked in Settings, then those
@@ -67,7 +83,7 @@ internal object SongRecognizers {
 class RecognizeSongActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val pick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(SongRecognizers.KEY_PICK, null)
+        val pick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
         // An app uninstalled since it was looked up has nothing to open.
         runCatching { startActivity(SongRecognizers.chosen(this, pick).intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         finish()
