@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.isSelectable
@@ -282,7 +283,7 @@ class MainActivityTest {
         inSettings {
             composeRule.onNodeWithText(setting).performScrollTo().performClick()
             composeRule.waitForIdle()
-            assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() })
+            assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() })
             composeRule.onAllNodesWithText("Shazam").onLast().performClick()
             composeRule.waitForIdle()
         }
