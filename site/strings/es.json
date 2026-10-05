@@ -14,16 +14,23 @@
   "note": "Gratis, de código abierto y sin publicidad. Funciona en Android 8 o posterior.",
   "alt_home": "Una canción de Apple Music lista para abrir en YouTube Music",
   "alt_list": "Una playlist de Deezer lista para reproducir toda en YouTube Music",
+  "how_h2": "Cómo funciona",
+  "how_steps": [
+    [
+      "Tocá cualquier link de música",
+      "De un amigo, un chat o un posteo."
+    ],
+    [
+      "Crosstune encuentra la canción",
+      "La misma, en la app que usás."
+    ],
+    [
+      "Suena en tu app",
+      "Sin copiar ni buscar."
+    ]
+  ],
   "features_h2": "Qué hace",
   "cards": [
-    [
-      "Se abre en tu app",
-      "Tocá un link de música y suena donde escuchás."
-    ],
-    [
-      "La canción exacta",
-      "No una búsqueda, si tu app lo permite."
-    ],
     [
       "Playlists enteras",
       "Mirá todas las canciones y reproducilas de una."
@@ -31,10 +38,6 @@
     [
       "¿Qué canción es?",
       "Shazam o Google la reconocen y Crosstune la abre."
-    ],
-    [
-      "Como quieras",
-      "Elegí una app para cada servicio o agregá la tuya."
     ],
     [
       "Privado",

@@ -14,16 +14,23 @@
   "note": "Gratis, open source en zonder advertenties. Werkt op Android 8 of hoger.",
   "alt_home": "Een nummer uit Apple Music, klaar om te openen in YouTube Music",
   "alt_list": "Een Deezer-playlist, klaar om af te spelen in YouTube Music",
+  "how_h2": "Zo werkt het",
+  "how_steps": [
+    [
+      "Tik op een muzieklink",
+      "Van een vriend, uit een chat of post."
+    ],
+    [
+      "Crosstune vindt het nummer",
+      "Hetzelfde, in de app die jij gebruikt."
+    ],
+    [
+      "Het speelt in jouw app",
+      "Zonder kopiëren of zoeken."
+    ]
+  ],
   "features_h2": "Wat het doet",
   "cards": [
-    [
-      "Opent in jouw app",
-      "Tik op een muzieklink en hij speelt waar jij luistert."
-    ],
-    [
-      "Precies het nummer",
-      "Geen zoekopdracht, als je app dat kan."
-    ],
     [
       "Hele playlists",
       "Zie alle nummers en speel ze allemaal af."
@@ -31,10 +38,6 @@
     [
       "Welk nummer is dit?",
       "Shazam of Google herkent het, Crosstune opent het."
-    ],
-    [
-      "Zoals jij wilt",
-      "Kies een app per dienst of voeg je eigen toe."
     ],
     [
       "Privé",

@@ -14,16 +14,23 @@
   "note": "Ücretsiz, açık kaynak ve reklamsız. Android 8 ve sonrasında çalışır.",
   "alt_home": "YouTube Music'te açılmaya hazır bir Apple Music şarkısı",
   "alt_list": "YouTube Music'te çalmaya hazır bir Deezer çalma listesi",
+  "how_h2": "Nasıl çalışır",
+  "how_steps": [
+    [
+      "Bir müzik bağlantısına dokunun",
+      "Bir arkadaştan, sohbetten ya da gönderiden."
+    ],
+    [
+      "Crosstune şarkıyı bulur",
+      "Aynı şarkıyı, kullandığınız uygulamada."
+    ],
+    [
+      "Uygulamanızda çalar",
+      "Kopyalamadan, aramadan."
+    ]
+  ],
   "features_h2": "Neler yapar",
   "cards": [
-    [
-      "Uygulamanızda açılır",
-      "Bir müzik bağlantısına dokunun, dinlediğiniz yerde çalsın."
-    ],
-    [
-      "Tam o şarkı",
-      "Uygulamanız destekliyorsa arama değil, şarkının kendisi."
-    ],
     [
       "Çalma listelerinin tamamı",
       "Tüm şarkıları görün, hepsini birden çalın."
@@ -31,10 +38,6 @@
     [
       "Bu şarkı ne?",
       "Shazam ya da Google tanır, Crosstune açar."
-    ],
-    [
-      "Size göre",
-      "Her servis için bir uygulama seçin ya da kendinizinkini ekleyin."
     ],
     [
       "Gizli",
