@@ -292,6 +292,24 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aRemasterTagDoesNotStopASongFromMatching() {
+        respond(
+            youTubeMusicPage(
+                youTubeMusicRow("Bullet With Butterfly Wings", "Band • Album • 4:18", videoId = "bullet00000"),
+                youTubeMusicRow("Other", "Band • Album • 4:18", videoId = "other000000")
+            )
+        )
+        for (title in listOf("Bullet With Butterfly Wings - Remastered 2012", "Bullet With Butterfly Wings (2012 Remaster)", "Bullet With Butterfly Wings - Mono")) {
+            assertEquals(title, "https://music.youtube.com/watch?v=bullet00000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Band")) })
+        }
+        // The same song credited to "Smashing Pumpkins", and a guest in the title, still match.
+        assertEquals("https://music.youtube.com/watch?v=bullet00000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Bullet With Butterfly Wings (feat. Guest)", "The Band")) })
+        // Only the tag is ignored: a different song, or a remix, still doesn't match.
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Bullet - Remastered", "Band")) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Bullet With Butterfly Wings - Skrillex Remix", "Band")) })
+    }
+
+    @Test
     fun youTubeOnlyOpensSongsFromTheSameSearch() {
         respond(youTubeMusicPage(youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen • Album • 3:20", videoId = "exact000000")))
         assertEquals("https://www.youtube.com/watch?v=exact000000", runBlocking { matcher().find(MusicService.YOUTUBE, song) })
@@ -370,5 +388,20 @@ class ExactMatcherTest {
         // Apps that need an account to search aren't asked.
         assertNull(restarted.find(MusicService.TIDAL, tracks[1]))
         assertNull(restarted.cover(tracks[2]))
+    }
+
+    @Test
+    fun aSongWithSeveralArtistsStillGetsACoverWhenSpotifyDoesNotAnswer() = runBlocking {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "open.spotify.com" -> throw IOException("busy")
+                // Deezer credits the song to the first artist only.
+                else -> FakeSpotify.html(request, """{"data":[{"title":"Baby","artist":{"name":"Justin Bieber"},"album":{"cover_big":"https://cdn/baby.jpg"}}]}""")
+            }
+        }
+        val baby = MusicMetadata("Baby", "Justin Bieber, Ludacris", url = "https://open.spotify.com/track/baby")
+        assertEquals("https://cdn/baby.jpg", matcher().cover(baby))
+        // An artist who isn't credited still doesn't get the cover.
+        assertNull(matcher().cover(baby.copy(artist = "Someone, Else", url = null)))
     }
 }

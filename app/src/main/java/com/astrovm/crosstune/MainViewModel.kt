@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -524,12 +525,18 @@ internal class MainViewModel(
         if (missing.isEmpty()) return
         coverJob = viewModelScope.launch {
             val tracks = result.tracks.toMutableList()
-            matcher.covers(missing.map(tracks::get)) { found, cover ->
-                tracks[missing[found]] = tracks[missing[found]].copy(artworkUrl = cover)
-                // Only while it's still the one on screen.
-                if (uiState.link?.url == link.url) uiState = uiState.copy(result = uiState.result?.copy(tracks = tracks.toList()))
+            try {
+                matcher.covers(missing.map(tracks::get)) { found, cover ->
+                    tracks[missing[found]] = tracks[missing[found]].copy(artworkUrl = cover)
+                    // Only while it's still the one on screen.
+                    if (uiState.link?.url == link.url) uiState = uiState.copy(result = uiState.result?.copy(tracks = tracks.toList()))
+                }
+            } finally {
+                // Stopped for another link, what was found is still kept with this one.
+                withContext(NonCancellable) {
+                    uiState = uiState.copy(history = historyStore.update(link.url, result.copy(tracks = tracks.toList())))
+                }
             }
-            uiState = uiState.copy(history = historyStore.update(link.url, result.copy(tracks = tracks.toList())))
         }
     }
 
@@ -739,6 +746,11 @@ internal class MainViewModel(
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = destination.matchService
         if (service != null && service == entry.link.service) return destination.adapt(entry.link.url)
+        // A playlist plays as a queue of its first songs, as the Play button in the app does, not as a search.
+        if (entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
+            entry.link.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
+            matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { return it }
+        }
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))

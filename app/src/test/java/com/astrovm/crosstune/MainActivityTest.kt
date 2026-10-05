@@ -1022,6 +1022,24 @@ class MainActivityTest {
     }
 
     @Test
+    fun theWidgetsPlayOpensASavedPlaylistAsAQueueNotASearch() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        collectionWithSongs()
+        val url = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.PLAYLIST, "37i9dQZF1DXcBWIGoYBM5M", url),
+                MusicMetadata("Road Trip", "", ItemType.PLAYLIST, tracks = listOf(MusicMetadata("First Song", "Band")))
+            )
+        )
+
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
     fun theWidgetsPlayOpensASongNoLongerInRecentLikeAnyLink() {
         respondWithTrack("Gone", "Artist · Song")
         val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))

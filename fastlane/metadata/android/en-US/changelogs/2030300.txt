@@ -1,0 +1,1 @@
+Play on the widget now plays a playlist as a queue instead of searching for its name. More songs make it into the queue, and more covers load.

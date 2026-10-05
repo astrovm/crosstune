@@ -46,6 +46,15 @@ internal class ExactMatcher(
     /** The apps whose search needs no account. */
     private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
 
+    /** A trailing remaster, mono or stereo tag, as " - Remastered 2012" or "(2003 Remaster)". */
+    private val editionTag = Regex(
+        """(?:\s+[-–]\s+[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*|\s*[(\[][^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*[)\]])$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** A guest credited in the title, as "(feat. Emel)", which services that credit it as an artist leave out. */
+    private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
+
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
 
@@ -206,8 +215,20 @@ internal class ExactMatcher(
     private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = remembered("cover", "", metadata) {
         withTimeoutOrNull(timeoutMs) {
             try {
-                // A Spotify song's own cover is known by its link, with no guessing by name.
-                if (metadata.url?.startsWith(SPOTIFY_TRACK_URL) == true) spotifyCover(metadata.url) else deezerCover(metadata)
+                // A Spotify song's own cover is known by its link, with no guessing by name. When Spotify
+                // doesn't answer, e.g. it's busy with the rest of the playlist, the name still finds it.
+                val own = if (metadata.url?.startsWith(SPOTIFY_TRACK_URL) == true) {
+                    try {
+                        spotifyCover(metadata.url)
+                    } catch (_: IOException) {
+                        null
+                    } catch (_: JSONException) {
+                        null
+                    }
+                } else {
+                    null
+                }
+                own ?: deezerCover(metadata)
             } catch (_: IOException) {
                 null
             } catch (_: JSONException) {
@@ -223,11 +244,12 @@ internal class ExactMatcher(
 
     private suspend fun deezerCover(metadata: MusicMetadata): String? {
         val title = normalize(metadata.title)
-        val artist = normalize(metadata.artist)
+        // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
+        val artists = artists(metadata.artist)
         return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
             val name = normalize(result.optString("title"))
             val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
-            title.isNotEmpty() && artist.isNotEmpty() && name.startsWith(title) && artist in credit
+            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
     }
 
@@ -336,14 +358,18 @@ internal class ExactMatcher(
      * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
      */
     private fun matches(metadata: MusicMetadata, name: String, artist: String): Boolean {
-        if (normalize(name) != normalize(metadata.title)) return false
+        if (normalize(withoutEditionTag(name)) != normalize(withoutEditionTag(metadata.title))) return false
         if (metadata.type == ItemType.ARTIST) return true
         val wanted = artists(metadata.artist)
         return wanted.isEmpty() || artists(artist).any(wanted::contains)
     }
 
-    /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own. */
-    private fun artists(credit: String): Set<String> = artistNames(credit).map(::normalize).filter { it.isNotEmpty() }.toSet()
+    /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself, which other services list without the tag. */
+    private fun withoutEditionTag(title: String): String = title.replace(featuring, "").replace(editionTag, "")
+
+    /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and "The" doesn't count. */
+    private fun artists(credit: String): Set<String> =
+        artistNames(credit).map { normalize(it.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
 
     private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
