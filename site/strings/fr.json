@@ -66,7 +66,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 3 octobre 2026",
+  "updated": "Dernière mise à jour : 4 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack."
+      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack. Les liens Shazam sont lus via la recherche d'Apple Music, et les plus anciens d'abord via l'API publique de Shazam."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Elle ne demande pas d'autorisation de localisation, de micro, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous configurez une destination personnalisée, choisissez une adresse HTTPS de confiance."
+      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Elle ne demande pas d'autorisation de localisation, de micro, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous configurez une destination personnalisée, choisissez une adresse HTTPS de confiance. Le bouton pour reconnaître un titre ouvre Shazam ou l'application Google, qui écoutent selon leurs propres politiques de confidentialité. Crosstune n'utilise jamais le micro."
     ],
     [
       "h2",

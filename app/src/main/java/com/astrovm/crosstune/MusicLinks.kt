@@ -24,6 +24,8 @@ internal data class MusicLink(
 internal sealed interface LinkInput {
     data class Link(val link: MusicLink) : LinkInput
     data class ShortLink(val url: String) : LinkInput
+    /** An older Shazam link, whose song is looked up by Shazam's own [key]. */
+    data class ShazamTrack(val key: String) : LinkInput
     /** A song shared by Pixel Now Playing: the song in words, then a Google search for it. */
     data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput {
         /** Shared text that parses back to this song, for the link field. */
@@ -68,8 +70,9 @@ internal object MusicLinks {
 
         // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
         val url = value.toHttpUrlOrNull()
-            ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null }
+            ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null || it.host.isOn("shazam.com") }
             ?: return null
+        shazamTrack(url)?.let { return it }
         fromUrl(url)?.let { return LinkInput.Link(it) }
         if (!url.host.isShortLinkHost()) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
@@ -91,9 +94,7 @@ internal object MusicLinks {
             val title = groups[shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
             val artist = groups[3 - shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
             if (search != nowPlayingSearch(searched.fill(title, artist))) return@firstNotNullOfOrNull null
-            val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
-                .addQueryParameter("q", "$title by $artist").build().toString()
-            LinkInput.RecognizedSong(canonical, MusicMetadata(title, artist))
+            recognizedSong(MusicMetadata(title, artist))
         }
     }
 
@@ -163,6 +164,7 @@ internal object MusicLinks {
                 soundCloud(segments)
             host.endsWith(".bandcamp.com") && host != "daily.bandcamp.com" -> bandcamp(host, segments)
             host == "audiomack.com" || host == "www.audiomack.com" -> audiomack(segments)
+            host == "shazam.com" || host == "www.shazam.com" -> shazamSong(segments)
             // Invidious and Piped, on any of their many sites, use YouTube's own watch links; the
             // popular sites' other video paths are recognised too.
             segments == listOf("watch") || host in frontendSites -> frontendVideo(url, segments)
@@ -240,6 +242,31 @@ internal object MusicLinks {
         }
         if (!numericIdRegex.matches(itemId)) return null
         return MusicLink(MusicService.APPLE_MUSIC, type, itemId, canonical(url), region)
+    }
+
+    /**
+     * Shazam's song pages, shazam.com/song/{id}/{name}, go by the song's Apple Music ID, so it
+     * opens as that song. Its own pages are blank without JavaScript, but Apple's lookup isn't.
+     */
+    private fun shazamSong(segments: List<String>): MusicLink? {
+        if (segments.firstOrNull() != "song") return null
+        val id = segments.getOrNull(1)?.takeIf { numericIdRegex.matches(it) } ?: return null
+        return MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, id, "https://music.apple.com/us/song/$id", "us")
+    }
+
+    /** Older Shazam links, shazam.com/track/{key}/{name}, use Shazam's own key for the song. */
+    private fun shazamTrack(url: HttpUrl): LinkInput.ShazamTrack? {
+        if (!url.host.isOn("shazam.com")) return null
+        val segments = url.pathSegments.filter { it.isNotEmpty() }
+        if (segments.firstOrNull() != "track") return null
+        return segments.getOrNull(1)?.takeIf { numericIdRegex.matches(it) }?.let { LinkInput.ShazamTrack(it) }
+    }
+
+    /** A song known only by name, kept as a Google search for it, as Now Playing shares it. */
+    fun recognizedSong(metadata: MusicMetadata): LinkInput.RecognizedSong {
+        val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", "${metadata.title} by ${metadata.artist}").build().toString()
+        return LinkInput.RecognizedSong(canonical, metadata)
     }
 
     private fun deezer(segments: List<String>): MusicLink? = typedItem(segments) { type, id ->

@@ -66,7 +66,7 @@
   "privacy_link": "プライバシーポリシー",
   "language_label": "言語",
   "privacy_title": "Crosstune プライバシーポリシー",
-  "updated": "最終更新日: 2026年10月3日",
+  "updated": "最終更新日: 2026年10月4日",
   "short_h2": "概要",
   "short_items": [
     "アカウント、広告、解析はありません。",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "音楽リンクを処理するため、Crosstune はリンク元のサービスに公開ページまたは公開 API をリクエストします。また、そのサービスの画像サーバーからカバー画像を読み込みます。対応するリンク元のサービスには、Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack があります。"
+      "音楽リンクを処理するため、Crosstune はリンク元のサービスに公開ページまたは公開 API をリクエストします。また、そのサービスの画像サーバーからカバー画像を読み込みます。対応するリンク元のサービスには、Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack があります。 Shazam のリンクは Apple Music の検索で読み取ります。古いリンクはまず Shazam の公開 API で読み取ります。"
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune は、音楽の情報とカバー画像を取得するために Android のインターネット権限を使います。位置情報、マイク、カメラ、連絡先、広告 ID の権限はリクエストしません。組み込みの音楽サービスへのリクエストには HTTPS を使います。自分でアプリやサイトを追加する場合は、信頼できる HTTPS アドレスを選んでください。"
+      "Crosstune は、音楽の情報とカバー画像を取得するために Android のインターネット権限を使います。位置情報、マイク、カメラ、連絡先、広告 ID の権限はリクエストしません。組み込みの音楽サービスへのリクエストには HTTPS を使います。自分でアプリやサイトを追加する場合は、信頼できる HTTPS アドレスを選んでください。 曲を認識するボタンは Shazam または Google アプリを開き、それぞれのプライバシー ポリシーに従って音を聞き取ります。Crosstune 自体がマイクを使うことはありません。"
     ],
     [
       "h2",

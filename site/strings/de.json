@@ -66,7 +66,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 3. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 4. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack."
+      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack. Shazam-Links werden über die Suche von Apple Music gelesen, ältere zuerst über die öffentliche API von Shazam."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune nutzt die Internetberechtigung von Android, um Musikinformationen und Cover abzurufen. Die App fragt keine Berechtigungen für Standort, Mikrofon, Kamera, Kontakte oder Werbe-ID an. Integrierte Anfragen an Musikdienste nutzen HTTPS. Wenn du ein eigenes Ziel einrichtest, wähle eine vertrauenswürdige HTTPS-Adresse."
+      "Crosstune nutzt die Internetberechtigung von Android, um Musikinformationen und Cover abzurufen. Die App fragt keine Berechtigungen für Standort, Mikrofon, Kamera, Kontakte oder Werbe-ID an. Integrierte Anfragen an Musikdienste nutzen HTTPS. Wenn du ein eigenes Ziel einrichtest, wähle eine vertrauenswürdige HTTPS-Adresse. Die Schaltfläche zum Erkennen eines Songs öffnet Shazam oder die Google App, die nach ihren eigenen Datenschutzerklärungen zuhören. Crosstune selbst nutzt nie das Mikrofon."
     ],
     [
       "h2",

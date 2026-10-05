@@ -66,7 +66,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 3 de octubre de 2026",
+  "updated": "Última actualización: 4 de octubre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Para resolver un link de música, Crosstune le pide su página pública o su API pública al servicio de origen. También carga la portada desde los servidores de imágenes del servicio. Los servicios de origen compatibles incluyen Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp y Audiomack."
+      "Para resolver un link de música, Crosstune le pide su página pública o su API pública al servicio de origen. También carga la portada desde los servidores de imágenes del servicio. Los servicios de origen compatibles incluyen Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp y Audiomack. Los links de Shazam se leen con la búsqueda de Apple Music, y los más viejos primero con la API pública de Shazam."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. No pide permisos de ubicación, micrófono, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si configurás un destino personalizado, elegí una dirección HTTPS de confianza."
+      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. No pide permisos de ubicación, micrófono, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si configurás un destino personalizado, elegí una dirección HTTPS de confianza. El botón para reconocer una canción abre Shazam o la app de Google, que escuchan según sus propias políticas de privacidad. Crosstune nunca usa el micrófono."
     ],
     [
       "h2",

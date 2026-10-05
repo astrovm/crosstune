@@ -11,6 +11,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Open the exact match: Apple Music, Deezer and YouTube Music can open the song, album or artist itself instead of a search, Bandcamp the song or album, and YouTube the song.</li>
 <li>Add other apps and sites that have a search page.</li>
 <li>Paste with one tap, search and reopen recent links, or open a copied link from the home screen widget, the Quick Settings tile, or by long-pressing the app icon.</li>
+<li>Opens Shazam links and songs shared from Pixel Now Playing, and a button opens Shazam or Google's song search to name a song playing nearby.</li>
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
 <li>Material You colors on Android 12 and later.</li>
 </ul>

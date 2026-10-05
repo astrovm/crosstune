@@ -11,6 +11,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Otwieraj dokładne dopasowanie: Apple Music, Deezer i YouTube Music mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, Bandcamp utwór lub album, a YouTube utwór.</li>
 <li>Dodawaj inne aplikacje i strony z wyszukiwarką.</li>
 <li>Wklejaj jednym kliknięciem, przeszukuj ostatnie linki i wracaj do nich albo otwieraj skopiowany link z widżetu na ekranie głównym, kafelka w Szybkich ustawieniach lub przytrzymując ikonę aplikacji.</li>
+<li>Otwiera linki z Shazama i utwory udostępnione z Now Playing na Pixelu, a przycisk otwiera Shazama lub wyszukiwanie utworów Google, aby rozpoznać utwór grający w pobliżu.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Kolory Material You na Androidzie 12 i nowszych.</li>
 </ul>

@@ -11,6 +11,7 @@ Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een ande
 <li>Exacte match openen: Apple Music, Deezer en YouTube Music kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, Bandcamp het nummer of album, en YouTube het nummer.</li>
 <li>Voeg andere apps en sites met een zoekpagina toe.</li>
 <li>Plak met één tik, doorzoek en open recente links opnieuw, of open een gekopieerde link via de widget op je startscherm, de tegel in Snelle instellingen of door het app-icoon lang ingedrukt te houden.</li>
+<li>Opent Shazam-links en nummers gedeeld vanuit Now Playing op je Pixel, en een knop opent Shazam of de nummerzoekfunctie van Google om een nummer in de buurt te herkennen.</li>
 <li>Kan een link niet worden gelezen? Open hem in de app waar hij vandaan komt, kopieer de zoektekst of deel een zoeklink.</li>
 <li>Material You-kleuren op Android 12 en hoger.</li>
 </ul>

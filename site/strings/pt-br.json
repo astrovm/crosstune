@@ -66,7 +66,7 @@
   "privacy_link": "Política de privacidade",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidade do Crosstune",
-  "updated": "Última atualização: 3 de outubro de 2026",
+  "updated": "Última atualização: 4 de outubro de 2026",
   "short_h2": "Em resumo",
   "short_items": [
     "Sem conta, anúncios ou análises.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Para resolver um link de música, o Crosstune solicita a página pública ou a API pública do serviço de origem. Ele também carrega a capa dos servidores de imagem do serviço. Os serviços de origem compatíveis incluem Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack."
+      "Para resolver um link de música, o Crosstune solicita a página pública ou a API pública do serviço de origem. Ele também carrega a capa dos servidores de imagem do serviço. Os serviços de origem compatíveis incluem Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack. Links do Shazam são lidos pela consulta do Apple Music, e os mais antigos primeiro pela API pública do Shazam."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "O Crosstune usa a permissão de internet do Android para obter informações musicais e capas. Ele não solicita permissões de localização, microfone, câmera, contatos ou ID de publicidade. As solicitações integradas a serviços de música usam HTTPS. Se você configurar um destino personalizado, escolha um endereço HTTPS confiável."
+      "O Crosstune usa a permissão de internet do Android para obter informações musicais e capas. Ele não solicita permissões de localização, microfone, câmera, contatos ou ID de publicidade. As solicitações integradas a serviços de música usam HTTPS. Se você configurar um destino personalizado, escolha um endereço HTTPS confiável. O botão para reconhecer uma música abre o Shazam ou o app Google, que escutam conforme as próprias políticas de privacidade. O Crosstune nunca usa o microfone."
     ],
     [
       "h2",

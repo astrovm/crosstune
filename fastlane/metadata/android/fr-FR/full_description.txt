@@ -11,6 +11,7 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 <li>Ouvrir le résultat exact : Apple Music, Deezer et YouTube Music peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp le titre ou l'album, et YouTube le titre.</li>
 <li>Ajoutez d'autres applications et sites dotés d'une page de recherche.</li>
 <li>Collez d'un seul geste, recherchez et rouvrez vos liens récents, ou ouvrez un lien copié depuis le widget de l'écran d'accueil, la tuile des réglages rapides ou en appuyant longuement sur l'icône de l'application.</li>
+<li>Ouvre les liens Shazam et les titres partagés depuis Now Playing sur Pixel, et un bouton ouvre Shazam ou la recherche de titres de Google pour reconnaître un titre qui passe autour de vous.</li>
 <li>Un lien illisible ? Ouvrez-le dans l'application d'origine, copiez le texte de recherche ou partagez un lien de recherche.</li>
 <li>Couleurs Material You sur Android 12 et versions ultérieures.</li>
 </ul>

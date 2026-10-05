@@ -4,6 +4,7 @@
     <string name="spotify_link_placeholder">Cole um link de música</string>
     <string name="resolve_button">Converter link</string>
     <string name="paste_button">Colar</string>
+    <string name="recognize_button">Reconhecer uma música</string>
     <string name="clear_button">Limpar</string>
     <string name="loading_text">Buscando o link…</string>
     <string name="open_in_youtube_music">Abrir no YouTube Music</string>

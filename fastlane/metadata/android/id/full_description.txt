@@ -11,6 +11,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 <li>Buka yang persis sama: Apple Music, Deezer, dan YouTube Music bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp membuka lagu atau albumnya, dan YouTube membuka lagunya.</li>
 <li>Tambahkan aplikasi dan situs lain yang punya halaman pencarian.</li>
 <li>Tempel dengan satu ketukan, cari dan buka ulang link terbaru, atau buka link yang disalin dari widget layar utama, kartu Setelan Cepat, atau dengan menekan lama ikon aplikasi.</li>
+<li>Membuka link Shazam dan lagu yang dibagikan dari Now Playing di Pixel, dan sebuah tombol membuka Shazam atau pencarian lagu Google untuk mengenali lagu yang diputar di dekatmu.</li>
 <li>Link tidak terbaca? Buka di aplikasi asalnya, salin teks pencarian, atau bagikan link pencarian.</li>
 <li>Warna Material You di Android 12 ke atas.</li>
 </ul>

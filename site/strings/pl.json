@@ -66,7 +66,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 3 października 2026",
+  "updated": "Ostatnia aktualizacja: 4 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Aby przetworzyć link muzyczny, Crosstune pobiera jego publiczną stronę lub publiczne API z serwisu źródłowego. Pobiera też okładki z serwerów obrazów tego serwisu. Obsługiwane serwisy źródłowe to m.in. Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp i Audiomack."
+      "Aby przetworzyć link muzyczny, Crosstune pobiera jego publiczną stronę lub publiczne API z serwisu źródłowego. Pobiera też okładki z serwerów obrazów tego serwisu. Obsługiwane serwisy źródłowe to m.in. Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp i Audiomack. Linki z Shazama są odczytywane przez wyszukiwanie Apple Music, a starsze najpierw przez publiczne API Shazama."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune korzysta z uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Nie prosi o uprawnienia do lokalizacji, mikrofonu, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane zapytania do serwisów muzycznych używają HTTPS. Jeśli konfigurujesz własne miejsce docelowe, wybierz zaufany adres HTTPS."
+      "Crosstune korzysta z uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Nie prosi o uprawnienia do lokalizacji, mikrofonu, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane zapytania do serwisów muzycznych używają HTTPS. Jeśli konfigurujesz własne miejsce docelowe, wybierz zaufany adres HTTPS. Przycisk rozpoznawania utworu otwiera Shazama lub aplikację Google, które słuchają zgodnie z własnymi zasadami prywatności. Crosstune nigdy nie używa mikrofonu."
     ],
     [
       "h2",

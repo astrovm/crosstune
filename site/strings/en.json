@@ -66,7 +66,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 3, 2026",
+  "updated": "Last updated: October 4, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack."
+      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack. Shazam links are read through Apple Music's lookup, and older ones through Shazam's public API first."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune uses Android's internet permission to retrieve music information and artwork. It does not request location, microphone, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It does not request location, microphone, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address. The button to recognize a song opens Shazam or the Google app, which listen under their own privacy policies. Crosstune itself never uses the microphone."
     ],
     [
       "h2",

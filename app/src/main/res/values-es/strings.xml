@@ -4,6 +4,7 @@
     <string name="spotify_link_placeholder">Pegá un link de música</string>
     <string name="resolve_button">Convertir link</string>
     <string name="paste_button">Pegar</string>
+    <string name="recognize_button">Reconocer una canción</string>
     <string name="clear_button">Borrar</string>
     <string name="loading_text">Buscando el link…</string>
     <string name="open_in_youtube_music">Abrir en YouTube Music</string>

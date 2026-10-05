@@ -4,6 +4,7 @@
     <string name="spotify_link_placeholder">म्यूज़िक लिंक पेस्ट करें</string>
     <string name="resolve_button">लिंक बदलें</string>
     <string name="paste_button">पेस्ट करें</string>
+    <string name="recognize_button">गाना पहचानें</string>
     <string name="clear_button">मिटाएँ</string>
     <string name="loading_text">लिंक खोजा जा रहा है…</string>
     <string name="open_in_youtube_music">YouTube Music में खोलें</string>
