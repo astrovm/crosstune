@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack. Shazam links are read through Apple Music's lookup, and older ones through Shazam's public API first."
+      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack. Shazam links are read through Apple Music's lookup, and older ones through Shazam's public API first. Shared Google results are followed on Google to read the song's title."
     ],
     [
       "p",

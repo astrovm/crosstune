@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "음악 링크를 처리하기 위해 Crosstune은 원본 서비스에 공개 페이지나 공개 API를 요청해요. 또한 해당 서비스의 이미지 서버에서 커버 이미지를 불러와요. 지원되는 원본 서비스에는 Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack이 있어요. Shazam 링크는 Apple Music 검색으로 읽고, 오래된 링크는 먼저 Shazam의 공개 API로 읽어요."
+      "음악 링크를 처리하기 위해 Crosstune은 원본 서비스에 공개 페이지나 공개 API를 요청해요. 또한 해당 서비스의 이미지 서버에서 커버 이미지를 불러와요. 지원되는 원본 서비스에는 Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack이 있어요. Shazam 링크는 Apple Music 검색으로 읽고, 오래된 링크는 먼저 Shazam의 공개 API로 읽어요. 공유된 Google 결과는 노래 제목을 읽기 위해 Google에서 열어요."
     ],
     [
       "p",

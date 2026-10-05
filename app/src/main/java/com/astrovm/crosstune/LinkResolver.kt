@@ -48,6 +48,10 @@ internal class LinkResolver(
 
     private suspend fun resolveShortLink(url: String): Resolution {
         val (response, body) = fetch(url)
+        // A shared Google result leads to a search for it, which names the song.
+        MusicLinks.googleSong(response.request.url)?.let { song ->
+            return Resolution.Resolved(MusicLink(null, ItemType.TRACK, song.url, song.url), song.metadata)
+        }
         val link = MusicLinks.fromUrl(response.request.url)
             ?: MusicLinks.fromPage(body)
             ?: return Resolution.Failed(httpError(response) ?: AppError.INVALID_URL)

@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bulunur. Shazam bağlantıları Apple Music'in aramasıyla, eski olanlar ise önce Shazam'ın herkese açık API'siyle okunur."
+      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bulunur. Shazam bağlantıları Apple Music'in aramasıyla, eski olanlar ise önce Shazam'ın herkese açık API'siyle okunur. Paylaşılan Google sonuçları, şarkının adını okumak için Google'da açılır."
     ],
     [
       "p",

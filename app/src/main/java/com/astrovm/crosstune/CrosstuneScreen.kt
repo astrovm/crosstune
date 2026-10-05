@@ -116,8 +116,9 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
-    /** Opens an app that names a song playing nearby; null when there's none. */
-    val onRecognize: (() -> Unit)? = null,
+    /** Apps that name a song playing nearby, in the order they're offered. */
+    val recognizers: List<SongRecognizer> = emptyList(),
+    val onRecognize: (SongRecognizer) -> Unit = {},
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -577,11 +578,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                 if (empty) {
                     Row {
                         // A song playing nearby, once named, is shared back here.
-                        actions.onRecognize?.let { recognize ->
-                            IconButton(onClick = recognize, enabled = !busy) {
-                                AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
-                            }
-                        }
+                        if (actions.recognizers.isNotEmpty()) RecognizeButton(actions, enabled = !busy)
                         IconButton(onClick = actions.onPaste, enabled = !busy) {
                             AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
                         }
@@ -907,6 +904,32 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                         .fillMaxHeight(),
                     enabled = songs || destinationReady,
                     description = if (songs) stringResource(R.string.share_songs_button) else null
+                )
+            }
+        }
+    }
+}
+
+/** Names a song playing nearby with the one app there is, or asks which when there's more than one. */
+@Composable
+private fun RecognizeButton(actions: ScreenActions, enabled: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { actions.recognizers.singleOrNull()?.let(actions.onRecognize) ?: run { expanded = true } },
+            enabled = enabled
+        ) {
+            AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            actions.recognizers.forEach { recognizer ->
+                DropdownMenuItem(
+                    text = { Text(recognizer.label) },
+                    leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
+                    onClick = {
+                        expanded = false
+                        actions.onRecognize(recognizer)
+                    }
                 )
             }
         }

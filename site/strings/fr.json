@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack. Les liens Shazam sont lus via la recherche d'Apple Music, et les plus anciens d'abord via l'API publique de Shazam."
+      "Pour résoudre un lien musical, Crosstune demande sa page publique ou son API publique au service source. Elle charge aussi la pochette depuis les serveurs d'images du service. Les services sources compatibles incluent Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack. Les liens Shazam sont lus via la recherche d'Apple Music, et les plus anciens d'abord via l'API publique de Shazam. Les résultats Google partagés sont ouverts sur Google pour lire le titre du morceau."
     ],
     [
       "p",

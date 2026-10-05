@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Om een muzieklink om te zetten, vraagt Crosstune de openbare pagina of openbare API op bij de bronservice. De app laadt ook de hoes van de afbeeldingsservers van de service. Ondersteunde bronservices zijn onder andere Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack. Shazam-links worden gelezen via de zoekfunctie van Apple Music, en oudere eerst via de openbare API van Shazam."
+      "Om een muzieklink om te zetten, vraagt Crosstune de openbare pagina of openbare API op bij de bronservice. De app laadt ook de hoes van de afbeeldingsservers van de service. Ondersteunde bronservices zijn onder andere Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack. Shazam-links worden gelezen via de zoekfunctie van Apple Music, en oudere eerst via de openbare API van Shazam. Gedeelde Google-resultaten worden bij Google geopend om de titel van het nummer te lezen."
     ],
     [
       "p",

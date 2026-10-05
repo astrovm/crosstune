@@ -69,6 +69,18 @@ class LinkResolverTest {
     }
 
     @Test
+    fun googleSharedResultsAreFollowedToTheSongsTitle() {
+        // It redirects to a search for the result.
+        fake.handler = { request ->
+            FakeSpotify.html(request, "<html>Google Search</html>", finalUrl = "https://www.google.com/search?kgmid=/g/11c2p4p6vv&hl=en&q=Iris&shem=dlvs1")
+        }
+        val result = resolve("Iris https://share.google/09OHXUIfQTRCqXUCJ") as Resolution.Resolved
+        assertEquals(MusicMetadata("Iris", ""), result.metadata)
+        assertEquals(null, result.link.service)
+        assertEquals("https://www.google.com/search?q=Iris&kgmid=%2Fg%2F11c2p4p6vv", result.link.url)
+    }
+
+    @Test
     fun youtubeAndYoutubeMusicUseOEmbed() {
         respond("""{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
         val oEmbed = "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ"

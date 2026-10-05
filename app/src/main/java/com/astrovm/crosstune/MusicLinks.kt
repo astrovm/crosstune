@@ -26,10 +26,13 @@ internal sealed interface LinkInput {
     data class ShortLink(val url: String) : LinkInput
     /** An older Shazam link, whose song is looked up by Shazam's own [key]. */
     data class ShazamTrack(val key: String) : LinkInput
-    /** A song shared by Pixel Now Playing: the song in words, then a Google search for it. */
+    /**
+     * A song known by name rather than by a music service link: shared by Pixel Now Playing, the
+     * song in words then a Google search for it, or Google's own song result, by its title only.
+     */
     data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput {
         /** Shared text that parses back to this song, for the link field. */
-        val text get() = MusicLinks.nowPlayingShare(metadata)
+        val text get() = if (metadata.artist.isBlank()) url else MusicLinks.nowPlayingShare(metadata)
     }
 }
 
@@ -45,12 +48,15 @@ internal object MusicLinks {
     /** Playlist IDs, e.g. PL… for user playlists or OLAK5uy_… for albums on YouTube Music. */
     private val youtubeListRegex = Regex("""^[A-Za-z0-9_-]{12,}$""")
     private val numericIdRegex = Regex("""^\d+$""")
+    private val googleHostRegex = Regex("""(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?""")
     private val tidalIdRegex = Regex("""^[A-Za-z0-9-]+$""")
     private val spotifyUrlInPageRegex =
         Regex("""https://open\.spotify\.com/(?:intl-[A-Za-z-]+/)?(track|album|artist|playlist)/([A-Za-z0-9]{22})""")
 
     private val shortLinkHosts = setOf(
-        "spotify.link", "link.deezer.com", "deezer.page.link", "dzr.page.link", "on.soundcloud.com"
+        "spotify.link", "link.deezer.com", "deezer.page.link", "dzr.page.link", "on.soundcloud.com",
+        // Google's shared results, such as a song its song search found.
+        "share.google"
     )
     private val itemPaths = mapOf(
         "track" to ItemType.TRACK, "album" to ItemType.ALBUM, "artist" to ItemType.ARTIST, "playlist" to ItemType.PLAYLIST
@@ -73,8 +79,10 @@ internal object MusicLinks {
             ?: "https://$value".toHttpUrlOrNull()?.takeIf { serviceForHost(it.host) != null || it.host.isOn("shazam.com") }
             ?: return null
         shazamTrack(url)?.let { return it }
+        googleSong(url)?.let { return it }
         fromUrl(url)?.let { return LinkInput.Link(it) }
-        if (!url.host.isShortLinkHost()) return null
+        // g.co also shortens Google's other links; its shared results are under /kgs.
+        if (!url.host.isShortLinkHost() && !(url.host == "g.co" && url.pathSegments.firstOrNull() == "kgs")) return null
         // Short links are always served over HTTPS; upgrading avoids a blocked cleartext request.
         return LinkInput.ShortLink(url.newBuilder().scheme("https").build().toString())
     }
@@ -261,6 +269,22 @@ internal object MusicLinks {
         if (segments.firstOrNull() != "track") return null
         return segments.getOrNull(1)?.takeIf { numericIdRegex.matches(it) }?.let { LinkInput.ShazamTrack(it) }
     }
+
+    /**
+     * A Google result for one thing, such as a song its song search found: a search with the
+     * thing's Knowledge Graph ID, "kgmid". It only says the song's title, so it's searched by that.
+     */
+    fun googleSong(url: HttpUrl): LinkInput.RecognizedSong? {
+        if (!url.host.isGoogle() || url.pathSegments != listOf("search")) return null
+        val id = url.queryParameter("kgmid")?.takeIf { it.isNotBlank() } ?: return null
+        val title = url.queryParameter("q")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", title).addQueryParameter("kgmid", id).build().toString()
+        return LinkInput.RecognizedSong(canonical, MusicMetadata(title, ""))
+    }
+
+    /** Google's own sites, e.g. google.com or google.com.ar, but not "notgoogle.com". */
+    private fun String.isGoogle() = googleHostRegex.matches(this)
 
     /** A song known only by name, kept as a Google search for it, as Now Playing shares it. */
     fun recognizedSong(metadata: MusicMetadata): LinkInput.RecognizedSong {
