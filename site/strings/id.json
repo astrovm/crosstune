@@ -17,40 +17,28 @@
   "features_h2": "Yang bisa dilakukan",
   "cards": [
     [
-      "Ketuk dan langsung buka",
-      "Link langsung terbuka di aplikasi favoritmu."
+      "Terbuka di aplikasimu",
+      "Ketuk link musik, lagunya diputar di tempatmu mendengarkan."
     ],
     [
-      "Persis sama",
-      "Aplikasi yang didukung membuka lagunya langsung, bukan hasil pencarian."
+      "Lagu yang tepat",
+      "Bukan pencarian, kalau aplikasimu mendukung."
     ],
     [
-      "Playlist dan album",
-      "Lihat semua lagu dan buka yang mana saja, atau putar semuanya."
+      "Satu playlist penuh",
+      "Lihat semua lagu dan putar semuanya sekaligus."
     ],
     [
-      "Aturanmu sendiri",
-      "Pilih aplikasi untuk tiap layanan, atau tanya setiap kali."
+      "Lagu apa ini?",
+      "Shazam atau Google mengenalinya, Crosstune membukanya."
     ],
     [
-      "Aplikasi apa pun",
-      "Tambahkan aplikasi atau situs apa pun yang punya halaman pencarian."
-    ],
-    [
-      "Now Playing",
-      "Lagu yang dibagikan dari Now Playing di Pixel juga bisa."
-    ],
-    [
-      "Pintasan",
-      "Widget di layar utama, tempel dengan satu ketukan, kartu Setelan Cepat."
-    ],
-    [
-      "Tanpa pelacakan",
-      "Menghapus bagian pelacakan seperti ?si= dari link."
+      "Sesukamu",
+      "Pilih aplikasi untuk tiap layanan, atau tambahkan sendiri."
     ],
     [
       "Privat",
-      "Tanpa akun. Riwayat tetap di ponselmu."
+      "Tanpa akun, tanpa pelacakan. Riwayat tetap di ponselmu."
     ]
   ],
   "play_button": "Google Play",

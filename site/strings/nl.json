@@ -17,40 +17,28 @@
   "features_h2": "Wat het doet",
   "cards": [
     [
-      "Tik en klaar",
-      "Links openen direct in je favoriete app."
+      "Opent in jouw app",
+      "Tik op een muzieklink en hij speelt waar jij luistert."
     ],
     [
-      "Exacte match",
-      "Ondersteunde apps openen het nummer zelf in plaats van een zoekopdracht."
+      "Precies het nummer",
+      "Geen zoekopdracht, als je app dat kan."
     ],
     [
-      "Playlists en albums",
-      "Bekijk alle nummers en open er een, of speel ze allemaal af."
+      "Hele playlists",
+      "Zie alle nummers en speel ze allemaal af."
     ],
     [
-      "Jouw regels",
-      "Kies een app per service, of laat het elke keer vragen."
+      "Welk nummer is dit?",
+      "Shazam of Google herkent het, Crosstune opent het."
     ],
     [
-      "Elke app",
-      "Voeg elke app of site met een zoekpagina toe."
-    ],
-    [
-      "Now Playing",
-      "Nummers gedeeld vanuit Now Playing op je Pixel werken ook."
-    ],
-    [
-      "Snelkoppelingen",
-      "Widget op je startscherm, plakken met één tik, tegel in Snelle instellingen."
-    ],
-    [
-      "Geen tracking",
-      "Haalt trackingdelen zoals ?si= uit links."
+      "Zoals jij wilt",
+      "Kies een app per dienst of voeg je eigen toe."
     ],
     [
       "Privé",
-      "Geen account. Je geschiedenis blijft op je telefoon."
+      "Geen account, geen tracking. Je geschiedenis blijft op je telefoon."
     ]
   ],
   "play_button": "Google Play",

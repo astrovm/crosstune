@@ -17,40 +17,28 @@
   "features_h2": "Was die App kann",
   "cards": [
     [
-      "Tippen und los",
-      "Links öffnen sich direkt in deiner Lieblings-App."
+      "Öffnet in deiner App",
+      "Tipp auf einen Musik-Link, und er spielt da, wo du hörst."
     ],
     [
-      "Genauer Treffer",
-      "Unterstützte Apps öffnen den Song selbst statt einer Suche."
+      "Genau der Song",
+      "Keine Suche, wenn deine App das kann."
     ],
     [
-      "Playlists und Alben",
-      "Sieh dir alle Songs an und öffne einen davon, oder spiel alle ab."
+      "Ganze Playlists",
+      "Sieh alle Songs und spiel alle auf einmal ab."
     ],
     [
-      "Deine Regeln",
-      "Wähle eine App pro Dienst oder lass dich jedes Mal fragen."
+      "Welcher Song ist das?",
+      "Shazam oder Google erkennt ihn, Crosstune öffnet ihn."
     ],
     [
-      "Jede App",
-      "Füge jede App oder Website mit Suchseite hinzu."
-    ],
-    [
-      "Now Playing",
-      "Auch Songs, die du aus Now Playing auf dem Pixel teilst, funktionieren."
-    ],
-    [
-      "Kurzbefehle",
-      "Widget auf dem Startbildschirm, Einfügen mit einem Tipp, Schnelleinstellungen-Kachel."
-    ],
-    [
-      "Kein Tracking",
-      "Entfernt Tracking-Teile wie ?si= aus Links."
+      "Wie du willst",
+      "Wähl eine App pro Dienst oder füg deine eigene hinzu."
     ],
     [
       "Privat",
-      "Kein Konto. Der Verlauf bleibt auf deinem Handy."
+      "Kein Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
     ]
   ],
   "play_button": "Google Play",

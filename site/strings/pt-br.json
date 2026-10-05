@@ -17,40 +17,28 @@
   "features_h2": "O que ele faz",
   "cards": [
     [
-      "Toque e pronto",
-      "Os links abrem direto no seu app favorito."
+      "Abre no seu app",
+      "Toque num link de música e ele toca onde você ouve."
     ],
     [
-      "Resultado exato",
-      "Os apps compatíveis abrem a própria música em vez de uma busca."
+      "A música exata",
+      "Não uma busca, quando o seu app permite."
     ],
     [
-      "Playlists e álbuns",
-      "Veja todas as músicas e abra qualquer uma, ou toque todas."
+      "Playlists inteiras",
+      "Veja todas as músicas e toque todas de uma vez."
     ],
     [
-      "Suas regras",
-      "Escolha um app para cada serviço ou peça para perguntar sempre."
+      "Que música é essa?",
+      "O Shazam ou o Google reconhece e o Crosstune abre."
     ],
     [
-      "Qualquer app",
-      "Adicione qualquer app ou site com uma página de busca."
-    ],
-    [
-      "Now Playing",
-      "Músicas compartilhadas pelo Now Playing do Pixel também funcionam."
-    ],
-    [
-      "Atalhos",
-      "Widget na tela inicial, colar com um toque, bloco das Configurações rápidas."
-    ],
-    [
-      "Sem rastreamento",
-      "Remove partes de rastreamento como ?si= dos links."
+      "Do seu jeito",
+      "Escolha um app para cada serviço ou adicione o seu."
     ],
     [
       "Privado",
-      "Sem conta. O histórico fica no seu celular."
+      "Sem conta, sem rastreamento. O histórico fica no seu celular."
     ]
   ],
   "play_button": "Google Play",

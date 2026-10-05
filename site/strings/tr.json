@@ -17,40 +17,28 @@
   "features_h2": "Neler yapar",
   "cards": [
     [
-      "Dokun ve dinle",
-      "Bağlantılar doğrudan favori uygulamanızda açılır."
+      "Uygulamanızda açılır",
+      "Bir müzik bağlantısına dokunun, dinlediğiniz yerde çalsın."
     ],
     [
-      "Tam eşleşme",
-      "Desteklenen uygulamalar arama yerine şarkının kendisini açar."
+      "Tam o şarkı",
+      "Uygulamanız destekliyorsa arama değil, şarkının kendisi."
     ],
     [
-      "Çalma listeleri ve albümler",
-      "Tüm şarkıları görün, istediğinizi açın ya da hepsini çalın."
+      "Çalma listelerinin tamamı",
+      "Tüm şarkıları görün, hepsini birden çalın."
     ],
     [
-      "Sizin kurallarınız",
-      "Her servis için bir uygulama seçin ya da her seferinde sorulsun."
+      "Bu şarkı ne?",
+      "Shazam ya da Google tanır, Crosstune açar."
     ],
     [
-      "Her uygulama",
-      "Arama sayfası olan her uygulamayı veya siteyi ekleyin."
-    ],
-    [
-      "Now Playing",
-      "Pixel'deki Now Playing'den paylaşılan şarkılar da çalışır."
-    ],
-    [
-      "Kısayollar",
-      "Ana ekran widget'ı, tek dokunuşla yapıştırma, Hızlı Ayarlar kutucuğu."
-    ],
-    [
-      "İzleme yok",
-      "Bağlantılardaki ?si= gibi izleme kısımlarını kaldırır."
+      "Size göre",
+      "Her servis için bir uygulama seçin ya da kendinizinkini ekleyin."
     ],
     [
       "Gizli",
-      "Hesap yok. Geçmiş telefonunuzda kalır."
+      "Hesap yok, izleme yok. Geçmiş telefonunuzda kalır."
     ]
   ],
   "play_button": "Google Play",

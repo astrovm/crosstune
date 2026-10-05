@@ -17,40 +17,28 @@
   "features_h2": "Cosa fa",
   "cards": [
     [
-      "Tocca e via",
-      "I link si aprono direttamente nella tua app preferita."
+      "Si apre nella tua app",
+      "Tocca un link musicale e parte dove ascolti."
     ],
     [
-      "Risultato esatto",
-      "Le app supportate aprono il brano stesso invece di una ricerca."
+      "Il brano esatto",
+      "Non una ricerca, se la tua app lo permette."
     ],
     [
-      "Playlist e album",
-      "Vedi tutti i brani e aprine uno, o riproducili tutti."
+      "Playlist intere",
+      "Vedi tutti i brani e riproducili tutti insieme."
     ],
     [
-      "Le tue regole",
-      "Scegli un'app per ogni servizio, o fatti chiedere ogni volta."
+      "Che brano è?",
+      "Shazam o Google lo riconosce, Crosstune lo apre."
     ],
     [
-      "Qualsiasi app",
-      "Aggiungi qualsiasi app o sito con una pagina di ricerca."
-    ],
-    [
-      "Now Playing",
-      "Funzionano anche i brani condivisi da Now Playing sul Pixel."
-    ],
-    [
-      "Scorciatoie",
-      "Widget nella schermata Home, incolla con un tocco, riquadro delle Impostazioni rapide."
-    ],
-    [
-      "Niente tracciamento",
-      "Toglie le parti di tracciamento come ?si= dai link."
+      "Come vuoi tu",
+      "Scegli un'app per ogni servizio o aggiungi la tua."
     ],
     [
       "Privata",
-      "Nessun account. La cronologia resta sul tuo telefono."
+      "Niente account né tracciamento. La cronologia resta sul tuo telefono."
     ]
   ],
   "play_button": "Google Play",
