@@ -623,6 +623,11 @@ internal class MainViewModel(
                 effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
                 return@launch
             }
+            // YouTube and YouTube Music play the same videos, so one opens as itself in the other.
+            track.url?.let { MusicLinks.linkFor(it) }?.youtubeVideoOn(destination.matchService)?.let { url ->
+                effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
+                return@launch
+            }
             val exactUrl = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
                 uiState = uiState.copy(isMatching = true)
                 try {
@@ -661,8 +666,9 @@ internal class MainViewModel(
         uiState.link?.takeIf { service != null && it.service == service }?.let { link ->
             return destination.adapt(link.url)
         }
-        // YouTube and YouTube Music share playlists, so one opens as itself in the other.
+        // YouTube and YouTube Music share playlists and videos, so one opens as itself in the other.
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
+        uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
         val exactUrl = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
@@ -746,6 +752,10 @@ internal class MainViewModel(
     private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String? {
         val service = destination.matchService
         if (service != null && service == entry.link.service) return destination.adapt(entry.link.url)
+        // YouTube and YouTube Music play the same videos, so one opens as itself in the other.
+        if (entry.metadata.type == ItemType.TRACK) {
+            entry.link.youtubeVideoOn(service)?.let { return destination.adapt(it) }
+        }
         // A playlist plays as a queue of its first songs, as the Play button in the app does, not as a search.
         if (entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
             entry.link.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
@@ -814,6 +824,9 @@ internal class MainViewModel(
     fun destinationUrl(): String? {
         val destination = uiState.resultDestination
         uiState.link?.takeIf { it.service != null && destination.matchService == it.service }?.let { return destination.adapt(it.url) }
+        // YouTube and YouTube Music play the same videos, so one is shared as itself in the other.
+        uiState.link?.takeIf { uiState.result?.type == ItemType.TRACK }?.youtubeVideoOn(destination.matchService)
+            ?.let { return destination.adapt(it) }
         // Every shown result has its link prepared before Copy and Share are enabled.
         return uiState.destinationUrls[destination]?.url?.forSharing()
     }

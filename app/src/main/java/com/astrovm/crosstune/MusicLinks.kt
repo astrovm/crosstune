@@ -128,6 +128,9 @@ internal object MusicLinks {
     /** The service a URL belongs to, even when it isn't a song, album, artist or playlist. */
     fun serviceFor(text: String): MusicService? = text.trim().toHttpUrlOrNull()?.host?.let(::serviceForHost)
 
+    /** What [text] is a link to, without fetching anything about it. */
+    fun linkFor(text: String): MusicLink? = text.trim().toHttpUrlOrNull()?.let(::fromUrl)
+
     private fun serviceForHost(host: String): MusicService? = when {
         host.isOn("spotify.com") || host.isOn("spotify.link") -> MusicService.SPOTIFY
         host == "music.youtube.com" -> MusicService.YOUTUBE_MUSIC
@@ -353,4 +356,15 @@ internal fun MusicLink.youtubePlaylistOn(service: MusicService?): String? {
     if (type != ItemType.PLAYLIST || this.service !in youtubeServices || service !in youtubeServices) return null
     val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
     return "$base/playlist?list=$id"
+}
+
+/**
+ * This YouTube or YouTube Music video's own page on [service], if that's one of the two. The two
+ * apps play the same videos, so one opens as itself in the other: a search for the title finds
+ * another recording, or none, and never the video the user picked.
+ */
+internal fun MusicLink.youtubeVideoOn(service: MusicService?): String? {
+    if (type != ItemType.TRACK || this.service !in youtubeServices || service !in youtubeServices) return null
+    val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
+    return "$base/watch?v=$id"
 }
