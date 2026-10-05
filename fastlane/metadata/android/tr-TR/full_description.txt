@@ -11,6 +11,7 @@ Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde d
 <li>Tam eşleşmeyi aç: Apple Music, Deezer ve YouTube Music, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; Bandcamp şarkıyı veya albümü, YouTube ise şarkıyı açabilir.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
 <li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>
+<li>Shazam bağlantılarını ve Pixel'deki Now Playing'den paylaşılan şarkıları açar; bir düğme de yakında çalan bir şarkıyı tanımak için Shazam'ı veya Google'ın şarkı aramasını açar.</li>
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>

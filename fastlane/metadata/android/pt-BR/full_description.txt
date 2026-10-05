@@ -11,6 +11,7 @@ Alguém manda um link de um serviço de música, mas você ouve em outro. Toque 
 <li>Abrir o resultado exato: o Apple Music, o Deezer e o YouTube Music podem abrir a própria música, álbum ou artista em vez de uma busca, o Bandcamp a música ou o álbum, e o YouTube a música.</li>
 <li>Adicione outros apps e sites que tenham uma página de busca.</li>
 <li>Cole com um toque, pesquise e reabra links recentes, ou abra um link copiado pelo widget da tela inicial, pelo bloco das Configurações rápidas ou mantendo o ícone do app pressionado.</li>
+<li>Abre links do Shazam e músicas compartilhadas pelo Now Playing do Pixel, e um botão abre o Shazam ou a busca de músicas do Google para reconhecer uma música tocando perto.</li>
 <li>Não consegue ler um link? Abra-o no app de origem, copie o texto da busca ou compartilhe um link de busca.</li>
 <li>Cores do Material You no Android 12 e versões mais recentes.</li>
 </ul>

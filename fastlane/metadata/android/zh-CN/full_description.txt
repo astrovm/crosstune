@@ -11,6 +11,7 @@
 <li>打开精确匹配：Apple Music、Deezer 和 YouTube Music 可直接打开歌曲、专辑或艺人本身，而不是搜索结果，Bandcamp 可直接打开歌曲或专辑，YouTube 可直接打开歌曲。</li>
 <li>添加其他带搜索页面的应用和网站。</li>
 <li>一键粘贴，搜索并重新打开最近的链接，或通过主屏幕微件、快捷设置图块或长按应用图标来打开已复制的链接。</li>
+<li>可打开 Shazam 链接和从 Pixel 的 Now Playing 分享的歌曲，还可以用按钮打开 Shazam 或 Google 歌曲搜索，识别附近正在播放的歌曲。</li>
 <li>无法读取链接？可在链接来源的应用中打开，也可以复制搜索文字或分享搜索链接。</li>
 <li>Android 12 及更高版本支持 Material You 动态配色。</li>
 </ul>
