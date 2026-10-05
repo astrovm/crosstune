@@ -309,6 +309,237 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Bullet With Butterfly Wings - Skrillex Remix", "Band")) })
     }
 
+    private fun findsVideo(title: String, artist: String, rowTitle: String, rowArtist: String): String? {
+        respond(youTubeMusicPage(youTubeMusicRow(rowTitle, "$rowArtist • Album • 3:00", videoId = "video000000")))
+        return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, artist)) }
+    }
+
+    private val video = "https://music.youtube.com/watch?v=video000000"
+
+    @Test
+    fun titleTagsAreIgnoredInEveryFormAndCase() {
+        assertEquals(video, findsVideo("Song - REMASTERED 2012", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song (Remastered)", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song [2012 Remaster]", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song", "Band", "Song - 2012 Remaster", "Band"))
+        // Two tags, in either order.
+        assertEquals(video, findsVideo("Song - 2012 Remaster (Mono)", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song (feat. Guest) - Remastered 2012", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song - Remastered 2012 (feat. Guest)", "Band", "Song", "Band"))
+        assertEquals(video, findsVideo("Song (ft. Guest)", "Band", "Song [Featuring Guest]", "Band"))
+        // Versions of the same recording.
+        assertEquals(video, findsVideo("Teen Age Riot (Album Version)", "Band", "Teen Age Riot", "Band"))
+        assertEquals(video, findsVideo("Never Say Never", "Band, Guest", "Never Say Never (Single Version) (feat. Guest)", "Band"))
+        assertEquals(video, findsVideo("Stereo Love - Original", "Band", "Stereo Love", "Band"))
+        assertEquals(video, findsVideo("Song - Radio Edit", "Band", "Song", "Band"))
+        // Non-Latin titles keep their letters.
+        assertEquals(video, findsVideo("ガラスのPALM TREE - Remastered", "Band", "ガラスのPALM TREE", "Band"))
+    }
+
+    @Test
+    fun titleTagsNeverTurnADifferentSongIntoAMatch() {
+        // A title that is only a tag keeps it, so two tag-only titles don't both become "".
+        assertNull(findsVideo("(Remastered)", "Band", "(feat. Guest)", "Band"))
+        assertEquals(video, findsVideo("(Remastered)", "Band", "(Remastered)", "Band"))
+        // Remixes, live versions and other songs are still different songs.
+        assertNull(findsVideo("Song", "Band", "Song (Live)", "Band"))
+        assertNull(findsVideo("Song - Remastered", "Band", "Song (Acoustic)", "Band"))
+        assertNull(findsVideo("Song (Remix)", "Band", "Song", "Band"))
+        assertNull(findsVideo("Song - Live Version", "Band", "Song", "Band"))
+        assertNull(findsVideo("Song (Acoustic Version)", "Band", "Song", "Band"))
+        assertNull(findsVideo("Song - Original Sin", "Band", "Song", "Band"))
+        // Words that merely contain a tag word are not tags.
+        assertNull(findsVideo("Monologue", "Band", "Mono", "Band"))
+        assertNull(findsVideo("Song - Stereotype", "Band", "Song", "Band"))
+        // Unbalanced or nested brackets are left alone rather than mangled.
+        assertEquals(video, findsVideo("Song (feat. A", "Band", "Song (feat. A", "Band"))
+        assertNull(findsVideo("Song (feat. A (B))", "Band", "Song", "Band"))
+    }
+
+    @Test
+    fun aLeadingTheIsIgnoredInArtistsButOnlyAsAWord() {
+        assertEquals(video, findsVideo("Song", "The Smashing Pumpkins", "Song", "Smashing Pumpkins"))
+        assertEquals(video, findsVideo("Song", "Smashing Pumpkins", "Song", "THE SMASHING PUMPKINS"))
+        // The band called "The The" and an artist named just "The" still have a name.
+        assertEquals(video, findsVideo("Song", "The The", "Song", "The The"))
+        assertEquals(video, findsVideo("Song", "The", "Song", "The"))
+        assertNull(findsVideo("Song", "The", "Song", "Someone"))
+        assertNull(findsVideo("Song", "Thelonious Monk", "Song", "Lonious Monk"))
+        assertNull(findsVideo("Song", "The Band", "Song", "Another Band"))
+    }
+
+    @Test
+    fun aQueueTakesEachVideoOnceAndStaysWithinWhatYouTubeTakes() {
+        var asked = ""
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") {
+                asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
+                FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=a&list=TLGGq").build()
+            } else {
+                // Every search answers with the same video, e.g. two titles for one recording.
+                FakeSpotify.html(request, youTubeMusicPage(
+                    youTubeMusicRow("One", "Band • Album • 3:00", videoId = "same0000000"),
+                    youTubeMusicRow("Two", "Band • Album • 3:00", videoId = "same0000000")
+                ))
+            }
+        }
+        val tracks = listOf(MusicMetadata("One", "Band"), MusicMetadata("Two", "Band"), MusicMetadata("One", "Band"))
+        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} }
+        assertEquals("same0000000", asked)
+        assertEquals("https://music.youtube.com/watch?v=same0000000&list=TLGGq", url)
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, emptyList()) {} })
+    }
+
+    @Test
+    fun aQueuePlaysTheFirstSongWhenYouTubeAnswersWithoutAPlaylist() {
+        for (answer in listOf<(Request) -> okhttp3.Response>(
+            { request -> FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=first000000").build() },
+            { request -> FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "not a url").build() },
+            { request -> FakeSpotify.html(request, "").newBuilder().code(200).build() },
+            { request -> FakeSpotify.html(request, "").newBuilder().code(429).build() }
+        )) {
+            fake.handler = { request ->
+                if (request.url.encodedPath == "/watch_videos") answer(request)
+                else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("First", "Band • Album • 3:00", videoId = "first000000")))
+            }
+            assertEquals("https://music.youtube.com/watch?v=first000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("First", "Band"))) {} })
+        }
+    }
+
+    @Test
+    fun aQueueSkipsSongsWhoseSearchFailsAndPlaylistsInsideIt() {
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=ok&list=TLGGq").build()
+                request.requestBodyText().contains("Broken") -> throw IOException("offline")
+                request.requestBodyText().contains("Garbled") -> FakeSpotify.html(request, "not json")
+                else -> FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("Fine", "Band • Album • 3:00", videoId = "fine0000000")))
+            }
+        }
+        val tracks = listOf(
+            MusicMetadata("Broken", "Band"), MusicMetadata("Garbled", "Band"), MusicMetadata("Fine", "Band"),
+            MusicMetadata("Nested", "", ItemType.PLAYLIST)
+        )
+        val looked = mutableListOf<Int>()
+        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
+        assertEquals("https://music.youtube.com/watch?v=fine0000000&list=TLGGq", url)
+        assertEquals(listOf(1, 2, 3, 4), looked.sorted())
+    }
+
+    private fun Request.requestBodyText(): String =
+        okio.Buffer().also { body?.writeTo(it) }.readUtf8()
+
+    @Test
+    fun aCoverIsFoundByNameWhenSpotifyAnswersWithNothingUsable() {
+        val deezer = """{"data":[{"title":"Song","artist":{"name":"The Band"},"album":{"cover_big":"https://cdn/song.jpg"}}]}"""
+        for (spotify in listOf("""{"thumbnail_url":""}""", """{"title":"no thumbnail"}""", "not json", "")) {
+            fake.handler = { request ->
+                if (request.url.host == "open.spotify.com") FakeSpotify.html(request, spotify) else FakeSpotify.html(request, deezer)
+            }
+            val track = MusicMetadata("Song - Remastered 2012", "Band", url = "https://open.spotify.com/track/abc")
+            assertEquals(spotify, "https://cdn/song.jpg", runBlocking { matcher().cover(track) })
+        }
+        // Both fail, no cover and no crash.
+        fake.handler = { throw IOException("offline") }
+        assertNull(runBlocking { matcher().cover(MusicMetadata("Song", "Band", url = "https://open.spotify.com/track/abc")) })
+        // A song with no artist at all has nothing to check Deezer's credit against.
+        respond(deezer)
+        assertNull(runBlocking { matcher().cover(MusicMetadata("Song", "")) })
+    }
+
+    private fun queueFinds(title: String, artist: String, rowTitle: String, rowArtist: String): String? {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow(rowTitle, "$rowArtist • Album • 3:00", videoId = "video000000")))
+        }
+        return runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata(title, artist)), {}) }
+    }
+
+    @Test
+    fun aQueueTakesTheClosestSongOfTheArtistWhenNoTitleIsTheSame() {
+        val played = "https://music.youtube.com/watch?v=video000000"
+        // A title in another script, written out in letters by YouTube Music.
+        assertEquals(played, queueFinds("ふたりの夏物語 NEVER ENDING SUMMER", "S. Kiyotaka & Omega Tribe", "FUTARI NO NATSU MONOGATARI NEVER ENDING SUMMER", "S.Kiyotaka & Omega Tribe"))
+        assertEquals(played, queueFinds("ガラスのPALM TREE", "S. Kiyotaka & Omega Tribe", "GLASS NO PALM TREE", "S.Kiyotaka & Omega Tribe"))
+        // A classical work's long name, which every service writes its own way.
+        assertEquals(played, queueFinds(
+            "Ellens Gesang III, Op. 52 No. 6, D. 839 \"Ave Maria\" (Hymne an die Jungfrau)", "Franz Schubert, Daniel Perret",
+            "Ellens Gesang III, D. 839, Op. 52 No. 6, Ave Maria", "Daniel Perret & Franz Schubert"
+        ))
+        // The artist credited with a guest, a tag or a "y", on one service and not the other.
+        assertEquals(played, queueFinds("La Locura Automática", "La Secta AllStar, Eddie Dee", "La Locura Automática (Reggaeton) (feat. Eddie Dee)", "La Secta"))
+        assertEquals(played, queueFinds("Soy una Gargola", "Alex Gargolas, Randy Nota Loca", "Soy Una Gargola", "Randy"))
+        assertEquals(played, queueFinds("Holdin' On - Skrillex & Nero Remix", "I See MONSTAS, NERO, Skrillex", "Holdin' On (Skrillex & Nero Remix)", "Monsta"))
+        assertEquals(played, queueFinds("Yo Voy (feat. Daddy Yankee)", "Zion & Lennox", "Yo Voy (feat. Daddy Yankee)", "Zion Y Lennox"))
+        // A short name inside another's is no match: "Sia" is not "Asia", nor "Ed" in "Eddie".
+        assertEquals(null, queueFinds("Heat of the Moment", "Sia", "Heat of the Moment", "Asia"))
+        assertEquals(null, queueFinds("Love Me Do", "Ed", "Love Me Do", "Eddie"))
+        // The song of another artist, or one that shares too little, is not taken.
+        assertEquals(null, queueFinds("Perfect", "The Smashing Pumpkins", "Perfect", "Simple Plan"))
+        assertEquals(null, queueFinds("Perfect Day", "Band", "Another Song Entirely", "Band"))
+        assertEquals(null, queueFinds("Love Me Do", "Band", "Love Me Tender", "Band"))
+        assertEquals(null, queueFinds("Song 7", "Band", "Song 5", "Band"))
+        assertEquals(null, queueFinds("Perfect", "Band", "Perfect Day", "Band"))
+        assertEquals(null, queueFinds("", "Band", "Anything", "Band"))
+    }
+
+    @Test
+    fun aSingleSongIsStillOnlyOpenedWhenItsTitleIsTheSame() {
+        respond(youTubeMusicPage(youTubeMusicRow("GLASS NO PALM TREE", "S.Kiyotaka & Omega Tribe • Album • 3:00", videoId = "video000000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("ガラスのPALM TREE", "S. Kiyotaka & Omega Tribe")) })
+    }
+
+    @Test
+    fun aQueueDoesNotTakeAnAlbumOrArtistLoosely() {
+        respond(youTubeMusicPage(youTubeMusicRow("Road Trip", "Album • Band • 2020", browseId = "MPREb_x")))
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Road Trip", "Band", ItemType.ALBUM))) {} })
+    }
+
+    @Test
+    fun aQueueTakesAnExactMatchLowerInTheResultsOverACloseOneAtTheTop() {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else FakeSpotify.html(request, youTubeMusicPage(
+                youTubeMusicRow("Glass No Palm Tree Live", "Band • Album • 3:00", videoId = "close000000"),
+                youTubeMusicRow("Glass No Palm Tree", "Band • Album • 3:00", videoId = "exact000000")
+            ))
+        }
+        val tracks = listOf(MusicMetadata("Glass No Palm Tree", "Band"))
+        assertEquals("https://music.youtube.com/watch?v=exact000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} })
+        // A song's close match is kept apart from its exact one, so opening it alone still wants the same title.
+        respond(youTubeMusicPage(youTubeMusicRow("GLASS NO PALM TREE", "Band • Album • 3:00", videoId = "other000000")))
+        val romaji = MusicMetadata("ガラスのPALM TREE", "Band")
+        assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, romaji) })
+    }
+
+    @Test
+    fun aQueueAsksAgainOnceWhenASongsSearchFailsButNotWhenItFindsNothing() {
+        var asked = 0
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else if (++asked == 1) throw IOException("slow moment")
+            else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("Song", "Band • Album • 3:00", videoId = "video000000")))
+        }
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} })
+        assertEquals(2, asked)
+
+        // Nothing found is an answer, so it is not asked twice; failing twice gives up.
+        asked = 0
+        fake.handler = { request -> asked++; FakeSpotify.html(request, """{"contents":{}}""") }
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
+        assertEquals(1, asked)
+        asked = 0
+        fake.handler = { asked++; throw IOException("offline") }
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
+        assertEquals(2, asked)
+
+        // A single song is asked once, so opening it doesn't wait longer on a slow network.
+        asked = 0
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Missing", "Nobody")) })
+        assertEquals(1, asked)
+    }
+
     @Test
     fun youTubeOnlyOpensSongsFromTheSameSearch() {
         respond(youTubeMusicPage(youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen • Album • 3:20", videoId = "exact000000")))

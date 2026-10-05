@@ -861,6 +861,43 @@ class MainActivityTest {
     }
 
     @Test
+    fun coversFoundBeforeLeavingAPlaylistAreKeptWithItInRecent() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        val firstCover = "https://i.scdn.co/image/first"
+        val playlistUrl = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band","uri":"spotify:track:first"},{"title":"Second Song","subtitle":"Band","uri":"spotify:track:second"}]}}}}}}</script>"""
+        // The second song's cover is slow, so the playlist is left before it comes.
+        val slow = CountDownLatch(1)
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.encodedPath == "/oembed" && "first" in request.url.toString() -> FakeSpotify.html(request, """{"thumbnail_url":"$firstCover"}""")
+                request.url.encodedPath == "/oembed" -> {
+                    slow.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    FakeSpotify.html(request, "{}")
+                }
+                request.url.encodedPath.startsWith("/playlist/") -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "Playlist"))
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Other Song | Spotify", "Artist · Song"))
+                else -> FakeSpotify.image(request, FakeSpotify.png())
+            }
+        }
+        val activity = launch()
+        resolveTyped(playlistUrl)
+        waitForText("First Song")
+        waitUntil { fake.requestedUrls.any { "oembed" in it && "first" in it } && fake.requestedUrls.any { "oembed" in it && "second" in it } }
+        waitUntil { ViewModelProvider(activity)[MainViewModel::class.java].uiState.result?.tracks?.get(0)?.artworkUrl == firstCover }
+
+        // On to another link while the second cover is still on its way.
+        click(string(R.string.clear_button))
+        resolveTyped("https://open.spotify.com/track/$TRACK_ID")
+        slow.countDown()
+
+        val saved = HistoryStore(prefs()).load().first { it.link.url == playlistUrl }.metadata.tracks
+        assertEquals(listOf(firstCover, null), saved.map { it.artworkUrl })
+    }
+
+    @Test
     fun aLongPlaylistPlaysInPartsOfWhatYouTubeTakes() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
         val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
@@ -868,7 +905,8 @@ class MainActivityTest {
         // Holds the song lookups so the progress can be seen.
         val release = CountDownLatch(1)
         fake.handler = { request ->
-            val body = fake.requestBodies.last()
+            // Its own body: songs are looked up several at a time, so the last one sent may be another's.
+            val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
             when {
                 request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
                 request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
@@ -1037,6 +1075,75 @@ class MainActivityTest {
 
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
+    }
+
+    private val savedPlaylistUrl = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+
+    private fun savePlaylist(tracks: List<MusicMetadata>, link: MusicLink = MusicLink(MusicService.SPOTIFY, ItemType.PLAYLIST, "37i9dQZF1DXcBWIGoYBM5M", savedPlaylistUrl)) {
+        HistoryStore(prefs()).add(HistoryEntry(link, MusicMetadata("Road Trip", "", ItemType.PLAYLIST, tracks = tracks)))
+    }
+
+    private fun widgetPlays(url: String): String? {
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        return nextStartedActivity()!!.dataString
+    }
+
+    @Test
+    fun theWidgetsPlayOnAPlaylistKeepsToTheFirst50AndTheirOwnVideos() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        savePlaylist((1..51).map { MusicMetadata("Song $it", "Band") })
+        // Every song was found before, so only the playlist is asked of YouTube.
+        val found = (1..51).joinToString(",") { """["find|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
+        java.io.File(app.cacheDir, "lookups.json").writeText("[$found]")
+        var asked = ""
+        fake.handler = { request ->
+            asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
+            FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=v1&list=TLGGq").build()
+        }
+
+        try {
+            assertEquals("https://music.youtube.com/watch?v=video000001&list=TLGGq", widgetPlays(savedPlaylistUrl))
+            assertEquals(50, asked.split(",").size)
+            assertEquals("video000050", asked.split(",").last())
+        } finally {
+            java.io.File(app.cacheDir, "lookups.json").delete()
+        }
+    }
+
+    @Test
+    fun theWidgetsPlayOnAPlaylistSearchesItsNameWhenNothingCanBeQueued() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        // Nothing found for any song, nothing saved at all, and YouTube refusing the queue each end in a search.
+        savePlaylist(listOf(MusicMetadata("Unknown", "Nobody")))
+        fake.handler = { request -> FakeSpotify.html(request, """{"contents":{}}""") }
+        assertEquals("https://music.youtube.com/search?q=Road%20Trip", widgetPlays(savedPlaylistUrl))
+    }
+
+    @Test
+    fun theWidgetsPlayOnAPlaylistWithoutSongsSearchesItsName() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        savePlaylist(emptyList())
+        fake.handler = { request -> FakeSpotify.html(request, """{"contents":{}}""") }
+        assertEquals("https://music.youtube.com/search?q=Road%20Trip", widgetPlays(savedPlaylistUrl))
+    }
+
+    @Test
+    fun theWidgetsPlayOnAPlaylistIsOnlyAQueueWhereYouTubeCanMakeOne() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        savePlaylist(listOf(MusicMetadata("First Song", "Band")))
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
+        assertEquals("https://www.deezer.com/search/Road%20Trip", widgetPlays(savedPlaylistUrl))
+        assertTrue(fake.requestedUrls.none { "watch_videos" in it })
+    }
+
+    @Test
+    fun theWidgetsPlayOnAYouTubePlaylistOpensItAsItselfInYouTubeMusic() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        val url = "https://www.youtube.com/playlist?list=PLabc123"
+        savePlaylist(listOf(MusicMetadata("First Song", "Band")), MusicLink(MusicService.YOUTUBE, ItemType.PLAYLIST, "PLabc123", url))
+        assertEquals("https://music.youtube.com/playlist?list=PLabc123", widgetPlays(url))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test

@@ -46,14 +46,20 @@ internal class ExactMatcher(
     /** The apps whose search needs no account. */
     private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
 
-    /** A trailing remaster, mono or stereo tag, as " - Remastered 2012" or "(2003 Remaster)". */
+    /**
+     * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in it, or
+     * a whole "Album Version" or "Original". "Live", "Acoustic" or "Remix" are other recordings.
+     */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*|\s*[(\[][^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*[)\]])$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
 
     /** A guest credited in the title, as "(feat. Emel)", which services that credit it as an artist leave out. */
     private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
+
+    /** "Zion y Lennox" and "Hall and Oates" are two names, whichever language says so. */
+    private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -85,27 +91,56 @@ internal class ExactMatcher(
         return remembered("find", target.name, metadata) { lookUp(target, metadata) }
     }
 
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata): String? =
-        withTimeoutOrNull(TIMEOUT_MS) {
-            try {
-                when (target) {
-                    MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
-                    MusicService.DEEZER -> findOnDeezer(metadata)
-                    MusicService.BANDCAMP -> findOnBandcamp(metadata)
-                    MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL)
-                    // YouTube.
-                    else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL)
+    /**
+     * For a queue, where a song that plays beats one that is left out: the song's exact match, or else
+     * the first song by the same artist whose title has all the words of the other's, e.g. a title
+     * written in another script or a classical work's long name. Kept apart from [match]'s answers,
+     * which a single song is opened with.
+     */
+    private suspend fun matchForQueue(target: MusicService, metadata: MusicMetadata): String? {
+        if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) return match(target, metadata)
+        cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
+        return remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) }
+    }
+
+    private class Answer(val url: String?)
+
+    /**
+     * What [target] has for [metadata], null if nothing or no answer. A search that failed or timed
+     * out is asked once more when [retrying], e.g. for a queue, where one song in fifty must not be
+     * lost to a slow moment; an answer of "none" is final.
+     */
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): String? {
+        repeat(if (retrying) 2 else 1) {
+            val answer = withTimeoutOrNull(TIMEOUT_MS) {
+                try {
+                    Answer(
+                        when (target) {
+                            MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
+                            MusicService.DEEZER -> findOnDeezer(metadata)
+                            MusicService.BANDCAMP -> findOnBandcamp(metadata)
+                            MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
+                            // YouTube.
+                            else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
+                        }
+                    )
+                } catch (_: IOException) {
+                    null
+                } catch (_: JSONException) {
+                    null
                 }
-            } catch (_: IOException) {
-                null
-            } catch (_: JSONException) {
-                null
             }
+            if (answer != null) return answer.url
         }
+        return null
+    }
+
+    private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
+        listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
 
     /** What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found something. */
     private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> String?): String? {
-        val key = listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
+        val key = cacheKey(kind, target, metadata)
         cache?.get(key)?.let { return it }
         return lookUp()?.also { cache?.put(key, it) }
     }
@@ -121,10 +156,10 @@ internal class ExactMatcher(
         val ids = coroutineScope {
             tracks.map { track ->
                 async {
-                    lookups.withPermit { match(target, track) }.also { onProgress(looked.incrementAndGet()) }
+                    lookups.withPermit { matchForQueue(target, track) }.also { onProgress(looked.incrementAndGet()) }
                 }
             }.awaitAll()
-        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }
+        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }.distinct()
         cache?.save()
         if (ids.isEmpty()) return null
         val watch = if (target == MusicService.YOUTUBE_MUSIC) YOUTUBE_MUSIC_WATCH_URL else YOUTUBE_WATCH_URL
@@ -243,11 +278,11 @@ internal class ExactMatcher(
     }
 
     private suspend fun deezerCover(metadata: MusicMetadata): String? {
-        val title = normalize(metadata.title)
+        val title = normalize(withoutEditionTag(metadata.title))
         // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
         val artists = artists(metadata.artist)
         return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
-            val name = normalize(result.optString("title"))
+            val name = normalize(withoutEditionTag(result.optString("title")))
             val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
@@ -297,7 +332,7 @@ internal class ExactMatcher(
      * YouTube Music's search, filtered to songs, albums or artists. Songs are also watchable on
      * YouTube itself, which has no such filter, so [watchUrl] picks the app the video id opens in.
      */
-    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String): String? {
+    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): String? {
         val (params, isSong) = when (metadata.type) {
             ItemType.TRACK -> YOUTUBE_MUSIC_SONGS to true
             ItemType.ALBUM -> YOUTUBE_MUSIC_ALBUMS to false
@@ -312,16 +347,17 @@ internal class ExactMatcher(
             .put("query", searchQuery(metadata))
             .put("params", params)
         val items = fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
-        return items.firstNotNullOfOrNull { item ->
+        fun found(item: JSONObject, loose: Boolean): String? {
             val columns = item.optJSONArray("flexColumns")?.objects()
                 ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
-                ?: return@firstNotNullOfOrNull null
+                ?: return null
             val name = columns.firstOrNull().orEmpty()
             // The second line is "Artist • Album • 4:46" for songs and "Album • Artist • 2012" for albums.
             val details = columns.getOrNull(1).orEmpty().split(" • ")
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
-            if (!matches(metadata, name, artist.ifEmpty { name })) return@firstNotNullOfOrNull null
-            when (metadata.type) {
+            val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name })
+            if (!same) return null
+            return when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }
                     ?.let { watchUrl + it }
                 else -> item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
@@ -329,6 +365,9 @@ internal class ExactMatcher(
                     ?.let { (if (metadata.type == ItemType.ALBUM) YOUTUBE_MUSIC_ALBUM_URL else YOUTUBE_MUSIC_ARTIST_URL) + it }
             }
         }
+        // An exact match anywhere in the results beats a close one at the top.
+        return items.firstNotNullOfOrNull { found(it, loose = false) }
+            ?: if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) } else null
     }
 
     private fun JSONObject.text(): String =
@@ -364,12 +403,37 @@ internal class ExactMatcher(
         return wanted.isEmpty() || artists(artist).any(wanted::contains)
     }
 
+    private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean {
+        val wanted = artists(metadata.artist)
+        // A group credited with a guest, or a name with a tag around it: "Randy" is in "Randy Nota Loca".
+        fun sameArtist(a: String, b: String) = a == b || (minOf(a.length, b.length) >= MIN_PARTIAL_ARTIST && (a in b || b in a))
+        if (wanted.isNotEmpty() && artists(artist).none { theirs -> wanted.any { sameArtist(it, theirs) } }) return false
+        val ours = words(withoutEditionTag(metadata.title))
+        val theirs = words(withoutEditionTag(name))
+        val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
+        // All the words of one title are in the other, so "Love Me Do" isn't "Love Me Tender".
+        return shorter.size >= 2 && longer.containsAll(shorter)
+    }
+
+    /** The words written in letters and digits: another script's are what the other title spells out. */
+    private fun words(title: String): Set<String> =
+        Normalizer.normalize(title, Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "").lowercase(Locale.ROOT)
+            .split(Regex("""[^a-z0-9]+""")).filter { it.isNotEmpty() }.toSet()
+
     /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself, which other services list without the tag. */
-    private fun withoutEditionTag(title: String): String = title.replace(featuring, "").replace(editionTag, "")
+    private fun withoutEditionTag(title: String): String {
+        var stripped = title
+        // "Song - 2012 Remaster (Mono)" has two, and a title that is only a tag is left as it is.
+        while (true) {
+            val shorter = stripped.replace(featuring, "").replace(editionTag, "")
+            if (shorter == stripped || shorter.isBlank()) return stripped
+            stripped = shorter
+        }
+    }
 
     /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and "The" doesn't count. */
     private fun artists(credit: String): Set<String> =
-        artistNames(credit).map { normalize(it.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
+        artistNames(credit).flatMap { it.split(conjunction) }.map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
 
     private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -380,6 +444,9 @@ internal class ExactMatcher(
             .replace(Regex("""[^\p{L}\p{N}]+"""), "")
 
     private companion object {
+        /** A shorter artist name has to be at least this long to count when it is inside another's. */
+        const val MIN_PARTIAL_ARTIST = 5
+        const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
         const val TIMEOUT_MS = 5_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
