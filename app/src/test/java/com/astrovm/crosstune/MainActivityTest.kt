@@ -3089,24 +3089,24 @@ class MainActivityTest {
         click(string(R.string.settings_button))
 
         click(string(R.string.add_custom_destination_button))
-        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_name_label))).performTextReplacement("Lyrics")
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_name_label))).performTextReplacement("Word Finder")
         composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
-            .performTextReplacement("https://lyrics.example/search")
+            .performTextReplacement("https://words.example/search")
         click(string(R.string.add_button))
         assertTextShown(string(R.string.custom_template_invalid))
 
         composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
-            .performTextReplacement("https://lyrics.example/search?q={query}")
+            .performTextReplacement("https://words.example/search?q={query}")
         assertTextAbsent(string(R.string.custom_template_invalid))
         click(string(R.string.add_button))
-        assertTextShown("https://lyrics.example/search?q={query}")
+        assertTextShown("https://words.example/search?q={query}")
         click(string(R.string.back_button))
 
-        chooseDefault("Lyrics")
+        chooseDefault("Word Finder")
         resolveTyped()
-        click(string(R.string.open_in_custom, "Lyrics"))
+        click(string(R.string.open_in_custom, "Word Finder"))
         val opened = nextStartedActivity()!!
-        assertEquals("https://lyrics.example/search?q=Custom%20Song%20Artist", opened.dataString)
+        assertEquals("https://words.example/search?q=Custom%20Song%20Artist", opened.dataString)
         assertEquals(
             "com.example.browser",
             app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName
@@ -3114,9 +3114,9 @@ class MainActivityTest {
 
         click(string(R.string.settings_button))
         click(string(R.string.remove_button))
-        assertTextAbsent("https://lyrics.example/search?q={query}")
+        assertTextAbsent("https://words.example/search?q={query}")
         click(string(R.string.back_button))
-        assertTextAbsent("Lyrics")
+        assertTextAbsent("Word Finder")
         assertTextShown(string(R.string.open_in_youtube_music))
     }
 

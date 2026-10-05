@@ -170,4 +170,13 @@
     <string name="error_recognition_unavailable">O reconhecimento de músicas não está disponível agora.</string>
     <string name="open_settings_button">Abrir configurações</string>
     <string name="open_app_button">Abrir %1$s</string>
+    <string name="lyrics_button">Músicas</string>
+    <string name="lyrics_title">Letra</string>
+    <string name="lyrics_loading">Buscando a letra…</string>
+    <string name="lyrics_none">Nenhuma letra encontrada para esta música.</string>
+    <string name="lyrics_failed">Não foi possível obter a letra agora.</string>
+    <string name="song_search_title">Músicas</string>
+    <string name="song_search_none">Nenhuma música encontrada para “%1$s”.</string>
+    <string name="song_search_placeholder">Música ou artista</string>
+    <string name="song_search_label">Nome da música</string>
 </resources>

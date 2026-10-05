@@ -170,4 +170,13 @@
     <string name="error_recognition_unavailable">Die Songerkennung ist gerade nicht verfügbar.</string>
     <string name="open_settings_button">Einstellungen öffnen</string>
     <string name="open_app_button">%1$s öffnen</string>
+    <string name="lyrics_button">Songs</string>
+    <string name="lyrics_title">Songtext</string>
+    <string name="lyrics_loading">Songtext wird gesucht…</string>
+    <string name="lyrics_none">Für diesen Song wurde kein Songtext gefunden.</string>
+    <string name="lyrics_failed">Songtext konnte gerade nicht geladen werden.</string>
+    <string name="song_search_title">Songs</string>
+    <string name="song_search_none">Keine Songs für „%1$s“ gefunden.</string>
+    <string name="song_search_placeholder">Song oder Künstler</string>
+    <string name="song_search_label">Songname</string>
 </resources>

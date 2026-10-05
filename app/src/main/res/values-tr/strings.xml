@@ -170,4 +170,13 @@
     <string name="error_recognition_unavailable">Şarkı tanıma şu anda kullanılamıyor.</string>
     <string name="open_settings_button">Ayarları aç</string>
     <string name="open_app_button">%1$s uygulamasını aç</string>
+    <string name="lyrics_button">Şarkılar</string>
+    <string name="lyrics_title">Sözler</string>
+    <string name="lyrics_loading">Sözler aranıyor…</string>
+    <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
+    <string name="lyrics_failed">Sözler şu anda alınamadı.</string>
+    <string name="song_search_title">Şarkılar</string>
+    <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
+    <string name="song_search_placeholder">Şarkı veya sanatçı</string>
+    <string name="song_search_label">Şarkı adı</string>
 </resources>
