@@ -431,9 +431,14 @@ internal class ExactMatcher(
         }
     }
 
-    /** "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and "The" doesn't count. */
+    /**
+     * "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and
+     * "The" doesn't count. The whole credit counts too, for a name that holds a separator: "125,
+     * Rue Montmartre" is one artist, not a "125" to match on and a "Rue Montmartre" to match on.
+     */
     private fun artists(credit: String): Set<String> =
-        artistNames(credit).flatMap { it.split(conjunction) }.map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
+        (artistNames(credit).flatMap { it.split(conjunction) } + credit)
+            .map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
 
     private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
