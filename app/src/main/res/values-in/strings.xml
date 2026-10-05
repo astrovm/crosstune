@@ -5,6 +5,7 @@
     <string name="resolve_button">Konversi link</string>
     <string name="paste_button">Tempel</string>
     <string name="recognize_button">Kenali lagu</string>
+    <string name="setting_recognizer">Aplikasi pengenal lagu</string>
     <string name="clear_button">Hapus</string>
     <string name="loading_text">Mencari link…</string>
     <string name="open_in_youtube_music">Buka di YouTube Music</string>

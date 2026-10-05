@@ -5,6 +5,7 @@
     <string name="resolve_button">링크 변환</string>
     <string name="paste_button">붙여넣기</string>
     <string name="recognize_button">노래 인식</string>
+    <string name="setting_recognizer">노래 인식 앱</string>
     <string name="clear_button">지우기</string>
     <string name="loading_text">링크를 찾는 중…</string>
     <string name="open_in_youtube_music">YouTube Music에서 열기</string>

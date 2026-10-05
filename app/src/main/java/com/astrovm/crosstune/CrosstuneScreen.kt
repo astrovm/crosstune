@@ -116,9 +116,12 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
-    /** Apps that name a song playing nearby, in the order they're offered. */
+    /** Apps that name a song playing nearby, Shazam first. */
     val recognizers: List<SongRecognizer> = emptyList(),
+    /** The one the Recognize button opens: the user's pick, or else the first there is. */
+    val recognizer: SongRecognizer? = null,
     val onRecognize: (SongRecognizer) -> Unit = {},
+    val onRecognizerChange: (SongRecognizer) -> Unit = {},
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -578,7 +581,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                 if (empty) {
                     Row {
                         // A song playing nearby, once named, is shared back here.
-                        if (actions.recognizers.isNotEmpty()) RecognizeButton(actions, enabled = !busy)
+                        actions.recognizer?.let { recognizer ->
+                            IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {
+                                AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+                            }
+                        }
                         IconButton(onClick = actions.onPaste, enabled = !busy) {
                             AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
                         }
@@ -904,32 +911,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                         .fillMaxHeight(),
                     enabled = songs || destinationReady,
                     description = if (songs) stringResource(R.string.share_songs_button) else null
-                )
-            }
-        }
-    }
-}
-
-/** Names a song playing nearby with the one app there is, or asks which when there's more than one. */
-@Composable
-private fun RecognizeButton(actions: ScreenActions, enabled: Boolean) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(
-            onClick = { actions.recognizers.singleOrNull()?.let(actions.onRecognize) ?: run { expanded = true } },
-            enabled = enabled
-        ) {
-            AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            actions.recognizers.forEach { recognizer ->
-                DropdownMenuItem(
-                    text = { Text(recognizer.label) },
-                    leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
-                    onClick = {
-                        expanded = false
-                        actions.onRecognize(recognizer)
-                    }
                 )
             }
         }

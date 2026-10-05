@@ -5,6 +5,7 @@
     <string name="resolve_button">Konwertuj link</string>
     <string name="paste_button">Wklej</string>
     <string name="recognize_button">Rozpoznaj utwór</string>
+    <string name="setting_recognizer">Aplikacja do rozpoznawania muzyki</string>
     <string name="clear_button">Wyczyść</string>
     <string name="loading_text">Sprawdzanie linku…</string>
     <string name="open_in_youtube_music">Otwórz w YouTube Music</string>

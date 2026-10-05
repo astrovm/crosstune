@@ -190,6 +190,11 @@ private fun SettingsList(
                 checked = state.shareSheetApps,
                 onCheckedChange = actions.onShareSheetAppsChange
             )
+            // Which app names a song playing nearby, when there's more than one.
+            if (actions.recognizers.size > 1) {
+                GroupDivider()
+                RecognizerRow(actions)
+            }
             GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
@@ -318,6 +323,49 @@ private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> 
 
 /** Marks where the heart icon goes in [R.string.made_with_love]. */
 internal const val HEART = "\uFFFC"
+
+/** Picks the app the Recognize button opens. */
+@Composable
+private fun RecognizerRow(actions: ScreenActions) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = true }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.setting_recognizer),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                actions.recognizer?.let { PackageIcon(it.packageName, size = 20.dp) }
+                Text(
+                    text = actions.recognizer?.label.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                actions.recognizers.forEach { recognizer ->
+                    DropdownMenuItem(
+                        text = { Text(recognizer.label) },
+                        leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
+                        onClick = {
+                            expanded = false
+                            actions.onRecognizerChange(recognizer)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 
 /** Picks the app's language, or the phone's with "System default". */
 @Composable

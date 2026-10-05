@@ -6,6 +6,7 @@
     <string name="resolve_button">変換</string>
     <string name="paste_button">貼り付け</string>
     <string name="recognize_button">曲を認識</string>
+    <string name="setting_recognizer">楽曲認識アプリ</string>
     <string name="clear_button">クリア</string>
     <string name="loading_text">リンクを確認しています…</string>
     <string name="open_in_youtube_music">YouTube Music で開く</string>

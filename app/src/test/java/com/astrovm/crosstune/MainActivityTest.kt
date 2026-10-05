@@ -241,39 +241,73 @@ class MainActivityTest {
     // endregion
 
     @Test
-    fun recognizeOpensShazamOrGoogleSongSearchAndAsksWhichWithBoth() {
+    fun recognizeOpensShazamFirstAndRemembersTheAppChosenInSettings() {
         val recognize = string(R.string.recognize_button)
+        val setting = string(R.string.setting_recognizer)
         fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
         fun resume() {
             controller!!.pause().resume()
             composeRule.waitForIdle()
         }
+        fun chooseRecognizer(label: String) = inSettings {
+            composeRule.onNodeWithText(setting).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            composeRule.onAllNodesWithText(label).onLast().performClick()
+            composeRule.waitForIdle()
+        }
         launch()
-        // With no app to name a song, there's no button for it.
+        // Nothing installed: no button or setting. One app: open it directly.
         assertTextAbsent(recognize)
-
+        inSettings { assertTextAbsent(setting) }
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
         resume()
+        inSettings { assertTextAbsent(setting) }
         click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
 
-        // With Shazam too, it asks which, Shazam first. Without its listening shortcut, Shazam just opens.
+        // Both apps: a tap launches Shazam immediately, even without its listening shortcut.
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         resume()
         click(recognize)
-        assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString() })
-        click("Shazam")
         assertEquals(Intent.ACTION_MAIN, nextStartedActivity()!!.action)
+        assertTextAbsent("Google")
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
         resume()
         click(recognize)
-        click("Shazam")
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
+        // Only Settings offers the choice. Changing it takes effect on the next tap.
+        inSettings {
+            composeRule.onNodeWithText(setting).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() })
+            composeRule.onAllNodesWithText("Shazam").onLast().performClick()
+            composeRule.waitForIdle()
+        }
         click(recognize)
-        click("Google")
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+        chooseRecognizer("Google")
+        assertEquals(SongRecognizers.GOOGLE, prefs().getString("song_recognizer", null))
+        click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+
+        // A fresh activity reads the saved preference, rather than resetting to Shazam.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+        chooseRecognizer("Shazam")
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
+        // An old or unavailable preference falls back to an installed app without overwriting it.
+        prefs().edit().putString("song_recognizer", "missing.recognizer").commit()
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+        assertEquals("missing.recognizer", prefs().getString("song_recognizer", null))
 
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)

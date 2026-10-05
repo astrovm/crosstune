@@ -44,6 +44,9 @@ class MainActivity : ComponentActivity() {
     /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
     private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
+    /** The app picked in Settings for the Recognize button; Shazam, then Google, when none is. */
+    private var recognizerPick by mutableStateOf<String?>(null)
+
     private val viewModel: MainViewModel by viewModels {
         viewModelFactory {
             initializer {
@@ -73,6 +76,8 @@ class MainActivity : ComponentActivity() {
         const val ACTION_OPEN_RECENT = "com.astrovm.crosstune.action.OPEN_RECENT"
         /** On a link, shows it here first, as the widget's songs do when tapped. */
         const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
+
+        private const val KEY_RECOGNIZER = "song_recognizer"
 
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -145,7 +150,12 @@ class MainActivity : ComponentActivity() {
                         onResolve = viewModel::resolveTypedInput,
                         onPaste = { viewModel.pasteLink(clipboardText()) },
                         recognizers = recognizers,
+                        recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
                         onRecognize = { tryStartActivity(it.intent) },
+                        onRecognizerChange = { picked ->
+                            recognizerPick = picked.packageName
+                            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(KEY_RECOGNIZER, picked.packageName).apply()
+                        },
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
@@ -204,6 +214,7 @@ class MainActivity : ComponentActivity() {
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
         recognizers = SongRecognizers.available(packageManager)
+        recognizerPick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(KEY_RECOGNIZER, null)
     }
 
     override fun onNewIntent(intent: Intent) {
