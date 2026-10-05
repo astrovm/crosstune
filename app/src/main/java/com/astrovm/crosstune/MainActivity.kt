@@ -77,7 +77,6 @@ class MainActivity : ComponentActivity() {
         /** On a link, shows it here first, as the widget's songs do when tapped. */
         const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
 
-        private const val KEY_RECOGNIZER = "song_recognizer"
 
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -154,7 +153,9 @@ class MainActivity : ComponentActivity() {
                         onRecognize = { tryStartActivity(it.intent) },
                         onRecognizerChange = { picked ->
                             recognizerPick = picked.packageName
-                            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(KEY_RECOGNIZER, picked.packageName).apply()
+                            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(SongRecognizers.KEY_PICK, picked.packageName).apply()
+                            // The widget's button opens the same app.
+                            lifecycleScope.launch { CrosstuneWidget().updateAll(applicationContext) }
                         },
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
@@ -214,7 +215,7 @@ class MainActivity : ComponentActivity() {
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
         recognizers = SongRecognizers.available(packageManager)
-        recognizerPick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(KEY_RECOGNIZER, null)
+        recognizerPick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(SongRecognizers.KEY_PICK, null)
     }
 
     override fun onNewIntent(intent: Intent) {

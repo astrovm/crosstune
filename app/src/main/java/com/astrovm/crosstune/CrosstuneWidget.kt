@@ -36,6 +36,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -61,7 +62,8 @@ class CrosstuneWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 /**
- * Crosstune in miniature: its logo and a button to open the copied link, then Recent, each song
+ * Crosstune in miniature: its logo, which opens the app, buttons to name a song playing nearby and
+ * to open the copied link, then Recent, each song
  * with its cover, opening in the user's app with ▶ or shown in Crosstune with a tap. One row tall,
  * it's just the button; two columns wide, the name and ▶ make way for the songs. Colors follow the app's: the wallpaper's from Android 12, its own before.
  */
@@ -71,7 +73,9 @@ class CrosstuneWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val songs = widgetSongs(context)
-        provideContent { WidgetTheme { WidgetContent(songs) } }
+        // The app it opens is picked at the tap, see RecognizeSongActivity.
+        val recognize = SongRecognizers.available(context.packageManager).isNotEmpty()
+        provideContent { WidgetTheme { WidgetContent(songs, recognize) } }
     }
 
     internal companion object {
@@ -111,9 +115,14 @@ class CrosstuneWidget : GlanceAppWidget() {
     }
 }
 
+/**
+ * With [recognize], a button opens the app that names a song playing nearby; there's room for it
+ * when the widget is wide.
+ */
 @Composable
-internal fun WidgetContent(songs: List<WidgetSong>) {
+internal fun WidgetContent(songs: List<WidgetSong>, recognize: Boolean = false) {
     val context = LocalContext.current
+    val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
     val paste = actionStartActivity(
         Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD).setClassName(context, MainActivity.PASTE_ALIAS)
     )
@@ -143,14 +152,26 @@ internal fun WidgetContent(songs: List<WidgetSong>) {
         } else {
             Column(modifier = GlanceModifier.fillMaxSize().padding(start = 14.dp, end = 6.dp, top = 6.dp)) {
                 Row(modifier = GlanceModifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Logo()
-                    Spacer(GlanceModifier.width(10.dp))
-                    Text(
-                        if (wide) context.getString(R.string.app_name) else "",
-                        modifier = GlanceModifier.defaultWeight(),
-                        maxLines = 1,
-                        style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    )
+                    // The logo and name open Crosstune.
+                    Row(modifier = GlanceModifier.defaultWeight().fillMaxHeight().clickable(openApp), verticalAlignment = Alignment.CenterVertically) {
+                        Logo()
+                        Spacer(GlanceModifier.width(10.dp))
+                        Text(
+                            if (wide) context.getString(R.string.app_name) else "",
+                            maxLines = 1,
+                            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                    if (wide && recognize) {
+                        CircleIconButton(
+                            imageProvider = ImageProvider(R.drawable.ic_recognize),
+                            contentDescription = context.getString(R.string.recognize_button),
+                            onClick = actionStartActivity(Intent(context, RecognizeSongActivity::class.java)),
+                            backgroundColor = GlanceTheme.colors.secondaryContainer,
+                            contentColor = GlanceTheme.colors.onSecondaryContainer
+                        )
+                        Spacer(GlanceModifier.width(6.dp))
+                    }
                     CircleIconButton(
                         imageProvider = ImageProvider(R.drawable.ic_content_paste),
                         contentDescription = context.getString(R.string.shortcut_paste_long),

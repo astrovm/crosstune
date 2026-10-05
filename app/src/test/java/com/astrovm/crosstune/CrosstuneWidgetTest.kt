@@ -46,11 +46,11 @@ class CrosstuneWidgetTest {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
-    private fun widget(size: DpSize, songs: List<WidgetSong>, block: GlanceAppWidgetUnitTest.() -> Unit) =
+    private fun widget(size: DpSize, songs: List<WidgetSong>, recognize: Boolean = false, block: GlanceAppWidgetUnitTest.() -> Unit) =
         runGlanceAppWidgetUnitTest {
             setContext(app)
             setAppWidgetSize(size)
-            provideComposable { WidgetContent(songs) }
+            provideComposable { WidgetContent(songs, recognize) }
             block()
         }
 
@@ -85,7 +85,21 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun twoColumnsWideTheSongsTakeTheWholeRow() = widget(CrosstuneWidget.NARROW_LIST, listOf(song)) {
+    fun wideItNamesASongNearbyAndItsNameOpensTheApp() = widget(CrosstuneWidget.LIST, listOf(song), recognize = true) {
+        onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.recognize_button)))).assertAny(hasStartActivityClickAction(Intent(app, RecognizeSongActivity::class.java)))
+        onAllNodes(hasAnyDescendant(hasText(app.getString(R.string.app_name))))
+            .assertAny(hasStartActivityClickAction(Intent(app, MainActivity::class.java)))
+    }
+
+    @Test
+    fun withoutAnAppToNameSongsThereIsNoButtonForIt() = widget(CrosstuneWidget.LIST, listOf(song)) {
+        onNode(hasContentDescription(app.getString(R.string.recognize_button))).assertDoesNotExist()
+    }
+
+    @Test
+    fun twoColumnsWideTheSongsTakeTheWholeRow() = widget(CrosstuneWidget.NARROW_LIST, listOf(song), recognize = true) {
+        // Only the copied link's button fits beside the logo.
+        onNode(hasContentDescription(app.getString(R.string.recognize_button))).assertDoesNotExist()
         onNode(hasText("Song")).assertExists()
         onNode(hasText(app.getString(R.string.app_name))).assertDoesNotExist()
         onNode(hasContentDescription(app.getString(R.string.history_open, "Song"))).assertDoesNotExist()
