@@ -34,32 +34,35 @@ class RecognizeSongActivityTest {
         return shadowOf(activity).nextStartedActivity
     }
 
-    @Test
-    fun itOpensThePickedAppThenShazamThenGoogle() {
-        install(SongRecognizers.GOOGLE, "Google", SongRecognizers.GOOGLE_SONG_SEARCH)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, tap()!!.action)
+    private fun pick(packageName: String) {
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
+            .putString(SongRecognizers.KEY_PICK, packageName).commit()
+    }
 
+    private fun assertListens(started: Intent?) {
+        assertEquals(MainActivity.ACTION_LISTEN, started!!.action)
+        assertEquals(MainActivity.LISTEN_ALIAS, started.component!!.className)
+    }
+
+    @Test
+    fun crosstuneListensUnlessAnotherAppIsPicked() {
+        assertListens(tap())
+        install(SongRecognizers.GOOGLE, "Google", SongRecognizers.GOOGLE_SONG_SEARCH)
         install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
+        assertListens(tap())
+
+        // A pick in Settings comes first, from the next tap.
+        pick(SongRecognizers.SHAZAM)
         val shazam = tap()!!
         assertEquals(SongRecognizers.SHAZAM_LISTEN, shazam.action)
         // It's not part of Crosstune's own task.
         assertTrue(shazam.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-
-        // A pick in Settings comes first, from the next tap.
-        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
-            .putString(SongRecognizers.KEY_PICK, SongRecognizers.GOOGLE).commit()
+        pick(SongRecognizers.GOOGLE)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, tap()!!.action)
-    }
-
-    @Test
-    fun withNoOtherAppCrosstuneListens() {
-        val listen = tap()!!
-        assertEquals(MainActivity.ACTION_LISTEN, listen.action)
-        assertEquals(MainActivity.LISTEN_ALIAS, listen.component!!.className)
-        // Picked in Settings, it comes first even with others installed.
-        install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
-        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
-            .putString(SongRecognizers.KEY_PICK, app.packageName).commit()
-        assertEquals(MainActivity.ACTION_LISTEN, tap()!!.action)
+        pick(app.packageName)
+        assertListens(tap())
+        // One that's gone listens here.
+        pick("missing.recognizer")
+        assertListens(tap())
     }
 }

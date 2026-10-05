@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
     /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
     private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
-    /** The app picked in Settings for the Recognize button; Shazam, Google, then Crosstune, when none is. */
+    /** The app picked in Settings for the Recognize button; Crosstune when none is. */
     private var recognizerPick by mutableStateOf<String?>(null)
 
     private val viewModel: MainViewModel by viewModels {
