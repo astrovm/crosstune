@@ -1101,7 +1101,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         },
         modifier = Modifier.padding(top = 8.dp)
     )
-    AnimatedVisibility(visible = searchExpanded, enter = expandVertically(Motion.size) + fadeIn(Motion.fadeIn), exit = shrinkVertically(Motion.size) + fadeOut(Motion.fadeOut)) {
+    AnimatedVisibility(visible = searchExpanded, enter = Motion.appear, exit = Motion.disappear) {
         TextField(
             value = query,
             onValueChange = { query = it },
