@@ -362,13 +362,16 @@ class MainActivityTest {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // Waits on the link that opened, not on the screen closing, which also waits on Android
+        // for the installed apps and can outlast a timeout on a busy machine.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        waitUntil { fake.requestedUrls.isNotEmpty() }
         assertOnlyCoverSearches()
         val entry = HistoryStore(prefs()).load().first()
         controller!!.pause().stop().destroy()
-        val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
-        composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
     }
 
@@ -1021,14 +1024,16 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"抱かれに来た女 - Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // Waits on the link that opened rather than on the screen closing, which also waits on
+        // Android for the installed apps, and that can outlast a timeout on a busy machine.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.youtube.com/watch?v=sPmul8b17AU", nextStartedActivity()!!.dataString)
 
         nextStartedActivity()
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Street Dolphin","author_name":"Kingo Hamada"}""") }
-        val other = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
-        composeRule.waitUntil(TIMEOUT_MS) { other.isFinishing }
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=VDuDQNkSC6g", nextStartedActivity()!!.dataString)
     }
 
