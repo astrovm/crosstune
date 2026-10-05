@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
-                    SongListener(microphoneFactory(), Shazam(client, computeDispatcher = listenDispatcher), listenDispatcher),
+                    SongListener(microphoneFactory(), Shazam(client)),
                     systemDispatcher
                 )
             }
@@ -106,10 +106,6 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
-
-        /** Where the microphone is read and its fingerprint made; tests do it in step with the screen. */
-        @VisibleForTesting
-        internal var listenDispatcher: CoroutineDispatcher = Dispatchers.IO
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
