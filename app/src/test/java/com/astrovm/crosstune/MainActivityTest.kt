@@ -242,9 +242,10 @@ class MainActivityTest {
     // endregion
 
     @Test
-    fun recognizeOpensShazamFirstAndRemembersTheAppChosenInSettings() {
+    fun recognizeListensInCrosstuneUnlessAnotherAppIsChosenInSettings() {
         val recognize = string(R.string.recognize_button)
         val setting = string(R.string.setting_recognizer)
+        val crosstune = string(R.string.app_name)
         fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
         fun resume() {
             controller!!.pause().resume()
@@ -256,78 +257,69 @@ class MainActivityTest {
             composeRule.onAllNodesWithText(label).onLast().performClick()
             composeRule.waitForIdle()
         }
-        launch()
-        // Nothing installed: Crosstune listens itself, so there's nothing to pick. Another app comes first.
-        composeRule.onNode(hasContentDescription(recognize)).assertExists()
+        /** A tap that listens here asks for the microphone, at most, rather than opening another app. */
+        fun assertListensHere() {
+            click(recognize)
+            val started = nextStartedActivity()
+            assertTrue("$started", started == null || started.action == "android.content.pm.action.REQUEST_PERMISSIONS")
+        }
+        val activity = launch()
+        // Nothing installed: Crosstune listens itself, so there's nothing to pick.
+        click(recognize)
+        assertEquals(android.Manifest.permission.RECORD_AUDIO, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
+        assertListensHere()
         inSettings { assertTextAbsent(setting) }
+
+        // With other apps, Crosstune still comes first, and Settings offers them.
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
-        resume()
-        inSettings { composeRule.onNodeWithText(setting).assertExists() }
-        click(recognize)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
-
-        // Both apps: a tap launches Shazam immediately, even without its listening shortcut.
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         resume()
+        assertListensHere()
+        inSettings {
+            composeRule.onNodeWithText(setting).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            assertEquals(
+                listOf(crosstune, "Shazam", "Google"),
+                composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google") or hasText(crosstune)))
+                    .fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() }
+            )
+            composeRule.onAllNodesWithText("Google").onLast().performClick()
+            composeRule.waitForIdle()
+        }
+        assertEquals(SongRecognizers.GOOGLE, prefs().getString("song_recognizer", null))
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+
+        // Shazam opens even without its listening shortcut, and listens right away with it.
+        chooseRecognizer("Shazam")
         click(recognize)
         assertEquals(Intent.ACTION_MAIN, nextStartedActivity()!!.action)
-        assertTextAbsent("Google")
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
         resume()
         click(recognize)
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
 
-        // Only Settings offers the choice. Changing it takes effect on the next tap.
-        inSettings {
-            composeRule.onNodeWithText(setting).performScrollTo().performClick()
-            composeRule.waitForIdle()
-            assertEquals(
-                listOf("Shazam", "Google", string(R.string.app_name)),
-                composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google") or hasText(string(R.string.app_name))))
-                    .fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() }
-            )
-            composeRule.onAllNodesWithText("Shazam").onLast().performClick()
-            composeRule.waitForIdle()
-        }
-        click(recognize)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
-        chooseRecognizer("Google")
-        assertEquals(SongRecognizers.GOOGLE, prefs().getString("song_recognizer", null))
-        click(recognize)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
-
-        // A fresh activity reads the saved preference, rather than resetting to Shazam.
+        // A fresh activity reads the saved choice.
         controller!!.pause().stop().destroy()
         launch()
         click(recognize)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
-        chooseRecognizer("Shazam")
-        click(recognize)
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
 
-        // Uninstalling the preferred app keeps recognition usable and the preference intact.
+        // Uninstalling the chosen app goes back to Crosstune, keeping the choice for when it's back.
         // Remove the fake components too: Robolectric keeps their manifest registry separately.
         shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Main"))
         shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"))
         shadowOf(app.packageManager).removePackage(SongRecognizers.SHAZAM)
         resume()
-        click(recognize)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+        assertListensHere()
         assertEquals(SongRecognizers.SHAZAM, prefs().getString("song_recognizer", null))
-        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
-        installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
-        resume()
-        click(recognize)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
 
-        // An old or unavailable preference falls back to an installed app without overwriting it.
-        prefs().edit().putString("song_recognizer", "missing.recognizer").commit()
-        resume()
-        click(recognize)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
-        assertEquals("missing.recognizer", prefs().getString("song_recognizer", null))
+        // Picking Crosstune again listens here.
+        chooseRecognizer("Google")
+        chooseRecognizer(crosstune)
+        assertListensHere()
 
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)

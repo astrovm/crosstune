@@ -27,15 +27,17 @@ internal object SongRecognizers {
     const val KEY_PICK = "song_recognizer"
 
     /**
-     * Those installed, Shazam first: listening right away, or else just opened. Crosstune comes
-     * last, so it's the one used when there's no other.
+     * Crosstune first, so it's the one used unless another is picked in Settings, then those
+     * installed: Shazam, listening right away or else just opened, and Google.
      */
-    fun available(context: Context): List<SongRecognizer> = others(context.packageManager) + SongRecognizer(
-        context.packageName,
-        context.getString(R.string.app_name),
-        Intent(MainActivity.ACTION_LISTEN).setClassName(context, MainActivity.LISTEN_ALIAS),
-        listensHere = true
-    )
+    fun available(context: Context): List<SongRecognizer> = listOf(
+        SongRecognizer(
+            context.packageName,
+            context.getString(R.string.app_name),
+            Intent(MainActivity.ACTION_LISTEN).setClassName(context, MainActivity.LISTEN_ALIAS),
+            listensHere = true
+        )
+    ) + others(context.packageManager)
 
     private fun others(packageManager: PackageManager): List<SongRecognizer> = listOfNotNull(
         listOfNotNull(Intent(SHAZAM_LISTEN).setPackage(SHAZAM), packageManager.getLaunchIntentForPackage(SHAZAM))
@@ -45,7 +47,7 @@ internal object SongRecognizers {
             ?.let { SongRecognizer(GOOGLE, label(packageManager, GOOGLE, "Google"), it) }
     )
 
-    /** The one the Recognize buttons open: the pick in Settings, or else the first there is. */
+    /** The one the Recognize buttons use: the pick in Settings, or else Crosstune. */
     fun chosen(context: Context, pick: String?): SongRecognizer {
         val all = available(context)
         return all.firstOrNull { it.packageName == pick } ?: all.first()

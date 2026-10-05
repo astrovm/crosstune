@@ -120,7 +120,7 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
-    /** What names a song playing nearby, Shazam first and Crosstune itself last. */
+    /** What names a song playing nearby: Crosstune itself first, then Shazam and Google. */
     val recognizers: List<SongRecognizer> = emptyList(),
     /** The one the Recognize button opens: the user's pick, or else the first there is. */
     val recognizer: SongRecognizer? = null,
