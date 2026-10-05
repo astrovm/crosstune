@@ -41,12 +41,20 @@
       "Nessun account. La cronologia resta sul tuo telefono."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Scaricala da Google Play",
+  "play_steps": [
+    "Unisciti al gruppo <a href=\"{group}\">Crosstune testers</a> con il tuo account Google Play.",
+    "Apri la <a href=\"{testing}\">pagina di test</a> e tocca <b>Become a tester</b>.",
+    "Installa Crosstune da <a href=\"{store}\">Google Play</a>."
+  ],
+  "play_note": "Crosstune è in test su Google Play. Potrebbero volerci alcuni minuti prima che compaia.",
   "works_with": "Funziona con",
   "made_with": "Fatto con {heart} da astro",
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 1 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 3 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "Per risolvere un link musicale, Crosstune richiede la sua pagina pubblica o la sua API pubblica al servizio di origine. Carica anche la copertina dai server di immagini del servizio. I servizi di origine supportati includono Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud e Bandcamp."
+      "Per risolvere un link musicale, Crosstune richiede la sua pagina pubblica o la sua API pubblica al servizio di origine. Carica anche la copertina dai server di immagini del servizio. I servizi di origine supportati includono Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack."
     ],
     [
       "p",
-      "Quando «Apri il risultato esatto» è attivo, l'app invia il titolo e l'artista dell'elemento al servizio di ricerca della destinazione: Apple Music, Deezer, YouTube Music, YouTube o Bandcamp. Puoi disattivare questa opzione nelle Impostazioni. Quando apri una destinazione, l'app o il sito selezionato riceve il link di destinazione o i termini di ricerca. Le destinazioni personalizzate ricevono i termini di ricerca nel modello di URL che configuri. Condividere un risultato lo invia all'app o al destinatario che selezioni."
+      "Quando «Apri il risultato esatto» è attivo, l'app invia il titolo e l'artista dell'elemento al servizio di ricerca della destinazione: Apple Music, Deezer, YouTube Music, YouTube o Bandcamp. Puoi disattivare questa opzione nelle Impostazioni. Quando apri una destinazione, l'app o il sito selezionato riceve il link di destinazione o i termini di ricerca. Quando usi «Riproduci tutto» su una playlist o un album, l'app invia il titolo e l'artista di ogni brano alla ricerca di YouTube Music, poi invia l'elenco dei video trovati a YouTube, che restituisce una playlist temporanea. Le destinazioni personalizzate ricevono i termini di ricerca nel modello di URL che configuri. Condividere un risultato lo invia all'app o al destinatario che selezioni."
     ],
     [
       "p",

@@ -41,12 +41,20 @@
       "Hesap yok. Geçmiş telefonunuzda kalır."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Google Play'den indir",
+  "play_steps": [
+    "Google Play hesabınla <a href=\"{group}\">Crosstune testers</a> grubuna katıl.",
+    "<a href=\"{testing}\">Test sayfasını</a> aç ve <b>Become a tester</b> düğmesine dokun.",
+    "Crosstune'u <a href=\"{store}\">Google Play</a>'den yükle."
+  ],
+  "play_note": "Crosstune, Google Play'de test aşamasında. Görünmesi birkaç dakika sürebilir.",
   "works_with": "Uyumlu servisler",
   "made_with": "astro tarafından {heart} ile yapıldı",
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 1 Ekim 2026",
+  "updated": "Son güncelleme: 3 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud ve Bandcamp bulunur."
+      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bulunur."
     ],
     [
       "p",
-      "“Tam eşleşmeyi aç” açıkken uygulama, öğenin başlığını ve sanatçısını hedefin arama servisine gönderir: Apple Music, Deezer, YouTube Music, YouTube veya Bandcamp. Bu seçeneği Ayarlar'dan kapatabilirsiniz. Bir hedefi açtığınızda, seçilen uygulama veya web sitesi hedef bağlantıyı ya da arama terimlerini alır. Eklediğiniz diğer uygulamalar ve siteler, arama terimlerini sizin ayarladığınız URL şablonunda alır. Bir sonucu paylaştığınızda, sonuç seçtiğiniz uygulamaya veya kişiye gönderilir."
+      "“Tam eşleşmeyi aç” açıkken uygulama, öğenin başlığını ve sanatçısını hedefin arama servisine gönderir: Apple Music, Deezer, YouTube Music, YouTube veya Bandcamp. Bu seçeneği Ayarlar'dan kapatabilirsiniz. Bir hedefi açtığınızda, seçilen uygulama veya web sitesi hedef bağlantıyı ya da arama terimlerini alır. Bir çalma listesinde veya albümde “Tümünü çal”ı kullandığınızda uygulama, her şarkının başlığını ve sanatçısını YouTube Music'in aramasına, ardından bulunan videoların listesini YouTube'a gönderir; YouTube da geçici bir çalma listesi döndürür. Eklediğiniz diğer uygulamalar ve siteler, arama terimlerini sizin ayarladığınız URL şablonunda alır. Bir sonucu paylaştığınızda, sonuç seçtiğiniz uygulamaya veya kişiye gönderilir."
     ],
     [
       "p",

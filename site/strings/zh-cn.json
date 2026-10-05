@@ -41,12 +41,20 @@
       "无需账号。历史记录只保存在你的手机上。"
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "在 Google Play 获取",
+  "play_steps": [
+    "用你的 Google Play 账号加入 <a href=\"{group}\">Crosstune testers</a> 群组。",
+    "打开<a href=\"{testing}\">测试页面</a>，点按 <b>Become a tester</b>。",
+    "从 <a href=\"{store}\">Google Play</a> 安装 Crosstune。"
+  ],
+  "play_note": "Crosstune 正在 Google Play 上测试。可能需要几分钟才会显示。",
   "works_with": "支持的服务",
   "made_with": "由 astro 用 {heart} 制作",
   "privacy_link": "隐私政策",
   "language_label": "语言",
   "privacy_title": "Crosstune 隐私政策",
-  "updated": "最后更新：2026年10月1日",
+  "updated": "最后更新：2026年10月3日",
   "short_h2": "简要说明",
   "short_items": [
     "没有账号、广告或数据分析。",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "为了解析音乐链接，Crosstune 会向来源服务请求其公开页面或公开 API。它还会从该服务的图片服务器加载封面图片。支持的来源服务包括 Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud 和 Bandcamp。"
+      "为了解析音乐链接，Crosstune 会向来源服务请求其公开页面或公开 API。它还会从该服务的图片服务器加载封面图片。支持的来源服务包括 Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack。"
     ],
     [
       "p",
-      "开启“打开精确匹配”后，应用会将该项目的标题和艺人发送到目标的搜索服务：Apple Music、Deezer、YouTube Music、YouTube 或 Bandcamp。你可以在设置中关闭此选项。当你打开目标时，所选应用或网站会收到目标链接或搜索词。你自行添加的应用和网站会通过你配置的网址模板收到搜索词。分享结果时，结果会发送给你选择的应用或接收者。"
+      "开启“打开精确匹配”后，应用会将该项目的标题和艺人发送到目标的搜索服务：Apple Music、Deezer、YouTube Music、YouTube 或 Bandcamp。你可以在设置中关闭此选项。当你打开目标时，所选应用或网站会收到目标链接或搜索词。在播放列表或专辑中使用“全部播放”时，应用会将每首歌曲的标题和艺人发送到 YouTube Music 的搜索，然后将找到的视频列表发送到 YouTube，YouTube 会返回一个临时播放列表。你自行添加的应用和网站会通过你配置的网址模板收到搜索词。分享结果时，结果会发送给你选择的应用或接收者。"
     ],
     [
       "p",

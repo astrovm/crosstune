@@ -41,12 +41,20 @@
       "계정이 필요 없어요. 기록은 휴대폰에만 남아요."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Google Play에서 받기",
+  "play_steps": [
+    "Google Play 계정으로 <a href=\"{group}\">Crosstune testers</a> 그룹에 가입하세요.",
+    "<a href=\"{testing}\">테스트 페이지</a>를 열고 <b>Become a tester</b>를 탭하세요.",
+    "<a href=\"{store}\">Google Play</a>에서 Crosstune을 설치하세요."
+  ],
+  "play_note": "Crosstune은 Google Play에서 테스트 중이에요. 표시되기까지 몇 분 걸릴 수 있어요.",
   "works_with": "지원 서비스",
   "made_with": "astro가 {heart}을 담아 만들었어요",
   "privacy_link": "개인정보처리방침",
   "language_label": "언어",
   "privacy_title": "Crosstune 개인정보처리방침",
-  "updated": "최종 업데이트: 2026년 10월 1일",
+  "updated": "최종 업데이트: 2026년 10월 3일",
   "short_h2": "요약",
   "short_items": [
     "계정, 광고, 분석이 없어요.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "음악 링크를 처리하기 위해 Crosstune은 원본 서비스에 공개 페이지나 공개 API를 요청해요. 또한 해당 서비스의 이미지 서버에서 커버 이미지를 불러와요. 지원되는 원본 서비스에는 Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp가 있어요."
+      "음악 링크를 처리하기 위해 Crosstune은 원본 서비스에 공개 페이지나 공개 API를 요청해요. 또한 해당 서비스의 이미지 서버에서 커버 이미지를 불러와요. 지원되는 원본 서비스에는 Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack이 있어요."
     ],
     [
       "p",
-      "‘정확한 항목 열기’를 켜면 앱이 항목의 제목과 아티스트를 대상 서비스의 검색으로 보내요. 대상 서비스는 Apple Music, Deezer, YouTube Music, YouTube, Bandcamp예요. 이 옵션은 설정에서 끌 수 있어요. 대상을 열면 선택한 앱이나 웹사이트가 대상 링크나 검색어를 받아요. 직접 추가한 앱과 사이트는 사용자가 설정한 URL 템플릿으로 검색어를 받아요. 결과를 공유하면 사용자가 선택한 앱이나 받는 사람에게 전송돼요."
+      "‘정확한 항목 열기’를 켜면 앱이 항목의 제목과 아티스트를 대상 서비스의 검색으로 보내요. 대상 서비스는 Apple Music, Deezer, YouTube Music, YouTube, Bandcamp예요. 이 옵션은 설정에서 끌 수 있어요. 대상을 열면 선택한 앱이나 웹사이트가 대상 링크나 검색어를 받아요. 플레이리스트나 앨범에서 ‘모두 재생’을 쓰면 앱이 각 노래의 제목과 아티스트를 YouTube Music 검색으로 보내고, 찾은 동영상 목록을 YouTube로 보내요. 그러면 YouTube가 임시 플레이리스트를 돌려줘요. 직접 추가한 앱과 사이트는 사용자가 설정한 URL 템플릿으로 검색어를 받아요. 결과를 공유하면 사용자가 선택한 앱이나 받는 사람에게 전송돼요."
     ],
     [
       "p",

@@ -41,12 +41,20 @@
       "No account. History stays on your phone."
     ]
   ],
+  "play_button": "Google Play",
+  "play_h2": "Get it on Google Play",
+  "play_steps": [
+    "Join the <a href=\"{group}\">Crosstune testers</a> group with your Google Play account.",
+    "Open the <a href=\"{testing}\">testing page</a> and tap <b>Become a tester</b>.",
+    "Install Crosstune from <a href=\"{store}\">Google Play</a>."
+  ],
+  "play_note": "Crosstune is in testing on Google Play. It can take a few minutes to show up.",
   "works_with": "Works with",
   "made_with": "Made with {heart} by astro",
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 1, 2026",
+  "updated": "Last updated: October 3, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -86,11 +94,11 @@
     ],
     [
       "p",
-      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, and Bandcamp."
+      "To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack."
     ],
     [
       "p",
-      "When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, or Bandcamp. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select."
+      "When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, or Bandcamp. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. When you use Play all on a playlist or album, the app sends each song’s title and artist to YouTube Music’s search, then sends the list of videos found to YouTube, which returns a temporary playlist. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select."
     ],
     [
       "p",
