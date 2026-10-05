@@ -332,7 +332,7 @@ internal class ExactMatcher(
      * YouTube Music's search, filtered to songs, albums or artists. Songs are also watchable on
      * YouTube itself, which has no such filter, so [watchUrl] picks the app the video id opens in.
      */
-    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean = false): String? {
+    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): String? {
         val (params, isSong) = when (metadata.type) {
             ItemType.TRACK -> YOUTUBE_MUSIC_SONGS to true
             ItemType.ALBUM -> YOUTUBE_MUSIC_ALBUMS to false

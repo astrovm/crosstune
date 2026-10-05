@@ -905,7 +905,8 @@ class MainActivityTest {
         // Holds the song lookups so the progress can be seen.
         val release = CountDownLatch(1)
         fake.handler = { request ->
-            val body = fake.requestBodies.last()
+            // Its own body: songs are looked up several at a time, so the last one sent may be another's.
+            val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
             when {
                 request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
                 request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
