@@ -952,6 +952,37 @@ class MainActivityTest {
         assertEquals(10, fake.requestedUrls.count { "music.youtube.com" in it })
     }
 
+    /** A playlist whose songs are YouTube videos, as a YouTube playlist's are. */
+    private fun youtubeSongPlaylist() {
+        val lockup = { id: String, title: String ->
+            """{"lockupViewModel":{"contentType":"LOCKUP_CONTENT_TYPE_VIDEO","contentId":"$id","metadata":{"lockupMetadataViewModel":{"title":{"content":"$title"},
+                "metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"Band"}}]}]}}}}}}"""
+        }
+        fake.handler = { request ->
+            when {
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, """{"contents":[]}""")
+                else -> FakeSpotify.html(
+                    request,
+                    """<meta property="og:title" content="Road Trip"><script>var ytInitialData = {"a":[${lockup("first000000", "First Song")},${lockup("second00000", "Second Song")}]};</script>"""
+                )
+            }
+        }
+    }
+
+    @Test
+    fun aPlaylistsYouTubeSongOpensAsItselfInYouTubeMusic() {
+        // A song of a playlist that came from YouTube plays in YouTube Music as itself, not as a
+        // search for its title, which finds another recording or none.
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        youtubeSongPlaylist()
+        launch()
+        resolveTyped("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")
+        waitForText("First Song")
+        composeRule.onNodeWithText("First Song").performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://music.youtube.com/watch?v=first000000", nextStartedActivity()!!.dataString)
+    }
+
     @Test
     fun playAllSaysSoWhenNoSongMatchesAndIsOnlyForYouTube() {
         prefs().edit().putString("default_target", "YOUTUBE").putBoolean("exact_match", true).commit()
@@ -981,6 +1012,24 @@ class MainActivityTest {
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")))
         composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         assertEquals("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aYouTubeVideoOpensAsItselfInTheOtherYouTubeApp() {
+        // Both apps play the same video, so a search for its title, which finds another recording
+        // or none, never stands in for it.
+        prefs().edit().putString("default_target", "YOUTUBE").commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"抱かれに来た女 - Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")))
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        assertEquals("https://www.youtube.com/watch?v=sPmul8b17AU", nextStartedActivity()!!.dataString)
+
+        nextStartedActivity()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Street Dolphin","author_name":"Kingo Hamada"}""") }
+        val other = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
+        composeRule.waitUntil(TIMEOUT_MS) { other.isFinishing }
+        assertEquals("https://music.youtube.com/watch?v=VDuDQNkSC6g", nextStartedActivity()!!.dataString)
     }
 
     @Test

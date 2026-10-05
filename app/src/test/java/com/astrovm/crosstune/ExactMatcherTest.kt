@@ -471,6 +471,9 @@ class ExactMatcherTest {
         assertEquals(played, queueFinds("Soy una Gargola", "Alex Gargolas, Randy Nota Loca", "Soy Una Gargola", "Randy"))
         assertEquals(played, queueFinds("Holdin' On - Skrillex & Nero Remix", "I See MONSTAS, NERO, Skrillex", "Holdin' On (Skrillex & Nero Remix)", "Monsta"))
         assertEquals(played, queueFinds("Yo Voy (feat. Daddy Yankee)", "Zion & Lennox", "Yo Voy (feat. Daddy Yankee)", "Zion Y Lennox"))
+        // An artist name that holds a comma is one name, and not two to match on.
+        assertEquals(played, queueFinds("Safari", "125 Rue Montmartre", "Safari", "125, Rue Montmartre"))
+        assertEquals(played, queueFinds("Safari", "125, Rue Montmartre", "Safari", "125 Rue Montmartre"))
         // A short name inside another's is no match: "Sia" is not "Asia", nor "Ed" in "Eddie".
         assertEquals(null, queueFinds("Heat of the Moment", "Sia", "Heat of the Moment", "Asia"))
         assertEquals(null, queueFinds("Love Me Do", "Ed", "Love Me Do", "Eddie"))

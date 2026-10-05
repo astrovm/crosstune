@@ -334,6 +334,24 @@ class MusicLinksTest {
     }
 
     @Test
+    fun youtubeAndYouTubeMusicVideosAndWhereEachOpensAsItself() {
+        val video = "4NRXx6U8ABQ"
+        assertLink("https://www.youtube.com/watch?v=$video", MusicService.YOUTUBE, ItemType.TRACK, video, "https://www.youtube.com/watch?v=$video")
+        assertLink("https://music.youtube.com/watch?v=$video&si=x", MusicService.YOUTUBE_MUSIC, ItemType.TRACK, video, "https://music.youtube.com/watch?v=$video")
+
+        // The same video plays in both apps, so one opens as itself in the other.
+        val fromMusic = link("https://music.youtube.com/watch?v=$video")!!
+        assertEquals("https://www.youtube.com/watch?v=$video", fromMusic.youtubeVideoOn(MusicService.YOUTUBE))
+        assertEquals("https://music.youtube.com/watch?v=$video", fromMusic.youtubeVideoOn(MusicService.YOUTUBE_MUSIC))
+        assertNull(fromMusic.youtubeVideoOn(MusicService.SPOTIFY))
+        assertNull(fromMusic.youtubeVideoOn(null))
+        // Anything but a video stays where it is, including a playlist both apps share.
+        val list = link("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")!!
+        assertNull(list.youtubeVideoOn(MusicService.YOUTUBE))
+        assertNull(link("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")!!.youtubeVideoOn(MusicService.YOUTUBE))
+    }
+
+    @Test
     fun audiomackSongsAlbumsAndPlaylists() {
         assertLink("https://audiomack.com/burna-boy/song/last-last", MusicService.AUDIOMACK, ItemType.TRACK, "burna-boy/last-last", "https://audiomack.com/burna-boy/song/last-last")
         assertLink("https://www.audiomack.com/burna-boy/album/love-damini", MusicService.AUDIOMACK, ItemType.ALBUM, "burna-boy/love-damini", "https://audiomack.com/burna-boy/album/love-damini")
