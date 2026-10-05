@@ -5,6 +5,7 @@
     <string name="resolve_button">링크 변환</string>
     <string name="paste_button">붙여넣기</string>
     <string name="recognize_button">노래 인식</string>
+    <string name="setting_recognizer">노래 인식 앱</string>
     <string name="clear_button">지우기</string>
     <string name="loading_text">링크를 찾는 중…</string>
     <string name="open_in_youtube_music">YouTube Music에서 열기</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">다시 시도</string>
     <string name="history_title">최근</string>
     <string name="search_recent">최근 항목 검색</string>
+    <string name="close_recent_search">검색 닫기</string>
     <string name="playlist_songs_title">노래</string>
     <string name="play_all_button">모두 재생</string>
     <string name="play_all_progress">노래를 찾는 중… %1$d/%2$d</string>

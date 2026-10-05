@@ -5,6 +5,7 @@
     <string name="resolve_button">Konwertuj link</string>
     <string name="paste_button">Wklej</string>
     <string name="recognize_button">Rozpoznaj utwór</string>
+    <string name="setting_recognizer">Aplikacja do rozpoznawania muzyki</string>
     <string name="clear_button">Wyczyść</string>
     <string name="loading_text">Sprawdzanie linku…</string>
     <string name="open_in_youtube_music">Otwórz w YouTube Music</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">Spróbuj ponownie</string>
     <string name="history_title">Ostatnie</string>
     <string name="search_recent">Szukaj w ostatnich</string>
+    <string name="close_recent_search">Zamknij wyszukiwanie</string>
     <string name="playlist_songs_title">Utwory</string>
     <string name="play_all_button">Odtwórz wszystko</string>
     <string name="play_all_progress">Szukanie utworów… %1$d z %2$d</string>

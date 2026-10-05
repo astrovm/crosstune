@@ -5,6 +5,7 @@
     <string name="resolve_button">Konversi link</string>
     <string name="paste_button">Tempel</string>
     <string name="recognize_button">Kenali lagu</string>
+    <string name="setting_recognizer">Aplikasi pengenal lagu</string>
     <string name="clear_button">Hapus</string>
     <string name="loading_text">Mencari link…</string>
     <string name="open_in_youtube_music">Buka di YouTube Music</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">Coba lagi</string>
     <string name="history_title">Terbaru</string>
     <string name="search_recent">Cari di Terbaru</string>
+    <string name="close_recent_search">Tutup pencarian</string>
     <string name="playlist_songs_title">Lagu</string>
     <string name="play_all_button">Putar semua</string>
     <string name="play_all_progress">Mencari lagu… %1$d dari %2$d</string>

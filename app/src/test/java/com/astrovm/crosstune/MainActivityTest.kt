@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.isSelectable
@@ -241,39 +242,89 @@ class MainActivityTest {
     // endregion
 
     @Test
-    fun recognizeOpensShazamOrGoogleSongSearchAndAsksWhichWithBoth() {
+    fun recognizeOpensShazamFirstAndRemembersTheAppChosenInSettings() {
         val recognize = string(R.string.recognize_button)
+        val setting = string(R.string.setting_recognizer)
         fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
         fun resume() {
             controller!!.pause().resume()
             composeRule.waitForIdle()
         }
+        fun chooseRecognizer(label: String) = inSettings {
+            composeRule.onNodeWithText(setting).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            composeRule.onAllNodesWithText(label).onLast().performClick()
+            composeRule.waitForIdle()
+        }
         launch()
-        // With no app to name a song, there's no button for it.
+        // Nothing installed: no button or setting. One app: open it directly.
         assertTextAbsent(recognize)
-
+        inSettings { assertTextAbsent(setting) }
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
         resume()
+        inSettings { assertTextAbsent(setting) }
         click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
 
-        // With Shazam too, it asks which, Shazam first. Without its listening shortcut, Shazam just opens.
+        // Both apps: a tap launches Shazam immediately, even without its listening shortcut.
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         resume()
         click(recognize)
-        assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString() })
-        click("Shazam")
         assertEquals(Intent.ACTION_MAIN, nextStartedActivity()!!.action)
+        assertTextAbsent("Google")
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
         resume()
         click(recognize)
-        click("Shazam")
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
+        // Only Settings offers the choice. Changing it takes effect on the next tap.
+        inSettings {
+            composeRule.onNodeWithText(setting).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() })
+            composeRule.onAllNodesWithText("Shazam").onLast().performClick()
+            composeRule.waitForIdle()
+        }
         click(recognize)
-        click("Google")
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+        chooseRecognizer("Google")
+        assertEquals(SongRecognizers.GOOGLE, prefs().getString("song_recognizer", null))
+        click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+
+        // A fresh activity reads the saved preference, rather than resetting to Shazam.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+        chooseRecognizer("Shazam")
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
+        // Uninstalling the preferred app keeps recognition usable and the preference intact.
+        // Remove the fake components too: Robolectric keeps their manifest registry separately.
+        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Main"))
+        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"))
+        shadowOf(app.packageManager).removePackage(SongRecognizers.SHAZAM)
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+        assertEquals(SongRecognizers.SHAZAM, prefs().getString("song_recognizer", null))
+        inSettings { assertTextAbsent(setting) }
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
+        installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
+        // An old or unavailable preference falls back to an installed app without overwriting it.
+        prefs().edit().putString("song_recognizer", "missing.recognizer").commit()
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+        assertEquals("missing.recognizer", prefs().getString("song_recognizer", null))
 
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)
@@ -892,10 +943,49 @@ class MainActivityTest {
             store.add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "$n", "https://www.deezer.com/track/$n"), MusicMetadata("Song $n", if (n == 3) "Special Band" else "Band")))
         }
         launch()
-        composeRule.onNodeWithText(string(R.string.search_recent)).performScrollTo().performTextInput("special song")
+        val search = string(R.string.search_recent)
+        // The toolbar uses labelled icons; the field appears only when Search is tapped.
+        composeRule.onNodeWithText(search).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.clear_history_button)).assertExists()
+        composeRule.onNodeWithText(string(R.string.clear_history_button)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(search).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(search).performTextInput("special song")
         composeRule.waitForIdle()
         assertTextShown("Song 3")
         assertTextAbsent("Song 4")
+        // Keep the open search and query through a configuration change.
+        controller!!.recreate()
+        composeRule.waitForIdle()
+        assertTextShown("Song 3")
+        assertTextAbsent("Song 4")
+        composeRule.onNodeWithText("special song").performTextReplacement("不存在 🎵")
+        composeRule.waitForIdle()
+        assertTextAbsent("Song 3")
+        // Closing search clears the filter; reopening starts with an empty field.
+        click(string(R.string.close_recent_search))
+        assertTextShown("Song 3")
+        assertTextShown("Song 4")
+        composeRule.onNodeWithText(search).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(search).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(search).assertExists()
+        assertTextShown("Song 4")
+    }
+
+    @Test
+    fun evenOneRecentSongCanBeSearchedAndBackClosesTheSearch() {
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "1", "https://www.deezer.com/track/1"), MusicMetadata("A Song", "Band")))
+        val activity = launch()
+        click(string(R.string.search_recent))
+        composeRule.onNodeWithText(string(R.string.search_recent)).performTextInput("missing")
+        composeRule.waitForIdle()
+        assertTextAbsent("A Song")
+        composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        composeRule.waitForIdle()
+        assertTextShown("A Song")
+        composeRule.onNodeWithText(string(R.string.search_recent)).assertDoesNotExist()
+        assertFalse(activity.isFinishing)
     }
 
     @Test
@@ -4102,7 +4192,7 @@ class MainActivityTest {
         android.runAll()
         resolveTyped()
         click(string(R.string.clear_button))
-        assertTextShown(string(R.string.clear_history_button))
+        composeRule.onNodeWithContentDescription(string(R.string.clear_history_button)).assertExists()
 
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
         // Recent is cleared after it was read with the rest, but before that answer arrives.

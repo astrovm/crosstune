@@ -9,6 +9,7 @@
     <string name="resolve_button">Convert link</string>
     <string name="paste_button">Paste</string>
     <string name="recognize_button">Recognize a song</string>
+    <string name="setting_recognizer">Song recognition app</string>
     <string name="clear_button">Clear</string>
     <string name="loading_text">Looking up the link…</string>
     <string name="target_youtube_music" translatable="false">YouTube Music</string>
@@ -98,6 +99,7 @@
     <string name="retry_button">Try again</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>
+    <string name="close_recent_search">Close search</string>
     <string name="playlist_songs_title">Songs</string>
     <string name="play_all_button">Play all</string>
     <string name="play_all_progress">Finding songs… %1$d of %2$d</string>

@@ -5,6 +5,7 @@
     <string name="resolve_button">Link omzetten</string>
     <string name="paste_button">Plakken</string>
     <string name="recognize_button">Nummer herkennen</string>
+    <string name="setting_recognizer">App voor muziekherkenning</string>
     <string name="clear_button">Wissen</string>
     <string name="loading_text">Link opzoeken…</string>
     <string name="open_in_youtube_music">Openen in YouTube Music</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">Opnieuw proberen</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Zoeken in Recent</string>
+    <string name="close_recent_search">Zoeken sluiten</string>
     <string name="playlist_songs_title">Nummers</string>
     <string name="play_all_button">Alles afspelen</string>
     <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>

@@ -5,6 +5,7 @@
     <string name="resolve_button">Преобразовать ссылку</string>
     <string name="paste_button">Вставить</string>
     <string name="recognize_button">Распознать трек</string>
+    <string name="setting_recognizer">Приложение для распознавания музыки</string>
     <string name="clear_button">Очистить</string>
     <string name="loading_text">Обрабатываем ссылку…</string>
     <string name="open_in_youtube_music">Открыть в YouTube Music</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">Повторить</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>
+    <string name="close_recent_search">Закрыть поиск</string>
     <string name="playlist_songs_title">Треки</string>
     <string name="play_all_button">Слушать всё</string>
     <string name="play_all_progress">Ищем треки… %1$d из %2$d</string>

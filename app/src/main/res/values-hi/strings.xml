@@ -5,6 +5,7 @@
     <string name="resolve_button">लिंक बदलें</string>
     <string name="paste_button">पेस्ट करें</string>
     <string name="recognize_button">गाना पहचानें</string>
+    <string name="setting_recognizer">गाने पहचानने वाला ऐप</string>
     <string name="clear_button">मिटाएँ</string>
     <string name="loading_text">लिंक खोजा जा रहा है…</string>
     <string name="open_in_youtube_music">YouTube Music में खोलें</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">फिर कोशिश करें</string>
     <string name="history_title">हाल के</string>
     <string name="search_recent">हाल ही में खोजें</string>
+    <string name="close_recent_search">खोज बंद करें</string>
     <string name="playlist_songs_title">गाने</string>
     <string name="play_all_button">सभी चलाएं</string>
     <string name="play_all_progress">गाने ढूंढ रहे हैं… %2$d में से %1$d</string>

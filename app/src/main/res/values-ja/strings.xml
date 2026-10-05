@@ -6,6 +6,7 @@
     <string name="resolve_button">変換</string>
     <string name="paste_button">貼り付け</string>
     <string name="recognize_button">曲を認識</string>
+    <string name="setting_recognizer">楽曲認識アプリ</string>
     <string name="clear_button">クリア</string>
     <string name="loading_text">リンクを確認しています…</string>
     <string name="open_in_youtube_music">YouTube Music で開く</string>
@@ -84,6 +85,7 @@
     <string name="retry_button">再試行</string>
     <string name="history_title">最近</string>
     <string name="search_recent">最近の項目を検索</string>
+    <string name="close_recent_search">検索を閉じる</string>
     <string name="playlist_songs_title">曲</string>
     <string name="play_all_button">すべて再生</string>
     <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>

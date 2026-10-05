@@ -6,6 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -99,6 +101,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -116,9 +120,12 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
-    /** Apps that name a song playing nearby, in the order they're offered. */
+    /** Apps that name a song playing nearby, Shazam first. */
     val recognizers: List<SongRecognizer> = emptyList(),
+    /** The one the Recognize button opens: the user's pick, or else the first there is. */
+    val recognizer: SongRecognizer? = null,
     val onRecognize: (SongRecognizer) -> Unit = {},
+    val onRecognizerChange: (SongRecognizer) -> Unit = {},
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -578,7 +585,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                 if (empty) {
                     Row {
                         // A song playing nearby, once named, is shared back here.
-                        if (actions.recognizers.isNotEmpty()) RecognizeButton(actions, enabled = !busy)
+                        actions.recognizer?.let { recognizer ->
+                            IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {
+                                AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+                            }
+                        }
                         IconButton(onClick = actions.onPaste, enabled = !busy) {
                             AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
                         }
@@ -910,32 +921,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
     }
 }
 
-/** Names a song playing nearby with the one app there is, or asks which when there's more than one. */
-@Composable
-private fun RecognizeButton(actions: ScreenActions, enabled: Boolean) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(
-            onClick = { actions.recognizers.singleOrNull()?.let(actions.onRecognize) ?: run { expanded = true } },
-            enabled = enabled
-        ) {
-            AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            actions.recognizers.forEach { recognizer ->
-                DropdownMenuItem(
-                    text = { Text(recognizer.label) },
-                    leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
-                    onClick = {
-                        expanded = false
-                        actions.onRecognize(recognizer)
-                    }
-                )
-            }
-        }
-    }
-}
-
 /** What a result's main button says and does. [description] adds the app's name, which its icon shows. */
 private class MainAction(val label: String, val description: String, val enabled: Boolean, val onClick: () -> Unit)
 
@@ -1089,39 +1074,67 @@ private fun SecondaryAction(
 
 @Composable
 private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions: ScreenActions) {
-    SectionHeader(
-        title = stringResource(R.string.history_title),
-        action = {
-            TextButton(onClick = actions.onClearHistory) {
-                Text(stringResource(R.string.clear_history_button))
-            }
-        },
-        modifier = Modifier.padding(top = 8.dp)
-    )
-    // A longer list gets a search, by title or artist.
     var query by rememberSaveable { mutableStateOf("") }
-    val searchable = history.size > SEARCHABLE_HISTORY
-    if (searchable) {
-        TextField(
-            value = query,
-            onValueChange = { query = it },
-            singleLine = true,
-            placeholder = { Text(stringResource(R.string.search_recent)) },
-            leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
-            shape = MaterialTheme.shapes.large,
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-        )
+    var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val closeSearch = {
+        searchExpanded = false
+        query = ""
+        keyboard?.hide()
+        focus.clearFocus()
+    }
+    BackHandler(enabled = searchExpanded) { closeSearch() }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 10.dp).heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AnimatedContent(
+            targetState = searchExpanded,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                (fadeIn(Motion.fadeIn) + expandHorizontally(Motion.size, expandFrom = Alignment.End)) togetherWith fadeOut(Motion.fadeOut)
+            },
+            label = "recent search"
+        ) { expanded ->
+            if (expanded) {
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search_recent)) },
+                    leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
+                    shape = MaterialTheme.shapes.large,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            } else {
+                Text(
+                    text = stringResource(R.string.history_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        IconButton(onClick = { if (searchExpanded) closeSearch() else searchExpanded = true }) {
+            AppIcon(
+                if (searchExpanded) R.drawable.ic_close else R.drawable.ic_search,
+                contentDescription = stringResource(if (searchExpanded) R.string.close_recent_search else R.string.search_recent)
+            )
+        }
+        IconButton(onClick = actions.onClearHistory) {
+            AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.clear_history_button))
+        }
     }
     val words = query.trim().lowercase().split(" ").filter { it.isNotEmpty() }
-    val shown = if (!searchable) history else history.filter { entry ->
+    val shown = history.filter { entry ->
         val text = "${entry.metadata.title} ${entry.metadata.artist}".lowercase()
         words.all { it in text }
     }
@@ -1330,7 +1343,6 @@ private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier 
 }
 
 /** How many Recent items fit at a glance; past that, a search shows above them. */
-private const val SEARCHABLE_HISTORY = 5
 
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =

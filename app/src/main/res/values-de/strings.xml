@@ -5,6 +5,7 @@
     <string name="resolve_button">Link umwandeln</string>
     <string name="paste_button">Einfügen</string>
     <string name="recognize_button">Song erkennen</string>
+    <string name="setting_recognizer">App zur Musikerkennung</string>
     <string name="clear_button">Leeren</string>
     <string name="loading_text">Link wird gesucht…</string>
     <string name="open_in_youtube_music">In YouTube Music öffnen</string>
@@ -83,6 +84,7 @@
     <string name="retry_button">Erneut versuchen</string>
     <string name="history_title">Zuletzt</string>
     <string name="search_recent">In Zuletzt suchen</string>
+    <string name="close_recent_search">Suche schließen</string>
     <string name="playlist_songs_title">Songs</string>
     <string name="play_all_button">Alle abspielen</string>
     <string name="play_all_progress">Songs werden gesucht… %1$d von %2$d</string>
