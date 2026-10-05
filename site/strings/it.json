@@ -13,7 +13,7 @@
   "download": "Scarica per Android",
   "note": "Gratis, open source e senza pubblicità. Funziona su Android 8 o versioni successive.",
   "alt_home": "Un brano di Apple Music pronto da aprire in YouTube Music",
-  "alt_picker": "Scelta dell'app che apre il link",
+  "alt_list": "Una playlist di Spotify pronta da riprodurre in YouTube Music",
   "features_h2": "Cosa fa",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Le app supportate aprono il brano stesso invece di una ricerca."
     ],
     [
+      "Playlist e album",
+      "Vedi tutti i brani e aprine uno, o riproducili tutti."
+    ],
+    [
       "Le tue regole",
       "Scegli un'app per ogni servizio, o fatti chiedere ogni volta."
     ],
@@ -33,8 +37,16 @@
       "Aggiungi qualsiasi app o sito con una pagina di ricerca."
     ],
     [
+      "Now Playing",
+      "Funzionano anche i brani condivisi da Now Playing sul Pixel."
+    ],
+    [
       "Scorciatoie",
-      "Incolla con un tocco, link recenti, riquadro delle Impostazioni rapide."
+      "Widget nella schermata Home, incolla con un tocco, riquadro delle Impostazioni rapide."
+    ],
+    [
+      "Niente tracciamento",
+      "Toglie le parti di tracciamento come ?si= dai link."
     ],
     [
       "Privata",

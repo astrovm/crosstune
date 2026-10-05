@@ -13,7 +13,7 @@
   "download": "Für Android herunterladen",
   "note": "Kostenlos, Open Source und werbefrei. Läuft ab Android 8.",
   "alt_home": "Ein Song aus Apple Music, bereit zum Öffnen in YouTube Music",
-  "alt_picker": "Auswahl, welche App den Link öffnet",
+  "alt_list": "Eine Spotify-Playlist, bereit zum Abspielen in YouTube Music",
   "features_h2": "Was die App kann",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Unterstützte Apps öffnen den Song selbst statt einer Suche."
     ],
     [
+      "Playlists und Alben",
+      "Sieh dir alle Songs an und öffne einen davon, oder spiel alle ab."
+    ],
+    [
       "Deine Regeln",
       "Wähle eine App pro Dienst oder lass dich jedes Mal fragen."
     ],
@@ -33,8 +37,16 @@
       "Füge jede App oder Website mit Suchseite hinzu."
     ],
     [
+      "Now Playing",
+      "Auch Songs, die du aus Now Playing auf dem Pixel teilst, funktionieren."
+    ],
+    [
       "Kurzbefehle",
-      "Einfügen mit einem Tipp, zuletzt genutzte Links, Schnelleinstellungen-Kachel."
+      "Widget auf dem Startbildschirm, Einfügen mit einem Tipp, Schnelleinstellungen-Kachel."
+    ],
+    [
+      "Kein Tracking",
+      "Entfernt Tracking-Teile wie ?si= aus Links."
     ],
     [
       "Privat",

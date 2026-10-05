@@ -13,7 +13,7 @@
   "download": "Downloaden voor Android",
   "note": "Gratis, open source en zonder advertenties. Werkt op Android 8 of hoger.",
   "alt_home": "Een nummer uit Apple Music, klaar om te openen in YouTube Music",
-  "alt_picker": "Kiezen welke app de link opent",
+  "alt_list": "Een Spotify-playlist, klaar om af te spelen in YouTube Music",
   "features_h2": "Wat het doet",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Ondersteunde apps openen het nummer zelf in plaats van een zoekopdracht."
     ],
     [
+      "Playlists en albums",
+      "Bekijk alle nummers en open er een, of speel ze allemaal af."
+    ],
+    [
       "Jouw regels",
       "Kies een app per service, of laat het elke keer vragen."
     ],
@@ -33,8 +37,16 @@
       "Voeg elke app of site met een zoekpagina toe."
     ],
     [
+      "Now Playing",
+      "Nummers gedeeld vanuit Now Playing op je Pixel werken ook."
+    ],
+    [
       "Snelkoppelingen",
-      "Plakken met één tik, recente links, tegel in Snelle instellingen."
+      "Widget op je startscherm, plakken met één tik, tegel in Snelle instellingen."
+    ],
+    [
+      "Geen tracking",
+      "Haalt trackingdelen zoals ?si= uit links."
     ],
     [
       "Privé",
