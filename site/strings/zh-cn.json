@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "为了解析音乐链接，Crosstune 会向来源服务请求其公开页面或公开 API。它还会从该服务的图片服务器加载封面图片。支持的来源服务包括 Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack。 Shazam 链接通过 Apple Music 的查询读取，较早的链接会先通过 Shazam 的公开 API 读取。"
+      "为了解析音乐链接，Crosstune 会向来源服务请求其公开页面或公开 API。它还会从该服务的图片服务器加载封面图片。支持的来源服务包括 Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack。 Shazam 链接通过 Apple Music 的查询读取，较早的链接会先通过 Shazam 的公开 API 读取。 分享的 Google 结果会在 Google 上打开，以读取歌曲名称。"
     ],
     [
       "p",

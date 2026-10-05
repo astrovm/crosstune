@@ -1,2 +1,2 @@
 Playlists: shorter buttons that fit on one line, a header to play each group of 50 songs, and a Play button that stays on screen while you scroll.
-Shazam links open in your app, and a new button next to Paste opens Shazam or Google's song search to name a song playing nearby.
+Shazam links and songs shared from Google open in your app, and a new button next to Paste opens Shazam or Google's song search to name a song playing nearby.

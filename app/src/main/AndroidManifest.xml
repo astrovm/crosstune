@@ -20,6 +20,7 @@
         <package android:name="com.amazon.mp3" />
         <!-- Apps that name a song playing nearby (SongRecognizers). -->
         <package android:name="com.shazam.android" />
+        <package android:name="com.google.android.googlequicksearchbox" />
         <intent>
             <action android:name="com.shazam.android.intent.actions.START_TAGGING" />
         </intent>

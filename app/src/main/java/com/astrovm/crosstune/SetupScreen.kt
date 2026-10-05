@@ -561,7 +561,7 @@ internal fun appsGuideDone(apps: List<LinkApp>, blocking: Set<LinkApp>?): Boolea
 
 /** An installed app's own icon, or nothing if it's just been uninstalled. */
 @Composable
-private fun PackageIcon(packageName: String, size: Dp = 32.dp) {
+internal fun PackageIcon(packageName: String, size: Dp = 32.dp) {
     val context = LocalContext.current
     val icon = remember(packageName) {
         runCatching { context.packageManager.getApplicationIcon(packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()

@@ -241,29 +241,39 @@ class MainActivityTest {
     // endregion
 
     @Test
-    fun recognizeOpensShazamListeningOrElseGoogleSongSearch() {
+    fun recognizeOpensShazamOrGoogleSongSearchAndAsksWhichWithBoth() {
         val recognize = string(R.string.recognize_button)
         fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
-        fun recognizeAfterResume(): Intent {
+        fun resume() {
             controller!!.pause().resume()
             composeRule.waitForIdle()
-            click(recognize)
-            return nextStartedActivity()!!
         }
         launch()
         // With no app to name a song, there's no button for it.
         assertTextAbsent(recognize)
 
-        installActivity(ComponentName("com.google.android.googlequicksearchbox", "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, recognizeAfterResume().action)
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
+        installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
 
-        // Shazam comes first: its app, or better, listening right away.
+        // With Shazam too, it asks which, Shazam first. Without its listening shortcut, Shazam just opens.
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
-        val shazam = recognizeAfterResume()
-        assertEquals(SongRecognizers.SHAZAM, shazam.`package` ?: shazam.component?.packageName)
-        assertEquals(Intent.ACTION_MAIN, shazam.action)
+        resume()
+        click(recognize)
+        assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString() })
+        click("Shazam")
+        assertEquals(Intent.ACTION_MAIN, nextStartedActivity()!!.action)
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, recognizeAfterResume().action)
+        resume()
+        click(recognize)
+        click("Shazam")
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+        click(recognize)
+        click("Google")
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
 
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)

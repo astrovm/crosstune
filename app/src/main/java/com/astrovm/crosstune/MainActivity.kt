@@ -41,8 +41,8 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
 
-    /** How to name a song playing nearby, looked up again whenever the app comes back. */
-    private var recognizer by mutableStateOf<Intent?>(null)
+    /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
+    private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
     private val viewModel: MainViewModel by viewModels {
         viewModelFactory {
@@ -144,7 +144,8 @@ class MainActivity : ComponentActivity() {
                         onUrlChange = viewModel::onUrlChange,
                         onResolve = viewModel::resolveTypedInput,
                         onPaste = { viewModel.pasteLink(clipboardText()) },
-                        onRecognize = recognizer?.let { intent -> { tryStartActivity(intent) } },
+                        recognizers = recognizers,
+                        onRecognize = { tryStartActivity(it.intent) },
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
-        recognizer = SongRecognizers.intent(packageManager)
+        recognizers = SongRecognizers.available(packageManager)
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Per risolvere un link musicale, Crosstune richiede la sua pagina pubblica o la sua API pubblica al servizio di origine. Carica anche la copertina dai server di immagini del servizio. I servizi di origine supportati includono Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack. I link di Shazam vengono letti tramite la ricerca di Apple Music, e quelli più vecchi prima tramite l'API pubblica di Shazam."
+      "Per risolvere un link musicale, Crosstune richiede la sua pagina pubblica o la sua API pubblica al servizio di origine. Carica anche la copertina dai server di immagini del servizio. I servizi di origine supportati includono Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack. I link di Shazam vengono letti tramite la ricerca di Apple Music, e quelli più vecchi prima tramite l'API pubblica di Shazam. I risultati di Google condivisi vengono aperti su Google per leggere il titolo del brano."
     ],
     [
       "p",

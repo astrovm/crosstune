@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack. Shazam-Links werden über die Suche von Apple Music gelesen, ältere zuerst über die öffentliche API von Shazam."
+      "Um einen Musik-Link aufzulösen, ruft Crosstune die öffentliche Seite oder öffentliche API des Quelldienstes ab. Außerdem lädt die App Cover von den Bildservern des Dienstes. Zu den unterstützten Quelldiensten gehören Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack. Shazam-Links werden über die Suche von Apple Music gelesen, ältere zuerst über die öffentliche API von Shazam. Geteilte Google-Ergebnisse werden bei Google aufgerufen, um den Titel des Songs zu lesen."
     ],
     [
       "p",

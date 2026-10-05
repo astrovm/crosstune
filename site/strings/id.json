@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Untuk memproses link musik, Crosstune meminta halaman publik atau API publiknya dari layanan sumber. Aplikasi juga memuat gambar sampul dari server gambar layanan itu. Layanan sumber yang didukung antara lain Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, dan Audiomack. Link Shazam dibaca lewat pencarian Apple Music, dan link lama lebih dulu lewat API publik Shazam."
+      "Untuk memproses link musik, Crosstune meminta halaman publik atau API publiknya dari layanan sumber. Aplikasi juga memuat gambar sampul dari server gambar layanan itu. Layanan sumber yang didukung antara lain Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, dan Audiomack. Link Shazam dibaca lewat pencarian Apple Music, dan link lama lebih dulu lewat API publik Shazam. Hasil Google yang dibagikan dibuka di Google untuk membaca judul lagu."
     ],
     [
       "p",

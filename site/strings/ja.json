@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "音楽リンクを処理するため、Crosstune はリンク元のサービスに公開ページまたは公開 API をリクエストします。また、そのサービスの画像サーバーからカバー画像を読み込みます。対応するリンク元のサービスには、Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack があります。 Shazam のリンクは Apple Music の検索で読み取ります。古いリンクはまず Shazam の公開 API で読み取ります。"
+      "音楽リンクを処理するため、Crosstune はリンク元のサービスに公開ページまたは公開 API をリクエストします。また、そのサービスの画像サーバーからカバー画像を読み込みます。対応するリンク元のサービスには、Spotify、YouTube、YouTube Music、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp、Audiomack があります。 Shazam のリンクは Apple Music の検索で読み取ります。古いリンクはまず Shazam の公開 API で読み取ります。 共有された Google の検索結果は、曲名を読み取るために Google で開きます。"
     ],
     [
       "p",

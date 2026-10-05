@@ -35,6 +35,25 @@ class MusicLinksTest {
     }
 
     @Test
+    fun googleSongResultsAreSearchedByTitle() {
+        val iris = LinkInput.RecognizedSong("https://www.google.com/search?q=Iris&kgmid=%2Fg%2F11c2p4p6vv", MusicMetadata("Iris", ""))
+        // Where Google's shared result leads, on any of its sites.
+        assertEquals(iris, MusicLinks.parse("https://www.google.com/search?kgmid=/g/11c2p4p6vv&hl=en-AR&q=Iris&shem=dlvs1&source=sh/x/kp/osrp/m1/4"))
+        assertEquals(iris, MusicLinks.parse("https://google.com.ar/search?q=Iris&kgmid=/g/11c2p4p6vv"))
+        // With no artist, the field shows the link itself.
+        assertEquals(iris.url, iris.text)
+        // A plain search isn't a song, nor is a look-alike site.
+        assertEquals(null, MusicLinks.parse("https://www.google.com/search?q=Iris"))
+        assertEquals(null, MusicLinks.parse("https://www.google.com/search?kgmid=/g/11c2p4p6vv"))
+        assertEquals(null, MusicLinks.parse("https://notgoogle.com/search?q=Iris&kgmid=/g/1"))
+        assertEquals(null, MusicLinks.parse("https://www.google.com/maps?q=Iris&kgmid=/g/1"))
+        // Its short links are followed later.
+        assertEquals(LinkInput.ShortLink("https://share.google/09OHXUIfQTRCqXUCJ"), MusicLinks.parse("Iris https://share.google/09OHXUIfQTRCqXUCJ"))
+        assertEquals(LinkInput.ShortLink("https://g.co/kgs/AbC123"), MusicLinks.parse("https://g.co/kgs/AbC123"))
+        assertEquals(null, MusicLinks.parse("https://g.co/meet/abc"))
+    }
+
+    @Test
     fun nowPlayingSharesDecodeSongAndArtist() {
         val expected = LinkInput.RecognizedSong(
             "https://www.google.com/search?q=A%20Song%20by%20Example%20Band",

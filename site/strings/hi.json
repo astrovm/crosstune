@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "म्यूज़िक लिंक पहचानने के लिए Crosstune सोर्स सेवा से उसका सार्वजनिक पेज या सार्वजनिक API माँगता है। यह सेवा के इमेज सर्वर से कवर आर्टवर्क भी लोड करता है। सपोर्ट की जाने वाली सोर्स सेवाओं में Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp और Audiomack शामिल हैं। Shazam लिंक Apple Music की खोज से पढ़े जाते हैं, और पुराने लिंक पहले Shazam के सार्वजनिक API से।"
+      "म्यूज़िक लिंक पहचानने के लिए Crosstune सोर्स सेवा से उसका सार्वजनिक पेज या सार्वजनिक API माँगता है। यह सेवा के इमेज सर्वर से कवर आर्टवर्क भी लोड करता है। सपोर्ट की जाने वाली सोर्स सेवाओं में Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp और Audiomack शामिल हैं। Shazam लिंक Apple Music की खोज से पढ़े जाते हैं, और पुराने लिंक पहले Shazam के सार्वजनिक API से। शेयर किए गए Google नतीजे गाने का नाम पढ़ने के लिए Google पर खोले जाते हैं।"
     ],
     [
       "p",
