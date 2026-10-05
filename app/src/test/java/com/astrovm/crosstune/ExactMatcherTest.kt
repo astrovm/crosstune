@@ -469,6 +469,9 @@ class ExactMatcherTest {
         // The song of another artist, or one that shares too little, is not taken.
         assertEquals(null, queueFinds("Perfect", "The Smashing Pumpkins", "Perfect", "Simple Plan"))
         assertEquals(null, queueFinds("Perfect Day", "Band", "Another Song Entirely", "Band"))
+        assertEquals(null, queueFinds("Love Me Do", "Band", "Love Me Tender", "Band"))
+        assertEquals(null, queueFinds("Song 7", "Band", "Song 5", "Band"))
+        assertEquals(null, queueFinds("Perfect", "Band", "Perfect Day", "Band"))
         assertEquals(null, queueFinds("", "Band", "Anything", "Band"))
     }
 
@@ -482,6 +485,24 @@ class ExactMatcherTest {
     fun aQueueDoesNotTakeAnAlbumOrArtistLoosely() {
         respond(youTubeMusicPage(youTubeMusicRow("Road Trip", "Album • Band • 2020", browseId = "MPREb_x")))
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Road Trip", "Band", ItemType.ALBUM))) {} })
+    }
+
+    @Test
+    fun aQueueTakesAnExactMatchLowerInTheResultsOverACloseOneAtTheTop() {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else FakeSpotify.html(request, youTubeMusicPage(
+                youTubeMusicRow("Glass No Palm Tree Live", "Band • Album • 3:00", videoId = "close000000"),
+                youTubeMusicRow("Glass No Palm Tree", "Band • Album • 3:00", videoId = "exact000000")
+            ))
+        }
+        val tracks = listOf(MusicMetadata("Glass No Palm Tree", "Band"))
+        assertEquals("https://music.youtube.com/watch?v=exact000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} })
+        // A song's close match is kept apart from its exact one, so opening it alone still wants the same title.
+        respond(youTubeMusicPage(youTubeMusicRow("GLASS NO PALM TREE", "Band • Album • 3:00", videoId = "other000000")))
+        val romaji = MusicMetadata("ガラスのPALM TREE", "Band")
+        assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, romaji) })
     }
 
     @Test
