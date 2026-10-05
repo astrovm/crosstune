@@ -1,1 +1,2 @@
+Crosstune can name a song playing nearby by itself: tap the button next to Paste and it listens. Only a fingerprint of the sound goes to Shazam, never the audio. You can still pick Shazam or Google's song search in Settings.
 The widget has a button to name a song playing nearby, and tapping its logo or name opens Crosstune.

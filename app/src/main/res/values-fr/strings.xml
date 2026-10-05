@@ -164,4 +164,10 @@
     <string name="setup_fixed">Réglé</string>
     <string name="choose_app_button">Choisir l’application</string>
     <string name="make_default_named">Définir %1$s par défaut</string>
+    <string name="listening_text">Écoute…</string>
+    <string name="error_no_match">Titre non reconnu. Réessayez plus près de la musique.</string>
+    <string name="error_microphone">Crosstune a besoin du micro pour reconnaître les titres.</string>
+    <string name="error_recognition_unavailable">La reconnaissance de titres n\'est pas disponible pour le moment.</string>
+    <string name="open_settings_button">Ouvrir les paramètres</string>
+    <string name="open_app_button">Ouvrir %1$s</string>
 </resources>

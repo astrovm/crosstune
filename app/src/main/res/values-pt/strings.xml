@@ -164,4 +164,10 @@
     <string name="setup_fixed">Resolvido</string>
     <string name="choose_app_button">Escolher app</string>
     <string name="make_default_named">Tornar %1$s o padrão</string>
+    <string name="listening_text">Ouvindo…</string>
+    <string name="error_no_match">Não foi possível reconhecer a música. Tente de novo mais perto da música.</string>
+    <string name="error_microphone">O Crosstune precisa do microfone para reconhecer músicas.</string>
+    <string name="error_recognition_unavailable">O reconhecimento de músicas não está disponível agora.</string>
+    <string name="open_settings_button">Abrir configurações</string>
+    <string name="open_app_button">Abrir %1$s</string>
 </resources>

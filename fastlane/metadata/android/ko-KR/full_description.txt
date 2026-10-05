@@ -11,10 +11,10 @@
 <li>정확한 항목 열기: Apple Music, Deezer, YouTube Music에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있고, Bandcamp에서는 노래와 앨범을, YouTube에서는 노래를 바로 열 수 있어요.</li>
 <li>검색 페이지가 있는 다른 앱과 사이트를 추가할 수 있어요.</li>
 <li>한 번의 탭으로 붙여넣고, 최근 링크를 검색해 다시 열거나, 홈 화면 위젯, 빠른 설정 타일, 앱 아이콘 길게 누르기로 복사한 링크를 열 수 있어요.</li>
-<li>Shazam 링크와 Pixel의 Now Playing에서 공유한 노래를 열 수 있고, 버튼으로 Shazam이나 Google 노래 검색을 열어 근처에서 나오는 노래를 인식할 수 있어요.</li>
+<li>근처에서 나오는 노래를 인식해요. Crosstune이 직접 듣거나, Shazam이나 Google 노래 검색을 열어요. Shazam 링크와 Pixel의 Now Playing에서 공유한 노래도 열 수 있어요.</li>
 <li>링크를 읽을 수 없나요? 링크가 온 앱에서 열거나, 검색어를 복사하거나, 검색 링크를 공유하세요.</li>
 <li>Android 12 이상에서 Material You 색상을 지원해요.</li>
 </ul>
 
 <b>개인정보 보호</b>
-계정, 분석, 광고가 없어요. 기록은 기기에만 저장돼요. 링크의 제목, 아티스트, 커버를 표시하기 위해 Crosstune은 링크가 온 서비스에만 요청해요. 정확한 항목 열기를 켜면 제목과 아티스트가 Apple, Deezer, YouTube Music, YouTube 또는 Bandcamp의 검색으로도 전송돼요. 모두 재생을 쓰면 노래의 제목과 아티스트가 YouTube Music 검색으로, 찾은 동영상이 YouTube로 전송돼요.
+계정, 분석, 광고가 없어요. 기록은 기기에만 저장돼요. 링크의 제목, 아티스트, 커버를 표시하기 위해 Crosstune은 링크가 온 서비스에만 요청해요. 정확한 항목 열기를 켜면 제목과 아티스트가 Apple, Deezer, YouTube Music, YouTube 또는 Bandcamp의 검색으로도 전송돼요. 모두 재생을 쓰면 노래의 제목과 아티스트가 YouTube Music 검색으로, 찾은 동영상이 YouTube로 전송돼요. 노래를 인식할 때 Crosstune은 듣는 동안에만 마이크를 사용하고, Shazam에는 소리의 지문만 보내요. 오디오는 절대 보내지 않아요.

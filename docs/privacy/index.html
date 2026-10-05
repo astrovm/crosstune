@@ -38,13 +38,14 @@
 <main>
 <p><a href="/">← Crosstune</a></p>
 <h1>Crosstune Privacy Policy</h1>
-<p>Last updated: October 4, 2026</p>
+<p>Last updated: October 5, 2026</p>
 <div class="short">
 <h2>In short</h2>
 <ul>
 <li>No account, ads or analytics.</li>
 <li>There's no Crosstune server. Your history stays on your phone.</li>
 <li>Links you convert go only to the music services involved.</li>
+<li>Recognizing a song sends Shazam only a fingerprint of the sound, never the audio.</li>
 <li>Clear history anytime in the app.</li>
 </ul>
 </div>
@@ -59,8 +60,10 @@
 <p>To resolve a music link, Crosstune requests its public page or public API from the source service. It also loads cover artwork from the service's image servers. Supported source services include Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, and Audiomack. Shazam links are read through Apple Music's lookup, and older ones through Shazam's public API first. Shared Google results are followed on Google to read the song's title.</p>
 <p>When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, or Bandcamp. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. When you use Play all on a playlist or album, the app sends each song’s title and artist to YouTube Music’s search, then sends the list of videos found to YouTube, which returns a temporary playlist. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select.</p>
 <p>Like other internet requests, these requests expose your IP address and normal request information to the contacted service. Those services may retain request logs and process information under their own privacy policies. The developer doesn't control how they process or keep that data. A music service may require its own account or subscription after you open it.</p>
+<h2>Song recognition</h2>
+<p>When you ask Crosstune to recognize a song, it records sound from the microphone only while it listens, for up to 12 seconds, and stops as soon as it finds the song. On your phone, it turns the sound into a fingerprint of its loudest points. Only that fingerprint goes to Shazam, never the audio, and the recording isn't saved. Crosstune doesn't send your location. Shazam answers with the song's title, artist, cover and Apple Music ID, and Crosstune then looks the song up like a pasted link. Like other requests, this one exposes your IP address to Shazam, which processes it under its own privacy policy. In Settings, you can choose Shazam or the Google app to recognize songs instead; they listen under their own privacy policies.</p>
 <h2>Permissions and security</h2>
-<p>Crosstune uses Android's internet permission to retrieve music information and artwork. It does not request location, microphone, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address. The button to recognize a song opens Shazam or the Google app, which listen under their own privacy policies. Crosstune itself never uses the microphone.</p>
+<p>Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address.</p>
 <h2>Retention and deletion</h2>
 <p>You can clear recent history in the app. Clearing Crosstune's app storage in Android Settings removes its local settings and history. The developer holds no server-side account or listening-history record to delete. Requests already received by third-party music services are subject to those services' retention and deletion policies.</p>
 <h2>Children</h2>

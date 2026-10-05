@@ -120,12 +120,15 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
-    /** Apps that name a song playing nearby, Shazam first. */
+    /** What names a song playing nearby, Shazam first and Crosstune itself last. */
     val recognizers: List<SongRecognizer> = emptyList(),
     /** The one the Recognize button opens: the user's pick, or else the first there is. */
     val recognizer: SongRecognizer? = null,
     val onRecognize: (SongRecognizer) -> Unit = {},
     val onRecognizerChange: (SongRecognizer) -> Unit = {},
+    val onStopListening: () -> Unit = {},
+    /** Android's settings for Crosstune, where the microphone is allowed. */
+    val onOpenMicrophoneSettings: () -> Unit = {},
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -196,6 +199,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     val screen = when {
         // A link from another app is handled right away; setup waits for the next regular launch.
         !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
+        state.listening -> Screen.LISTENING
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
@@ -218,6 +222,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
         } else if (shown == Screen.HANDOFF) {
             Handoff(state, actions)
+        } else if (shown == Screen.LISTENING) {
+            ListeningScreen(actions)
         } else {
             MainScreen(state, guided, onOpenSettings = { showSettings = true })
         }
@@ -226,7 +232,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 private enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), MAIN(0), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
 }
 
 private const val GUIDE_ALLOW = "allow"
@@ -584,7 +590,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             AnimatedContent(targetState = state.linkText.isEmpty(), transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
                     Row {
-                        // A song playing nearby, once named, is shared back here.
+                        // Crosstune listens itself, or opens another app, which shares the song back here.
                         actions.recognizer?.let { recognizer ->
                             IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {
                                 AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
@@ -771,6 +777,19 @@ private fun ErrorCard(error: AppError, state: UiState, actions: ScreenActions) {
                     if (state.canRetry) {
                         TextButton(onClick = actions.onRetry, colors = onError) {
                             Text(stringResource(R.string.retry_button))
+                        }
+                    }
+                    if (error == AppError.MICROPHONE) {
+                        TextButton(onClick = actions.onOpenMicrophoneSettings, colors = onError) {
+                            Text(stringResource(R.string.open_settings_button))
+                        }
+                    }
+                    // Shazam is busy, but another app may still name the song.
+                    if (error == AppError.RECOGNITION_UNAVAILABLE) {
+                        actions.recognizers.filterNot { it.listensHere }.forEach { recognizer ->
+                            TextButton(onClick = { actions.onRecognize(recognizer) }, colors = onError) {
+                                Text(stringResource(R.string.open_app_button, recognizer.label))
+                            }
                         }
                     }
                     // A link Crosstune couldn't read can still be opened in the app it belongs to.

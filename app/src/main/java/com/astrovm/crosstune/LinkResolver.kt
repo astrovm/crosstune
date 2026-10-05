@@ -21,7 +21,13 @@ internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boole
     SERVICE_UNAVAILABLE(R.string.error_service_unavailable, canRetry = true),
     NETWORK(R.string.error_network, canRetry = true),
     METADATA_UNAVAILABLE(R.string.error_metadata_unavailable, canRetry = true),
-    NO_APP_TO_OPEN(R.string.error_no_app_to_open)
+    NO_APP_TO_OPEN(R.string.error_no_app_to_open),
+    /** Listening didn't name the song. */
+    NO_MATCH(R.string.error_no_match, canRetry = true),
+    /** The microphone can't record, most likely without the permission. */
+    MICROPHONE(R.string.error_microphone),
+    /** Shazam is busy or failing; another song recognition app may still work. */
+    RECOGNITION_UNAVAILABLE(R.string.error_recognition_unavailable, canRetry = true)
 }
 
 internal sealed interface Resolution {

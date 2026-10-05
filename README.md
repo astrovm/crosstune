@@ -44,7 +44,7 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Ask every time.** Pick the app each time you open a link.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
-- **Name that song.** A button next to **Paste** opens Shazam, or Google's song search when Shazam isn't available, to name a song playing nearby. Choose which app it opens in **Settings** → **Song recognition app** when both are available. Share it back to open it in your app.
+- **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Have Shazam or the Google app? It opens that instead, and you can switch in **Settings** → **Song recognition app**.
 - **Shortcuts.** One-tap paste, a home screen widget with your Recent songs and a button to name a song nearby, a Quick Settings tile, and a long-press shortcut on the app icon.
 - **Recent.** Search it, and swipe a song away to remove it.
 - **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
@@ -87,6 +87,7 @@ Check that **Open the exact match** is on. If it is, there was no confident matc
 - History stays on your device.
 - Crosstune only asks the service a link comes from for its title, artist and cover.
 - With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube and Bandcamp website search).
+- Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

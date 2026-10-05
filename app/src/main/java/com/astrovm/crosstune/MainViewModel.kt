@@ -21,6 +21,8 @@ internal data class UiState(
     val linkText: String = "",
     val isLoading: Boolean = false,
     val isMatching: Boolean = false,
+    /** Set while the microphone is listening for a song playing nearby. */
+    val listening: Boolean = false,
     val result: MusicMetadata? = null,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
     val destinationUrls: Map<Destination, PreparedLink> = emptyMap(),
@@ -165,6 +167,8 @@ internal class MainViewModel(
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
     val artwork: ArtworkLoader,
+    /** Names a song playing nearby. */
+    private val listener: SongListener,
     /** Where Android is asked about apps and links: many slow calls that mustn't hold up the screen. */
     private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
@@ -378,7 +382,56 @@ internal class MainViewModel(
         resolve(input, openWhenReady, destination)
     }
 
+    /** Whether Try again listens again, since listening failed before a song was found. */
+    var retryListens = false
+        private set
+
+    /**
+     * Listens for a song playing nearby, then shows it as a pasted link would: by its Apple Music
+     * link when Shazam knows it, like a Shazam link, or else by its name, like a Now Playing song.
+     * The microphone permission is already granted.
+     */
+    fun listen() {
+        job?.cancel()
+        lastRequest = null
+        pendingOpen = false
+        retryListens = true
+        uiState = uiState.copy(
+            listening = true, isLoading = false, isMatching = false, error = null, linkText = "", result = null,
+            destinationUrls = emptyMap(), selectedDestination = null, link = null, showDestinationPicker = false,
+            handlingIncomingLink = false, handingOff = false
+        )
+        job = viewModelScope.launch {
+            val heard = try {
+                listener.listen()
+            } finally {
+                uiState = uiState.copy(listening = false)
+            }
+            when (heard) {
+                is Heard.Song -> {
+                    retryListens = false
+                    val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
+                        ?: MusicLinks.recognizedSong(heard.metadata)
+                    uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
+                    resolve(input, openWhenReady = false)
+                }
+                Heard.Nothing -> showListenError(AppError.NO_MATCH)
+                is Heard.Failed -> showListenError(heard.error)
+            }
+        }
+    }
+
+    fun stopListening() {
+        job?.cancel()
+        uiState = uiState.copy(listening = false)
+    }
+
+    private fun showListenError(error: AppError) {
+        uiState = uiState.copy(error = error, canRetry = error.canRetry)
+    }
+
     private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null) {
+        retryListens = false
         lastRequest = Triple(input, openWhenReady, destination)
         pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
@@ -913,6 +966,7 @@ internal class MainViewModel(
     }
 
     fun showError(error: AppError) {
+        retryListens = false
         uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
     }
 

@@ -164,4 +164,10 @@
     <string name="setup_fixed">Naprawione</string>
     <string name="choose_app_button">Wybierz aplikację</string>
     <string name="make_default_named">Ustaw %1$s jako domyślną</string>
+    <string name="listening_text">Słucham…</string>
+    <string name="error_no_match">Nie rozpoznano utworu. Spróbuj ponownie bliżej muzyki.</string>
+    <string name="error_microphone">Crosstune potrzebuje mikrofonu, aby rozpoznawać utwory.</string>
+    <string name="error_recognition_unavailable">Rozpoznawanie utworów jest teraz niedostępne.</string>
+    <string name="open_settings_button">Otwórz ustawienia</string>
+    <string name="open_app_button">Otwórz %1$s</string>
 </resources>

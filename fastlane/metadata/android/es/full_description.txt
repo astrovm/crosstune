@@ -11,10 +11,10 @@ Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. T
 <li>Abrir la coincidencia exacta: Apple Music, Deezer y YouTube Music pueden abrir la canción, el álbum o el artista en sí, en vez de una búsqueda, Bandcamp la canción o el álbum, y YouTube la canción.</li>
 <li>Agregá otras apps y sitios que tengan página de búsqueda.</li>
 <li>Pegá con un toque, buscá y volvé a abrir links recientes, o abrí un link copiado desde el widget de la pantalla de inicio, el mosaico de Configuración rápida o manteniendo apretado el ícono de la app.</li>
-<li>Abre links de Shazam y canciones compartidas desde Now Playing del Pixel, y un botón abre Shazam o la búsqueda de canciones de Google para reconocer una canción que suena cerca.</li>
+<li>Reconoce una canción que suena cerca: Crosstune escucha por su cuenta, o abre Shazam o la búsqueda de canciones de Google. También abre links de Shazam y canciones compartidas desde Now Playing del Pixel.</li>
 <li>¿No se puede leer un link? Abrilo en la app de la que viene, copiá el texto de búsqueda o compartí un link de búsqueda.</li>
 <li>Colores de Material You en Android 12 y posteriores.</li>
 </ul>
 
 <b>Privacidad</b>
-Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp. Reproducir todo manda los títulos y artistas de las canciones a la búsqueda de YouTube Music, y los videos encontrados a YouTube.
+Sin cuentas, analíticas ni publicidad. El historial se queda en tu celular. Para mostrar el título, el artista y la portada de un link, Crosstune solo le consulta al servicio del que viene el link. Con Abrir la coincidencia exacta activado, el título y el artista también van a la búsqueda de Apple, Deezer, YouTube Music, YouTube o Bandcamp. Reproducir todo manda los títulos y artistas de las canciones a la búsqueda de YouTube Music, y los videos encontrados a YouTube. Para reconocer una canción, Crosstune usa el micrófono solo mientras escucha y le envía a Shazam solo una huella del sonido, nunca el audio.

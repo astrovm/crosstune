@@ -164,4 +164,10 @@
     <string name="setup_fixed">ठीक हो गया</string>
     <string name="choose_app_button">ऐप चुनें</string>
     <string name="make_default_named">%1$s को डिफ़ॉल्ट बनाएं</string>
+    <string name="listening_text">सुन रहा है…</string>
+    <string name="error_no_match">गाना पहचाना नहीं जा सका। संगीत के पास जाकर फिर कोशिश करें।</string>
+    <string name="error_microphone">गाने पहचानने के लिए Crosstune को माइक्रोफ़ोन चाहिए।</string>
+    <string name="error_recognition_unavailable">गाना पहचानना अभी उपलब्ध नहीं है।</string>
+    <string name="open_settings_button">सेटिंग खोलें</string>
+    <string name="open_app_button">%1$s खोलें</string>
 </resources>

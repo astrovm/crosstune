@@ -37,7 +37,7 @@
     ],
     [
       "Name that song",
-      "Shazam or Google finds it, Crosstune opens it."
+      "Crosstune listens, names it and opens it."
     ],
     [
       "Private",
@@ -57,12 +57,13 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 4, 2026",
+  "updated": "Last updated: October 5, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
     "There's no Crosstune server. Your history stays on your phone.",
     "Links you convert go only to the music services involved.",
+    "Recognizing a song sends Shazam only a fingerprint of the sound, never the audio.",
     "Clear history anytime in the app."
   ],
   "details_h2": "Details",
@@ -109,11 +110,19 @@
     ],
     [
       "h2",
+      "Song recognition"
+    ],
+    [
+      "p",
+      "When you ask Crosstune to recognize a song, it records sound from the microphone only while it listens, for up to 12 seconds, and stops as soon as it finds the song. On your phone, it turns the sound into a fingerprint of its loudest points. Only that fingerprint goes to Shazam, never the audio, and the recording isn't saved. Crosstune doesn't send your location. Shazam answers with the song's title, artist, cover and Apple Music ID, and Crosstune then looks the song up like a pasted link. Like other requests, this one exposes your IP address to Shazam, which processes it under its own privacy policy. In Settings, you can choose Shazam or the Google app to recognize songs instead; they listen under their own privacy policies."
+    ],
+    [
+      "h2",
       "Permissions and security"
     ],
     [
       "p",
-      "Crosstune uses Android's internet permission to retrieve music information and artwork. It does not request location, microphone, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address. The button to recognize a song opens Shazam or the Google app, which listen under their own privacy policies. Crosstune itself never uses the microphone."
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
     ],
     [
       "h2",

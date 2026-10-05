@@ -73,9 +73,7 @@ class CrosstuneWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val songs = widgetSongs(context)
-        // The app it opens is picked at the tap, see RecognizeSongActivity.
-        val recognize = SongRecognizers.available(context.packageManager).isNotEmpty()
-        provideContent { WidgetTheme { WidgetContent(songs, recognize) } }
+        provideContent { WidgetTheme { WidgetContent(songs) } }
     }
 
     internal companion object {
@@ -116,11 +114,11 @@ class CrosstuneWidget : GlanceAppWidget() {
 }
 
 /**
- * With [recognize], a button opens the app that names a song playing nearby; there's room for it
- * when the widget is wide.
+ * When it's wide, a button names a song playing nearby, with the app picked at the tap, see
+ * RecognizeSongActivity.
  */
 @Composable
-internal fun WidgetContent(songs: List<WidgetSong>, recognize: Boolean = false) {
+internal fun WidgetContent(songs: List<WidgetSong>) {
     val context = LocalContext.current
     val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
     val paste = actionStartActivity(
@@ -162,7 +160,7 @@ internal fun WidgetContent(songs: List<WidgetSong>, recognize: Boolean = false) 
                             style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         )
                     }
-                    if (wide && recognize) {
+                    if (wide) {
                         CircleIconButton(
                             imageProvider = ImageProvider(R.drawable.ic_recognize),
                             contentDescription = context.getString(R.string.recognize_button),

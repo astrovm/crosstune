@@ -11,10 +11,10 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Otwieraj dokładne dopasowanie: Apple Music, Deezer i YouTube Music mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, Bandcamp utwór lub album, a YouTube utwór.</li>
 <li>Dodawaj inne aplikacje i strony z wyszukiwarką.</li>
 <li>Wklejaj jednym kliknięciem, przeszukuj ostatnie linki i wracaj do nich albo otwieraj skopiowany link z widżetu na ekranie głównym, kafelka w Szybkich ustawieniach lub przytrzymując ikonę aplikacji.</li>
-<li>Otwiera linki z Shazama i utwory udostępnione z Now Playing na Pixelu, a przycisk otwiera Shazama lub wyszukiwanie utworów Google, aby rozpoznać utwór grający w pobliżu.</li>
+<li>Rozpoznaje utwór grający w pobliżu: Crosstune słucha sam albo otwiera Shazama lub wyszukiwanie utworów Google. Otwiera też linki z Shazama i utwory udostępnione z Now Playing na Pixelu.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Kolory Material You na Androidzie 12 i nowszych.</li>
 </ul>
 
 <b>Prywatność</b>
-Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube.
+Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube. Do rozpoznania utworu Crosstune używa mikrofonu tylko podczas słuchania i wysyła do Shazama tylko odcisk dźwięku, nigdy nagranie.

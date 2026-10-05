@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,7 +52,14 @@ class RecognizeSongActivityTest {
     }
 
     @Test
-    fun withNoAppItJustCloses() {
-        assertNull(tap())
+    fun withNoOtherAppCrosstuneListens() {
+        val listen = tap()!!
+        assertEquals(MainActivity.ACTION_LISTEN, listen.action)
+        assertEquals(MainActivity.LISTEN_ALIAS, listen.component!!.className)
+        // Picked in Settings, it comes first even with others installed.
+        install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
+            .putString(SongRecognizers.KEY_PICK, app.packageName).commit()
+        assertEquals(MainActivity.ACTION_LISTEN, tap()!!.action)
     }
 }

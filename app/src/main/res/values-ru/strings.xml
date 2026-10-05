@@ -164,4 +164,10 @@
     <string name="setup_fixed">Исправлено</string>
     <string name="choose_app_button">Выбрать приложение</string>
     <string name="make_default_named">Сделать %1$s основным</string>
+    <string name="listening_text">Слушаю…</string>
+    <string name="error_no_match">Не удалось распознать трек. Попробуйте ещё раз ближе к музыке.</string>
+    <string name="error_microphone">Crosstune нужен микрофон, чтобы распознавать треки.</string>
+    <string name="error_recognition_unavailable">Распознавание треков сейчас недоступно.</string>
+    <string name="open_settings_button">Открыть настройки</string>
+    <string name="open_app_button">Открыть %1$s</string>
 </resources>

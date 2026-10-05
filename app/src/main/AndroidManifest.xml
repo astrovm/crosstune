@@ -3,6 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only while listening for a song playing nearby, see SongListener. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Phones without a microphone can still install Crosstune; they just can't listen. -->
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
 
     <!--
         Lets Crosstune find a browser or app for a link other than itself, and see which music
@@ -287,6 +293,12 @@
 
         <activity-alias
             android:name=".PasteFromClipboard"
+            android:exported="false"
+            android:targetActivity=".MainActivity" />
+
+        <!-- Starts listening for a song; not exported, so no other app can make Crosstune listen. -->
+        <activity-alias
+            android:name=".ListenForSong"
             android:exported="false"
             android:targetActivity=".MainActivity" />
 

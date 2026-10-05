@@ -37,7 +37,7 @@
     ],
     [
       "Bu şarkı ne?",
-      "Shazam ya da Google tanır, Crosstune açar."
+      "Crosstune dinler, tanır ve açar."
     ],
     [
       "Gizli",
@@ -57,12 +57,13 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 4 Ekim 2026",
+  "updated": "Son güncelleme: 5 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
     "Crosstune'un sunucusu yok. Geçmişiniz telefonunuzda kalır.",
     "Dönüştürdüğünüz bağlantılar yalnızca ilgili müzik servislerine gider.",
+    "Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez.",
     "Geçmişi istediğiniz zaman uygulamadan temizleyebilirsiniz."
   ],
   "details_h2": "Ayrıntılar",
@@ -109,11 +110,19 @@
     ],
     [
       "h2",
+      "Şarkı tanıma"
+    ],
+    [
+      "p",
+      "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Ayarlar'da şarkı tanımak için bunun yerine Shazam'ı veya Google uygulamasını seçebilirsiniz; bunlar kendi gizlilik politikalarına göre dinler."
+    ],
+    [
+      "h2",
       "İzinler ve güvenlik"
     ],
     [
       "p",
-      "Crosstune, müzik bilgilerini ve kapak görsellerini almak için Android'in internet iznini kullanır. Konum, mikrofon, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Kendi uygulamanızı veya sitenizi eklerseniz güvenilir bir HTTPS adresi seçin. Şarkı tanıma düğmesi Shazam'ı veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler. Crosstune mikrofonu hiçbir zaman kullanmaz."
+      "Crosstune, müzik bilgilerini ve kapakları almak için Android'in internet iznini kullanır. Mikrofon iznini ilk kez şarkı tanıdığınızda ister ve mikrofonu yalnızca dinlerken kullanır. Konum, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Özel bir hedef eklerseniz güvenilir bir HTTPS adresi seçin."
     ],
     [
       "h2",
