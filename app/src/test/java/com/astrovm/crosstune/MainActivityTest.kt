@@ -302,6 +302,19 @@ class MainActivityTest {
         click(recognize)
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
 
+        // Uninstalling the preferred app keeps recognition usable and the preference intact.
+        shadowOf(app.packageManager).removePackage(SongRecognizers.SHAZAM)
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
+        assertEquals(SongRecognizers.SHAZAM, prefs().getString("song_recognizer", null))
+        inSettings { assertTextAbsent(setting) }
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
+        installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
+        resume()
+        click(recognize)
+        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
+
         // An old or unavailable preference falls back to an installed app without overwriting it.
         prefs().edit().putString("song_recognizer", "missing.recognizer").commit()
         resume()
