@@ -159,21 +159,21 @@ internal class SongListener(
     private data class Progress(val recorded: Int, val done: Boolean)
 
     suspend fun listen(): Heard = coroutineScope {
-        val recording = withContext(recordDispatcher) { microphone.open() } ?: return@coroutineScope Heard.Failed(AppError.MICROPHONE)
         val audio = ShortArray(ShazamSignature.SAMPLES)
         val progress = MutableStateFlow(Progress(0, done = false))
+        // It opens the microphone itself, so whatever it opens it closes, even when stopped meanwhile.
         val recorder = launch(recordDispatcher) {
-            recording.use {
-                var recorded = 0
+            var recorded = 0
+            microphone.open()?.use { recording ->
                 while (isActive && recorded < audio.size) {
                     // Stopping interrupts a read that's waiting for sound.
-                    val read = runInterruptible { it.read(audio, recorded, min(CHUNK, audio.size - recorded)) }
+                    val read = runInterruptible { recording.read(audio, recorded, min(CHUNK, audio.size - recorded)) }
                     if (read <= 0) break
                     recorded += read
                     progress.value = Progress(recorded, done = false)
                 }
-                progress.value = Progress(recorded, done = true)
             }
+            progress.value = Progress(recorded, done = true)
         }
         var tried = 0
         var heard: Heard? = null
@@ -181,7 +181,7 @@ internal class SongListener(
             // Asked again once there's another step's worth, or whatever's left when recording ends.
             val now = progress.first { it.done || it.recorded >= tried + STEP }
             heard = if (now.recorded == tried) {
-                // A microphone that gives no sound at all isn't working.
+                // A microphone that can't open, or gives no sound at all, isn't working.
                 if (tried == 0) Heard.Failed(AppError.MICROPHONE) else Heard.Nothing
             } else {
                 tried = now.recorded

@@ -23,6 +23,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowAudioRecord
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
 /** Listening for a song: the microphone, Shazam's answers, and when to ask it. Robolectric for org.json and AudioRecord. */
 @RunWith(RobolectricTestRunner::class)
@@ -181,6 +182,24 @@ class SongListenerTest {
         val listening = launch(Dispatchers.Default) { listener.listen() }
         while (microphone.opened == 0) yield()
         listening.cancelAndJoin()
+        assertTrue(microphone.closed)
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun stoppingWhileTheMicrophoneOpensStillClosesIt() = runBlocking {
+        val opening = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        val slow = Microphone {
+            opening.countDown()
+            stopped.await()
+            microphone.open()
+        }
+        val listening = launch(Dispatchers.Default) { SongListener(slow, shazam).listen() }
+        opening.await()
+        listening.cancel()
+        stopped.countDown()
+        listening.join()
         assertTrue(microphone.closed)
         assertTrue(fake.requestedUrls.isEmpty())
     }
