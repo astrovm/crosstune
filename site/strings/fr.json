@@ -13,7 +13,7 @@
   "download": "Télécharger pour Android",
   "note": "Gratuite, open source et sans publicité. Fonctionne sur Android 8 ou version ultérieure.",
   "alt_home": "Un morceau d'Apple Music prêt à s'ouvrir dans YouTube Music",
-  "alt_picker": "Choix de l'application qui ouvre le lien",
+  "alt_list": "Une playlist Spotify prête à être lue dans YouTube Music",
   "features_h2": "Ce qu'elle fait",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Les applications compatibles ouvrent le morceau lui-même au lieu d'une recherche."
     ],
     [
+      "Playlists et albums",
+      "Voyez tous les titres et ouvrez celui que vous voulez, ou lisez tout."
+    ],
+    [
       "Vos règles",
       "Choisissez une application par service, ou laissez-la vous demander à chaque fois."
     ],
@@ -33,8 +37,16 @@
       "Ajoutez n'importe quelle application ou site doté d'une page de recherche."
     ],
     [
+      "Now Playing",
+      "Les titres partagés depuis Now Playing sur Pixel fonctionnent aussi."
+    ],
+    [
       "Raccourcis",
-      "Coller d'un geste, liens récents, tuile des réglages rapides."
+      "Widget sur l'écran d'accueil, coller d'un geste, tuile des réglages rapides."
+    ],
+    [
+      "Sans pistage",
+      "Retire les éléments de pistage comme ?si= des liens."
     ],
     [
       "Privé",
@@ -44,9 +56,9 @@
   "play_button": "Google Play",
   "play_h2": "Disponible sur Google Play",
   "play_steps": [
-    "Rejoins le groupe <a href=\"{group}\">Crosstune testers</a> avec ton compte Google Play.",
-    "Ouvre la <a href=\"{testing}\">page de test</a> et appuie sur <b>Become a tester</b>.",
-    "Installe Crosstune depuis <a href=\"{store}\">Google Play</a>."
+    "Rejoignez le groupe <a href=\"{group}\">Crosstune testers</a> avec votre compte Google Play.",
+    "Ouvrez la <a href=\"{testing}\">page de test</a> et appuyez sur <b>Become a tester</b>.",
+    "Installez Crosstune depuis <a href=\"{store}\">Google Play</a>."
   ],
   "play_note": "Crosstune est en test sur Google Play. Il peut mettre quelques minutes à apparaître.",
   "works_with": "Compatible avec",

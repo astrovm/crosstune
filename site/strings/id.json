@@ -13,7 +13,7 @@
   "download": "Download untuk Android",
   "note": "Gratis, open source, dan tanpa iklan. Berfungsi di Android 8 atau yang lebih baru.",
   "alt_home": "Lagu dari Apple Music yang siap dibuka di YouTube Music",
-  "alt_picker": "Memilih aplikasi untuk membuka link",
+  "alt_list": "Playlist Spotify yang siap diputar di YouTube Music",
   "features_h2": "Yang bisa dilakukan",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Aplikasi yang didukung membuka lagunya langsung, bukan hasil pencarian."
     ],
     [
+      "Playlist dan album",
+      "Lihat semua lagu dan buka yang mana saja, atau putar semuanya."
+    ],
+    [
       "Aturanmu sendiri",
       "Pilih aplikasi untuk tiap layanan, atau tanya setiap kali."
     ],
@@ -33,8 +37,16 @@
       "Tambahkan aplikasi atau situs apa pun yang punya halaman pencarian."
     ],
     [
+      "Now Playing",
+      "Lagu yang dibagikan dari Now Playing di Pixel juga bisa."
+    ],
+    [
       "Pintasan",
-      "Tempel dengan satu ketukan, link terbaru, kartu Setelan Cepat."
+      "Widget di layar utama, tempel dengan satu ketukan, kartu Setelan Cepat."
+    ],
+    [
+      "Tanpa pelacakan",
+      "Menghapus bagian pelacakan seperti ?si= dari link."
     ],
     [
       "Privat",

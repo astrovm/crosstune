@@ -13,7 +13,7 @@
   "download": "Pobierz na Androida",
   "note": "Darmowa, open source i bez reklam. Działa na Androidzie 8 lub nowszym.",
   "alt_home": "Utwór z Apple Music gotowy do otwarcia w YouTube Music",
-  "alt_picker": "Wybór aplikacji, która otworzy link",
+  "alt_list": "Playlista ze Spotify gotowa do odtworzenia w YouTube Music",
   "features_h2": "Co robi",
   "cards": [
     [
@@ -25,6 +25,10 @@
       "Obsługiwane aplikacje otwierają sam utwór zamiast wyszukiwania."
     ],
     [
+      "Playlisty i albumy",
+      "Zobacz wszystkie utwory i otwórz dowolny albo odtwórz wszystkie."
+    ],
+    [
       "Twoje zasady",
       "Wybierz aplikację dla każdego serwisu albo pytaj za każdym razem."
     ],
@@ -33,8 +37,16 @@
       "Dodaj dowolną aplikację lub stronę z wyszukiwarką."
     ],
     [
+      "Now Playing",
+      "Działają też utwory udostępnione z Now Playing na Pixelu."
+    ],
+    [
       "Skróty",
-      "Wklejanie jednym kliknięciem, ostatnie linki, kafelek w Szybkich ustawieniach."
+      "Widżet na ekranie głównym, wklejanie jednym kliknięciem, kafelek w Szybkich ustawieniach."
+    ],
+    [
+      "Bez śledzenia",
+      "Usuwa z linków elementy śledzące, takie jak ?si=."
     ],
     [
       "Prywatność",
