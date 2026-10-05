@@ -88,6 +88,9 @@
     <string name="play_all_in">%1$s에서 모두 재생</string>
     <string name="play_first_in">%1$s에서 첫 곡 재생</string>
     <string name="play_part">%1$d~%2$d번 재생</string>
+    <string name="play_part_in">%3$s에서 %1$d~%2$d번 재생</string>
+    <string name="part_range">%1$d~%2$d번</string>
+    <string name="play_first_button">첫 곡 재생</string>
     <string name="songs_shown">%2$d곡 중 처음 %1$d곡</string>
     <string name="clear_history_button">기록 삭제</string>
     <string name="tile_label">복사한 음악 링크 열기</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">링크 공유</string>
     <string name="copy_songs_button">노래 복사</string>
     <string name="share_songs_button">노래 공유</string>
+    <string name="copy_button">복사</string>
+    <string name="share_button">공유</string>
     <string name="songs_copied">노래를 복사했어요</string>
     <string name="settings_link_owners_title">이 링크를 여는 앱</string>
     <string name="settings_link_owners_description">탭해서 변경하세요.</string>

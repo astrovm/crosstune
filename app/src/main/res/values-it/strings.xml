@@ -89,6 +89,9 @@
     <string name="play_all_in">Riproduci tutto in %1$s</string>
     <string name="play_first_in">Riproduci il primo brano in %1$s</string>
     <string name="play_part">Riproduci da %1$d a %2$d</string>
+    <string name="play_part_in">Riproduci da %1$d a %2$d in %3$s</string>
+    <string name="part_range">Da %1$d a %2$d</string>
+    <string name="play_first_button">Riproduci il primo brano</string>
     <string name="songs_shown">Primi %1$d di %2$d</string>
     <string name="clear_history_button">Cancella cronologia</string>
     <string name="tile_label">Apri link musicale copiato</string>
@@ -133,6 +136,8 @@
     <string name="share_link_button">Condividi link</string>
     <string name="copy_songs_button">Copia brani</string>
     <string name="share_songs_button">Condividi brani</string>
+    <string name="copy_button">Copia</string>
+    <string name="share_button">Condividi</string>
     <string name="songs_copied">Brani copiati</string>
     <string name="settings_link_owners_title">App con questi link</string>
     <string name="settings_link_owners_description">Toccane una per cambiare.</string>

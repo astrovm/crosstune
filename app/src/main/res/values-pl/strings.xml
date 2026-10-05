@@ -88,6 +88,9 @@
     <string name="play_all_in">Odtwórz wszystko w %1$s</string>
     <string name="play_first_in">Odtwórz pierwszy utwór w %1$s</string>
     <string name="play_part">Odtwórz od %1$d do %2$d</string>
+    <string name="play_part_in">Odtwórz od %1$d do %2$d w %3$s</string>
+    <string name="part_range">Od %1$d do %2$d</string>
+    <string name="play_first_button">Odtwórz pierwszy utwór</string>
     <string name="songs_shown">Pierwsze %1$d z %2$d</string>
     <string name="clear_history_button">Wyczyść historię</string>
     <string name="tile_label">Otwórz skopiowany link muzyczny</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">Udostępnij link</string>
     <string name="copy_songs_button">Kopiuj utwory</string>
     <string name="share_songs_button">Udostępnij utwory</string>
+    <string name="copy_button">Kopiuj</string>
+    <string name="share_button">Udostępnij</string>
     <string name="songs_copied">Skopiowano utwory</string>
     <string name="settings_link_owners_title">Aplikacje z tymi linkami</string>
     <string name="settings_link_owners_description">Kliknij jedną, aby to zmienić.</string>

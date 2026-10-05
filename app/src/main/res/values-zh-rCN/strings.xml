@@ -88,6 +88,9 @@
     <string name="play_all_in">在 %1$s 中全部播放</string>
     <string name="play_first_in">在 %1$s 中播放第一首</string>
     <string name="play_part">播放第 %1$d 到 %2$d 首</string>
+    <string name="play_part_in">在 %3$s 中播放第 %1$d 到 %2$d 首</string>
+    <string name="part_range">第 %1$d 到 %2$d 首</string>
+    <string name="play_first_button">播放第一首</string>
     <string name="songs_shown">共 %2$d 首，显示前 %1$d 首</string>
     <string name="clear_history_button">清除历史记录</string>
     <string name="tile_label">打开已复制的音乐链接</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">分享链接</string>
     <string name="copy_songs_button">复制歌曲</string>
     <string name="share_songs_button">分享歌曲</string>
+    <string name="copy_button">复制</string>
+    <string name="share_button">分享</string>
     <string name="songs_copied">已复制歌曲</string>
     <string name="settings_link_owners_title">可打开这些链接的应用</string>
     <string name="settings_link_owners_description">点按某个应用即可更改。</string>

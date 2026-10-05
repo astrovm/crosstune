@@ -88,6 +88,9 @@
     <string name="play_all_in">Alle in %1$s abspielen</string>
     <string name="play_first_in">Ersten Song in %1$s abspielen</string>
     <string name="play_part">%1$d bis %2$d abspielen</string>
+    <string name="play_part_in">%1$d bis %2$d in %3$s abspielen</string>
+    <string name="part_range">%1$d bis %2$d</string>
+    <string name="play_first_button">Ersten Song abspielen</string>
     <string name="songs_shown">Erste %1$d von %2$d</string>
     <string name="clear_history_button">Verlauf löschen</string>
     <string name="tile_label">Kopierten Musik-Link öffnen</string>
@@ -132,6 +135,8 @@
     <string name="share_link_button">Link teilen</string>
     <string name="copy_songs_button">Songs kopieren</string>
     <string name="share_songs_button">Songs teilen</string>
+    <string name="copy_button">Kopieren</string>
+    <string name="share_button">Teilen</string>
     <string name="songs_copied">Songs kopiert</string>
     <string name="settings_link_owners_title">Apps mit diesen Links</string>
     <string name="settings_link_owners_description">Tippe auf eine, um es zu ändern.</string>
