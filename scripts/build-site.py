@@ -30,7 +30,8 @@ FEATURE_ICONS = [
 SERVICES = [
     ("Spotify", "spotify"), ("YouTube Music", "youtubemusic"), ("YouTube", "youtube"),
     ("Apple Music", "applemusic"), ("Deezer", "deezer"), ("TIDAL", "tidal"),
-    ("SoundCloud", "soundcloud"), ("Bandcamp", "bandcamp"), ("Amazon Music", "amazonmusic"),
+    ("SoundCloud", "soundcloud"), ("Bandcamp", "bandcamp"), ("Audiomack", "audiomack"),
+    ("Amazon Music", "amazonmusic"), ("Qobuz", "qobuz"),
 ]
 # Web frontends with no logo of their own: their first letter on a tile, as in the app (Frontend.color).
 FRONTENDS = [("Invidious", "#2E8FE0"), ("Piped", "#E5482F")]
@@ -49,7 +50,7 @@ def services():
         xml = (ROOT / "app/src/main/res/drawable" / f"ic_service_{drawable}.xml").read_text()
         color = re.search(r'android:fillColor="([^"]+)"', xml).group(1)
         path = re.search(r'android:pathData="([^"]+)"', xml).group(1)
-        fill = "currentColor" if color == "#000000" else color
+        fill = "currentColor" if color in ("#000000", "#FF000000") else color
         items.append(f'            <li title="{name}"><svg viewBox="0 0 24 24" role="img" aria-label="{name}"><path fill="{fill}" d="{path}"/></svg></li>')
     for name, color in FRONTENDS:
         items.append(
@@ -129,7 +130,7 @@ def main():
             f'<div><h3>{h}</h3><p>{p}</p></div></div>'
             for icon, (h, p) in zip(FEATURE_ICONS, s["cards"])
         )
-        play_steps = "\n".join(f"        <li>{step.format(**PLAY_LINKS)}</li>" for step in s["play_steps"])
+        play_steps = "\n".join(f"        <li><span>{step.format(**PLAY_LINKS)}</span></li>" for step in s["play_steps"])
         out = DOCS if code == "en" else DOCS / code
         out.mkdir(parents=True, exist_ok=True)
         (out / "index.html").write_text(fill(index, {
