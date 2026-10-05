@@ -20,8 +20,9 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
-import java.text.Normalizer
 import java.util.Locale
+
+
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -37,29 +38,8 @@ internal class ExactMatcher(
     /** Where what's found is remembered, so the same song isn't looked up again. */
     private val cache: LookupCache? = null
 ) {
-    private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
-    private val artistSeparator = Regex(
-        """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
-        RegexOption.IGNORE_CASE
-    )
-
     /** The apps whose search needs no account. */
     private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
-
-    /**
-     * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in it, or
-     * a whole "Album Version" or "Original". "Live", "Acoustic" or "Remix" are other recordings.
-     */
-    private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*)\s*[)\]]?$""",
-        RegexOption.IGNORE_CASE
-    )
-
-    /** A guest credited in the title, as "(feat. Emel)", which services that credit it as an artist leave out. */
-    private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
-
-    /** "Zion y Lennox" and "Hall and Oates" are two names, whichever language says so. */
-    private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -278,12 +258,12 @@ internal class ExactMatcher(
     }
 
     private suspend fun deezerCover(metadata: MusicMetadata): String? {
-        val title = normalize(withoutEditionTag(metadata.title))
+        val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
         // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
-        val artists = artists(metadata.artist)
+        val artists = SongNames.artists(metadata.artist)
         return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
-            val name = normalize(withoutEditionTag(result.optString("title")))
-            val credit = normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
+            val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("title")))
+            val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
     }
@@ -317,12 +297,12 @@ internal class ExactMatcher(
      * Anything else, e.g. a label's page, is left to the search fallback.
      */
     private fun isOnArtistsOwnPage(metadata: MusicMetadata, pageUrl: String): Boolean {
-        val host = normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
+        val host = SongNames.normalize(pageUrl.toHttpUrlOrNull()?.host?.removeSuffix(".bandcamp.com").orEmpty())
         if (host.isEmpty()) return false
         // Without an artist there is nothing to check the page against, so leave it to the search.
-        return artistNames(metadata.artist).any { name ->
+        return SongNames.artistNames(metadata.artist).any { name ->
             // "The" only counts as an article when it is a word of its own: not in "Thelonious".
-            listOf(name, name.replace(leadingArticle, "")).map(::normalize).any { candidate ->
+            listOf(name, SongNames.withoutArticle(name)).map(SongNames::normalize).any { candidate ->
                 candidate.isNotEmpty() && pageSuffixes.any { suffix -> host == candidate + suffix }
             }
         }
@@ -397,61 +377,16 @@ internal class ExactMatcher(
      * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
      */
     private fun matches(metadata: MusicMetadata, name: String, artist: String): Boolean {
-        if (normalize(withoutEditionTag(name)) != normalize(withoutEditionTag(metadata.title))) return false
+        if (!SongNames.same(name, metadata.title)) return false
         if (metadata.type == ItemType.ARTIST) return true
-        val wanted = artists(metadata.artist)
-        return wanted.isEmpty() || artists(artist).any(wanted::contains)
+        val wanted = SongNames.artists(metadata.artist)
+        return wanted.isEmpty() || SongNames.artists(artist).any(wanted::contains)
     }
 
-    private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean {
-        val wanted = artists(metadata.artist)
-        // A group credited with a guest, or a name with a tag around it: "Randy" is in "Randy Nota Loca".
-        fun sameArtist(a: String, b: String) = a == b || (minOf(a.length, b.length) >= MIN_PARTIAL_ARTIST && (a in b || b in a))
-        if (wanted.isNotEmpty() && artists(artist).none { theirs -> wanted.any { sameArtist(it, theirs) } }) return false
-        val ours = words(withoutEditionTag(metadata.title))
-        val theirs = words(withoutEditionTag(name))
-        val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
-        // All the words of one title are in the other, so "Love Me Do" isn't "Love Me Tender".
-        return shorter.size >= 2 && longer.containsAll(shorter)
-    }
-
-    /** The words written in letters and digits: another script's are what the other title spells out. */
-    private fun words(title: String): Set<String> =
-        Normalizer.normalize(title, Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "").lowercase(Locale.ROOT)
-            .split(Regex("""[^a-z0-9]+""")).filter { it.isNotEmpty() }.toSet()
-
-    /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself, which other services list without the tag. */
-    private fun withoutEditionTag(title: String): String {
-        var stripped = title
-        // "Song - 2012 Remaster (Mono)" has two, and a title that is only a tag is left as it is.
-        while (true) {
-            val shorter = stripped.replace(featuring, "").replace(editionTag, "")
-            if (shorter == stripped || shorter.isBlank()) return stripped
-            stripped = shorter
-        }
-    }
-
-    /**
-     * "A & B feat. C" is credited as just "A" on some services, so each name counts on its own, and
-     * "The" doesn't count. The whole credit counts too, for a name that holds a separator: "125,
-     * Rue Montmartre" is one artist, not a "125" to match on and a "Rue Montmartre" to match on.
-     */
-    private fun artists(credit: String): Set<String> =
-        (artistNames(credit).flatMap { it.split(conjunction) } + credit)
-            .map { name -> normalize(name.replace(leadingArticle, "")) }.filter { it.isNotEmpty() }.toSet()
-
-    private fun artistNames(credit: String): List<String> = credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
-
-    private fun normalize(text: String): String =
-        Normalizer.normalize(text, Normalizer.Form.NFD)
-            .replace(Regex("""\p{M}+"""), "")
-            .lowercase(Locale.ROOT)
-            .replace(Regex("""[^\p{L}\p{N}]+"""), "")
+    private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean =
+        SongNames.wordsMatch(name, metadata.title) && SongNames.artistInside(artist, metadata.artist)
 
     private companion object {
-        /** A shorter artist name has to be at least this long to count when it is inside another's. */
-        const val MIN_PARTIAL_ARTIST = 5
-        const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
         const val TIMEOUT_MS = 5_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"

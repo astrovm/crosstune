@@ -28,10 +28,15 @@ class FakeSpotify : Interceptor {
     @Volatile
     var handler: (Request) -> Response = { request -> html(request, "") }
 
+    /** How long each answer takes to arrive, for a test of a lookup that runs out of time. */
+    @Volatile
+    var delayMillis: Long = 0
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         requestedUrls += request.url.toString()
         requestBodies += request.body?.let { body -> Buffer().also(body::writeTo).readUtf8() }.orEmpty()
+        if (delayMillis > 0) Thread.sleep(delayMillis)
         return handler(request)
     }
 
