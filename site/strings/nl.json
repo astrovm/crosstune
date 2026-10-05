@@ -37,7 +37,7 @@
     ],
     [
       "Welk nummer is dit?",
-      "Shazam of Google herkent het, Crosstune opent het."
+      "Crosstune luistert, herkent het en opent het."
     ],
     [
       "Privé",
@@ -57,12 +57,13 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 4 oktober 2026",
+  "updated": "Laatst bijgewerkt: 5 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
     "Er is geen Crosstune-server. Je geschiedenis blijft op je telefoon.",
     "Links die je omzet, gaan alleen naar de betrokken muziekservices.",
+    "Voor het herkennen van een nummer krijgt Shazam alleen een vingerafdruk van het geluid, nooit de audio.",
     "Wis je geschiedenis wanneer je wilt in de app."
   ],
   "details_h2": "Details",
@@ -109,11 +110,19 @@
     ],
     [
       "h2",
+      "Nummerherkenning"
+    ],
+    [
+      "p",
+      "Als je Crosstune een nummer laat herkennen, neemt het alleen tijdens het luisteren geluid op met de microfoon, maximaal 12 seconden, en stopt het zodra het het nummer vindt. Op je telefoon maakt het van het geluid een vingerafdruk van de luidste punten. Alleen die vingerafdruk gaat naar Shazam, nooit de audio, en de opname wordt niet bewaard. Crosstune stuurt je locatie niet mee. Shazam antwoordt met de titel, artiest, hoes en Apple Music-ID van het nummer, en Crosstune zoekt het nummer daarna op als een geplakte link. Net als andere verzoeken geeft dit verzoek je IP-adres door aan Shazam, dat het verwerkt volgens zijn eigen privacybeleid. In Instellingen kun je in plaats daarvan Shazam of de Google-app kiezen om nummers te herkennen; die luisteren volgens hun eigen privacybeleid."
+    ],
+    [
+      "h2",
       "Machtigingen en beveiliging"
     ],
     [
       "p",
-      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. De app vraagt geen machtigingen voor locatie, microfoon, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekservices gebruiken HTTPS. Als je een eigen bestemming instelt, kies dan een vertrouwd HTTPS-adres. De knop om een nummer te herkennen opent Shazam of de Google-app, die luisteren volgens hun eigen privacybeleid. Crosstune zelf gebruikt nooit de microfoon."
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent, en gebruikt de microfoon alleen tijdens het luisteren. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres."
     ],
     [
       "h2",

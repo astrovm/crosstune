@@ -11,10 +11,10 @@ Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een ande
 <li>Exacte match openen: Apple Music, Deezer en YouTube Music kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, Bandcamp het nummer of album, en YouTube het nummer.</li>
 <li>Voeg andere apps en sites met een zoekpagina toe.</li>
 <li>Plak met één tik, doorzoek en open recente links opnieuw, of open een gekopieerde link via de widget op je startscherm, de tegel in Snelle instellingen of door het app-icoon lang ingedrukt te houden.</li>
-<li>Opent Shazam-links en nummers gedeeld vanuit Now Playing op je Pixel, en een knop opent Shazam of de nummerzoekfunctie van Google om een nummer in de buurt te herkennen.</li>
+<li>Herkent een nummer in de buurt: Crosstune luistert zelf, of opent Shazam of de nummerzoekfunctie van Google. Opent ook Shazam-links en nummers gedeeld vanuit Now Playing op je Pixel.</li>
 <li>Kan een link niet worden gelezen? Open hem in de app waar hij vandaan komt, kopieer de zoektekst of deel een zoeklink.</li>
 <li>Material You-kleuren op Android 12 en hoger.</li>
 </ul>
 
 <b>Privacy</b>
-Geen accounts, analyse of advertenties. Je geschiedenis blijft op je apparaat. Om de titel, artiest en hoes van een link te tonen, vraagt Crosstune alleen de service waar de link vandaan komt. Als Exacte match openen aanstaat, gaan de titel en artiest ook naar de zoekfunctie van Apple, Deezer, YouTube Music, YouTube of Bandcamp. Alles afspelen stuurt de titels en artiesten van de nummers naar de zoekfunctie van YouTube Music, en de gevonden video's naar YouTube.
+Geen accounts, analyse of advertenties. Je geschiedenis blijft op je apparaat. Om de titel, artiest en hoes van een link te tonen, vraagt Crosstune alleen de service waar de link vandaan komt. Als Exacte match openen aanstaat, gaan de titel en artiest ook naar de zoekfunctie van Apple, Deezer, YouTube Music, YouTube of Bandcamp. Alles afspelen stuurt de titels en artiesten van de nummers naar de zoekfunctie van YouTube Music, en de gevonden video's naar YouTube. Om een nummer te herkennen gebruikt Crosstune de microfoon alleen tijdens het luisteren, en stuurt het Shazam alleen een vingerafdruk van het geluid, nooit de audio.

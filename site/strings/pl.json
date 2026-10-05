@@ -37,7 +37,7 @@
     ],
     [
       "Co to za utwór?",
-      "Shazam lub Google go rozpozna, a Crosstune otworzy."
+      "Crosstune słucha, rozpoznaje i otwiera."
     ],
     [
       "Prywatność",
@@ -57,12 +57,13 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 4 października 2026",
+  "updated": "Ostatnia aktualizacja: 5 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
     "Nie ma serwera Crosstune. Historia zostaje na Twoim telefonie.",
     "Linki, które konwertujesz, trafiają tylko do serwisów muzycznych, których dotyczą.",
+    "Do rozpoznania utworu Shazam dostaje tylko odcisk dźwięku, nigdy nagranie.",
     "Historię możesz wyczyścić w aplikacji w każdej chwili."
   ],
   "details_h2": "Szczegóły",
@@ -109,11 +110,19 @@
     ],
     [
       "h2",
+      "Rozpoznawanie utworów"
+    ],
+    [
+      "p",
+      "Gdy prosisz Crosstune o rozpoznanie utworu, nagrywa dźwięk z mikrofonu tylko podczas słuchania, maksymalnie przez 12 sekund, i przestaje, gdy tylko znajdzie utwór. Na telefonie zamienia dźwięk w odcisk jego najgłośniejszych punktów. Do Shazama trafia tylko ten odcisk, nigdy nagranie, a nagranie nie jest zapisywane. Crosstune nie wysyła Twojej lokalizacji. Shazam odpowiada tytułem, wykonawcą, okładką i identyfikatorem Apple Music utworu, a Crosstune wyszukuje go potem jak wklejony link. Jak inne żądania, to ujawnia Twój adres IP Shazamowi, który przetwarza je zgodnie z własnymi zasadami prywatności. W ustawieniach możesz zamiast tego wybrać Shazama lub aplikację Google do rozpoznawania utworów; słuchają one zgodnie z własnymi zasadami prywatności."
+    ],
+    [
+      "h2",
       "Uprawnienia i bezpieczeństwo"
     ],
     [
       "p",
-      "Crosstune korzysta z uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Nie prosi o uprawnienia do lokalizacji, mikrofonu, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane zapytania do serwisów muzycznych używają HTTPS. Jeśli konfigurujesz własne miejsce docelowe, wybierz zaufany adres HTTPS. Przycisk rozpoznawania utworu otwiera Shazama lub aplikację Google, które słuchają zgodnie z własnymi zasadami prywatności. Crosstune nigdy nie używa mikrofonu."
+      "Crosstune używa uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Prosi o uprawnienie do mikrofonu przy pierwszym rozpoznawaniu utworu i używa mikrofonu tylko podczas słuchania. Nie prosi o uprawnienia do lokalizacji, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane żądania do serwisów muzycznych używają HTTPS. Jeśli dodasz własne miejsce docelowe, wybierz zaufany adres HTTPS."
     ],
     [
       "h2",

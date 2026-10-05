@@ -164,4 +164,10 @@
     <string name="setup_fixed">Resuelto</string>
     <string name="choose_app_button">Elegir app</string>
     <string name="make_default_named">Usar %1$s por defecto</string>
+    <string name="listening_text">Escuchando…</string>
+    <string name="error_no_match">No se pudo reconocer la canción. Probá de nuevo más cerca de la música.</string>
+    <string name="error_microphone">Crosstune necesita el micrófono para reconocer canciones.</string>
+    <string name="error_recognition_unavailable">El reconocimiento de canciones no está disponible ahora.</string>
+    <string name="open_settings_button">Abrir ajustes</string>
+    <string name="open_app_button">Abrir %1$s</string>
 </resources>

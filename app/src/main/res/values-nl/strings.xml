@@ -164,4 +164,10 @@
     <string name="setup_fixed">Opgelost</string>
     <string name="choose_app_button">App kiezen</string>
     <string name="make_default_named">%1$s als standaard instellen</string>
+    <string name="listening_text">Luisteren…</string>
+    <string name="error_no_match">Nummer niet herkend. Probeer het opnieuw dichter bij de muziek.</string>
+    <string name="error_microphone">Crosstune heeft de microfoon nodig om nummers te herkennen.</string>
+    <string name="error_recognition_unavailable">Nummerherkenning is nu niet beschikbaar.</string>
+    <string name="open_settings_button">Instellingen openen</string>
+    <string name="open_app_button">%1$s openen</string>
 </resources>

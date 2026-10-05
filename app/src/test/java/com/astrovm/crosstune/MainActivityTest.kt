@@ -257,13 +257,13 @@ class MainActivityTest {
             composeRule.waitForIdle()
         }
         launch()
-        // Nothing installed: no button or setting. One app: open it directly.
-        assertTextAbsent(recognize)
+        // Nothing installed: Crosstune listens itself, so there's nothing to pick. Another app comes first.
+        composeRule.onNode(hasContentDescription(recognize)).assertExists()
         inSettings { assertTextAbsent(setting) }
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
         installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
         resume()
-        inSettings { assertTextAbsent(setting) }
+        inSettings { composeRule.onNodeWithText(setting).assertExists() }
         click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
 
@@ -283,7 +283,11 @@ class MainActivityTest {
         inSettings {
             composeRule.onNodeWithText(setting).performScrollTo().performClick()
             composeRule.waitForIdle()
-            assertEquals(listOf("Shazam", "Google"), composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google"))).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() })
+            assertEquals(
+                listOf("Shazam", "Google", string(R.string.app_name)),
+                composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google") or hasText(string(R.string.app_name))))
+                    .fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() }
+            )
             composeRule.onAllNodesWithText("Shazam").onLast().performClick()
             composeRule.waitForIdle()
         }
@@ -312,7 +316,6 @@ class MainActivityTest {
         click(recognize)
         assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
         assertEquals(SongRecognizers.SHAZAM, prefs().getString("song_recognizer", null))
-        inSettings { assertTextAbsent(setting) }
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
         installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
         resume()

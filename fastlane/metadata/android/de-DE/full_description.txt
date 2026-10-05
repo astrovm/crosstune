@@ -11,10 +11,10 @@ Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem an
 <li>Genauen Treffer öffnen: Apple Music, Deezer und YouTube Music können den Song, das Album oder den Künstler selbst öffnen statt einer Suche, Bandcamp den Song oder das Album, YouTube den Song.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
 <li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
-<li>Öffnet Shazam-Links und Songs, die aus Now Playing auf dem Pixel geteilt werden, und eine Schaltfläche öffnet Shazam oder die Songsuche von Google, um einen Song in der Nähe zu erkennen.</li>
+<li>Erkennt einen Song in der Nähe: Crosstune hört selbst zu oder öffnet Shazam oder die Songsuche von Google. Öffnet auch Shazam-Links und Songs, die aus Now Playing auf dem Pixel geteilt werden.</li>
 <li>Link nicht lesbar? Öffne ihn in der App, aus der er stammt, kopiere den Suchtext oder teile einen Such-Link.</li>
 <li>Material-You-Farben ab Android 12.</li>
 </ul>
 
 <b>Datenschutz</b>
-Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Ist „Genauen Treffer öffnen“ aktiv, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp. „Alle abspielen“ schickt Titel und Künstler der Songs an die Suche von YouTube Music und die gefundenen Videos an YouTube.
+Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Ist „Genauen Treffer öffnen“ aktiv, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp. „Alle abspielen“ schickt Titel und Künstler der Songs an die Suche von YouTube Music und die gefundenen Videos an YouTube. Zum Erkennen eines Songs nutzt Crosstune das Mikrofon nur während des Zuhörens und schickt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme.

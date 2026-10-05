@@ -46,11 +46,11 @@ class CrosstuneWidgetTest {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
-    private fun widget(size: DpSize, songs: List<WidgetSong>, recognize: Boolean = false, block: GlanceAppWidgetUnitTest.() -> Unit) =
+    private fun widget(size: DpSize, songs: List<WidgetSong>, block: GlanceAppWidgetUnitTest.() -> Unit) =
         runGlanceAppWidgetUnitTest {
             setContext(app)
             setAppWidgetSize(size)
-            provideComposable { WidgetContent(songs, recognize) }
+            provideComposable { WidgetContent(songs) }
             block()
         }
 
@@ -85,19 +85,14 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun wideItNamesASongNearbyAndItsNameOpensTheApp() = widget(CrosstuneWidget.LIST, listOf(song), recognize = true) {
+    fun wideItNamesASongNearbyAndItsNameOpensTheApp() = widget(CrosstuneWidget.LIST, listOf(song)) {
         onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.recognize_button)))).assertAny(hasStartActivityClickAction(Intent(app, RecognizeSongActivity::class.java)))
         onAllNodes(hasAnyDescendant(hasText(app.getString(R.string.app_name))))
             .assertAny(hasStartActivityClickAction(Intent(app, MainActivity::class.java)))
     }
 
     @Test
-    fun withoutAnAppToNameSongsThereIsNoButtonForIt() = widget(CrosstuneWidget.LIST, listOf(song)) {
-        onNode(hasContentDescription(app.getString(R.string.recognize_button))).assertDoesNotExist()
-    }
-
-    @Test
-    fun twoColumnsWideTheSongsTakeTheWholeRow() = widget(CrosstuneWidget.NARROW_LIST, listOf(song), recognize = true) {
+    fun twoColumnsWideTheSongsTakeTheWholeRow() = widget(CrosstuneWidget.NARROW_LIST, listOf(song)) {
         // Only the copied link's button fits beside the logo.
         onNode(hasContentDescription(app.getString(R.string.recognize_button))).assertDoesNotExist()
         onNode(hasText("Song")).assertExists()

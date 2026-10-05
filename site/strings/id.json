@@ -37,7 +37,7 @@
     ],
     [
       "Lagu apa ini?",
-      "Shazam atau Google mengenalinya, Crosstune membukanya."
+      "Crosstune mendengarkan, mengenali, lalu membukanya."
     ],
     [
       "Privat",
@@ -57,12 +57,13 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 4 Oktober 2026",
+  "updated": "Terakhir diperbarui: 5 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
     "Crosstune tidak punya server. Riwayatmu tetap di ponselmu.",
     "Link yang kamu konversi hanya dikirim ke layanan musik yang terkait.",
+    "Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya.",
     "Hapus riwayat kapan saja di aplikasi."
   ],
   "details_h2": "Detail",
@@ -109,11 +110,19 @@
     ],
     [
       "h2",
+      "Pengenalan lagu"
+    ],
+    [
+      "p",
+      "Saat Anda meminta Crosstune mengenali lagu, Crosstune merekam suara dari mikrofon hanya selama mendengarkan, paling lama 12 detik, dan berhenti begitu lagunya ditemukan. Di ponsel Anda, suara itu diubah menjadi sidik jari dari titik-titik terkerasnya. Hanya sidik jari itu yang dikirim ke Shazam, tidak pernah rekamannya, dan rekamannya tidak disimpan. Crosstune tidak mengirim lokasi Anda. Shazam menjawab dengan judul, artis, sampul, dan ID Apple Music lagu itu, lalu Crosstune mencari lagunya seperti link yang ditempel. Seperti permintaan lain, permintaan ini memperlihatkan alamat IP Anda ke Shazam, yang memprosesnya sesuai kebijakan privasinya sendiri. Di Setelan, Anda bisa memilih Shazam atau aplikasi Google untuk mengenali lagu; keduanya mendengarkan sesuai kebijakan privasi masing-masing."
+    ],
+    [
+      "h2",
       "Izin dan keamanan"
     ],
     [
       "p",
-      "Crosstune memakai izin internet Android untuk mengambil informasi musik dan gambar sampul. Aplikasi tidak meminta izin lokasi, mikrofon, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika kamu menambahkan aplikasi atau situs sendiri, pilih alamat HTTPS yang tepercaya. Tombol untuk mengenali lagu membuka Shazam atau aplikasi Google, yang mendengarkan sesuai kebijakan privasi masing-masing. Crosstune sendiri tidak pernah memakai mikrofon."
+      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu, dan memakai mikrofon hanya selama mendengarkan. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya."
     ],
     [
       "h2",

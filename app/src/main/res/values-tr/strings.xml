@@ -164,4 +164,10 @@
     <string name="setup_fixed">Düzeltildi</string>
     <string name="choose_app_button">Uygulama seç</string>
     <string name="make_default_named">%1$s varsayılan olsun</string>
+    <string name="listening_text">Dinleniyor…</string>
+    <string name="error_no_match">Şarkı tanınamadı. Müziğe daha yakın tekrar deneyin.</string>
+    <string name="error_microphone">Crosstune\'un şarkıları tanımak için mikrofona ihtiyacı var.</string>
+    <string name="error_recognition_unavailable">Şarkı tanıma şu anda kullanılamıyor.</string>
+    <string name="open_settings_button">Ayarları aç</string>
+    <string name="open_app_button">%1$s uygulamasını aç</string>
 </resources>

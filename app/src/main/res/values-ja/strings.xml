@@ -165,4 +165,10 @@
     <string name="setup_fixed">解決済み</string>
     <string name="choose_app_button">アプリを選ぶ</string>
     <string name="make_default_named">%1$s をデフォルトにする</string>
+    <string name="listening_text">聞き取り中…</string>
+    <string name="error_no_match">曲を認識できませんでした。音楽に近づいてもう一度お試しください。</string>
+    <string name="error_microphone">曲を認識するには、Crosstune にマイクへのアクセスが必要です。</string>
+    <string name="error_recognition_unavailable">現在、曲の認識は利用できません。</string>
+    <string name="open_settings_button">設定を開く</string>
+    <string name="open_app_button">%1$s を開く</string>
 </resources>

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
+import android.Manifest
 import androidx.glance.appwidget.updateAll
 import android.net.Uri
 import android.os.Build
@@ -17,6 +18,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +46,7 @@ class MainActivity : ComponentActivity() {
     /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
     private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
-    /** The app picked in Settings for the Recognize button; Shazam, then Google, when none is. */
+    /** The app picked in Settings for the Recognize button; Shazam, Google, then Crosstune, when none is. */
     private var recognizerPick by mutableStateOf<String?>(null)
 
     private val viewModel: MainViewModel by viewModels {
@@ -58,10 +60,16 @@ class MainActivity : ComponentActivity() {
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
+                    SongListener(microphoneFactory(), Shazam(client, computeDispatcher = listenDispatcher), listenDispatcher),
                     systemDispatcher
                 )
             }
         }
+    }
+
+    /** Asked on the first listen; without it, the error offers Android's settings for Crosstune. */
+    private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.listen() else viewModel.showError(AppError.MICROPHONE)
     }
 
     /** Set when launched to read the clipboard, which Android only allows once the window has focus. */
@@ -74,6 +82,10 @@ class MainActivity : ComponentActivity() {
         const val PASTE_ALIAS = "com.astrovm.crosstune.PasteFromClipboard"
         /** The widget's ▶: opens a Recent song in the user's app, like Recent's own ▶. */
         const val ACTION_OPEN_RECENT = "com.astrovm.crosstune.action.OPEN_RECENT"
+        /** Listens for a song playing nearby, from the widget. */
+        const val ACTION_LISTEN = "com.astrovm.crosstune.action.LISTEN"
+        /** The unexported alias the widget listens through, so no other app can make Crosstune listen. */
+        const val LISTEN_ALIAS = "com.astrovm.crosstune.ListenForSong"
         /** On a link, shows it here first, as the widget's songs do when tapped. */
         const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
 
@@ -91,6 +103,13 @@ class MainActivity : ComponentActivity() {
         /** Where what's found for songs is read and written; tests do it in step with the screen. */
         @VisibleForTesting
         internal var lookupDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        @VisibleForTesting
+        internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
+
+        /** Where the microphone is read and its fingerprint made; tests do it in step with the screen. */
+        @VisibleForTesting
+        internal var listenDispatcher: CoroutineDispatcher = Dispatchers.IO
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,7 +169,9 @@ class MainActivity : ComponentActivity() {
                         onPaste = { viewModel.pasteLink(clipboardText()) },
                         recognizers = recognizers,
                         recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
-                        onRecognize = { tryStartActivity(it.intent) },
+                        onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
+                        onStopListening = viewModel::stopListening,
+                        onOpenMicrophoneSettings = { tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri())) },
                         onRecognizerChange = { picked ->
                             recognizerPick = picked.packageName
                             getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(SongRecognizers.KEY_PICK, picked.packageName).apply()
@@ -158,7 +179,7 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch { CrosstuneWidget().updateAll(applicationContext) }
                         },
                         onClear = viewModel::clear,
-                        onRetry = viewModel::retry,
+                        onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
                         onOpen = { viewModel.openResult() },
                         onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },
                         onOpenOriginal = viewModel::openOriginal,
@@ -214,8 +235,23 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
-        recognizers = SongRecognizers.available(packageManager)
+        recognizers = SongRecognizers.available(this)
         recognizerPick = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getString(SongRecognizers.KEY_PICK, null)
+    }
+
+    /** Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it. */
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && viewModel.uiState.listening) viewModel.stopListening()
+    }
+
+    /** Listens, asking for the microphone first if it hasn't been allowed. */
+    private fun listen() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.listen()
+        } else {
+            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -253,6 +289,7 @@ class MainActivity : ComponentActivity() {
                 show = viewModel.uiState.showSongFirst
             )
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
+            ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) listen()
         }
     }
 
