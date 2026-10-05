@@ -4,6 +4,7 @@
     <string name="spotify_link_placeholder">Müzik bağlantısı yapıştırın</string>
     <string name="resolve_button">Bağlantıyı dönüştür</string>
     <string name="paste_button">Yapıştır</string>
+    <string name="recognize_button">Şarkıyı tanı</string>
     <string name="clear_button">Temizle</string>
     <string name="loading_text">Bağlantı aranıyor…</string>
     <string name="open_in_youtube_music">YouTube Music\'te aç</string>

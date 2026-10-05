@@ -18,6 +18,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
@@ -37,6 +40,9 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+
+    /** How to name a song playing nearby, looked up again whenever the app comes back. */
+    private var recognizer by mutableStateOf<Intent?>(null)
 
     private val viewModel: MainViewModel by viewModels {
         viewModelFactory {
@@ -138,6 +144,7 @@ class MainActivity : ComponentActivity() {
                         onUrlChange = viewModel::onUrlChange,
                         onResolve = viewModel::resolveTypedInput,
                         onPaste = { viewModel.pasteLink(clipboardText()) },
+                        onRecognize = recognizer?.let { intent -> { tryStartActivity(intent) } },
                         onClear = viewModel::clear,
                         onRetry = viewModel::retry,
                         onOpen = { viewModel.openResult() },
@@ -195,6 +202,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
+        recognizer = SongRecognizers.intent(packageManager)
     }
 
     override fun onNewIntent(intent: Intent) {

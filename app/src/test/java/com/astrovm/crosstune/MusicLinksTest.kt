@@ -19,6 +19,22 @@ class MusicLinksTest {
     private fun recognized(text: String) = (MusicLinks.parse(text) as? LinkInput.RecognizedSong)?.metadata
 
     @Test
+    fun shazamSongsOpenAsTheirAppleMusicSong() {
+        val song = LinkInput.Link(MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1109658204", "https://music.apple.com/us/song/1109658204", "us"))
+        assertEquals(song, MusicLinks.parse("https://www.shazam.com/song/1109658204/iris"))
+        // As Shazam shares it, and copied without the scheme.
+        assertEquals(song, MusicLinks.parse("I used Shazam to discover Iris by The Goo Goo Dolls. https://www.shazam.com/song/1109658204/iris?referrer=share"))
+        assertEquals(song, MusicLinks.parse("shazam.com/song/1109658204"))
+        // Older links use Shazam's own key, looked up later.
+        assertEquals(LinkInput.ShazamTrack("20066955"), MusicLinks.parse("https://www.shazam.com/track/20066955/kiss-the-rain"))
+        // Shazam's other pages aren't songs.
+        assertEquals(null, MusicLinks.parse("https://www.shazam.com/artist/hugel/978839124"))
+        assertEquals(null, MusicLinks.parse("https://www.shazam.com/song/iris"))
+        assertEquals(null, MusicLinks.parse("https://www.shazam.com/track/kiss-the-rain"))
+        assertEquals(null, MusicLinks.parse("https://www.shazam.com/charts/top-200/world"))
+    }
+
+    @Test
     fun nowPlayingSharesDecodeSongAndArtist() {
         val expected = LinkInput.RecognizedSong(
             "https://www.google.com/search?q=A%20Song%20by%20Example%20Band",

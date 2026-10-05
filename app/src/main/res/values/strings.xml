@@ -8,6 +8,7 @@
     <string name="spotify_link_placeholder">Paste a music link</string>
     <string name="resolve_button">Convert link</string>
     <string name="paste_button">Paste</string>
+    <string name="recognize_button">Recognize a song</string>
     <string name="clear_button">Clear</string>
     <string name="loading_text">Looking up the link…</string>
     <string name="target_youtube_music" translatable="false">YouTube Music</string>

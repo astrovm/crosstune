@@ -66,7 +66,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 3 oktober 2026",
+  "updated": "Laatst bijgewerkt: 4 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Om een muzieklink om te zetten, vraagt Crosstune de openbare pagina of openbare API op bij de bronservice. De app laadt ook de hoes van de afbeeldingsservers van de service. Ondersteunde bronservices zijn onder andere Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack."
+      "Om een muzieklink om te zetten, vraagt Crosstune de openbare pagina of openbare API op bij de bronservice. De app laadt ook de hoes van de afbeeldingsservers van de service. Ondersteunde bronservices zijn onder andere Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack. Shazam-links worden gelezen via de zoekfunctie van Apple Music, en oudere eerst via de openbare API van Shazam."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. De app vraagt geen machtigingen voor locatie, microfoon, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekservices gebruiken HTTPS. Als je een eigen bestemming instelt, kies dan een vertrouwd HTTPS-adres."
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. De app vraagt geen machtigingen voor locatie, microfoon, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekservices gebruiken HTTPS. Als je een eigen bestemming instelt, kies dan een vertrouwd HTTPS-adres. De knop om een nummer te herkennen opent Shazam of de Google-app, die luisteren volgens hun eigen privacybeleid. Crosstune zelf gebruikt nooit de microfoon."
     ],
     [
       "h2",

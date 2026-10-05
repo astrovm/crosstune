@@ -4,6 +4,7 @@
     <string name="spotify_link_placeholder">粘贴音乐链接</string>
     <string name="resolve_button">转换链接</string>
     <string name="paste_button">粘贴</string>
+    <string name="recognize_button">识别歌曲</string>
     <string name="clear_button">清除</string>
     <string name="loading_text">正在查找链接…</string>
     <string name="open_in_youtube_music">在 YouTube Music 中打开</string>

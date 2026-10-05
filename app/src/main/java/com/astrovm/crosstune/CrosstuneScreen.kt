@@ -116,6 +116,8 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
+    /** Opens an app that names a song playing nearby; null when there's none. */
+    val onRecognize: (() -> Unit)? = null,
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
@@ -573,8 +575,16 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             // Paste turns into clear as soon as there's text, and back.
             AnimatedContent(targetState = state.linkText.isEmpty(), transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
-                    IconButton(onClick = actions.onPaste, enabled = !busy) {
-                        AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
+                    Row {
+                        // A song playing nearby, once named, is shared back here.
+                        actions.onRecognize?.let { recognize ->
+                            IconButton(onClick = recognize, enabled = !busy) {
+                                AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+                            }
+                        }
+                        IconButton(onClick = actions.onPaste, enabled = !busy) {
+                            AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
+                        }
                     }
                 } else {
                     IconButton(onClick = actions.onClear, enabled = !busy) {

@@ -40,6 +40,7 @@ internal class LinkResolver(
     suspend fun resolve(input: LinkInput): Resolution = when (input) {
         is LinkInput.Link -> resolveLink(input.link)
         is LinkInput.ShortLink -> guarded(null) { resolveShortLink(input.url) }
+        is LinkInput.ShazamTrack -> guarded(null) { resolveShazamTrack(input.key) }
         is LinkInput.RecognizedSong -> Resolution.Resolved(
             MusicLink(null, ItemType.TRACK, input.url, input.url), input.metadata
         )
@@ -51,6 +52,28 @@ internal class LinkResolver(
             ?: MusicLinks.fromPage(body)
             ?: return Resolution.Failed(httpError(response) ?: AppError.INVALID_URL)
         return resolveLink(link)
+    }
+
+    /**
+     * An older Shazam link's song, from Shazam's public API. It opens as the song on Apple Music,
+     * like newer Shazam links, or else by its name, like a song Now Playing heard.
+     */
+    private suspend fun resolveShazamTrack(key: String): Resolution {
+        val (response, body) = fetch("https://cdn.shazam.com/discovery/v5/en-US/US/web/-/track/$key")
+        httpError(response)?.let { return Resolution.Failed(it) }
+        // It answers an unknown key with no content.
+        if (body.isBlank()) return Resolution.Failed(AppError.NOT_FOUND)
+        val song = JSONObject(body)
+        song.optString("trackadamid").takeIf { it.isNotEmpty() }?.let { id ->
+            return resolveLink(MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, id, "https://music.apple.com/us/song/$id", "us"))
+        }
+        val metadata = MusicMetadata(
+            title = song.optString("title").takeIf { it.isNotBlank() } ?: return Resolution.Failed(AppError.METADATA_UNAVAILABLE),
+            artist = song.optString("subtitle"),
+            artworkUrl = song.optJSONObject("images")?.optString("coverart")?.takeIf { it.isNotEmpty() }
+        )
+        val recognized = MusicLinks.recognizedSong(metadata)
+        return Resolution.Resolved(MusicLink(null, ItemType.TRACK, recognized.url, recognized.url), metadata)
     }
 
     private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {

@@ -66,7 +66,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 3 Ekim 2026",
+  "updated": "Son güncelleme: 4 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bulunur."
+      "Bir müzik bağlantısını çözümlemek için Crosstune, kaynak servisten bağlantının herkese açık sayfasını veya herkese açık API'sini ister. Ayrıca kapak görsellerini servisin görsel sunucularından yükler. Desteklenen kaynak servisler arasında Spotify, YouTube, YouTube Music, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bulunur. Shazam bağlantıları Apple Music'in aramasıyla, eski olanlar ise önce Shazam'ın herkese açık API'siyle okunur."
     ],
     [
       "p",
@@ -122,7 +122,7 @@
     ],
     [
       "p",
-      "Crosstune, müzik bilgilerini ve kapak görsellerini almak için Android'in internet iznini kullanır. Konum, mikrofon, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Kendi uygulamanızı veya sitenizi eklerseniz güvenilir bir HTTPS adresi seçin."
+      "Crosstune, müzik bilgilerini ve kapak görsellerini almak için Android'in internet iznini kullanır. Konum, mikrofon, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Kendi uygulamanızı veya sitenizi eklerseniz güvenilir bir HTTPS adresi seçin. Şarkı tanıma düğmesi Shazam'ı veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler. Crosstune mikrofonu hiçbir zaman kullanmaz."
     ],
     [
       "h2",

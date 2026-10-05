@@ -18,6 +18,14 @@
         <package android:name="com.soundcloud.android" />
         <package android:name="com.bandcamp.android" />
         <package android:name="com.amazon.mp3" />
+        <!-- Apps that name a song playing nearby (SongRecognizers). -->
+        <package android:name="com.shazam.android" />
+        <intent>
+            <action android:name="com.shazam.android.intent.actions.START_TAGGING" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.googlequicksearchbox.MUSIC_SEARCH" />
+        </intent>
         <!-- Other apps that verify a service's links (LinkInterception.OTHER_LINK_APPS). -->
         <package android:name="com.google.android.apps.youtube.producer" />
         <package android:name="com.google.android.apps.youtube.creator" />

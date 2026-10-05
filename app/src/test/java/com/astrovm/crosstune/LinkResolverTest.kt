@@ -38,6 +38,37 @@ class LinkResolverTest {
     }
 
     @Test
+    fun olderShazamLinksAreLookedUpOnShazamThenAppleMusic() {
+        val api = "https://cdn.shazam.com/discovery/v5/en-US/US/web/-/track/20066955"
+        val lookup = "https://itunes.apple.com/lookup?id=1444027955&country=us"
+        fake.handler = { request ->
+            when (request.url.host) {
+                "cdn.shazam.com" -> FakeSpotify.html(request, """{"key":"20066955","title":"Kiss the Rain","subtitle":"Billie Myers","trackadamid":"1444027955"}""")
+                else -> FakeSpotify.html(request, """{"results":[{"trackName":"Kiss the Rain","artistName":"Billie Myers"}]}""")
+            }
+        }
+        val result = resolve("https://www.shazam.com/track/20066955/kiss-the-rain") as Resolution.Resolved
+        assertEquals(MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1444027955", "https://music.apple.com/us/song/1444027955", "us"), result.link)
+        assertEquals(MusicMetadata("Kiss the Rain", "Billie Myers"), result.metadata)
+        assertEquals(listOf(api, lookup), fake.requestedUrls)
+
+        // A song Apple Music doesn't have is known by its name, like one Now Playing heard.
+        respond("""{"title":"Demo","subtitle":"Band","images":{"coverart":"https://example.com/cover.jpg"}}""")
+        val named = resolve("https://www.shazam.com/track/1/demo") as Resolution.Resolved
+        assertEquals(MusicMetadata("Demo", "Band", artworkUrl = "https://example.com/cover.jpg"), named.metadata)
+        assertEquals(null, named.link.service)
+        assertEquals("https://www.google.com/search?q=Demo%20by%20Band", named.link.url)
+
+        // Shazam answers an unknown key with nothing, and one with no title isn't usable.
+        respond("", code = 204)
+        assertEquals(Resolution.Failed(AppError.NOT_FOUND), resolve("https://www.shazam.com/track/2/x"))
+        respond("""{"images":{}}""")
+        assertEquals(Resolution.Failed(AppError.METADATA_UNAVAILABLE), resolve("https://www.shazam.com/track/3/x"))
+        respond("", code = 503)
+        assertEquals(Resolution.Failed(AppError.SERVICE_UNAVAILABLE), resolve("https://www.shazam.com/track/4/x"))
+    }
+
+    @Test
     fun youtubeAndYoutubeMusicUseOEmbed() {
         respond("""{"title":"Blinding Lights","author_name":"The Weeknd - Topic"}""")
         val oEmbed = "https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fmusic.youtube.com%2Fwatch%3Fv%3D4NRXx6U8ABQ"
