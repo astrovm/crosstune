@@ -6,6 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -1084,43 +1086,52 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         focus.clearFocus()
     }
     BackHandler(enabled = searchExpanded) { closeSearch() }
-    SectionHeader(
-        title = stringResource(R.string.history_title),
-        action = {
-            Row {
-                IconButton(onClick = { if (searchExpanded) closeSearch() else searchExpanded = true }) {
-                    AppIcon(
-                        if (searchExpanded) R.drawable.ic_close else R.drawable.ic_search,
-                        contentDescription = stringResource(if (searchExpanded) R.string.dismiss_button else R.string.search_recent)
-                    )
-                }
-                IconButton(onClick = actions.onClearHistory) {
-                    AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.clear_history_button))
-                }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 10.dp).heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AnimatedContent(
+            targetState = searchExpanded,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                (fadeIn(Motion.fadeIn) + expandHorizontally(Motion.size, expandFrom = Alignment.End)) togetherWith fadeOut(Motion.fadeOut)
+            },
+            label = "recent search"
+        ) { expanded ->
+            if (expanded) {
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search_recent)) },
+                    leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
+                    shape = MaterialTheme.shapes.large,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            } else {
+                Text(
+                    text = stringResource(R.string.history_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-        },
-        modifier = Modifier.padding(top = 8.dp)
-    )
-    AnimatedVisibility(visible = searchExpanded, enter = Motion.appear, exit = Motion.disappear) {
-        TextField(
-            value = query,
-            onValueChange = { query = it },
-            singleLine = true,
-            placeholder = { Text(stringResource(R.string.search_recent)) },
-            leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
-            shape = MaterialTheme.shapes.large,
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-                .focusRequester(focusRequester)
-        )
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        }
+        IconButton(onClick = { if (searchExpanded) closeSearch() else searchExpanded = true }) {
+            AppIcon(
+                if (searchExpanded) R.drawable.ic_close else R.drawable.ic_search,
+                contentDescription = stringResource(if (searchExpanded) R.string.close_recent_search else R.string.search_recent)
+            )
+        }
+        IconButton(onClick = actions.onClearHistory) {
+            AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.clear_history_button))
+        }
     }
     val words = query.trim().lowercase().split(" ").filter { it.isNotEmpty() }
     val shown = history.filter { entry ->

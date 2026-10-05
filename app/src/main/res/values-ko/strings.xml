@@ -84,6 +84,7 @@
     <string name="retry_button">다시 시도</string>
     <string name="history_title">최근</string>
     <string name="search_recent">최근 항목 검색</string>
+    <string name="close_recent_search">검색 닫기</string>
     <string name="playlist_songs_title">노래</string>
     <string name="play_all_button">모두 재생</string>
     <string name="play_all_progress">노래를 찾는 중… %1$d/%2$d</string>

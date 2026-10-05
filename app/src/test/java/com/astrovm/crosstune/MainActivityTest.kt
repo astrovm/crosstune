@@ -304,6 +304,9 @@ class MainActivityTest {
         assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
 
         // Uninstalling the preferred app keeps recognition usable and the preference intact.
+        // Remove the fake components too: Robolectric keeps their manifest registry separately.
+        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Main"))
+        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"))
         shadowOf(app.packageManager).removePackage(SongRecognizers.SHAZAM)
         resume()
         click(recognize)
@@ -960,7 +963,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextAbsent("Song 3")
         // Closing search clears the filter; reopening starts with an empty field.
-        click(string(R.string.dismiss_button))
+        click(string(R.string.close_recent_search))
         assertTextShown("Song 3")
         assertTextShown("Song 4")
         composeRule.onNodeWithText(search).assertDoesNotExist()

@@ -84,6 +84,7 @@
     <string name="retry_button">Reintentar</string>
     <string name="history_title">Recientes</string>
     <string name="search_recent">Buscar en Recientes</string>
+    <string name="close_recent_search">Cerrar búsqueda</string>
     <string name="playlist_songs_title">Canciones</string>
     <string name="play_all_button">Reproducir todo</string>
     <string name="play_all_progress">Buscando canciones… %1$d de %2$d</string>

@@ -84,6 +84,7 @@
     <string name="retry_button">Réessayer</string>
     <string name="history_title">Récents</string>
     <string name="search_recent">Rechercher dans Récents</string>
+    <string name="close_recent_search">Fermer la recherche</string>
     <string name="playlist_songs_title">Titres</string>
     <string name="play_all_button">Tout lire</string>
     <string name="play_all_progress">Recherche des titres… %1$d sur %2$d</string>

@@ -99,6 +99,7 @@
     <string name="retry_button">Try again</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>
+    <string name="close_recent_search">Close search</string>
     <string name="playlist_songs_title">Songs</string>
     <string name="play_all_button">Play all</string>
     <string name="play_all_progress">Finding songs… %1$d of %2$d</string>

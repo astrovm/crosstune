@@ -84,6 +84,7 @@
     <string name="retry_button">Opnieuw proberen</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Zoeken in Recent</string>
+    <string name="close_recent_search">Zoeken sluiten</string>
     <string name="playlist_songs_title">Nummers</string>
     <string name="play_all_button">Alles afspelen</string>
     <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>

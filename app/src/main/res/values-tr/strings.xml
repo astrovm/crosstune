@@ -84,6 +84,7 @@
     <string name="retry_button">Tekrar dene</string>
     <string name="history_title">Son kullanılanlar</string>
     <string name="search_recent">Son kullanılanlarda ara</string>
+    <string name="close_recent_search">Aramayı kapat</string>
     <string name="playlist_songs_title">Şarkılar</string>
     <string name="play_all_button">Tümünü çal</string>
     <string name="play_all_progress">Şarkılar aranıyor… %2$d şarkıdan %1$d</string>

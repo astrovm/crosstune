@@ -84,6 +84,7 @@
     <string name="retry_button">Coba lagi</string>
     <string name="history_title">Terbaru</string>
     <string name="search_recent">Cari di Terbaru</string>
+    <string name="close_recent_search">Tutup pencarian</string>
     <string name="playlist_songs_title">Lagu</string>
     <string name="play_all_button">Putar semua</string>
     <string name="play_all_progress">Mencari lagu… %1$d dari %2$d</string>
