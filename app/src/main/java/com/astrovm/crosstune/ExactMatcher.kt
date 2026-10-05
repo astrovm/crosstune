@@ -88,16 +88,26 @@ internal class ExactMatcher(
         return remembered("find", target.name, metadata) { lookUp(target, metadata) }
     }
 
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata): String? =
+    /**
+     * For a queue, where a song that plays beats one that is left out: the first song by the same
+     * artist whose title shares at least half its words, e.g. a title written in another script
+     * or a classical work's long name. Songs only, and only after [match] found none.
+     */
+    private suspend fun matchLoosely(target: MusicService, metadata: MusicMetadata): String? {
+        if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) return null
+        return remembered("loose", target.name, metadata) { lookUp(target, metadata, loosely = true) }
+    }
+
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false): String? =
         withTimeoutOrNull(TIMEOUT_MS) {
             try {
                 when (target) {
                     MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
                     MusicService.DEEZER -> findOnDeezer(metadata)
                     MusicService.BANDCAMP -> findOnBandcamp(metadata)
-                    MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL)
+                    MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
                     // YouTube.
-                    else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL)
+                    else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
                 }
             } catch (_: IOException) {
                 null
@@ -124,7 +134,7 @@ internal class ExactMatcher(
         val ids = coroutineScope {
             tracks.map { track ->
                 async {
-                    lookups.withPermit { match(target, track) }.also { onProgress(looked.incrementAndGet()) }
+                    lookups.withPermit { match(target, track) ?: matchLoosely(target, track) }.also { onProgress(looked.incrementAndGet()) }
                 }
             }.awaitAll()
         }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }.distinct()
@@ -300,7 +310,7 @@ internal class ExactMatcher(
      * YouTube Music's search, filtered to songs, albums or artists. Songs are also watchable on
      * YouTube itself, which has no such filter, so [watchUrl] picks the app the video id opens in.
      */
-    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String): String? {
+    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean = false): String? {
         val (params, isSong) = when (metadata.type) {
             ItemType.TRACK -> YOUTUBE_MUSIC_SONGS to true
             ItemType.ALBUM -> YOUTUBE_MUSIC_ALBUMS to false
@@ -323,7 +333,8 @@ internal class ExactMatcher(
             // The second line is "Artist • Album • 4:46" for songs and "Album • Artist • 2012" for albums.
             val details = columns.getOrNull(1).orEmpty().split(" • ")
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
-            if (!matches(metadata, name, artist.ifEmpty { name })) return@firstNotNullOfOrNull null
+            val same = if (loosely) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name })
+            if (!same) return@firstNotNullOfOrNull null
             when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }
                     ?.let { watchUrl + it }
@@ -366,6 +377,19 @@ internal class ExactMatcher(
         val wanted = artists(metadata.artist)
         return wanted.isEmpty() || artists(artist).any(wanted::contains)
     }
+
+    private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean {
+        val wanted = artists(metadata.artist)
+        if (wanted.isNotEmpty() && artists(artist).none(wanted::contains)) return false
+        val ours = words(withoutEditionTag(metadata.title))
+        val theirs = words(withoutEditionTag(name))
+        if (ours.isEmpty() || theirs.isEmpty()) return false
+        return ours.intersect(theirs).size * 2 >= minOf(ours.size, theirs.size)
+    }
+
+    private fun words(title: String): Set<String> =
+        Normalizer.normalize(title, Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "").lowercase(Locale.ROOT)
+            .split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
 
     /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself, which other services list without the tag. */
     private fun withoutEditionTag(title: String): String {

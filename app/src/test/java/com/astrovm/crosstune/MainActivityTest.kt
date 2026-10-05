@@ -1082,10 +1082,9 @@ class MainActivityTest {
         HistoryStore(prefs()).add(HistoryEntry(link, MusicMetadata("Road Trip", "", ItemType.PLAYLIST, tracks = tracks)))
     }
 
-    /** Looking up a whole queue of songs takes longer than the usual wait. */
     private fun widgetPlays(url: String): String? {
         val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
-        composeRule.waitUntil(QUEUE_TIMEOUT_MS) { activity.isFinishing }
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
         return nextStartedActivity()!!.dataString
     }
 
@@ -1093,25 +1092,22 @@ class MainActivityTest {
     fun theWidgetsPlayOnAPlaylistKeepsToTheFirst50AndTheirOwnVideos() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
         savePlaylist((1..51).map { MusicMetadata("Song $it", "Band") })
+        // Every song was found before, so only the playlist is asked of YouTube.
+        val found = (1..51).joinToString(",") { """["find|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
+        java.io.File(app.cacheDir, "lookups.json").writeText("[$found]")
         var asked = ""
         fake.handler = { request ->
-            if (request.url.encodedPath == "/watch_videos") {
-                asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
-                FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=v1&list=TLGGq").build()
-            } else {
-                // Each search is answered by the song named in it.
-                val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
-                val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
-                FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                    "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
-                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                    "playlistItemData":{"videoId":"video${number.padStart(6, '0')}"}}}]}""")
-            }
+            asked = java.net.URLDecoder.decode(request.url.queryParameter("video_ids")!!, "UTF-8")
+            FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=v1&list=TLGGq").build()
         }
 
-        assertEquals("https://music.youtube.com/watch?v=video000001&list=TLGGq", widgetPlays(savedPlaylistUrl))
-        assertEquals(50, asked.split(",").size)
-        assertEquals("video000050", asked.split(",").last())
+        try {
+            assertEquals("https://music.youtube.com/watch?v=video000001&list=TLGGq", widgetPlays(savedPlaylistUrl))
+            assertEquals(50, asked.split(",").size)
+            assertEquals("video000050", asked.split(",").last())
+        } finally {
+            java.io.File(app.cacheDir, "lookups.json").delete()
+        }
     }
 
     @Test
@@ -4595,7 +4591,6 @@ class MainActivityTest {
     // endregion
 
     private companion object {
-        const val QUEUE_TIMEOUT_MS = 120_000L
         const val TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
         const val OTHER_TRACK_ID = "0VjIjW4GlUZAMYd2vXMi3b"
         const val TIMEOUT_MS = 5_000L

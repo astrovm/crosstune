@@ -447,6 +447,43 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().cover(MusicMetadata("Song", "")) })
     }
 
+    private fun queueFinds(title: String, artist: String, rowTitle: String, rowArtist: String): String? {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
+            else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow(rowTitle, "$rowArtist • Album • 3:00", videoId = "video000000")))
+        }
+        return runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata(title, artist)), {}) }
+    }
+
+    @Test
+    fun aQueueTakesTheClosestSongOfTheArtistWhenNoTitleIsTheSame() {
+        val played = "https://music.youtube.com/watch?v=video000000"
+        // A title in another script, written out in letters by YouTube Music.
+        assertEquals(played, queueFinds("ふたりの夏物語 NEVER ENDING SUMMER", "S. Kiyotaka & Omega Tribe", "FUTARI NO NATSU MONOGATARI NEVER ENDING SUMMER", "S.Kiyotaka & Omega Tribe"))
+        assertEquals(played, queueFinds("ガラスのPALM TREE", "S. Kiyotaka & Omega Tribe", "GLASS NO PALM TREE", "S.Kiyotaka & Omega Tribe"))
+        // A classical work's long name, which every service writes its own way.
+        assertEquals(played, queueFinds(
+            "Ellens Gesang III, Op. 52 No. 6, D. 839 \"Ave Maria\" (Hymne an die Jungfrau)", "Franz Schubert, Daniel Perret",
+            "Ellens Gesang III, D. 839, Op. 52 No. 6, Ave Maria", "Daniel Perret & Franz Schubert"
+        ))
+        // The song of another artist, or one that shares too little, is not taken.
+        assertEquals(null, queueFinds("Perfect", "The Smashing Pumpkins", "Perfect", "Simple Plan"))
+        assertEquals(null, queueFinds("Perfect Day", "Band", "Another Song Entirely", "Band"))
+        assertEquals(null, queueFinds("", "Band", "Anything", "Band"))
+    }
+
+    @Test
+    fun aSingleSongIsStillOnlyOpenedWhenItsTitleIsTheSame() {
+        respond(youTubeMusicPage(youTubeMusicRow("GLASS NO PALM TREE", "S.Kiyotaka & Omega Tribe • Album • 3:00", videoId = "video000000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("ガラスのPALM TREE", "S. Kiyotaka & Omega Tribe")) })
+    }
+
+    @Test
+    fun aQueueDoesNotTakeAnAlbumOrArtistLoosely() {
+        respond(youTubeMusicPage(youTubeMusicRow("Road Trip", "Album • Band • 2020", browseId = "MPREb_x")))
+        assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Road Trip", "Band", ItemType.ALBUM))) {} })
+    }
+
     @Test
     fun youTubeOnlyOpensSongsFromTheSameSearch() {
         respond(youTubeMusicPage(youTubeMusicRow("Beyonce Song", "Carly Rae Jepsen • Album • 3:20", videoId = "exact000000")))
