@@ -2395,9 +2395,16 @@ class MainActivityTest {
         assertTextShown(string(R.string.lyrics_button))
         assertTextAbsent("夜が灯りを投げるBedで")
 
+        // The words take a moment to come back, and the sheet says it is getting them rather than
+        // sitting blank while it waits. The delay is what keeps that state on screen long enough to
+        // be seen at all, on a loaded machine as well as a quiet one.
+        fake.delayMillis = 500
         click(string(R.string.lyrics_button))
+        waitForText(string(R.string.lyrics_loading))
         waitForText("夜が灯りを投げるBedで")
+        fake.delayMillis = 0
         assertTextShown("Dakare Ni Kita Onna · Kingo Hamada")
+
         // Closed by the dialog itself, so the screen underneath is the song again.
         composeRule.onAllNodesWithText(string(R.string.dismiss_button)).onLast().performClick()
         assertTextAbsent("夜が灯りを投げるBedで")
