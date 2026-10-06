@@ -170,14 +170,12 @@
     <string name="error_recognition_unavailable">歌曲识别目前不可用。</string>
     <string name="open_settings_button">打开设置</string>
     <string name="open_app_button">打开 %1$s</string>
-    <string name="lyrics_button">歌曲</string>
+    <string name="lyrics_button">歌词</string>
     <string name="lyrics_title">歌词</string>
     <string name="lyrics_loading">正在查找歌词…</string>
     <string name="lyrics_none">没有找到这首歌的歌词。</string>
     <string name="lyrics_failed">暂时无法获取歌词。</string>
     <string name="song_search_title">歌曲</string>
     <string name="song_search_none">没有找到与“%1$s”匹配的歌曲。</string>
-    <string name="song_search_placeholder">歌曲或艺人</string>
-    <string name="song_search_label">歌曲名</string>
     <string name="song_search_label_for">“%1$s”的搜索结果</string>
 </resources>

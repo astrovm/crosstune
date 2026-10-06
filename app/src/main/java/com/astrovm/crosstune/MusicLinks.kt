@@ -134,9 +134,10 @@ internal object MusicLinks {
     private val schemeRegex = Regex("""^[a-z][a-z0-9+.-]*:""", RegexOption.IGNORE_CASE)
 
     /**
- * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters is
- * well past any title anyone types, and short enough to catch an id with a character added or lost.
- */
+     * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters
+     * is well past any title anyone types, and short enough to catch an id with a character added
+     * or lost.
+     */
     private val bareIdRegex = Regex("""[A-Za-z0-9]{20,}""")
 
     /**

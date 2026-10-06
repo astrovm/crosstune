@@ -2503,6 +2503,8 @@ class MainActivityTest {
 
         waitForText(string(R.string.song_search_none, "zzzznotarealsong"))
         assertResultAbsent()
+        // The sheet says it, so no card about a link that went missing is shown on top of it.
+        assertTextAbsent(string(R.string.error_not_found))
     }
 
     @Test

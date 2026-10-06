@@ -170,14 +170,12 @@
     <string name="error_recognition_unavailable">La reconnaissance de titres n\'est pas disponible pour le moment.</string>
     <string name="open_settings_button">Ouvrir les paramètres</string>
     <string name="open_app_button">Ouvrir %1$s</string>
-    <string name="lyrics_button">Titres</string>
+    <string name="lyrics_button">Paroles</string>
     <string name="lyrics_title">Paroles</string>
     <string name="lyrics_loading">Recherche des paroles…</string>
     <string name="lyrics_none">Aucune parole trouvée pour ce titre.</string>
     <string name="lyrics_failed">Impossible d\'obtenir les paroles pour le moment.</string>
     <string name="song_search_title">Titres</string>
     <string name="song_search_none">Aucun titre trouvé pour « %1$s ».</string>
-    <string name="song_search_placeholder">Titre ou artiste</string>
-    <string name="song_search_label">Nom du titre</string>
     <string name="song_search_label_for">Trouvées pour « %1$s »</string>
 </resources>
