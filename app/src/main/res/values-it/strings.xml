@@ -2,7 +2,7 @@
 <resources>
 
     <string name="spotify_link_label">Link musicale</string>
-    <string name="spotify_link_placeholder">Incolla un link musicale</string>
+    <string name="spotify_link_placeholder">Incolla un link musicale o il nome di un brano</string>
     <string name="resolve_button">Converti link</string>
     <string name="paste_button">Incolla</string>
     <string name="recognize_button">Riconosci un brano</string>
@@ -171,4 +171,14 @@
     <string name="error_recognition_unavailable">Il riconoscimento dei brani non è disponibile al momento.</string>
     <string name="open_settings_button">Apri impostazioni</string>
     <string name="open_app_button">Apri %1$s</string>
+    <string name="lyrics_button">Brani</string>
+    <string name="lyrics_title">Testo</string>
+    <string name="lyrics_loading">Ricerca del testo in corso…</string>
+    <string name="lyrics_none">Nessun testo trovato per questo brano.</string>
+    <string name="lyrics_failed">Non è stato possibile ottenere il testo in questo momento.</string>
+    <string name="song_search_title">Brani</string>
+    <string name="song_search_none">Nessun brano trovato per «%1$s».</string>
+    <string name="song_search_placeholder">Brano o artista</string>
+    <string name="song_search_label">Nome del brano</string>
+    <string name="song_search_label_for">Trovate per «%1$s»</string>
 </resources>

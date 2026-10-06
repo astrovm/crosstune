@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Link musik</string>
-    <string name="spotify_link_placeholder">Tempel link musik</string>
+    <string name="spotify_link_placeholder">Tempel tautan musik atau nama lagu</string>
     <string name="resolve_button">Konversi link</string>
     <string name="paste_button">Tempel</string>
     <string name="recognize_button">Kenali lagu</string>
@@ -170,4 +170,14 @@
     <string name="error_recognition_unavailable">Pengenalan lagu tidak tersedia saat ini.</string>
     <string name="open_settings_button">Buka setelan</string>
     <string name="open_app_button">Buka %1$s</string>
+    <string name="lyrics_button">Lagu</string>
+    <string name="lyrics_title">Lirik</string>
+    <string name="lyrics_loading">Mencari lirik…</string>
+    <string name="lyrics_none">Lirik lagu ini tidak ditemukan.</string>
+    <string name="lyrics_failed">Tidak bisa mengambil lirik saat ini.</string>
+    <string name="song_search_title">Lagu</string>
+    <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
+    <string name="song_search_placeholder">Lagu atau artis</string>
+    <string name="song_search_label">Nama lagu</string>
+    <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>
 </resources>

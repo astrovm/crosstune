@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Musik-Link</string>
-    <string name="spotify_link_placeholder">Musik-Link einfügen</string>
+    <string name="spotify_link_placeholder">Musik-Link oder Songname einfügen</string>
     <string name="resolve_button">Link umwandeln</string>
     <string name="paste_button">Einfügen</string>
     <string name="recognize_button">Song erkennen</string>
@@ -170,4 +170,14 @@
     <string name="error_recognition_unavailable">Die Songerkennung ist gerade nicht verfügbar.</string>
     <string name="open_settings_button">Einstellungen öffnen</string>
     <string name="open_app_button">%1$s öffnen</string>
+    <string name="lyrics_button">Songs</string>
+    <string name="lyrics_title">Songtext</string>
+    <string name="lyrics_loading">Songtext wird gesucht…</string>
+    <string name="lyrics_none">Für diesen Song wurde kein Songtext gefunden.</string>
+    <string name="lyrics_failed">Songtext konnte gerade nicht geladen werden.</string>
+    <string name="song_search_title">Songs</string>
+    <string name="song_search_none">Keine Songs für „%1$s“ gefunden.</string>
+    <string name="song_search_placeholder">Song oder Künstler</string>
+    <string name="song_search_label">Songname</string>
+    <string name="song_search_label_for">Gefunden für „%1$s“</string>
 </resources>

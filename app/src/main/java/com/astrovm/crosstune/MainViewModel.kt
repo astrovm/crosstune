@@ -62,6 +62,20 @@ internal data class UiState(
     val showDestinationPicker: Boolean = false,
     /** A service the picker leaves out: the one the link came from, when opening it there would just go back. */
     val pickerHides: MusicService? = null,
+    /** What a song's lyrics are being fetched for, or null when they aren't shown. */
+    val lyricsFor: MusicMetadata? = null,
+    /** The words fetched, empty while they're on the way or when the service has none. */
+    val lyrics: String = "",
+    /** Set while the words are being fetched. */
+    val isLoadingLyrics: Boolean = false,
+    /** Set when the service wouldn't answer, which isn't the same as the song having no words. */
+    val lyricsFailed: Boolean = false,
+    /** Songs found for typed text that wasn't a link, offered to pick from. */
+    val songSearch: List<MusicMetadata> = emptyList(),
+    /** What was searched for, so an empty list can say what it found nothing for. */
+    val songSearchQuery: String = "",
+    /** Set while the songs for typed text are being looked up. */
+    val isSearchingSongs: Boolean = false,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
@@ -164,6 +178,10 @@ internal sealed interface Effect {
 internal class MainViewModel(
     private val resolver: LinkResolver,
     private val matcher: ExactMatcher,
+    /** Where a song's words come from; nullable so tests need no lyrics service. */
+    private val lyricsFinder: LyricsFinder? = null,
+    /** Where a song typed by name is looked up; nullable so tests need no catalogue. */
+    private val songSearcher: SongSearcher? = null,
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
@@ -302,7 +320,67 @@ internal class MainViewModel(
     /** Resolves what the user typed, leaving the text field as typed. */
     fun resolveTypedInput() {
         uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
-        val input = parse(uiState.linkText) ?: return rejectInput()
+        val input = parse(uiState.linkText)
+        if (input == null) {
+            // Not a link, so it may be a song's name. One with a catalogue behind it gets a list to
+            // pick from; anything else is still not something Crosstune can open.
+            searchSongs(uiState.linkText)
+            return
+        }
+        resolve(input, openWhenReady = false)
+    }
+
+    private var searchJob: Job? = null
+
+    /**
+     * Looks [query] up as a song's name and offers what was found to pick from, so a song can be
+     * converted without its link. Nothing is searched for a link, which is already all it needs.
+     */
+    fun searchSongs(query: String) {
+        val searcher = songSearcher
+        val words = query.trim()
+        // A link Crosstune can't open is reported as one, not looked up as a song named after it.
+        if (searcher == null || words.isEmpty() || MusicLinks.looksLikeALink(words)) return rejectInput()
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            // Whatever was shown before is gone, so the songs found are what the screen is about.
+            uiState = uiState.copy(
+                isSearchingSongs = true,
+                songSearch = emptyList(),
+                result = null,
+                destinationUrls = emptyMap(),
+                link = null
+            )
+            val songs = searcher.search(words)
+            uiState = uiState.copy(isSearchingSongs = false, songSearch = songs, songSearchQuery = words)
+            // Nothing by that name: say so, rather than showing an empty list with no reason in it.
+            if (songs.isEmpty()) uiState = uiState.copy(error = AppError.NOT_FOUND)
+        }
+    }
+
+    /** Closes the songs offered, leaving the typed text as it was. */
+    fun dismissSongSearch() {
+        searchJob?.cancel()
+        uiState = uiState.copy(isSearchingSongs = false, songSearch = emptyList(), songSearchQuery = "")
+    }
+
+    /**
+     * Opens the chosen song where the result goes, matched like a song of its own. Its own link,
+     * where it has one, is what gets resolved, so it opens in the default app exactly as if that
+     * link had been pasted.
+     */
+    fun chooseSong(song: MusicMetadata) {
+        dismissSongSearch()
+        // A song found by name carries its own service's link, which is what gets resolved, so it
+        // opens in the default app exactly as if that link had been pasted.
+        song.url?.let { MusicLinks.parse(it) }?.let { parsed ->
+            uiState = uiState.copy(linkText = (parsed as? LinkInput.Link)?.link?.url ?: song.url)
+            resolve(parsed, openWhenReady = false)
+            return
+        }
+        val input = MusicLinks.recognizedSong(song)
+        job?.cancel()
+        uiState = uiState.copy(linkText = (input as LinkInput.RecognizedSong).text)
         resolve(input, openWhenReady = false)
     }
 
@@ -437,6 +515,7 @@ internal class MainViewModel(
         pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         job?.cancel()
+        dismissLyrics()
         uiState = uiState.copy(
             isLoading = true,
             isMatching = false,
@@ -659,6 +738,43 @@ internal class MainViewModel(
         effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
     }
 
+    private var lyricsJob: Job? = null
+
+    /**
+     * Fetches the shown song's words and shows them. A song with no words of its own says so
+     * rather than showing nothing, so it isn't read as a lookup that hasn't answered.
+     */
+    fun showLyrics() {
+        val song = uiState.result ?: return
+        // Only a song has words, and one whose artist is unknown can't be looked up safely.
+        val finder = lyricsFinder ?: return
+        if (song.type != ItemType.TRACK || song.artist.isBlank()) return
+        // Already showing these words, or on the way, so a second tap doesn't fetch them again. A lookup
+        // that failed is worth asking again, so Retry is the one case that does fetch.
+        if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
+        lyricsJob?.cancel()
+        lyricsJob = viewModelScope.launch {
+            uiState = uiState.copy(lyricsFor = song, lyrics = "", lyricsFailed = false, isLoadingLyrics = true)
+            try {
+                // A lookup that failed says so, rather than claiming the song has no words.
+                when (val answer = finder.lyricsOf(song)) {
+                    is LyricsFinder.Lyrics.Found -> uiState = uiState.copy(lyrics = answer.words, lyricsFailed = false)
+                    LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                    LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
+                }
+            } finally {
+                uiState = uiState.copy(isLoadingLyrics = false)
+            }
+        }
+    }
+
+    /** Closes the words. The next song starts without them, rather than showing the last one's. */
+    fun dismissLyrics() {
+        lyricsJob?.cancel()
+        lyricsJob = null
+        uiState = uiState.copy(lyricsFor = null, lyrics = "", lyricsFailed = false, isLoadingLyrics = false)
+    }
+
     private suspend fun prepareDestination(destination: Destination): String? {
         val metadata = uiState.result ?: return null
         val service = destination.matchService
@@ -836,6 +952,7 @@ internal class MainViewModel(
         job?.cancel()
         lastRequest = null
         pendingOpen = false
+        dismissLyrics()
         uiState = uiState.copy(
             linkText = "",
             isLoading = false,

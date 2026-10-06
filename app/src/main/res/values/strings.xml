@@ -5,7 +5,7 @@
     <string name="publisher_name" translatable="false">astrovm</string>
 
     <string name="spotify_link_label">Music link</string>
-    <string name="spotify_link_placeholder">Paste a music link</string>
+    <string name="spotify_link_placeholder">Paste a music link or a song name</string>
     <string name="resolve_button">Convert link</string>
     <string name="paste_button">Paste</string>
     <string name="recognize_button">Recognize a song</string>
@@ -110,6 +110,16 @@
     <string name="part_range">%1$d to %2$d</string>
     <string name="play_first_button">Play first song</string>
     <string name="songs_shown">First %1$d of %2$d</string>
+    <string name="lyrics_button">Lyrics</string>
+    <string name="lyrics_title">Lyrics</string>
+    <string name="lyrics_loading">Getting lyrics…</string>
+    <string name="lyrics_none">No lyrics found for this song.</string>
+    <string name="lyrics_failed">Couldn\'t get lyrics just now.</string>
+    <string name="song_search_title">Songs</string>
+    <string name="song_search_label_for">Found for “%1$s”</string>
+    <string name="song_search_none">No songs found for “%1$s”.</string>
+    <string name="song_search_placeholder">Song or artist</string>
+    <string name="song_search_label">Song name</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
     <string name="shortcut_paste_short">Open copied link</string>

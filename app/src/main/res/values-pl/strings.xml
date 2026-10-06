@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Link muzyczny</string>
-    <string name="spotify_link_placeholder">Wklej link muzyczny</string>
+    <string name="spotify_link_placeholder">Wklej link do muzyki lub nazwę utworu</string>
     <string name="resolve_button">Konwertuj link</string>
     <string name="paste_button">Wklej</string>
     <string name="recognize_button">Rozpoznaj utwór</string>
@@ -170,4 +170,14 @@
     <string name="error_recognition_unavailable">Rozpoznawanie utworów jest teraz niedostępne.</string>
     <string name="open_settings_button">Otwórz ustawienia</string>
     <string name="open_app_button">Otwórz %1$s</string>
+    <string name="lyrics_button">Utwory</string>
+    <string name="lyrics_title">Tekst</string>
+    <string name="lyrics_loading">Szukanie tekstu…</string>
+    <string name="lyrics_none">Nie znaleziono tekstu tego utworu.</string>
+    <string name="lyrics_failed">Nie udało się pobrać tekstu.</string>
+    <string name="song_search_title">Utwory</string>
+    <string name="song_search_none">Nie znaleziono utworów dla „%1$s”.</string>
+    <string name="song_search_placeholder">Utwór lub wykonawca</string>
+    <string name="song_search_label">Nazwa utworu</string>
+    <string name="song_search_label_for">Znalezione dla „%1$s”</string>
 </resources>

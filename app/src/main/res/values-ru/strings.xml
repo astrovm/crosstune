@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">Музыкальная ссылка</string>
-    <string name="spotify_link_placeholder">Вставьте музыкальную ссылку</string>
+    <string name="spotify_link_placeholder">Вставьте музыкальную ссылку или название трека</string>
     <string name="resolve_button">Преобразовать ссылку</string>
     <string name="paste_button">Вставить</string>
     <string name="recognize_button">Распознать трек</string>
@@ -170,4 +170,14 @@
     <string name="error_recognition_unavailable">Распознавание треков сейчас недоступно.</string>
     <string name="open_settings_button">Открыть настройки</string>
     <string name="open_app_button">Открыть %1$s</string>
+    <string name="lyrics_button">Треки</string>
+    <string name="lyrics_title">Текст</string>
+    <string name="lyrics_loading">Ищем текст…</string>
+    <string name="lyrics_none">Для этого трека текст не найден.</string>
+    <string name="lyrics_failed">Не удалось получить текст.</string>
+    <string name="song_search_title">Треки</string>
+    <string name="song_search_none">Треки для «%1$s» не найдены.</string>
+    <string name="song_search_placeholder">Трек или исполнитель</string>
+    <string name="song_search_label">Название трека</string>
+    <string name="song_search_label_for">Найдено по запросу «%1$s»</string>
 </resources>

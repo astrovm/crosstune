@@ -362,13 +362,16 @@ class MainActivityTest {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // Waits on the link that opened, not on the screen closing, which also waits on Android
+        // for the installed apps and can outlast a timeout on a busy machine.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
+        waitUntil { fake.requestedUrls.isNotEmpty() }
         assertOnlyCoverSearches()
         val entry = HistoryStore(prefs()).load().first()
         controller!!.pause().stop().destroy()
-        val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
-        composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
     }
 
@@ -1021,14 +1024,16 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"抱かれに来た女 - Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // Waits on the link that opened rather than on the screen closing, which also waits on
+        // Android for the installed apps, and that can outlast a timeout on a busy machine.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.youtube.com/watch?v=sPmul8b17AU", nextStartedActivity()!!.dataString)
 
         nextStartedActivity()
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Street Dolphin","author_name":"Kingo Hamada"}""") }
-        val other = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
-        composeRule.waitUntil(TIMEOUT_MS) { other.isFinishing }
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=VDuDQNkSC6g")))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=VDuDQNkSC6g", nextStartedActivity()!!.dataString)
     }
 
@@ -1428,12 +1433,14 @@ class MainActivityTest {
         resolveTyped()
         assertResultShown()
 
+        // A name rather than a link is looked up as a song, and the old song goes, since what is
+        // on screen is now the songs that name turned up rather than a result to open.
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
         typeUrl("just some words")
         click(string(R.string.resolve_button))
 
-        // The error stands alone: no old song above it, and no offer to open that song.
-        assertTextShown(string(R.string.error_invalid_url))
         assertResultAbsent()
+        assertTextShown(string(R.string.song_search_title))
         assertTextAbsent(string(R.string.open_in_spotify))
     }
 
@@ -1604,8 +1611,7 @@ class MainActivityTest {
             "https://open.spotify.com/track",
             "https://open.spotify.com/track/not-a-valid-id",
             "/track/$TRACK_ID",
-            "spotify:track:short",
-            "just some words"
+            "spotify:track:short"
         )
         for (input in invalid) {
             typeUrl(input)
@@ -1620,11 +1626,12 @@ class MainActivityTest {
     @Test
     fun editingInputClearsPreviousError() {
         launch()
-        typeUrl("nope")
+        // A link Crosstune can't open, rather than a name, which is looked up instead.
+        typeUrl("https://open.spotify.com/track/nope")
         click(string(R.string.resolve_button))
         assertTextShown(string(R.string.error_invalid_url))
 
-        typeUrl("nope again")
+        typeUrl("https://open.spotify.com/track/nope-again")
         assertTextAbsent(string(R.string.error_invalid_url))
     }
 
@@ -2370,6 +2377,147 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongShowsItsWordsAndSaysSoWhenItHasNoneOrTheServiceIsBusy() {
+        fun lyrics(json: String) {
+            fake.handler = { request ->
+                if (request.url.host == "lrclib.net") FakeSpotify.html(request, json)
+                else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+            }
+        }
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"夜が灯りを投げるBedで"}]"""
+        lyrics(words)
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        waitForResult()
+
+        // Nothing is asked for until the button is tapped.
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.startsWith("https://lrclib.net") })
+        assertTextShown(string(R.string.lyrics_button))
+        assertTextAbsent("夜が灯りを投げるBedで")
+
+        click(string(R.string.lyrics_button))
+        waitForText("夜が灯りを投げるBedで")
+        assertTextShown("Dakare Ni Kita Onna · Kingo Hamada")
+        // Closed by the dialog itself, so the screen underneath is the song again.
+        composeRule.onAllNodesWithText(string(R.string.dismiss_button)).onLast().performClick()
+        assertTextAbsent("夜が灯りを投げるBedで")
+
+        // A song with no words of its own says so, rather than sitting empty.
+        click(string(R.string.clear_button))
+        lyrics("[]")
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        waitForResult()
+        click(string(R.string.lyrics_button))
+        waitForText(string(R.string.lyrics_none))
+
+        // A service that won't answer says that too, and offers another try.
+        click(string(R.string.clear_button))
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
+            } else {
+                FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+            }
+        }
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        waitForResult()
+        click(string(R.string.lyrics_button))
+        waitForText(string(R.string.lyrics_failed))
+        click(string(R.string.retry_button))
+        waitForText(string(R.string.lyrics_failed))
+        // Asked once more on the retry, since a busy service is worth asking again.
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.count { it.startsWith("https://lrclib.net") } >= 5)
+    }
+
+@Test
+    fun theLyricsButtonIsOnlyForASongWhoseArtistIsKnown() {
+        collectionWithSongs(title = "Album", type = "album")
+        launch()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        waitForResult()
+        // An album has no words of its own, and without an artist there's nothing to look up.
+        assertTextAbsent(string(R.string.lyrics_button))
+    }
+
+@Test
+    fun aTypedSongNameIsOfferedToPickFromAndOpensWhereTheResultGoes() {
+        // A name rather than a link, so the songs it turns up are offered to pick from.
+        val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-80-0-0.jpg"
+        fake.handler = { request ->
+            when {
+                request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/track" ->
+                    FakeSpotify.html(request, """{"data":[{"id":608098752,"title":"Machi No Dorufin","link":"https://www.deezer.com/track/608098752","artist":{"name":"Kingo Hamada"},"album":{"cover_big":"$cover"}}]}""")
+                request.url.host == "open.deezer.com" || request.url.host == "www.deezer.com" ||
+                request.url.encodedPath.startsWith("/track/") ->
+                    FakeSpotify.html(request, """{"id":608098752,"title":"Machi No Dorufin","link":"https://www.deezer.com/track/608098752","artist":{"name":"Kingo Hamada"},"album":{"cover_big":"$cover"}}""")
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, """{"contents":[]}""")
+                else -> FakeSpotify.html(request, """{"data":[]}""")
+            }
+        }
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        typeUrl("Kingo Hamada")
+        click(string(R.string.resolve_button))
+
+        // The sheet says what the songs were found for, and offers the song with its artist.
+        waitForText(string(R.string.song_search_title))
+        assertTextShown(string(R.string.song_search_label_for, "Kingo Hamada"))
+        composeRule.onNodeWithText("Machi No Dorufin").performScrollTo().performClick()
+        waitForResult()
+
+        // The chosen song is shown with its own artist, as if its link had been pasted.
+        assertTextShown("Kingo Hamada")
+        assertTextShown(string(R.string.open_in_youtube_music))
+    }
+
+    @Test
+    fun aFoundSongWithNoLinkOfItsOwnIsOpenedByItsNameAndArtist() {
+        // A catalogue row with no link can't be opened as itself, so it's matched by name instead,
+        // which is what the app already does for a song shared without a link.
+        fake.handler = { request ->
+            when {
+                request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/track" ->
+                    FakeSpotify.html(request, """{"data":[{"id":7,"title":"Machi No Dorufin","artist":{"name":"Kingo Hamada"}}]}""")
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, """{"contents":[]}""")
+                else -> FakeSpotify.html(request, """{"data":[]}""")
+            }
+        }
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        typeUrl("Kingo Hamada")
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.song_search_title))
+        composeRule.onNodeWithText("Machi No Dorufin").performScrollTo().performClick()
+        waitForResult()
+
+        assertTextShown("Machi No Dorufin")
+        assertTextShown("Kingo Hamada")
+    }
+
+@Test
+    fun aNameThatFindsNothingSaysSoRatherThanShowingAnEmptyList() {
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
+        launch()
+        typeUrl("zzzznotarealsong")
+        click(string(R.string.resolve_button))
+
+        waitForText(string(R.string.song_search_none, "zzzznotarealsong"))
+        assertResultAbsent()
+    }
+
+    @Test
+    fun aLinkCrosstuneCantOpenIsStillReportedAsALinkRatherThanASongName() {
+        // Something shaped like a link is one, even when Crosstune can't open it, so it isn't
+        // looked up as a song that happens to be named after it.
+        launch()
+        typeUrl("https://notdeezer.com/track/1234")
+        click(string(R.string.resolve_button))
+        assertTextShown(string(R.string.error_invalid_url))
+        assertTextAbsent(string(R.string.song_search_title))
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.contains("/search/track") })
+    }
+
+    @Test
     fun albumsArtistsAndPlaylistsResolveAndSearchByName() {
         fake.handler = { request ->
             val page = when (request.url.pathSegments.first()) {
@@ -3089,24 +3237,24 @@ class MainActivityTest {
         click(string(R.string.settings_button))
 
         click(string(R.string.add_custom_destination_button))
-        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_name_label))).performTextReplacement("Lyrics")
+        composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_name_label))).performTextReplacement("Word Finder")
         composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
-            .performTextReplacement("https://lyrics.example/search")
+            .performTextReplacement("https://words.example/search")
         click(string(R.string.add_button))
         assertTextShown(string(R.string.custom_template_invalid))
 
         composeRule.onNode(hasSetTextAction() and hasText(string(R.string.custom_template_label)))
-            .performTextReplacement("https://lyrics.example/search?q={query}")
+            .performTextReplacement("https://words.example/search?q={query}")
         assertTextAbsent(string(R.string.custom_template_invalid))
         click(string(R.string.add_button))
-        assertTextShown("https://lyrics.example/search?q={query}")
+        assertTextShown("https://words.example/search?q={query}")
         click(string(R.string.back_button))
 
-        chooseDefault("Lyrics")
+        chooseDefault("Word Finder")
         resolveTyped()
-        click(string(R.string.open_in_custom, "Lyrics"))
+        click(string(R.string.open_in_custom, "Word Finder"))
         val opened = nextStartedActivity()!!
-        assertEquals("https://lyrics.example/search?q=Custom%20Song%20Artist", opened.dataString)
+        assertEquals("https://words.example/search?q=Custom%20Song%20Artist", opened.dataString)
         assertEquals(
             "com.example.browser",
             app.packageManager.resolveActivity(opened, 0)!!.activityInfo.packageName
@@ -3114,9 +3262,9 @@ class MainActivityTest {
 
         click(string(R.string.settings_button))
         click(string(R.string.remove_button))
-        assertTextAbsent("https://lyrics.example/search?q={query}")
+        assertTextAbsent("https://words.example/search?q={query}")
         click(string(R.string.back_button))
-        assertTextAbsent("Lyrics")
+        assertTextAbsent("Word Finder")
         assertTextShown(string(R.string.open_in_youtube_music))
     }
 

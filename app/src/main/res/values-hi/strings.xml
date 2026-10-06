@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="spotify_link_label">म्यूज़िक लिंक</string>
-    <string name="spotify_link_placeholder">म्यूज़िक लिंक पेस्ट करें</string>
+    <string name="spotify_link_placeholder">म्यूज़िक लिंक या गाने का नाम पेस्ट करें</string>
     <string name="resolve_button">लिंक बदलें</string>
     <string name="paste_button">पेस्ट करें</string>
     <string name="recognize_button">गाना पहचानें</string>
@@ -170,4 +170,14 @@
     <string name="error_recognition_unavailable">गाना पहचानना अभी उपलब्ध नहीं है।</string>
     <string name="open_settings_button">सेटिंग खोलें</string>
     <string name="open_app_button">%1$s खोलें</string>
+    <string name="lyrics_button">गाने</string>
+    <string name="lyrics_title">बोल</string>
+    <string name="lyrics_loading">बोल खोजे जा रहे हैं…</string>
+    <string name="lyrics_none">इस गाने के बोल नहीं मिले।</string>
+    <string name="lyrics_failed">अभी बोल नहीं लाए जा सके।</string>
+    <string name="song_search_title">गाने</string>
+    <string name="song_search_none">“%1$s” के लिए कोई गाना नहीं मिला।</string>
+    <string name="song_search_placeholder">गाना या कलाकार</string>
+    <string name="song_search_label">गाने का नाम</string>
+    <string name="song_search_label_for">“%1$s” के लिए मिला</string>
 </resources>
