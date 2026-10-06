@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key."
+    ],
+    [
+      "p",
       "Like other internet requests, these requests expose your IP address and normal request information to the contacted service. Those services may retain request logs and process information under their own privacy policies. The developer doesn't control how they process or keep that data. A music service may require its own account or subscription after you open it."
     ],
     [

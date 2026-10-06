@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Wenn du statt eines Links den Namen eines Songs eintippst, sendet Crosstune den Namen an die öffentlichen Song-Suchen von Deezer und Apple und zeigt die gefundenen Songs, damit du den gesuchten Song ohne seinen Link öffnen kannst. Wenn du den Songtext anfragst, sendet die App Titel und Künstler an LRCLIB, einen Songtext-Dienst, der kein Konto und keinen Schlüssel benötigt."
+    ],
+    [
+      "p",
       "Wie andere Internetanfragen geben diese Anfragen deine IP-Adresse und die üblichen Anfrageinformationen an den kontaktierten Dienst weiter. Diese Dienste können Anfrageprotokolle aufbewahren und Informationen nach ihren eigenen Datenschutzrichtlinien verarbeiten. Der Entwickler hat keinen Einfluss darauf, wie sie diese Daten verarbeiten oder aufbewahren. Ein Musikdienst kann nach dem Öffnen ein eigenes Konto oder Abo verlangen."
     ],
     [

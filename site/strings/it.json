@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave."
+    ],
+    [
+      "p",
       "Come ogni altra richiesta su internet, queste richieste espongono il tuo indirizzo IP e le normali informazioni della richiesta al servizio contattato. Questi servizi possono conservare log delle richieste e trattare informazioni secondo le proprie informative sulla privacy. Lo sviluppatore non controlla come trattano o conservano questi dati. Un servizio musicale può richiedere un proprio account o abbonamento dopo che lo apri."
     ],
     [

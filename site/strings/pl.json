@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst utworu, aplikacja wysyła tytuł i wykonawcę do serwisu LRCLIB, który nie wymaga konta ani klucza."
+    ],
+    [
+      "p",
       "Jak każde zapytanie w internecie, te zapytania ujawniają serwisowi, z którym się łączą, Twój adres IP i standardowe informacje o zapytaniu. Te serwisy mogą przechowywać logi zapytań i przetwarzać informacje zgodnie z własnymi politykami prywatności. Deweloper nie ma wpływu na to, jak przetwarzają lub przechowują te dane. Serwis muzyczny może po otwarciu wymagać własnego konta lub subskrypcji."
     ],
     [

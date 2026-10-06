@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Quando você digita o nome de uma música em vez de um link, o Crosstune envia esse nome às buscas públicas de músicas do Deezer e da Apple e mostra as músicas encontradas, para você abrir a música que queria sem o link. Quando você pede a letra de uma música, o app envia o título e o artista à LRCLIB, um serviço de letras que não precisa de conta nem chave."
+    ],
+    [
+      "p",
       "Como outras solicitações pela internet, essas solicitações expõem seu endereço IP e as informações normais da solicitação ao serviço contatado. Esses serviços podem manter registros de solicitações e processar informações de acordo com suas próprias políticas de privacidade. O desenvolvedor não controla como eles processam ou guardam esses dados. Um serviço de música pode exigir uma conta ou assinatura própria depois que você o abrir."
     ],
     [

@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir."
+    ],
+    [
+      "p",
       "Diğer internet istekleri gibi bu istekler de IP adresinizi ve normal istek bilgilerini iletişim kurulan servise açar. Bu servisler istek kayıtlarını saklayabilir ve bilgileri kendi gizlilik politikalarına göre işleyebilir. Geliştirici, bu verileri nasıl işlediklerini veya sakladıklarını kontrol etmez. Bir müzik servisi, açtıktan sonra kendi hesabını veya aboneliğini gerektirebilir."
     ],
     [

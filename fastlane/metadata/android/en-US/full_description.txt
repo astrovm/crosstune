@@ -13,8 +13,9 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Paste with one tap, search and reopen recent links, or open a copied link from the home screen widget, the Quick Settings tile, or by long-pressing the app icon.</li>
 <li>Names a song playing nearby: Crosstune listens itself, or opens Shazam or Google's song search. Also opens Shazam links and songs shared from Pixel Now Playing.</li>
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
+<li>Find a song by typing its name instead of a link, and read the lyrics of any song you open.</li>
 <li>Material You colors on Android 12 and later.</li>
 </ul>
 
 <b>Privacy</b>
-No accounts, analytics or ads. History stays on your device. To show a link's title, artist and cover, Crosstune only asks the service the link comes from. With Open the exact match on, the title and artist also go to the search of Apple, Deezer, YouTube Music, YouTube or Bandcamp. Play all sends the songs' titles and artists to YouTube Music's search, and the videos found to YouTube. To name a song, Crosstune uses the microphone only while listening, and sends Shazam just a fingerprint of the sound, never the audio.
+No accounts, analytics or ads. History stays on your device. To show a link's title, artist and cover, Crosstune only asks the service the link comes from. With Open the exact match on, the title and artist also go to the search of Apple, Deezer, YouTube Music, YouTube or Bandcamp. Play all sends the songs' titles and artists to YouTube Music's search, and the videos found to YouTube. To name a song, Crosstune uses the microphone only while listening, and sends Shazam just a fingerprint of the sound, never the audio. Typing a song's name sends it to Deezer's and Apple's song search, and asking for lyrics sends the song's title and artist to LRCLIB.

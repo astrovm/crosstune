@@ -13,8 +13,9 @@ Qualcuno ti manda un link da un servizio musicale, ma tu ascolti su un altro. To
 <li>Incolla con un tocco, cerca e riapri i link recenti, oppure apri un link copiato dal widget della schermata Home, dal riquadro delle Impostazioni rapide o tenendo premuta l'icona dell'app.</li>
 <li>Riconosce un brano che suona vicino: Crosstune ascolta da solo, oppure apre Shazam o la ricerca di brani di Google. Apre anche i link di Shazam e i brani condivisi da Now Playing sul Pixel.</li>
 <li>Link non leggibile? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
+<li>Trova un brano digitando il suo nome invece di un link, e leggi il testo di qualsiasi brano apri.</li>
 <li>Colori Material You su Android 12 e versioni successive.</li>
 </ul>
 
 <b>Privacy</b>
-Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per mostrare titolo, artista e copertina di un link, Crosstune interroga solo il servizio da cui proviene il link. Con Apri il risultato esatto attivo, titolo e artista vengono inviati anche alla ricerca di Apple, Deezer, YouTube Music, YouTube o Bandcamp. Riproduci tutto invia titoli e artisti dei brani alla ricerca di YouTube Music, e i video trovati a YouTube. Per riconoscere un brano, Crosstune usa il microfono solo mentre ascolta e invia a Shazam solo un'impronta del suono, mai l'audio.
+Nessun account, analisi o pubblicità. La cronologia resta sul tuo dispositivo. Per mostrare titolo, artista e copertina di un link, Crosstune interroga solo il servizio da cui proviene il link. Con Apri il risultato esatto attivo, titolo e artista vengono inviati anche alla ricerca di Apple, Deezer, YouTube Music, YouTube o Bandcamp. Riproduci tutto invia titoli e artisti dei brani alla ricerca di YouTube Music, e i video trovati a YouTube. Per riconoscere un brano, Crosstune usa il microfono solo mentre ascolta e invia a Shazam solo un'impronta del suono, mai l'audio. Digitare il nome di un brano lo invia alla ricerca di brani di Deezer e di Apple, e chiedere il testo invia il titolo e l'artista a LRCLIB.
