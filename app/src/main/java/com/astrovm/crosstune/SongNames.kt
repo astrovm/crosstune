@@ -92,12 +92,16 @@ internal object SongNames {
         }
     }
 
-    /** One of them contains every word of the other, so "Love Me Do" is never "Love Me Tender". */
+    /**
+     * One of them contains every word of the other, so "Love Me Do" is never "Love Me Tender".
+     * A single word only matches the whole of the other title: one word on its own says too
+     * little, but two titles reduced to the same word are the same title with a tag left off.
+     */
     fun wordsMatch(one: String, other: String): Boolean {
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
-        return shorter.size >= 2 && longer.containsAll(shorter)
+        return (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */

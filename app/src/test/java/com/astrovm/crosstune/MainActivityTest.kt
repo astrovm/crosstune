@@ -345,12 +345,12 @@ class MainActivityTest {
         prefs().edit().putBoolean("exact_match", true).commit()
         fake.handler = { request -> FakeSpotify.html(request,
             """{"data":[{"id":123,"title":"A Song","artist":{"name":"Example Band"},"link":"https://www.deezer.com/track/123"}]}""") }
-        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+        launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
             putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
         })
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
         assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") })
     }
@@ -358,7 +358,7 @@ class MainActivityTest {
     @Test
     fun recognizedSongSearchesCustomDestinationInsteadOfOpeningGoogle() {
         DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
-        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+        launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
@@ -378,11 +378,11 @@ class MainActivityTest {
     @Test
     fun pixelNowPlayingShareOpensMusicSearchAndCanReopenFromHistory() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
-        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+        launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val opened = nextStartedActivity()!!
         assertEquals("com.google.android.apps.youtube.music", opened.`package`)
         assertEquals("https://music.youtube.com/search?q=A%20Song%20Example%20Band", opened.dataString)
@@ -390,8 +390,8 @@ class MainActivityTest {
         val saved = HistoryStore(prefs()).load().first()
         assertEquals(MusicMetadata("A Song", "Example Band"), saved.metadata)
         controller!!.pause().stop().destroy()
-        val reopened = launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
-        composeRule.waitUntil(TIMEOUT_MS) { reopened.isFinishing }
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
         assertOnlyCoverSearches()
     }
@@ -399,11 +399,11 @@ class MainActivityTest {
     @Test
     fun aNowPlayingShareInSpanishWithAnAmpersandOpensInTheMusicApp() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
-        val activity = launch(Intent(Intent.ACTION_SEND).apply {
+        launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "Canción de Simon & Garfunkel\nhttps://www.google.com/search?q=Canción+de+Simon+&+Garfunkel")
         })
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/search?q=Canci%C3%B3n%20Simon%20%26%20Garfunkel", nextStartedActivity()!!.dataString)
         assertEquals(MusicMetadata("Canción", "Simon & Garfunkel"), HistoryStore(prefs()).load().first().metadata)
     }
@@ -561,11 +561,11 @@ class MainActivityTest {
     @Test
     fun viewIntentResolvesTrackAndOpensYouTubeMusicThenFinishes() {
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
-        val activity = launch(
+        launch(
             Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID?si=abc"))
         )
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
 
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
         val started = nextStartedActivity()
@@ -618,14 +618,14 @@ class MainActivityTest {
         controller!!.pause().stop().destroy()
 
         // An "Open in" app picked in the share sheet still opens right away.
-        val picked = launch(
+        launch(
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
                 putExtra(Intent.EXTRA_SHORTCUT_ID, "open_in:DEEZER")
             }
         )
-        composeRule.waitUntil(TIMEOUT_MS) { picked.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("deezer.android.app", nextStartedActivity()!!.`package`)
     }
 
@@ -633,14 +633,14 @@ class MainActivityTest {
     fun sharedTextOpensPreferredYouTubeTarget() {
         prefs().edit().putString("default_target", "YOUTUBE").commit()
         respondWithTrack("Song &amp; Dance", "The Band · Song · 2020")
-        val activity = launch(
+        launch(
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "Listen: https://open.spotify.com/track/$TRACK_ID?si=x.")
             }
         )
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
 
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
         val started = nextStartedActivity()
@@ -1012,8 +1012,8 @@ class MainActivityTest {
     fun aYouTubePlaylistOpensAsItselfInYouTubeMusic() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """<meta property="og:title" content="Road Trip">""") }
-        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI")))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", nextStartedActivity()!!.dataString)
     }
 
@@ -1023,7 +1023,7 @@ class MainActivityTest {
         // or none, never stands in for it.
         prefs().edit().putString("default_target", "YOUTUBE").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"抱かれに来た女 - Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
-        val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")))
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")))
         // Waits on the link that opened rather than on the screen closing, which also waits on
         // Android for the installed apps, and that can outlast a timeout on a busy machine.
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -1106,9 +1106,9 @@ class MainActivityTest {
         val url = "https://open.spotify.com/track/$TRACK_ID"
         HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist")))
 
-        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Saved%20Artist", nextStartedActivity()!!.dataString)
         assertTrue(fake.requestedUrls.isEmpty())
     }
@@ -1125,9 +1125,11 @@ class MainActivityTest {
             )
         )
 
-        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // The screen closing waits on Android for the installed apps, which can outlast
+        // a timeout on a loaded machine, so the link that opened is what gets awaited.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
     }
 
@@ -1138,8 +1140,8 @@ class MainActivityTest {
     }
 
     private fun widgetPlays(url: String): String? {
-        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         return nextStartedActivity()!!.dataString
     }
 
@@ -1203,21 +1205,21 @@ class MainActivityTest {
     @Test
     fun theWidgetsPlayOpensASongNoLongerInRecentLikeAnyLink() {
         respondWithTrack("Gone", "Artist · Song")
-        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
     }
 
     @Test
     fun selectedTextOpensInTheDefaultApp() {
         respondWithTrack("Selected", "Artist · Song")
-        val activity = launch(
+        launch(
             Intent(Intent.ACTION_PROCESS_TEXT)
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_PROCESS_TEXT, "https://open.spotify.com/track/$TRACK_ID")
         )
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("com.google.android.apps.youtube.music", nextStartedActivity()!!.`package`)
     }
 
@@ -1345,8 +1347,8 @@ class MainActivityTest {
     fun theTopRowsShareEntrySharesTheConvertedLinkWithoutCrosstune() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
         respondWithTrack("Shared On", "Artist · Song")
-        val activity = launch(sharedFromTopRow("action:SHARE"))
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        launch(sharedFromTopRow("action:SHARE"))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val chooser = nextStartedActivity()!!
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         assertEquals("https://www.deezer.com/search/Shared%20On%20Artist", chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
@@ -1394,7 +1396,7 @@ class MainActivityTest {
     fun aShareSheetTargetOpensTheLinkInItsAppWithoutAsking() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("ask_each_time", true).commit()
         respondWithTrack("Direct", "Artist · Song")
-        val activity = launch(
+        launch(
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/$TRACK_ID")
@@ -1402,7 +1404,7 @@ class MainActivityTest {
             }
         )
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(MusicService.DEEZER.packageName, nextStartedActivity()!!.`package`)
     }
 
@@ -2109,7 +2111,7 @@ class MainActivityTest {
             }
         )
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil { activity.isFinishing }
         assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
     }
 
