@@ -2,8 +2,6 @@ package com.astrovm.crosstune
 
 import android.content.res.Configuration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -11,17 +9,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.astrovm.crosstune.ui.theme.AppTypography
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
-import com.astrovm.crosstune.ui.theme.Forest40
-import com.astrovm.crosstune.ui.theme.Forest80
-import com.astrovm.crosstune.ui.theme.Ember40
-import com.astrovm.crosstune.ui.theme.Ember80
-import com.astrovm.crosstune.ui.theme.Slate40
-import com.astrovm.crosstune.ui.theme.Slate80
+import com.astrovm.crosstune.ui.theme.Lime
+import com.astrovm.crosstune.ui.theme.LimeDark
+import com.astrovm.crosstune.ui.theme.Night
+import com.astrovm.crosstune.ui.theme.Violet
+import com.astrovm.crosstune.ui.theme.VioletLight
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -62,7 +58,7 @@ class PreviewAndThemeTest {
     fun lightThemeUsesLightPalette() {
         val colors = mutableListOf<Color>()
         composeRule.setContent {
-            CrosstuneTheme(darkTheme = false, dynamicColor = false) {
+            CrosstuneTheme(darkTheme = false) {
                 colors += MaterialTheme.colorScheme.primary
                 colors += MaterialTheme.colorScheme.secondary
                 colors += MaterialTheme.colorScheme.tertiary
@@ -70,21 +66,21 @@ class PreviewAndThemeTest {
             }
         }
         composeRule.waitForIdle()
-        assertEquals(listOf(Forest40, Slate40, Ember40), colors.take(3))
+        assertEquals(listOf(Violet, LimeDark, LimeDark), colors.take(3))
     }
 
     @Test
     fun darkThemeUsesDarkPalette() {
         val colors = mutableListOf<Color>()
         composeRule.setContent {
-            CrosstuneTheme(darkTheme = true, dynamicColor = false) {
+            CrosstuneTheme(darkTheme = true) {
                 colors += MaterialTheme.colorScheme.primary
                 colors += MaterialTheme.colorScheme.secondary
                 colors += MaterialTheme.colorScheme.tertiary
             }
         }
         composeRule.waitForIdle()
-        assertEquals(listOf(Forest80, Slate80, Ember80), colors.take(3))
+        assertEquals(listOf(VioletLight, Lime, Lime), colors.take(3))
     }
 
     @Test
@@ -92,12 +88,12 @@ class PreviewAndThemeTest {
     fun themeFollowsSystemDarkMode() {
         val colors = mutableListOf<Color>()
         composeRule.setContent {
-            CrosstuneTheme(dynamicColor = false) {
+            CrosstuneTheme {
                 colors += MaterialTheme.colorScheme.primary
             }
         }
         composeRule.waitForIdle()
-        assertEquals(Forest80, colors.first())
+        assertEquals(VioletLight, colors.first())
     }
 
     @Test
@@ -105,7 +101,7 @@ class PreviewAndThemeTest {
         var dark by mutableStateOf(false)
         val primaries = mutableListOf<Color>()
         composeRule.setContent {
-            CrosstuneTheme(darkTheme = dark, dynamicColor = false) {
+            CrosstuneTheme(darkTheme = dark) {
                 primaries += MaterialTheme.colorScheme.primary
             }
         }
@@ -116,7 +112,7 @@ class PreviewAndThemeTest {
         dark = false
         composeRule.waitForIdle()
 
-        assertEquals(listOf(Forest40, Forest80, Forest40), primaries)
+        assertEquals(listOf(Violet, VioletLight, Violet), primaries)
     }
 
     @Test
@@ -129,7 +125,7 @@ class PreviewAndThemeTest {
                     if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
             }
             CompositionLocalProvider(LocalConfiguration provides configuration) {
-                CrosstuneTheme(dynamicColor = false) {
+                CrosstuneTheme {
                     primaries += MaterialTheme.colorScheme.primary
                 }
             }
@@ -139,35 +135,21 @@ class PreviewAndThemeTest {
         night = true
         composeRule.waitForIdle()
 
-        assertEquals(listOf(Forest40, Forest80), primaries)
+        assertEquals(listOf(Violet, VioletLight), primaries)
     }
 
     @Test
-    fun dynamicColorUsesWallpaperPaletteOnAndroid12AndLater() {
-        val colors = mutableListOf<Color>()
-        lateinit var expected: List<Color>
-        composeRule.setContent {
-            val context = LocalContext.current
-            expected = listOf(
-                dynamicLightColorScheme(context).primary,
-                dynamicDarkColorScheme(context).primary
-            )
-            CrosstuneTheme(darkTheme = false) { colors += MaterialTheme.colorScheme.primary }
-            CrosstuneTheme(darkTheme = true) { colors += MaterialTheme.colorScheme.primary }
-        }
-        composeRule.waitForIdle()
-        assertEquals(expected, colors.take(2))
-    }
-
-    @Test
-    @Config(sdk = [30])
-    fun dynamicColorFallsBackToCrosstunePaletteBeforeAndroid12() {
+    fun theAppKeepsItsOwnColorsWhateverTheWallpaper() {
+        // The covers bring their colors in; the app's own stay the logo's, on Android 12 and later too.
         val colors = mutableListOf<Color>()
         composeRule.setContent {
-            CrosstuneTheme(darkTheme = false) { colors += MaterialTheme.colorScheme.primary }
+            CrosstuneTheme(darkTheme = true) {
+                colors += MaterialTheme.colorScheme.primary
+                colors += MaterialTheme.colorScheme.surface
+            }
         }
         composeRule.waitForIdle()
-        assertEquals(Forest40, colors.first())
+        assertEquals(listOf(VioletLight, Night), colors.take(2))
     }
 
     @Test
@@ -179,7 +161,7 @@ class PreviewAndThemeTest {
         val content: @Composable () -> Unit = { themeContentCompositions++ }
         composeRule.setContent {
             parentCompositions += tick.let { 1 }
-            CrosstuneTheme(darkTheme = false, dynamicColor = false, content = content)
+            CrosstuneTheme(darkTheme = false, content = content)
         }
         composeRule.waitForIdle()
 

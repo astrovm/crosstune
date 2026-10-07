@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -17,17 +18,22 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 /**
  * The app's motion, in one place so everything moves alike: springs for movement, so a change
@@ -56,6 +62,14 @@ internal fun <S> AnimatedContentTransitionScope<S>.slide(forward: Boolean): Cont
     return (slideInHorizontally(Motion.offset) { width -> direction * width / 5 } + fadeIn(Motion.fadeIn)) togetherWith
         (slideOutHorizontally(Motion.offset) { width -> -direction * width / 5 } + fadeOut(Motion.fadeOut))
 }
+
+/** A screen rising over the one below it, [up], or sinking back down to show it again. */
+internal fun <S> AnimatedContentTransitionScope<S>.rise(up: Boolean): ContentTransform =
+    if (up) {
+        (slideInVertically(Motion.offset) { height -> height / 3 } + fadeIn(Motion.fadeIn)) togetherWith fadeOut(Motion.fadeOut)
+    } else {
+        fadeIn(Motion.fadeIn) togetherWith (slideOutVertically(Motion.offset) { height -> height / 3 } + fadeOut(Motion.fadeOut))
+    }
 
 /** One thing swapping for another in place, e.g. a new result for the last one, or nothing for something. */
 internal fun <S> AnimatedContentTransitionScope<S>.swap(): ContentTransform =
@@ -94,4 +108,21 @@ internal fun Modifier.pressScale(interactionSource: InteractionSource): Modifier
 internal fun Modifier.flipWhen(open: Boolean): Modifier {
     val rotation by animateFloatAsState(if (open) 180f else 0f, spring(stiffness = Spring.StiffnessMediumLow), label = "flip")
     return graphicsLayer { rotationZ = rotation }
+}
+
+/**
+ * Rises and fades in when first shown, a beat after the one before it, so a list arrives in a
+ * wave instead of all at once. Only the first few wait, so a long list never keeps anyone waiting.
+ */
+@Composable
+internal fun Modifier.enterIn(index: Int): Modifier {
+    val shown = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(minOf(index, 8) * 40L)
+        shown.animateTo(1f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow))
+    }
+    return graphicsLayer {
+        alpha = shown.value
+        translationY = (1f - shown.value) * 24.dp.toPx()
+    }
 }

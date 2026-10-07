@@ -71,6 +71,12 @@ internal data class UiState(
     val isLoadingLyrics: Boolean = false,
     /** Set when the service wouldn't answer, which isn't the same as the song having no words. */
     val lyricsFailed: Boolean = false,
+    /** The words with when each is sung, so they can follow the song; empty when they aren't timed. */
+    val lyricLines: List<LyricLine> = emptyList(),
+    /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
+    val following: Following? = null,
+    /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
+    val canFollowApps: Boolean = false,
     /** Songs found for typed text that wasn't a link, offered to pick from. */
     val songSearch: List<MusicMetadata> = emptyList(),
     /** What was searched for, so an empty list can say what it found nothing for. */
@@ -183,6 +189,8 @@ internal class MainViewModel(
     private val lyricsFinder: LyricsFinder? = null,
     /** Where a song typed by name is looked up; nullable so tests need no catalogue. */
     private val songSearcher: SongSearcher? = null,
+    /** What music apps are playing, which a song's timed words follow; nullable so tests need none. */
+    private val playback: PlaybackSource? = null,
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
@@ -347,7 +355,8 @@ internal class MainViewModel(
             // Whatever was shown before is gone, so the songs found are what the screen is about.
             uiState = uiState.copy(
                 isSearchingSongs = true,
-                songSearchQuery = "",
+                // The sheet says what it's looking for while it looks.
+                songSearchQuery = words,
                 songSearch = emptyList(),
                 result = null,
                 destinationUrls = emptyMap(),
@@ -477,6 +486,7 @@ internal class MainViewModel(
      */
     fun listen() {
         cancelContentWork()
+        heardSong = null
         retryListens = true
         uiState = uiState.copy(
             listening = true, isLoading = false, isMatching = false, error = null, linkText = "", result = null,
@@ -492,6 +502,7 @@ internal class MainViewModel(
             when (heard) {
                 is Heard.Song -> {
                     retryListens = false
+                    heardSong = heard
                     val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
                         ?: MusicLinks.recognizedSong(heard.metadata)
                     uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
@@ -741,10 +752,15 @@ internal class MainViewModel(
     }
 
     private var lyricsJob: Job? = null
+    private var followJob: Job? = null
+
+    /** The last song Crosstune heard, with where in it the sound heard starts, so its words can follow on. */
+    private var heardSong: Heard.Song? = null
 
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
-     * rather than showing nothing, so it isn't read as a lookup that hasn't answered.
+     * rather than showing nothing, so it isn't read as a lookup that hasn't answered. Timed words
+     * follow the song while something says where it is.
      */
     fun showLyrics() {
         val song = uiState.result ?: return
@@ -755,26 +771,69 @@ internal class MainViewModel(
         // that failed is worth asking again, so Retry is the one case that does fetch.
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         lyricsJob?.cancel()
+        stopFollowing()
         lyricsJob = viewModelScope.launch {
-            uiState = uiState.copy(lyricsFor = song, lyrics = "", lyricsFailed = false, isLoadingLyrics = true)
+            uiState = uiState.copy(
+                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = true,
+                canFollowApps = playback?.hasAccess() == true
+            )
             try {
                 // A lookup that failed says so, rather than claiming the song has no words.
                 when (val answer = finder.lyricsOf(song)) {
-                    is LyricsFinder.Lyrics.Found -> uiState = uiState.copy(lyrics = answer.words, lyricsFailed = false)
+                    is LyricsFinder.Lyrics.Found -> uiState = uiState.copy(lyrics = answer.words, lyricLines = answer.lines, lyricsFailed = false)
                     LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                     LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                 }
             } finally {
                 if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
             }
+            follow(song)
         }
+    }
+
+    /**
+     * Follows [song] as it plays, for its timed words: in the music app playing it, or else from
+     * where Crosstune heard it, which can't tell a pause or a skip but is close while it plays on.
+     */
+    private fun follow(song: MusicMetadata) {
+        stopFollowing()
+        if (uiState.lyricLines.isEmpty()) return
+        val heard = heardSong?.takeIf { SongNames.same(it.metadata.title, song.title) && SongNames.sameArtist(it.metadata.artist, song.artist) }
+            ?.clock?.let { Following(it, app = null, canSeek = false) }
+        uiState = uiState.copy(following = heard)
+        val source = playback?.takeIf { it.hasAccess() } ?: return
+        followJob = viewModelScope.launch {
+            source.follow(song).collect { playing -> uiState = uiState.copy(following = playing ?: heard) }
+        }
+    }
+
+    private fun stopFollowing() {
+        followJob?.cancel()
+        followJob = null
+        uiState = uiState.copy(following = null)
+    }
+
+    /** Back from Android's settings, where following music apps may have just been allowed. */
+    fun refreshFollowing() {
+        val access = playback?.hasAccess() == true
+        if (access == uiState.canFollowApps) return
+        uiState = uiState.copy(canFollowApps = access)
+        uiState.lyricsFor?.takeIf { !uiState.isLoadingLyrics }?.let(::follow)
+    }
+
+    /** Moves the music app playing the song to a line of its words. */
+    fun seekLyrics(positionMs: Long) {
+        val song = uiState.lyricsFor ?: return
+        if (uiState.following?.canSeek != true) return
+        playback?.seekTo(song, positionMs)
     }
 
     /** Closes the words. The next song starts without them, rather than showing the last one's. */
     fun dismissLyrics() {
         lyricsJob?.cancel()
         lyricsJob = null
-        uiState = uiState.copy(lyricsFor = null, lyrics = "", lyricsFailed = false, isLoadingLyrics = false)
+        stopFollowing()
+        uiState = uiState.copy(lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false)
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {

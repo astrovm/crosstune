@@ -63,6 +63,22 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun timedWordsComeWithWhenEachLineIsSung() {
+        // Among the song's own answers, one with timed words wins, so they can follow the song.
+        val plainOnly = answer("Song", "Band", "Plain words")
+        val timed = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:02.50] \n[00:03.00] Second")
+        respond("""[$plainOnly,$timed]""")
+        assertEquals(
+            Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(3_000, "Second"))),
+            found(MusicMetadata("Song", "Band"))
+        )
+
+        // Timed words alone are the words too, once their timings are taken off.
+        respond("""[{"trackName":"Song","artistName":"Band","syncedLyrics":"[00:01.00] Only timed"}]""")
+        assertEquals(Lyrics.Found("Only timed", listOf(LyricLine(1_000, "Only timed"))), found(MusicMetadata("Song", "Band")))
+    }
+
+    @Test
     fun anInstrumentalHasNoWordsRatherThanTheWordNull() {
         // LRCLIB sends an instrumental's words as null, not as an empty text.
         respond("""[{"trackName":"Flight","artistName":"Band","plainLyrics":null,"syncedLyrics":null}]""")
@@ -126,8 +142,8 @@ class LyricsFinderTest {
         respond("""[null,"nope",7]""")
         assertEquals(Lyrics.None, found(MusicMetadata("Song", "Band")))
 
-        // Synced words carry their timings inline, so they're not what a song's lyrics are.
-        respond("""[{"trackName":"Song","artistName":"Band","syncedLyrics":"[00:01.00] Timed"}]""")
+        // Timed words with nothing in them are no words either.
+        respond("""[{"trackName":"Song","artistName":"Band","syncedLyrics":"[00:01.00] "}]""")
         assertEquals(Lyrics.None, found(MusicMetadata("Song", "Band")))
     }
 

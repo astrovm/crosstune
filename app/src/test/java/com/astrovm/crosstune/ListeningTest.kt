@@ -9,6 +9,8 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.provider.Settings
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -119,6 +121,29 @@ class ListeningTest {
         assertTrue(microphone.closed)
         assertEquals(MusicService.APPLE_MUSIC, HistoryStore(prefs()).load().first().link.service)
         assertTrue(!shown(string(R.string.listening_text)))
+    }
+
+    @Test
+    fun theWordsOfASongHeardFollowOnFromWhereItWasHeard() {
+        // Shazam says the sound sent starts 12.5 seconds into the song.
+        val synced = """[{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Start\n[00:10.00] Ten\n[10:00.00] Late"}]"""
+        fake.handler = { request ->
+            when (request.url.host) {
+                "amp.shazam.com" -> FakeSpotify.html(request, """{"matches":[{"id":"1","offset":12.5}],"track":{"title":"Demo","subtitle":"Band"}}""")
+                "lrclib.net" -> FakeSpotify.html(request, synced)
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        allowMicrophone()
+        launch()
+        microphone.play(3.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // No music app plays it, so it follows what Crosstune heard: the line sung from 10 seconds in.
+        waitForText(string(R.string.lyrics_following_heard))
+        composeRule.onNode(hasText("Ten") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        composeRule.onNode(hasText("Late") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)).assertExists()
     }
 
     @Test

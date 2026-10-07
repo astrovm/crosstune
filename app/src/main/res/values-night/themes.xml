@@ -3,7 +3,7 @@
     <style name="Theme.Crosstune" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
     </style>
-    <color name="window_background">#FF141218</color>
+    <color name="window_background">#FF0E0D13</color>
     <color name="widget_background">#FF2B2930</color>
     <color name="widget_text">#FFE6E1E5</color>
     <color name="widget_preview_row">#FF3A3740</color>

@@ -176,6 +176,12 @@
     <string name="lyrics_loading">歌詞を検索しています…</string>
     <string name="lyrics_none">この曲の歌詞は見つかりませんでした。</string>
     <string name="lyrics_failed">今は歌詞を取得できませんでした。</string>
+    <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>
+    <string name="lyrics_follow_allow">音楽アプリで再生中の曲に歌詞を合わせます。</string>
+    <string name="lyrics_follow_play">この曲を音楽アプリで再生すると、歌詞が曲に合わせて進みます。</string>
+    <string name="lyrics_following_app">%1$s に合わせています</string>
+    <string name="lyrics_following_heard">Crosstune が聞き取った位置に合わせています</string>
+    <string name="lyrics_jump">ここへ移動</string>
     <string name="song_search_title">曲</string>
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
     <string name="song_search_label_for">「%1$s」の検索結果</string>

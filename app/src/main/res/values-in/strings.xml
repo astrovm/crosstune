@@ -175,6 +175,12 @@
     <string name="lyrics_loading">Mencari lirik…</string>
     <string name="lyrics_none">Lirik lagu ini tidak ditemukan.</string>
     <string name="lyrics_failed">Tidak bisa mengambil lirik saat ini.</string>
+    <string name="lyrics_sync_service">Sinkronisasi lirik Crosstune</string>
+    <string name="lyrics_follow_allow">Biarkan lirik mengikuti lagu yang diputar di aplikasi musikmu.</string>
+    <string name="lyrics_follow_play">Putar lagu ini di aplikasi musikmu dan liriknya akan mengikuti.</string>
+    <string name="lyrics_following_app">Mengikuti %1$s</string>
+    <string name="lyrics_following_heard">Mengikuti yang didengar Crosstune</string>
+    <string name="lyrics_jump">Lompat ke sini</string>
     <string name="song_search_title">Lagu</string>
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
     <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>

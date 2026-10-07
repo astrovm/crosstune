@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                     ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher)),
                     LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
                     SongSearcher(client),
+                    playbackFactory(applicationContext),
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
@@ -105,6 +106,10 @@ class MainActivity : ComponentActivity() {
         /** Where what's found for songs is read and written; tests do it in step with the screen. */
         @VisibleForTesting
         internal var lookupDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+        /** What music apps are playing, which a song's timed words follow. */
+        @VisibleForTesting
+        internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
 
         @VisibleForTesting
         internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
@@ -183,6 +188,8 @@ class MainActivity : ComponentActivity() {
                         onOpenOriginal = viewModel::openOriginal,
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
+                        onSeekLyrics = viewModel::seekLyrics,
+                        onAllowFollowing = ::openNotificationAccess,
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,
@@ -237,6 +244,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
+        // Or let Crosstune follow what music apps play.
+        viewModel.refreshFollowing()
         recognizers = SongRecognizers.available(this)
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
     }
@@ -320,6 +329,16 @@ class MainActivity : ComponentActivity() {
     private fun clipboardText(): String? {
         val clip = getSystemService(ClipboardManager::class.java)?.primaryClip
         return clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+    }
+
+    /** Android's page for letting Crosstune see what music apps play, at its own entry where Android has one. */
+    private fun openNotificationAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val own = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(this, NowPlayingListener::class.java).flattenToString())
+            if (tryStartActivity(own)) return
+        }
+        tryStartActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
     private fun open(effect: Effect.Open) {

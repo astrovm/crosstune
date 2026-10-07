@@ -115,6 +115,12 @@
     <string name="lyrics_loading">Getting lyrics…</string>
     <string name="lyrics_none">No lyrics found for this song.</string>
     <string name="lyrics_failed">Couldn\'t get lyrics just now.</string>
+    <string name="lyrics_sync_service">Crosstune lyrics sync</string>
+    <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
+    <string name="lyrics_follow_play">Play this song in your music app and the words follow along.</string>
+    <string name="lyrics_following_app">Following %1$s</string>
+    <string name="lyrics_following_heard">Following what Crosstune heard</string>
+    <string name="lyrics_jump">Jump here</string>
     <string name="song_search_title">Songs</string>
     <string name="song_search_label_for">Found for “%1$s”</string>
     <string name="song_search_none">No songs found for “%1$s”.</string>

@@ -19,8 +19,8 @@ import java.io.IOException
  * crowdsourced, so what it gives back is checked against the song asked about before it's
  * believed: the words of a song with the same name by someone else are no use at all.
  *
- * Synced words carry their timings inline, and are left out; plain ones are what a song's
- * lyrics are.
+ * Timed words come with when each line is sung, so they can follow the song as it plays; the plain
+ * words are what's shown when nothing says where in the song it is.
  */
 internal class LyricsFinder(
     private val client: OkHttpClient,
@@ -30,8 +30,8 @@ internal class LyricsFinder(
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
-        /** The words themselves. */
-        data class Found(val words: String) : Lyrics
+        /** The words themselves, and their [lines] with when each is sung, when the service has them timed. */
+        data class Found(val words: String, val lines: List<LyricLine> = emptyList()) : Lyrics
 
         /** The service answered, and holds none for this song. */
         data object None : Lyrics
@@ -53,7 +53,7 @@ internal class LyricsFinder(
                 try {
                     // No list at all means it wouldn't answer, which is not a song without words.
                     val answers = answersFor(metadata) ?: return@withTimeoutOrNull Lyrics.Unavailable
-                    wordsOf(answers, metadata).let { if (it == null) Lyrics.None else Lyrics.Found(it) }
+                    wordsOf(answers, metadata) ?: Lyrics.None
                 } catch (_: IOException) {
                     Lyrics.Unavailable
                 } catch (_: JSONException) {
@@ -65,10 +65,15 @@ internal class LyricsFinder(
         return Lyrics.Unavailable
     }
 
-    private fun wordsOf(answers: List<Answer>, metadata: MusicMetadata): String? {
-        // The service's own answers first, then a close one, as [ExactMatcher] does.
-        val song = answers.firstOrNull { it.isExact(metadata) } ?: answers.firstOrNull { it.belongsTo(metadata) }
-        return song?.plain()
+    private fun wordsOf(answers: List<Answer>, metadata: MusicMetadata): Lyrics.Found? {
+        // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
+        // with timed words wins, so they can follow the song.
+        val songs = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
+        val lines = song.synced()
+        // Timed words are the words too, once their timings are taken off.
+        val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return null }
+        return Lyrics.Found(words, lines)
     }
 
     /** What the service said, or null when it said something that isn't a list of answers. */
@@ -101,6 +106,9 @@ internal class LyricsFinder(
     /** One answer: whose song it claims to be, and its words. */
     private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
         fun plain(): String? = (json.opt("plainLyrics") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+
+        /** The words with when each line is sung, empty when it has none timed. */
+        fun synced(): List<LyricLine> = (json.opt("syncedLyrics") as? String)?.let { SyncedLyrics.withPauses(SyncedLyrics.parse(it)) }.orEmpty()
 
         /**
          * The very song asked about, name for name. A title compared without its edition tag would

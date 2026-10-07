@@ -175,6 +175,12 @@
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
     <string name="lyrics_failed">Sözler şu anda alınamadı.</string>
+    <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>
+    <string name="lyrics_follow_allow">Sözler müzik uygulamanda çalan şarkıyı takip etsin.</string>
+    <string name="lyrics_follow_play">Bu şarkıyı müzik uygulamanda çal, sözler de takip etsin.</string>
+    <string name="lyrics_following_app">%1$s takip ediliyor</string>
+    <string name="lyrics_following_heard">Crosstune\'un duyduğu takip ediliyor</string>
+    <string name="lyrics_jump">Buraya atla</string>
     <string name="song_search_title">Şarkılar</string>
     <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
     <string name="song_search_label_for">“%1$s” için bulundu</string>

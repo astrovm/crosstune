@@ -22,6 +22,8 @@ import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
+import androidx.compose.ui.test.SemanticsMatcher
+import android.os.SystemClock
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
@@ -110,6 +112,7 @@ class MainActivityTest {
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
+        MainActivity.playbackFactory = ::MediaSessionPlayback
     }
 
     // region helpers
@@ -2426,11 +2429,14 @@ class MainActivityTest {
         waitForText(string(R.string.lyrics_loading))
         waitForText("夜が灯りを投げるBedで")
         fake.delayMillis = 0
-        assertTextShown("Dakare Ni Kita Onna · Kingo Hamada")
+        // The words fill the screen, under the song they're of.
+        assertTextShown("Kingo Hamada")
+        assertResultAbsent()
 
-        // Closed by the dialog itself, so the screen underneath is the song again.
-        composeRule.onAllNodesWithText(string(R.string.dismiss_button)).onLast().performClick()
-        assertTextAbsent("夜が灯りを投げるBedで")
+        // Closed from the screen itself, so the song is shown again.
+        click(string(R.string.dismiss_button))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText("夜が灯りを投げるBedで").fetchSemanticsNodes().isEmpty() }
+        waitForResult()
 
         // A song with no words of its own says so, rather than sitting empty.
         click(string(R.string.clear_button))
@@ -2439,6 +2445,7 @@ class MainActivityTest {
         waitForResult()
         click(string(R.string.lyrics_button))
         waitForText(string(R.string.lyrics_none))
+        click(string(R.string.dismiss_button))
 
         // A service that won't answer says that too, and offers another try.
         click(string(R.string.clear_button))
@@ -2459,7 +2466,93 @@ class MainActivityTest {
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.count { it.startsWith("https://lrclib.net") } >= 5)
     }
 
-@Test
+    /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays. */
+    private fun timedSong(): FakePlayback {
+        val playback = FakePlayback()
+        MainActivity.playbackFactory = { playback }
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
+            """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.lyrics_button))
+        return playback
+    }
+
+    private fun assertLit(line: String) =
+        composeRule.onNode(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+
+    @Test
+    fun timedWordsFollowTheMusicAppPlayingTheSongOnceAllowed() {
+        val playback = timedSong()
+        // Not allowed yet, the words say how, and Allow opens Android's page for Crosstune.
+        waitForText(string(R.string.lyrics_follow_allow))
+        click(string(R.string.allow_button))
+        val opened = nextStartedActivity()!!
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, opened.action)
+        assertEquals(
+            ComponentName(app, NowPlayingListener::class.java).flattenToString(),
+            opened.getStringExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME)
+        )
+
+        // Allowed and back, with no app playing it yet.
+        playback.access = true
+        controller!!.pause().resume()
+        waitForText(string(R.string.lyrics_follow_play))
+
+        // Its app plays it, paused 25 seconds in: the second line is lit.
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitForText(string(R.string.lyrics_following_app, "Spotify"))
+        assertLit("Two")
+        // A line tapped moves the app there.
+        composeRule.onNodeWithText("Three").performClick()
+        assertEquals(listOf(40_000L), playback.seeks)
+
+        // Playing on, past the last line; an app that can't jump isn't asked to.
+        playback.playing.value = Following(PlaybackClock(45_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = false)
+        composeRule.waitUntil(TIMEOUT_MS) {
+            composeRule.onAllNodes(hasText("Three") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("One").performClick()
+        assertEquals(listOf(40_000L), playback.seeks)
+
+        // Back goes back to the song.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        waitForResult()
+        // Nothing left to follow, a resume changes nothing.
+        controller!!.pause().resume()
+        assertResultShown()
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun beforeAndroid11AllowOpensTheListOfAppsThatMaySeeWhatPlays() {
+        timedSong()
+        waitForText(string(R.string.lyrics_follow_allow))
+        click(string(R.string.allow_button))
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, nextStartedActivity()!!.action)
+    }
+
+    @Test
+    fun wordsWithNoTimingsReadAsAPage() {
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"Only plain"}]""")
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.lyrics_button))
+        waitForText("Only plain")
+        // Nothing to follow, so nothing says how to.
+        assertTextAbsent(string(R.string.lyrics_follow_play))
+        assertTextAbsent(string(R.string.lyrics_follow_allow))
+    }
+
+    @Test
     fun theLyricsButtonIsOnlyForASongWhoseArtistIsKnown() {
         collectionWithSongs(title = "Album", type = "album")
         launch()

@@ -26,7 +26,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -80,8 +83,8 @@ internal fun SectionHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
             action?.invoke()
@@ -106,7 +109,7 @@ internal fun Group(modifier: Modifier = Modifier, content: @Composable ColumnSco
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(Motion.size),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(content = content)
     }
@@ -116,7 +119,7 @@ internal fun Group(modifier: Modifier = Modifier, content: @Composable ColumnSco
 internal fun GroupDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = 20.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
     )
 }
 
@@ -164,7 +167,7 @@ internal fun CoverArt(url: String?, load: suspend (String) -> ImageBitmap?, size
     Surface(
         modifier = modifier.size(size),
         shape = if (size >= 72.dp) MaterialTheme.shapes.medium else MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -189,4 +192,20 @@ internal fun CoverArt(url: String?, load: suspend (String) -> ImageBitmap?, size
             }
         }
     }
+}
+
+/**
+ * The color a cover leans to, for the glow behind it and the lyrics' backdrop: its average,
+ * brightened so a dark cover still tints, or null until it's loaded or when there's none.
+ */
+@Composable
+internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): Color? {
+    val color by produceState<Color?>(initialValue = null, url) {
+        value = url?.let { load(it) }?.let { image ->
+            val pixel = Bitmap.createScaledBitmap(image.asAndroidBitmap(), 1, 1, true).getPixel(0, 0)
+            val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(pixel, it) }
+            Color.hsv(hsv[0], hsv[1].coerceIn(0.35f, 0.9f), hsv[2].coerceIn(0.55f, 0.95f))
+        }
+    }
+    return color
 }

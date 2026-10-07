@@ -175,6 +175,12 @@
     <string name="lyrics_loading">Tekst opzoeken…</string>
     <string name="lyrics_none">Geen tekst gevonden voor dit nummer.</string>
     <string name="lyrics_failed">Kon de tekst niet ophalen.</string>
+    <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
+    <string name="lyrics_follow_allow">Laat de tekst het nummer volgen dat in je muziek-app speelt.</string>
+    <string name="lyrics_follow_play">Speel dit nummer af in je muziek-app en de tekst volgt mee.</string>
+    <string name="lyrics_following_app">Volgt %1$s</string>
+    <string name="lyrics_following_heard">Volgt wat Crosstune hoorde</string>
+    <string name="lyrics_jump">Hierheen springen</string>
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
     <string name="song_search_label_for">Gevonden voor “%1$s”</string>

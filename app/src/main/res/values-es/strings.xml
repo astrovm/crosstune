@@ -175,6 +175,12 @@
     <string name="lyrics_loading">Buscando la letra…</string>
     <string name="lyrics_none">No se encontró la letra de esta canción.</string>
     <string name="lyrics_failed">No se pudo obtener la letra en este momento.</string>
+    <string name="lyrics_sync_service">Sincronización de letras de Crosstune</string>
+    <string name="lyrics_follow_allow">Hacé que la letra siga la canción que suena en tu app de música.</string>
+    <string name="lyrics_follow_play">Reproducí esta canción en tu app de música y la letra la va a seguir.</string>
+    <string name="lyrics_following_app">Siguiendo %1$s</string>
+    <string name="lyrics_following_heard">Siguiendo lo que escuchó Crosstune</string>
+    <string name="lyrics_jump">Ir acá</string>
     <string name="song_search_title">Canciones</string>
     <string name="song_search_none">No se encontraron canciones para «%1$s».</string>
     <string name="song_search_label_for">Encontradas para «%1$s»</string>

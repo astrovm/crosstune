@@ -711,7 +711,7 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
 @Preview(showBackground = true)
 @Composable
 internal fun SettingsScreenPreview() {
-    CrosstuneTheme(dynamicColor = false) {
+    CrosstuneTheme {
         SettingsScreen(
             state = UiState(
                 intercepted = setOf(MusicService.SPOTIFY, MusicService.YOUTUBE),

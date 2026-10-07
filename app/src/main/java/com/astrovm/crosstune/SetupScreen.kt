@@ -663,7 +663,7 @@ internal fun appsToStop(state: UiState): List<LinkApp> {
 @Preview(showBackground = true)
 @Composable
 internal fun SetupScreenPreview() {
-    CrosstuneTheme(dynamicColor = false) {
+    CrosstuneTheme {
         SetupScreen(
             state = UiState(
                 setupComplete = false,
