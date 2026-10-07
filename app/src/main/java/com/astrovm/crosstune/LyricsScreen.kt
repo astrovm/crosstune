@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +36,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +47,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -284,39 +290,105 @@ private fun LyricLineText(text: String, place: Int, canSeek: Boolean, onClick: (
 }
 
 /**
- * Under timed words: what they follow, with a dot that beats while it plays; or how to have them
- * follow the song, allowing Crosstune to see what music apps play, or playing it in one.
+ * Under timed words, only while there's something to say: what they follow, for a moment once
+ * they start to, with a dot that beats while it plays; how to have them follow the song, until it's
+ * done or put away; or, briefly, to play it in a music app.
  */
 @Composable
 private fun FollowBar(state: UiState, actions: ScreenActions) {
     val timed = state.lyricLines.isNotEmpty() && !state.isLoadingLyrics && !state.lyricsFailed
-    AnimatedVisibility(visible = timed, enter = Motion.appear, exit = Motion.disappear) {
-        val following = state.following
-        Surface(
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            AnimatedContent(targetState = following?.app to (following != null), transitionSpec = { fade() }, label = "follow bar") { (app, followed) ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).height(48.dp)) {
-                    if (followed) {
-                        Beat(playing = following?.clock?.playing != false)
-                        Spacer(Modifier.size(12.dp))
-                        Text(
-                            if (app != null) stringResource(R.string.lyrics_following_app, app) else stringResource(R.string.lyrics_following_heard),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                    } else if (!state.canFollowApps) {
-                        Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
-                    } else {
-                        Text(stringResource(R.string.lyrics_follow_play), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    val following = state.following
+    val shown = when {
+        following != null -> FollowShown.FOLLOWING
+        !state.canFollowApps -> FollowShown.ALLOW
+        else -> FollowShown.PLAY
+    }
+    // Saying what they follow, or to play the song, is news once; after that the words say it.
+    var fresh by remember(shown, following?.app) { mutableStateOf(true) }
+    LaunchedEffect(shown, following?.app) {
+        delay(ANNOUNCE_MS)
+        fresh = false
+    }
+    var putAway by rememberSaveable { mutableStateOf(false) }
+    val visible = timed && if (shown == FollowShown.ALLOW) !putAway else fresh
+    AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
+        AnimatedContent(targetState = shown to following?.app, transitionSpec = { fade() }, label = "follow bar") { (now, app) ->
+            if (now == FollowShown.FOLLOWING) {
+                // A small tag, centered, rather than a bar: it's only saying so.
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                            Beat(playing = following?.clock?.playing != false)
+                            Spacer(Modifier.size(10.dp))
+                            Text(
+                                if (app != null) stringResource(R.string.lyrics_following_app, app) else stringResource(R.string.lyrics_following_heard),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 6.dp, bottom = 6.dp).heightIn(min = 48.dp)) {
+                        if (now == FollowShown.ALLOW) {
+                            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
+                            IconButton(onClick = { putAway = true }) {
+                                AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.not_now_button), modifier = Modifier.size(20.dp))
+                            }
+                        } else {
+                            Text(stringResource(R.string.lyrics_follow_play), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 16.dp))
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+private enum class FollowShown { FOLLOWING, ALLOW, PLAY }
+
+/**
+ * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an
+ * app installed from a file, Android turns the first try down, and only then offers, in App info,
+ * to allow restricted settings, after which the access turns on.
+ */
+@Composable
+internal fun FollowHelp(actions: ScreenActions) {
+    val access = stringResource(R.string.follow_help_access_button)
+    AlertDialog(
+        onDismissRequest = actions.onDismissFollowHelp,
+        title = { Text(stringResource(R.string.follow_help_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
+                FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
+                FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = actions.onDismissFollowHelp) { Text(stringResource(R.string.dismiss_button)) }
+        }
+    )
+}
+
+@Composable
+private fun FollowStep(number: Int, text: String, button: String, onClick: () -> Unit) {
+    Row {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        }
+        Column(modifier = Modifier.padding(start = 14.dp)) {
+            Text(text, style = MaterialTheme.typography.bodyMedium)
+            FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
         }
     }
 }
@@ -337,6 +409,9 @@ private fun Beat(playing: Boolean) {
             .background(if (playing) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant, CircleShape)
     )
 }
+
+/** How long saying what the words follow, or to play the song, stays up. */
+private const val ANNOUNCE_MS = 4_000L
 
 /** How often a playing song's line is checked: well under a beat, so a line lights as it's sung. */
 private const val TICK_MS = 80L

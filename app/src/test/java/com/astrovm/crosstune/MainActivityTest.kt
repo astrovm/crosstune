@@ -21,6 +21,7 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onLast
 import android.content.ClipboardManager
 import android.content.ComponentName
+import android.app.UiModeManager
 import android.content.Context
 import androidx.compose.ui.test.SemanticsMatcher
 import android.os.SystemClock
@@ -40,6 +41,8 @@ import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -2503,10 +2506,18 @@ class MainActivityTest {
         controller!!.pause().resume()
         waitForText(string(R.string.lyrics_follow_play))
 
-        // Its app plays it, paused 25 seconds in: the second line is lit.
+        // Its app plays it, paused 25 seconds in: the second line is lit, and it says what it follows,
+        // for a moment, then leaves the words to it.
+        composeRule.mainClock.autoAdvance = false
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        waitForText(string(R.string.lyrics_following_app, "Spotify"))
+        shadowOf(Looper.getMainLooper()).idle()
+        composeRule.mainClock.advanceTimeBy(500)
+        assertTextShown(string(R.string.lyrics_following_app, "Spotify"))
         assertLit("Two")
+        composeRule.mainClock.advanceTimeBy(5_000)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.lyrics_following_app, "Spotify"))
         // A line tapped moves the app there.
         composeRule.onNodeWithText("Three").performClick()
         assertEquals(listOf(40_000L), playback.seeks)
@@ -2525,6 +2536,107 @@ class MainActivityTest {
         // Nothing left to follow, a resume changes nothing.
         controller!!.pause().resume()
         assertResultShown()
+    }
+
+    @Test
+    fun whereAndroidHoldsTheAccessBackTheStepsShowWithThePageForEach() {
+        val playback = timedSong()
+        playback.restricted = true
+        waitForText(string(R.string.lyrics_follow_allow))
+        click(string(R.string.allow_button))
+        // Installed from a file, Android turns the first try down, then offers restricted settings in App info.
+        waitForText(string(R.string.follow_help_title))
+        assertNull(nextStartedActivity())
+        composeRule.onAllNodesWithText(string(R.string.follow_help_access_button)).onFirst().performClick()
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        click(string(R.string.follow_help_app_info))
+        val appInfo = nextStartedActivity()!!
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfo.action)
+        assertEquals("package:${app.packageName}", appInfo.dataString)
+        composeRule.onAllNodesWithText(string(R.string.follow_help_access_button)).onLast().performClick()
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+
+        // Back without it, the steps stay; with it, they go, and the words follow.
+        controller!!.pause().resume()
+        assertTextShown(string(R.string.follow_help_title))
+        playback.access = true
+        controller!!.pause().resume()
+        assertTextAbsent(string(R.string.follow_help_title))
+        waitForText(string(R.string.lyrics_follow_play))
+    }
+
+    @Test
+    fun backWithoutTheAccessTheStepsShowAndCanBePutAway() {
+        timedSong()
+        waitForText(string(R.string.lyrics_follow_allow))
+        click(string(R.string.allow_button))
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        // Android may have kept the switch from turning on, so coming back without it shows how.
+        controller!!.pause().resume()
+        waitForText(string(R.string.follow_help_title))
+        composeRule.onAllNodesWithText(string(R.string.dismiss_button)).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.follow_help_title))
+        // Put away, they don't come back on their own.
+        controller!!.pause().resume()
+        assertTextAbsent(string(R.string.follow_help_title))
+
+        // Nor does the offer, once put away for these words.
+        click(string(R.string.not_now_button))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun settingsSaysWhetherLyricsFollowMusicAppsAndSwitchingOpensAndroidsPage() {
+        val playback = FakePlayback()
+        MainActivity.playbackFactory = { playback }
+        launch()
+        click(string(R.string.settings_button))
+        val follow = composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo()
+        follow.assertIsOff()
+        // Switched on: Android's page, and back without it, the steps.
+        follow.performClick()
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+        controller!!.pause().resume()
+        waitForText(string(R.string.follow_help_title))
+
+        // Allowed there, it's on, and the steps go.
+        playback.access = true
+        controller!!.pause().resume()
+        assertTextAbsent(string(R.string.follow_help_title))
+        follow.assertIsOn()
+        // Switched off: Android's page again, where it's turned off.
+        follow.performClick()
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+    }
+
+    @Test
+    fun theLookCanBeLightOrDarkWhateverThePhoneIs() {
+        launch()
+        val uiModes = app.getSystemService(UiModeManager::class.java)
+        fun pick(label: String) {
+            composeRule.onNodeWithText(string(R.string.setting_theme)).performScrollTo().performClick()
+            composeRule.waitForIdle()
+            composeRule.onAllNodesWithText(label).onLast().performClick()
+            composeRule.waitForIdle()
+        }
+        click(string(R.string.settings_button))
+        pick(string(R.string.theme_dark))
+        // Android is told too, so its launch screen matches next time.
+        assertEquals(UiModeManager.MODE_NIGHT_YES, shadowOf(uiModes).applicationNightMode)
+        assertEquals("DARK", prefs().getString("theme", null))
+        pick(string(R.string.theme_light))
+        assertEquals(UiModeManager.MODE_NIGHT_NO, shadowOf(uiModes).applicationNightMode)
+        pick(string(R.string.language_system_default))
+        assertEquals(UiModeManager.MODE_NIGHT_AUTO, shadowOf(uiModes).applicationNightMode)
+        assertEquals("SYSTEM", prefs().getString("theme", null))
+
+        // Kept for the next launch.
+        pick(string(R.string.theme_dark))
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.theme_dark)).assertExists()
     }
 
     @Test
@@ -2879,12 +2991,12 @@ class MainActivityTest {
     fun languagePickerSetsTheAppLanguageOrFollowsThePhone() {
         launch()
         click(string(R.string.settings_button))
-        composeRule.onNodeWithText(string(R.string.language_system_default)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.setting_language)).performScrollTo().performClick()
         composeRule.onNodeWithText("Español").performClick()
         composeRule.waitForIdle()
         assertEquals("es", AppLanguage.current(app))
 
-        composeRule.onNodeWithText(string(R.string.language_system_default)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.setting_language)).performScrollTo().performClick()
         composeRule.onAllNodesWithText(string(R.string.language_system_default)).onLast().performClick()
         composeRule.waitForIdle()
         assertNull(AppLanguage.current(app))

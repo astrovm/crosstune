@@ -77,6 +77,10 @@ internal data class UiState(
     val following: Following? = null,
     /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
     val canFollowApps: Boolean = false,
+    /** Set while showing how to let Crosstune see what music apps play, step by step. */
+    val followHelp: Boolean = false,
+    /** Light, dark, or as the phone is. */
+    val theme: ThemeMode = ThemeMode.SYSTEM,
     /** Songs found for typed text that wasn't a link, offered to pick from. */
     val songSearch: List<MusicMetadata> = emptyList(),
     /** What was searched for, so an empty list can say what it found nothing for. */
@@ -172,6 +176,9 @@ internal data class UiState(
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
 internal enum class AfterLookup { OPEN, SHARE }
 
+/** The app's look: as the phone is set, or always light or dark. */
+internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 /** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
@@ -220,6 +227,7 @@ internal class MainViewModel(
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             showSongFirst = preferences.getBoolean(KEY_SHOW_SONG_FIRST, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
+            theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -813,12 +821,52 @@ internal class MainViewModel(
         uiState = uiState.copy(following = null)
     }
 
-    /** Back from Android's settings, where following music apps may have just been allowed. */
+    /** Set once Android's page for the access was opened, so coming back without it can say what to try. */
+    private var askedForAccess = false
+
+    /**
+     * Back from Android's settings, where following music apps may have just been allowed. Back
+     * without it, the steps show, since Android may have kept the switch from turning on.
+     */
     fun refreshFollowing() {
         val access = playback?.hasAccess() == true
+        if (access) {
+            askedForAccess = false
+            uiState = uiState.copy(followHelp = false)
+        } else if (askedForAccess) {
+            uiState = uiState.copy(followHelp = true)
+        }
         if (access == uiState.canFollowApps) return
         uiState = uiState.copy(canFollowApps = access)
         uiState.lyricsFor?.takeIf { !uiState.isLoadingLyrics }?.let(::follow)
+    }
+
+    /**
+     * Allow, for the words to follow music apps: true when Android's page for it can just open.
+     * Where Android restricts it first, the steps show instead, that one included.
+     */
+    fun allowFollowing(): Boolean {
+        if (playback?.restricted() == true) {
+            uiState = uiState.copy(followHelp = true)
+            return false
+        }
+        askedForAccess = true
+        return true
+    }
+
+    /** Android's page for the access is opening, from the steps. */
+    fun openingFollowAccess() {
+        askedForAccess = true
+    }
+
+    fun dismissFollowHelp() {
+        askedForAccess = false
+        uiState = uiState.copy(followHelp = false)
+    }
+
+    fun selectTheme(theme: ThemeMode) {
+        preferences.edit { putString(KEY_THEME, theme.name) }
+        uiState = uiState.copy(theme = theme)
     }
 
     /** Moves the music app playing the song to a line of its words. */
@@ -833,7 +881,10 @@ internal class MainViewModel(
         lyricsJob?.cancel()
         lyricsJob = null
         stopFollowing()
-        uiState = uiState.copy(lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false)
+        askedForAccess = false
+        uiState = uiState.copy(
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false, followHelp = false
+        )
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {
@@ -1205,6 +1256,7 @@ internal class MainViewModel(
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
+        private const val KEY_THEME = "theme"
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageInstaller
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -26,6 +27,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowMediaSessionManager
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
@@ -79,6 +81,25 @@ class PlaybackTest {
         assertTrue(playback.hasAccess())
         // Its part of Android's notification access is only there to be allowed.
         assertNotNull(NowPlayingListener())
+    }
+
+    @Test
+    fun androidHoldsItBackForAnAppInstalledFromAFile() {
+        // Installed by a store, or with nothing known about it, nothing's held back.
+        assertFalse(playback.restricted())
+        shadowOf(app.packageManager).setInstallSourceInfo(app.packageName, null, null, null, null, null, PackageInstaller.PACKAGE_SOURCE_STORE)
+        assertFalse(playback.restricted())
+        // A file downloaded, or one copied over, has to have restricted settings allowed first.
+        shadowOf(app.packageManager).setInstallSourceInfo(app.packageName, null, null, null, null, null, PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
+        assertTrue(playback.restricted())
+        shadowOf(app.packageManager).setInstallSourceInfo(app.packageName, null, null, null, null, null, PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE)
+        assertTrue(playback.restricted())
+    }
+
+    @Test
+    @Config(sdk = [32])
+    fun beforeAndroid13NothingIsHeldBack() {
+        assertFalse(playback.restricted())
     }
 
     @Test

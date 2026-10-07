@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.UiModeManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -17,9 +18,12 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -96,6 +100,10 @@ class MainActivity : ComponentActivity() {
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
 
+        /** The navigation bar's scrims, as Android's own edge-to-edge default draws them. */
+        private val LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+        private val DARK_SCRIM = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = ::httpClient
 
@@ -163,7 +171,16 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            CrosstuneTheme {
+            val theme = viewModel.uiState.theme
+            val dark = if (theme == ThemeMode.DARK) true else if (theme == ThemeMode.LIGHT) false else isSystemInDarkTheme()
+            // The bars' icons follow the app's look, which may not be the phone's.
+            LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { dark },
+                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark }
+                )
+            }
+            CrosstuneTheme(darkTheme = dark) {
                 CrosstuneScreen(
                     state = viewModel.uiState,
                     actions = ScreenActions(
@@ -174,7 +191,7 @@ class MainActivity : ComponentActivity() {
                         recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
                         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
                         onStopListening = viewModel::stopListening,
-                        onOpenMicrophoneSettings = { tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri())) },
+                        onOpenMicrophoneSettings = ::openAppInfo,
                         onRecognizerChange = { picked ->
                             recognizerPick = picked.packageName
                             getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(SongRecognizers.KEY_PICK, picked.packageName).apply()
@@ -189,7 +206,14 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
-                        onAllowFollowing = ::openNotificationAccess,
+                        onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
+                        onOpenFollowAccess = {
+                            viewModel.openingFollowAccess()
+                            openNotificationAccess()
+                        },
+                        onOpenAppInfo = ::openAppInfo,
+                        onDismissFollowHelp = viewModel::dismissFollowHelp,
+                        onThemeChange = ::selectTheme,
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,
@@ -329,6 +353,24 @@ class MainActivity : ComponentActivity() {
     private fun clipboardText(): String? {
         val clip = getSystemService(ClipboardManager::class.java)?.primaryClip
         return clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+    }
+
+    /** Crosstune's App info: where the microphone is allowed, and restricted settings. */
+    private fun openAppInfo() {
+        tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+    }
+
+    /** Light, dark or as the phone is: from Android 12 Android itself is told, so the launch screen matches too. */
+    private fun selectTheme(theme: ThemeMode) {
+        viewModel.selectTheme(theme)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val mode = when (theme) {
+                ThemeMode.LIGHT -> UiModeManager.MODE_NIGHT_NO
+                ThemeMode.DARK -> UiModeManager.MODE_NIGHT_YES
+                ThemeMode.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+            }
+            getSystemService(UiModeManager::class.java).setApplicationNightMode(mode)
+        }
     }
 
     /** Android's page for letting Crosstune see what music apps play, at its own entry where Android has one. */

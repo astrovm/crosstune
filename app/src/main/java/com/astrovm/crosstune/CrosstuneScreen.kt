@@ -186,8 +186,14 @@ internal data class ScreenActions(
     val onDismissLyrics: () -> Unit = {},
     /** Moves the music app playing the song to where a line of its words is sung. */
     val onSeekLyrics: (Long) -> Unit = {},
-    /** Opens Android's settings to let Crosstune see what music apps play, so the words follow along. */
+    /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */
     val onAllowFollowing: () -> Unit = {},
+    /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */
+    val onOpenFollowAccess: () -> Unit = {},
+    /** Opens Crosstune's App info, where restricted settings are allowed. */
+    val onOpenAppInfo: () -> Unit = {},
+    val onDismissFollowHelp: () -> Unit = {},
+    val onThemeChange: (ThemeMode) -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */
@@ -249,6 +255,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             MainScreen(state, guided, onOpenSettings = { showSettings = true })
         }
     }
+    // Asked for from the words or from settings, so it shows over either.
+    if (state.followHelp) FollowHelp(actions)
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */

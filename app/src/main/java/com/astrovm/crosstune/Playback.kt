@@ -2,10 +2,12 @@ package com.astrovm.crosstune
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageInstaller
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -37,6 +39,12 @@ internal interface PlaybackSource {
 
     /** Moves the app playing [song] to [positionMs]. */
     fun seekTo(song: MusicMetadata, positionMs: Long)
+
+    /**
+     * Whether Android holds this access back until "Allow restricted settings" is turned on for
+     * Crosstune, as it does from Android 13 for an app installed from a downloaded file.
+     */
+    fun restricted(): Boolean
 }
 
 /**
@@ -53,6 +61,10 @@ internal class MediaSessionPlayback(
     private val handler = Handler(Looper.getMainLooper())
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
+
+    override fun restricted(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            runCatching { context.packageManager.getInstallSourceInfo(context.packageName).packageSource }.getOrNull() in fromAFile
 
     override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
@@ -112,6 +124,9 @@ internal class MediaSessionPlayback(
             SongNames.artistNames(song.artist).map(SongNames::words).any { it.isNotEmpty() && SongNames.words(title).containsAll(it) }
     }
 }
+
+/** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */
+private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
