@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -179,17 +180,16 @@ internal class SongListener(
             try {
                 microphone.open()?.use { recording ->
                     while (isActive && recorded < audio.size) {
-                    // Stopping interrupts a read that's waiting for sound.
+                        // Stopping interrupts a read that's waiting for sound.
                         val read = runInterruptible { recording.read(audio, recorded, min(CHUNK, audio.size - recorded)) }
                         if (read <= 0) break
                         recorded += read
                         progress.value = Progress(recorded, done = false)
                     }
                 }
-            } catch (_: SecurityException) {
-                progress.value = Progress(recorded, done = true, failed = true)
-                return@launch
-            } catch (_: IllegalStateException) {
+            } catch (e: IllegalStateException) {
+                // Being stopped is one too, and isn't the microphone failing.
+                if (e is CancellationException) throw e
                 progress.value = Progress(recorded, done = true, failed = true)
                 return@launch
             }

@@ -386,8 +386,7 @@ internal class MainViewModel(
             return
         }
         val input = MusicLinks.recognizedSong(song)
-        job?.cancel()
-        uiState = uiState.copy(linkText = (input as LinkInput.RecognizedSong).text)
+        uiState = uiState.copy(linkText = input.text)
         resolve(input, openWhenReady = false)
     }
 
