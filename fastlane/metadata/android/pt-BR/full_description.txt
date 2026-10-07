@@ -13,8 +13,9 @@ Alguém manda um link de um serviço de música, mas você ouve em outro. Toque 
 <li>Cole com um toque, pesquise e reabra links recentes, ou abra um link copiado pelo widget da tela inicial, pelo bloco das Configurações rápidas ou mantendo o ícone do app pressionado.</li>
 <li>Reconhece uma música tocando perto: o Crosstune escuta sozinho, ou abre o Shazam ou a busca de músicas do Google. Também abre links do Shazam e músicas compartilhadas pelo Now Playing do Pixel.</li>
 <li>Não consegue ler um link? Abra-o no app de origem, copie o texto da busca ou compartilhe um link de busca.</li>
+<li>Encontre uma música digitando o nome dela em vez de um link, e leia a letra de qualquer música que abrir.</li>
 <li>Cores do Material You no Android 12 e versões mais recentes.</li>
 </ul>
 
 <b>Privacidade</b>
-Sem contas, análises ou anúncios. O histórico fica no seu dispositivo. Para mostrar o título, o artista e a capa de um link, o Crosstune consulta apenas o serviço de onde o link veio. Com a opção Abrir o resultado exato ativada, o título e o artista também são enviados à busca da Apple, do Deezer, do YouTube Music, do YouTube ou do Bandcamp. Tocar tudo envia os títulos e artistas das músicas à busca do YouTube Music, e os vídeos encontrados ao YouTube. Para reconhecer uma música, o Crosstune usa o microfone só enquanto escuta e envia ao Shazam só uma impressão digital do som, nunca o áudio.
+Sem contas, análises ou anúncios. O histórico fica no seu dispositivo. Para mostrar o título, o artista e a capa de um link, o Crosstune consulta apenas o serviço de onde o link veio. Com a opção Abrir o resultado exato ativada, o título e o artista também são enviados à busca da Apple, do Deezer, do YouTube Music, do YouTube ou do Bandcamp. Tocar tudo envia os títulos e artistas das músicas à busca do YouTube Music, e os vídeos encontrados ao YouTube. Para reconhecer uma música, o Crosstune usa o microfone só enquanto escuta e envia ao Shazam só uma impressão digital do som, nunca o áudio. Digitar o nome de uma música o envia à busca de músicas do Deezer e da Apple, e pedir a letra envia o título e o artista à LRCLIB.

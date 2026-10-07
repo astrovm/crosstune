@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik lagu, aplikasi mengirim judul dan artis lagu ke LRCLIB, layanan lirik yang tidak butuh akun atau kunci."
+    ],
+    [
+      "p",
       "Seperti permintaan internet lainnya, permintaan ini memperlihatkan alamat IP dan informasi permintaan biasa ke layanan yang dihubungi. Layanan tersebut bisa menyimpan log permintaan dan memproses informasi sesuai kebijakan privasinya sendiri. Developer tidak mengendalikan cara mereka memproses atau menyimpan data itu. Layanan musik bisa meminta akun atau langganannya sendiri setelah kamu membukanya."
     ],
     [

@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Als je de naam van een nummer typt in plaats van een link, stuurt Crosstune die naam naar de openbare nummerzoekopdrachten van Deezer en Apple en toont de gevonden nummers, zodat je het nummer dat je bedoelde zonder link kunt openen. Als je de tekst van een nummer opvraagt, stuurt de app de titel en artiest naar LRCLIB, een tekstservice die geen account of sleutel nodig heeft."
+    ],
+    [
+      "p",
       "Zoals bij andere internetverzoeken krijgt de benaderde service je IP-adres en de gebruikelijke verzoekinformatie te zien. Die services kunnen verzoeklogboeken bewaren en informatie verwerken volgens hun eigen privacybeleid. De ontwikkelaar heeft geen invloed op hoe zij die gegevens verwerken of bewaren. Een muziekservice kan een eigen account of abonnement vereisen nadat je hem opent."
     ],
     [

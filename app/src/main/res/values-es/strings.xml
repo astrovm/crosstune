@@ -170,14 +170,12 @@
     <string name="error_recognition_unavailable">El reconocimiento de canciones no está disponible ahora.</string>
     <string name="open_settings_button">Abrir ajustes</string>
     <string name="open_app_button">Abrir %1$s</string>
-    <string name="lyrics_button">Canciones</string>
+    <string name="lyrics_button">Letra</string>
     <string name="lyrics_title">Letra</string>
     <string name="lyrics_loading">Buscando la letra…</string>
     <string name="lyrics_none">No se encontró la letra de esta canción.</string>
     <string name="lyrics_failed">No se pudo obtener la letra en este momento.</string>
     <string name="song_search_title">Canciones</string>
     <string name="song_search_none">No se encontraron canciones para «%1$s».</string>
-    <string name="song_search_placeholder">Canción o artista</string>
-    <string name="song_search_label">Nombre de la canción</string>
     <string name="song_search_label_for">Encontradas para «%1$s»</string>
 </resources>

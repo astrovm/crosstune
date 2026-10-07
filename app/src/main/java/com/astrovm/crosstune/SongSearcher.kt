@@ -32,17 +32,23 @@ internal class SongSearcher(
         val words = query.trim()
         if (words.isEmpty()) return emptyList()
         return withTimeoutOrNull(timeoutMs) {
-            try {
-                val songs = deezer(words) + itunes(words)
-                // Deezer first, so its answers lead; each service's own repeated name is one song.
-                songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
-            } catch (_: IOException) {
-                emptyList()
-            } catch (_: JSONException) {
-                emptyList()
-            }
+            // Deezer first, so its answers lead; a service that won't answer costs only its own
+            // part, and the other is still asked.
+            val songs = answering { deezer(words) } + answering { itunes(words) }
+            // Each service's own repeated name is one song.
+            songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
         } ?: emptyList()
     }
+
+    /** What [find] found, or nothing when the service is unreachable or sends back rubbish. */
+    private suspend fun answering(find: suspend () -> List<MusicMetadata>): List<MusicMetadata> =
+        try {
+            find()
+        } catch (_: IOException) {
+            emptyList()
+        } catch (_: JSONException) {
+            emptyList()
+        }
 
     /** What Deezer holds for [query]; empty when it won't answer or has nothing. */
     private suspend fun deezer(query: String): List<MusicMetadata> {

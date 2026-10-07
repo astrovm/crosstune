@@ -2,7 +2,9 @@ package com.astrovm.crosstune
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MusicLinksTest {
@@ -298,6 +300,30 @@ class MusicLinksTest {
         assertEquals(LinkInput.ShortLink("https://spotify.link/AbCdEf"), MusicLinks.parse("spotify.link/AbCdEf"))
         assertNull(MusicLinks.parse("example.com/track/11dFghVXANMlKmJXsNCbNl"))
         assertNull(MusicLinks.parse("just some words"))
+    }
+
+    @Test
+    fun aNameWithADotInItIsNotALinkButAnAddressIs() {
+        // The dot proves nothing on its own: these are names, and nobody linked anywhere with them.
+        listOf("Mr.Big", "S.O.S", "R.E.M", "A.B.C", "3.14")
+            .forEach { assertFalse(it, MusicLinks.looksLikeALink(it)) }
+
+        // An address is one with something past its host, or a host Crosstune already knows.
+        listOf(
+            "open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",
+            "www.youtube.com/watch?v=4NRXx6U8ABQ",
+            "example.com/watch?v=x#t=10",
+            "open.spotify.com",
+            "deezer.com",
+            "music.youtube.com"
+        ).forEach { assertTrue(it, MusicLinks.looksLikeALink(it)) }
+
+        // What made a link before still does: a scheme, a bare path, a bare id.
+        listOf("spotify:track:11dFghVXANMlKmJXsNCbNl", "/track/11dFghVXANMlKmJXsNCbNl", "11dFghVXANMlKmJXsNCbNl")
+            .forEach { assertTrue(it, MusicLinks.looksLikeALink(it)) }
+
+        assertFalse("   ", MusicLinks.looksLikeALink("   "))
+        assertFalse("just some words", MusicLinks.looksLikeALink("just some words"))
     }
 
     @Test

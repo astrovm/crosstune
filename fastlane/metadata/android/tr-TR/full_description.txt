@@ -13,8 +13,9 @@ Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde d
 <li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>
 <li>Yakında çalan bir şarkıyı tanır: Crosstune kendisi dinler ya da Shazam'ı veya Google'ın şarkı aramasını açar. Shazam bağlantılarını ve Pixel'deki Now Playing'den paylaşılan şarkıları da açar.</li>
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
+<li>Bağlantı yerine şarkının adını yazarak şarkıyı bulun ve açtığınız her şarkının sözlerini okuyun.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>
 
 <b>Gizlilik</b>
-Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Bir bağlantının başlığını, sanatçısını ve kapağını göstermek için Crosstune yalnızca bağlantının geldiği servise sorar. Tam eşleşmeyi aç seçeneği açıkken başlık ve sanatçı, Apple, Deezer, YouTube Music, YouTube veya Bandcamp'in aramasına da gönderilir. Tümünü çal, şarkıların başlıklarını ve sanatçılarını YouTube Music'in aramasına, bulunan videoları ise YouTube'a gönderir. Crosstune şarkı tanırken mikrofonu yalnızca dinlerken kullanır ve Shazam'a sesin yalnızca parmak izini gönderir, ses kaydını asla göndermez.
+Hesap, analiz veya reklam yok. Geçmiş cihazınızda kalır. Bir bağlantının başlığını, sanatçısını ve kapağını göstermek için Crosstune yalnızca bağlantının geldiği servise sorar. Tam eşleşmeyi aç seçeneği açıkken başlık ve sanatçı, Apple, Deezer, YouTube Music, YouTube veya Bandcamp'in aramasına da gönderilir. Tümünü çal, şarkıların başlıklarını ve sanatçılarını YouTube Music'in aramasına, bulunan videoları ise YouTube'a gönderir. Crosstune şarkı tanırken mikrofonu yalnızca dinlerken kullanır ve Shazam'a sesin yalnızca parmak izini gönderir, ses kaydını asla göndermez. Bir şarkının adını yazmak, onu Deezer ve Apple'ın şarkı aramasına gönderir; söz istemek ise şarkının başlığını ve sanatçısını LRCLIB'e gönderir.

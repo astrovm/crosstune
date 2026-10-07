@@ -134,9 +134,10 @@ internal object MusicLinks {
     private val schemeRegex = Regex("""^[a-z][a-z0-9+.-]*:""", RegexOption.IGNORE_CASE)
 
     /**
- * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters is
- * well past any title anyone types, and short enough to catch an id with a character added or lost.
- */
+     * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters
+     * is well past any title anyone types, and short enough to catch an id with a character added
+     * or lost.
+     */
     private val bareIdRegex = Regex("""[A-Za-z0-9]{20,}""")
 
     /**
@@ -144,6 +145,10 @@ internal object MusicLinks {
      * host with a dot in it, e.g. "spotify:track:x" or "open.spotify.com/track/x", or it is an ID
      * pasted on its own. A link Crosstune can't open is still a link, so it is reported as one
      * instead of being looked up as a song that happens to be named "open.spotify.com/track/x".
+     *
+     * The dot on its own proves nothing, since names carry them too: "Mr.Big" and "S.O.S" are songs.
+     * So a dotted name counts only as an address Crosstune already knows, or one with something
+     * past its host, which is what makes the rest of it a link.
      */
     fun looksLikeALink(text: String): Boolean {
         val value = text.trim()
@@ -154,8 +159,9 @@ internal object MusicLinks {
         if (value.startsWith('/')) return true
         // A bare id, e.g. one copied from a Spotify url, is a link with its address left off.
         if (bareIdRegex.matches(value)) return true
-        val host = value.substringBefore('/').substringBefore('?').substringBefore(':')
-        return host.contains('.') && host.substringAfterLast('.').length >= 2
+        val host = value.substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
+        if (!host.contains('.') || host.substringAfterLast('.').length < 2) return false
+        return value.length > host.length || serviceForHost(host) != null
     }
 
     private fun serviceForHost(host: String): MusicService? = when {

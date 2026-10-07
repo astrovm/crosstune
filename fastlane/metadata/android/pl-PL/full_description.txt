@@ -13,8 +13,9 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Wklejaj jednym kliknięciem, przeszukuj ostatnie linki i wracaj do nich albo otwieraj skopiowany link z widżetu na ekranie głównym, kafelka w Szybkich ustawieniach lub przytrzymując ikonę aplikacji.</li>
 <li>Rozpoznaje utwór grający w pobliżu: Crosstune słucha sam albo otwiera Shazama lub wyszukiwanie utworów Google. Otwiera też linki z Shazama i utwory udostępnione z Now Playing na Pixelu.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
+<li>Znajdź utwór, wpisując jego nazwę zamiast linku, i czytaj tekst dowolnego utworu, który otworzysz.</li>
 <li>Kolory Material You na Androidzie 12 i nowszych.</li>
 </ul>
 
 <b>Prywatność</b>
-Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube. Do rozpoznania utworu Crosstune używa mikrofonu tylko podczas słuchania i wysyła do Shazama tylko odcisk dźwięku, nigdy nagranie.
+Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Gdy włączona jest opcja „Otwieraj dokładne dopasowanie”, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube. Do rozpoznania utworu Crosstune używa mikrofonu tylko podczas słuchania i wysyła do Shazama tylko odcisk dźwięku, nigdy nagranie. Wpisanie nazwy utworu wysyła ją do wyszukiwarki piosenek Deezer i Apple, a prośba o tekst wysyła tytuł i wykonawcę do serwisu LRCLIB.

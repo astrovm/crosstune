@@ -137,6 +137,18 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun anEditionTagNamesNoOtherRecordingSoItsWordsAreTaken() {
+        // The tag says which edition the words came from, not that they belong to another song.
+        // One word on its own says too little to stand for a longer title, so a lone word is only
+        // the whole title when the two titles are one once the tag is taken off: which is what
+        // "Yesterday (2012 Remaster)" and "Yesterday" are.
+        respond("""[${answer("Yesterday (2012 Remaster)", "The Beatles", "Yesterday's words")}]""")
+        assertEquals("Yesterday's words", words(MusicMetadata("Yesterday", "The Beatles")))
+        respond("""[${answer("Yesterday", "The Beatles", "Yesterday's words")}]""")
+        assertEquals("Yesterday's words", words(MusicMetadata("Yesterday (2012 Remaster)", "The Beatles")))
+    }
+
+    @Test
     fun aSecondTrySucceedsWhereTheFirstWasBusy() {
         var calls = 0
         fake.handler = { request ->

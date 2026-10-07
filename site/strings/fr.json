@@ -106,6 +106,10 @@
     ],
     [
       "p",
+      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé."
+    ],
+    [
+      "p",
       "Comme toute requête sur Internet, ces requêtes communiquent votre adresse IP et les informations habituelles de la requête au service contacté. Ces services peuvent conserver des journaux de requêtes et traiter des informations selon leurs propres politiques de confidentialité. Le développeur ne contrôle pas la façon dont ils traitent ou conservent ces données. Un service de musique peut exiger son propre compte ou abonnement une fois ouvert."
     ],
     [

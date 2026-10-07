@@ -90,6 +90,21 @@ class TranslationsTest {
     }
 
     @Test
+    fun theLyricsButtonIsNamedForTheSheetItOpens() {
+        // The button opens the sheet titled lyrics_title, so it carries the same word. Every
+        // language once gave it the word for songs instead, and a Spanish speaker tapped
+        // "Canciones" to read a sheet titled "Letra".
+        for (folder in languages.keys) {
+            val translated = strings(folder)
+            assertEquals(
+                "$folder lyrics_button",
+                translated.getValue("lyrics_title"),
+                translated.getValue("lyrics_button")
+            )
+        }
+    }
+
+    @Test
     fun everyLanguageHasAStoreListingWithinTheStoreLimits() {
         for (folder in languages.values + "en-US") {
             val title = File(store, "$folder/title.txt").readText().trim()

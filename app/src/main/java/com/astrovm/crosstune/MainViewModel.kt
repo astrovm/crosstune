@@ -352,9 +352,15 @@ internal class MainViewModel(
                 link = null
             )
             val songs = searcher.search(words)
-            uiState = uiState.copy(isSearchingSongs = false, songSearch = songs, songSearchQuery = words)
-            // Nothing by that name: say so, rather than showing an empty list with no reason in it.
-            if (songs.isEmpty()) uiState = uiState.copy(error = AppError.NOT_FOUND)
+            // The sheet says what was found, an empty list included, so it is the one place that
+            // does. NOT_FOUND reads as a link that went missing, and would sit over the songs of
+            // the next search, so any error from before is cleared with it.
+            uiState = uiState.copy(
+                isSearchingSongs = false,
+                songSearch = songs,
+                songSearchQuery = words,
+                error = null
+            )
         }
     }
 
@@ -371,8 +377,7 @@ internal class MainViewModel(
      */
     fun chooseSong(song: MusicMetadata) {
         dismissSongSearch()
-        // A song found by name carries its own service's link, which is what gets resolved, so it
-        // opens in the default app exactly as if that link had been pasted.
+        // The field shows the link about to be resolved, so a chosen song reads like a pasted one.
         song.url?.let { MusicLinks.parse(it) }?.let { parsed ->
             uiState = uiState.copy(linkText = (parsed as? LinkInput.Link)?.link?.url ?: song.url)
             resolve(parsed, openWhenReady = false)

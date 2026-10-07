@@ -105,7 +105,8 @@ internal class LyricsFinder(
         /**
          * The very song asked about, name for name. A title compared without its edition tag would
          * make a remaster the same song as the plain recording, so [SongNames.normalize] is used on
-         * its own here and no tag is taken off.
+         * its own here and no tag is taken off: when both this and a plain-titled answer are there,
+         * the plain one wins. [belongsTo] takes the tag off, so no song's words are lost over it.
          */
         fun isExact(metadata: MusicMetadata) =
             SongNames.normalize(title) == SongNames.normalize(metadata.title) && SongNames.sameArtist(artist, metadata.artist)

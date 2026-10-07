@@ -99,6 +99,24 @@ class SongSearcherTest {
     }
 
     @Test
+    fun oneServiceBeingOfflineCostsOnlyItsOwnAnswers() {
+        fake.handler = { request: Request ->
+            if (request.url.host == "api.deezer.com") throw IOException("offline")
+            FakeSpotify.html(
+                request,
+                """{"results":[{"trackName":"Yesterday","artistName":"The Beatles",
+                    "trackViewUrl":"https://music.apple.com/us/song/2","artworkUrl100":"https://is1/cover.jpg"}]}"""
+            )
+        }
+        // Deezer refusing must not cost the search Apple's answer to the same words.
+        assertEquals(
+            listOf(MusicMetadata("Yesterday", "The Beatles", url = "https://music.apple.com/us/song/2", artworkUrl = "https://is1/cover.jpg")),
+            found("Yesterday")
+        )
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") })
+    }
+
+    @Test
     fun noServiceAndNoTimeBothFindNothing() {
         fake.handler = { throw IOException("offline") }
         assertEquals(emptyList<MusicMetadata>(), found("Song"))

@@ -1,1 +1,1 @@
-Play on the widget now plays a playlist as a queue instead of searching for its name. More songs make it into the queue, and more covers load.
+Find a song by its name even without a link, and read the lyrics of any song you open. Playing a saved playlist from the widget now plays it as a queue instead of searching for its name, with more songs and covers loading.

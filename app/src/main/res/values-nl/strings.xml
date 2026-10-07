@@ -170,14 +170,12 @@
     <string name="error_recognition_unavailable">Nummerherkenning is nu niet beschikbaar.</string>
     <string name="open_settings_button">Instellingen openen</string>
     <string name="open_app_button">%1$s openen</string>
-    <string name="lyrics_button">Nummers</string>
+    <string name="lyrics_button">Tekst</string>
     <string name="lyrics_title">Tekst</string>
     <string name="lyrics_loading">Tekst opzoeken…</string>
     <string name="lyrics_none">Geen tekst gevonden voor dit nummer.</string>
     <string name="lyrics_failed">Kon de tekst niet ophalen.</string>
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
-    <string name="song_search_placeholder">Nummer of artiest</string>
-    <string name="song_search_label">Naam van het nummer</string>
     <string name="song_search_label_for">Gevonden voor “%1$s”</string>
 </resources>
