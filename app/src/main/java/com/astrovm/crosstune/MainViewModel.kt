@@ -16,6 +16,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 internal data class UiState(
@@ -341,11 +342,12 @@ internal class MainViewModel(
         val words = query.trim()
         // A link Crosstune can't open is reported as one, not looked up as a song named after it.
         if (searcher == null || words.isEmpty() || MusicLinks.looksLikeALink(words)) return rejectInput()
-        searchJob?.cancel()
+        cancelContentWork()
         searchJob = viewModelScope.launch {
             // Whatever was shown before is gone, so the songs found are what the screen is about.
             uiState = uiState.copy(
                 isSearchingSongs = true,
+                songSearchQuery = "",
                 songSearch = emptyList(),
                 result = null,
                 destinationUrls = emptyMap(),
@@ -411,6 +413,7 @@ internal class MainViewModel(
      * With [show], it only shows the result, for the user to pick what to do.
      */
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
+        cancelContentWork()
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         uiState = uiState.copy(
             linkText = incoming,
@@ -437,9 +440,7 @@ internal class MainViewModel(
      * old song and offer to open it, as if that were the link that failed.
      */
     private fun rejectInput() {
-        job?.cancel()
-        lastRequest = null
-        pendingOpen = false
+        cancelContentWork()
         uiState = uiState.copy(
             result = null, destinationUrls = emptyMap(), selectedDestination = null,
             link = null, showDestinationPicker = false
@@ -476,9 +477,7 @@ internal class MainViewModel(
      * The microphone permission is already granted.
      */
     fun listen() {
-        job?.cancel()
-        lastRequest = null
-        pendingOpen = false
+        cancelContentWork()
         retryListens = true
         uiState = uiState.copy(
             listening = true, isLoading = false, isMatching = false, error = null, linkText = "", result = null,
@@ -489,7 +488,7 @@ internal class MainViewModel(
             val heard = try {
                 listener.listen()
             } finally {
-                uiState = uiState.copy(listening = false)
+                if (isActive) uiState = uiState.copy(listening = false)
             }
             when (heard) {
                 is Heard.Song -> {
@@ -515,12 +514,10 @@ internal class MainViewModel(
     }
 
     private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null) {
-        retryListens = false
+        cancelContentWork()
         lastRequest = Triple(input, openWhenReady, destination)
         pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
-        job?.cancel()
-        dismissLyrics()
         uiState = uiState.copy(
             isLoading = true,
             isMatching = false,
@@ -632,6 +629,7 @@ internal class MainViewModel(
 
     /** A destination or exact-match preference change prepares the current result again. */
     private fun prepareResultDestination() {
+        cancelTrackWork()
         if (uiState.result == null || uiState.showDestinationPicker) return
         job?.cancel()
         uiState = uiState.copy(isMatching = false)
@@ -685,14 +683,14 @@ internal class MainViewModel(
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
         val tracks = uiState.result?.tracks.orEmpty().drop(from).take(MAX_QUEUE)
-        trackJob?.cancel()
+        cancelTrackWork()
         trackJob = viewModelScope.launch {
             uiState = uiState.copy(queueProgress = 0 to tracks.size, queueFrom = from)
             try {
                 val url = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
                 if (url == null) showError(AppError.NOT_FOUND) else effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
             } finally {
-                uiState = uiState.copy(queueProgress = null)
+                if (isActive) uiState = uiState.copy(queueProgress = null)
             }
         }
     }
@@ -700,7 +698,7 @@ internal class MainViewModel(
     /** Opens one of a playlist's songs where the result goes, matched like a song of its own. */
     fun openTrack(track: MusicMetadata) {
         val destination = uiState.resultDestination
-        trackJob?.cancel()
+        cancelTrackWork()
         trackJob = viewModelScope.launch {
             // A song from a playlist on the same service is opened by its own link.
             track.url?.takeIf { destination.matchService != null && MusicLinks.serviceFor(it) == destination.matchService }?.let { url ->
@@ -717,7 +715,7 @@ internal class MainViewModel(
                 try {
                     matcher.find(service, track)
                 } finally {
-                    uiState = uiState.copy(isMatching = false)
+                    if (isActive) uiState = uiState.copy(isMatching = false)
                 }
             }
             val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
@@ -768,7 +766,7 @@ internal class MainViewModel(
                     LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                 }
             } finally {
-                uiState = uiState.copy(isLoadingLyrics = false)
+                if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
             }
         }
     }
@@ -807,6 +805,7 @@ internal class MainViewModel(
         val link = uiState.link ?: return
         // An exact match may still be running; it must not open a second app when it finishes.
         job?.cancel()
+        cancelTrackWork()
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
         val finishAfterOpen = lastRequest?.second == true
@@ -820,7 +819,7 @@ internal class MainViewModel(
     }
 
     private fun selectHistoryEntry(entry: HistoryEntry) {
-        job?.cancel()
+        cancelContentWork()
         // The entry replaces whatever was being looked up, including a link from another app.
         lastRequest = null
         pendingOpen = false
@@ -859,7 +858,8 @@ internal class MainViewModel(
     }
 
     private fun openSaved(entry: HistoryEntry, finishAfterOpen: Boolean) {
-        viewModelScope.launch {
+        cancelContentWork()
+        job = viewModelScope.launch {
             val destination = destinationFor(entry)
             val url = urlForHistory(entry, destination) ?: return@launch
             effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
@@ -878,7 +878,8 @@ internal class MainViewModel(
             entry.link.youtubeVideoOn(service)?.let { return destination.adapt(it) }
         }
         // A playlist plays as a queue of its first songs, as the Play button in the app does, not as a search.
-        if (entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
+        // An album has its own page there, which the exact match below finds.
+        if (entry.metadata.type == ItemType.PLAYLIST && entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
             entry.link.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
             matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { return it }
         }
@@ -954,10 +955,7 @@ internal class MainViewModel(
 
 
     fun clear() {
-        job?.cancel()
-        lastRequest = null
-        pendingOpen = false
-        dismissLyrics()
+        cancelContentWork()
         uiState = uiState.copy(
             linkText = "",
             isLoading = false,
@@ -971,6 +969,27 @@ internal class MainViewModel(
             handlingIncomingLink = false,
             handingOff = false
         )
+    }
+
+    /** A new song or an empty screen replaces every operation owned by the previous content. */
+    private fun cancelContentWork() {
+        job?.cancel()
+        job = null
+        lastRequest = null
+        pendingOpen = false
+        retryListens = false
+        dismissSongSearch()
+        dismissLyrics()
+        cancelTrackWork()
+        coverJob?.cancel()
+        coverJob = null
+        uiState = uiState.copy(isLoading = false, isMatching = false, listening = false, canRetry = false)
+    }
+
+    private fun cancelTrackWork() {
+        trackJob?.cancel()
+        trackJob = null
+        uiState = uiState.copy(queueProgress = null, isMatching = false)
     }
 
     private fun rememberDestination(destination: Destination, prepared: PreparedLink) {

@@ -131,14 +131,22 @@ internal object MusicLinks {
     /** What [text] is a link to, without fetching anything about it. */
     fun linkFor(text: String): MusicLink? = text.trim().toHttpUrlOrNull()?.let(::fromUrl)
 
-    private val schemeRegex = Regex("""^[a-z][a-z0-9+.-]*:""", RegexOption.IGNORE_CASE)
+    /**
+     * A scheme with its "//", or one of the few that go without, e.g. "spotify:" or "mailto:". A colon
+     * alone is no scheme: "Re:make" and "Re:Zero" are songs.
+     */
+    private val schemeRegex = Regex(
+        """^(?:[a-z][a-z0-9+.-]*://|(?:spotify|mailto|tel|sms|geo|data|intent|market|javascript|about|file):)""",
+        RegexOption.IGNORE_CASE
+    )
 
     /**
      * An id pasted with its address left off, e.g. one copied from a Spotify url. Twenty characters
      * is well past any title anyone types, and short enough to catch an id with a character added
-     * or lost.
+     * or lost. An id mixes letters and digits, while a long one-word title, e.g.
+     * "Supercalifragilisticexpialidocious", is letters only.
      */
-    private val bareIdRegex = Regex("""[A-Za-z0-9]{20,}""")
+    private val bareIdRegex = Regex("""(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
 
     /**
      * Whether [text] was meant as a link rather than as a song's name: it carries a scheme, or a

@@ -126,12 +126,24 @@ internal class AudioRecordMicrophone(private val create: () -> AudioRecord = ::m
         }
         // Without the permission it's made, but can't record.
         if (record?.state != AudioRecord.STATE_INITIALIZED) return null.also { record?.release() }
-        record.startRecording()
+        try {
+            record.startRecording()
+        } catch (_: RuntimeException) {
+            record.release()
+            return null
+        }
         return object : Recording {
-            override fun read(buffer: ShortArray, offset: Int, count: Int) = record.read(buffer, offset, count)
+            override fun read(buffer: ShortArray, offset: Int, count: Int): Int {
+                val read = record.read(buffer, offset, count)
+                if (read < 0) throw IllegalStateException("Microphone read failed: $read")
+                return read
+            }
             override fun close() {
-                record.stop()
-                record.release()
+                try {
+                    record.stop()
+                } finally {
+                    record.release()
+                }
             }
         }
     }
@@ -156,7 +168,7 @@ internal class SongListener(
     /** Reading the microphone blocks. */
     private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
-    private data class Progress(val recorded: Int, val done: Boolean)
+    private data class Progress(val recorded: Int, val done: Boolean, val failed: Boolean = false)
 
     suspend fun listen(): Heard = coroutineScope {
         val audio = ShortArray(ShazamSignature.SAMPLES)
@@ -164,14 +176,22 @@ internal class SongListener(
         // It opens the microphone itself, so whatever it opens it closes, even when stopped meanwhile.
         val recorder = launch(recordDispatcher) {
             var recorded = 0
-            microphone.open()?.use { recording ->
-                while (isActive && recorded < audio.size) {
+            try {
+                microphone.open()?.use { recording ->
+                    while (isActive && recorded < audio.size) {
                     // Stopping interrupts a read that's waiting for sound.
-                    val read = runInterruptible { recording.read(audio, recorded, min(CHUNK, audio.size - recorded)) }
-                    if (read <= 0) break
-                    recorded += read
-                    progress.value = Progress(recorded, done = false)
+                        val read = runInterruptible { recording.read(audio, recorded, min(CHUNK, audio.size - recorded)) }
+                        if (read <= 0) break
+                        recorded += read
+                        progress.value = Progress(recorded, done = false)
+                    }
                 }
+            } catch (_: SecurityException) {
+                progress.value = Progress(recorded, done = true, failed = true)
+                return@launch
+            } catch (_: IllegalStateException) {
+                progress.value = Progress(recorded, done = true, failed = true)
+                return@launch
             }
             progress.value = Progress(recorded, done = true)
         }
@@ -180,7 +200,9 @@ internal class SongListener(
         while (heard == null) {
             // Asked again once there's another step's worth, or whatever's left when recording ends.
             val now = progress.first { it.done || it.recorded >= tried + STEP }
-            heard = if (now.recorded == tried) {
+            heard = if (now.failed) {
+                Heard.Failed(AppError.MICROPHONE)
+            } else if (now.recorded == tried) {
                 // A microphone that can't open, or gives no sound at all, isn't working.
                 if (tried == 0) Heard.Failed(AppError.MICROPHONE) else Heard.Nothing
             } else {

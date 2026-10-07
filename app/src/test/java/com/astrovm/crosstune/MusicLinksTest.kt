@@ -305,7 +305,7 @@ class MusicLinksTest {
     @Test
     fun aNameWithADotInItIsNotALinkButAnAddressIs() {
         // The dot proves nothing on its own: these are names, and nobody linked anywhere with them.
-        listOf("Mr.Big", "S.O.S", "R.E.M", "A.B.C", "3.14")
+        listOf("Mr.Big", "S.O.S", "R.E.M", "A.B.C", "3.14", "Re:make", "Re:Zero", "Supercalifragilisticexpialidocious")
             .forEach { assertFalse(it, MusicLinks.looksLikeALink(it)) }
 
         // An address is one with something past its host, or a host Crosstune already knows.
