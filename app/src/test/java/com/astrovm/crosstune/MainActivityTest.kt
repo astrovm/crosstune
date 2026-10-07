@@ -1203,6 +1203,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun theWidgetsPlayOpensASavedAlbumAsTheAlbumNotAsAQueue() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        collectionWithSongs(type = "album")
+        val url = "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy"
+        HistoryStore(prefs()).add(
+            HistoryEntry(
+                MusicLink(MusicService.SPOTIFY, ItemType.ALBUM, "4aawyAB9vmqN3uQ7FjRGTy", url),
+                MusicMetadata("Road Trip", "Band", ItemType.ALBUM, tracks = listOf(MusicMetadata("First Song", "Band")))
+            )
+        )
+
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        // YouTube Music has no album by that name here, so it's searched for, not played as its songs.
+        val opened = nextStartedActivity()!!.dataString!!
+        assertTrue(opened, opened.startsWith("https://music.youtube.com/search"))
+        assertTrue(fake.requestedUrls.none { it.contains("watch_videos") })
+    }
+
+    @Test
     fun theWidgetsPlayOpensASongNoLongerInRecentLikeAnyLink() {
         respondWithTrack("Gone", "Artist · Song")
         launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse("https://open.spotify.com/track/$TRACK_ID")))

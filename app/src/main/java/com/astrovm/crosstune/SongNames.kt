@@ -98,10 +98,13 @@ internal object SongNames {
      * little, but two titles reduced to the same word are the same title with a tag left off.
      */
     fun wordsMatch(one: String, other: String): Boolean {
+        // Entirely non-Latin titles have no words below. Two empty sets say nothing about
+        // whether they name the same song; compare their actual letters first.
+        if (same(one, other) && normalize(one).isNotEmpty()) return true
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
-        return (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
+        return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
     }
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */

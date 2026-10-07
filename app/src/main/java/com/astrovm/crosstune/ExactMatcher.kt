@@ -77,6 +77,7 @@ internal class ExactMatcher(
      */
     private suspend fun matchForQueue(target: MusicService, metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) return match(target, metadata)
+        metadata.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(target)?.let { return it }
         cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
         return remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) }
     }

@@ -13,7 +13,6 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
-import java.util.Locale
 
 /**
  * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
@@ -60,7 +59,7 @@ internal class LyricsFinder(
                 } catch (_: JSONException) {
                     Lyrics.Unavailable
                 }
-            } ?: return Lyrics.Unavailable
+            } ?: Lyrics.Unavailable
             if (answer !is Lyrics.Unavailable) return answer
         }
         return Lyrics.Unavailable
@@ -93,6 +92,7 @@ internal class LyricsFinder(
             .get()
             .build()
         return client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
             val body = withContext(ioDispatcher) { response.body.stringAtMost() }
             JSONTokener(body).nextValue()
         }
@@ -100,7 +100,7 @@ internal class LyricsFinder(
 
     /** One answer: whose song it claims to be, and its words. */
     private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
-        fun plain(): String? = json.optString("plainLyrics").trim().takeIf { it.isNotEmpty() }
+        fun plain(): String? = (json.opt("plainLyrics") as? String)?.trim()?.takeIf { it.isNotEmpty() }
 
         /**
          * The very song asked about, name for name. A title compared without its edition tag would
@@ -121,9 +121,9 @@ internal class LyricsFinder(
         companion object {
             fun of(json: JSONObject?): Answer? {
                 if (json == null) return null
-                val title = json.optString("trackName").trim()
-                val artist = json.optString("artistName").trim()
-                if (title.isEmpty()) return null
+                val title = (json.opt("trackName") as? String)?.trim().orEmpty()
+                val artist = (json.opt("artistName") as? String)?.trim().orEmpty()
+                if (title.isEmpty() || artist.isEmpty()) return null
                 return Answer(title, artist, json)
             }
         }

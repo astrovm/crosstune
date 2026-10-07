@@ -63,6 +63,22 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun anInstrumentalHasNoWordsRatherThanTheWordNull() {
+        // LRCLIB sends an instrumental's words as null, not as an empty text.
+        respond("""[{"trackName":"Flight","artistName":"Band","plainLyrics":null,"syncedLyrics":null}]""")
+        assertEquals(Lyrics.None, found(MusicMetadata("Flight", "Band")))
+    }
+
+    @Test
+    fun anotherSongWrittenInAnotherScriptIsNotTheSameSong() {
+        // Neither title has a Latin word, which says nothing about whether they are the same song.
+        respond("""[${answer("冬の歌", "Artist", "Wrong song")}]""")
+        assertEquals(Lyrics.None, found(MusicMetadata("夏の歌", "Artist")))
+        respond("""[${answer("夏の歌", "Artist", "夏")}]""")
+        assertEquals("夏", words(MusicMetadata("夏の歌", "Artist")))
+    }
+
+    @Test
     fun aNameWrittenAnotherWayStillCountsAsTheSameSong() {
         // A title in another script, written out in letters, and an artist credited with a tag.
         respond("""[${answer("FUTARI NO NATSU MONOGATARI NEVER ENDING SUMMER", "Omega Tribe", "夏物語")}]""")

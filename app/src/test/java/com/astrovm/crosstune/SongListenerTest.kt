@@ -236,6 +236,32 @@ class SongListenerTest {
         assertNull(AudioRecordMicrophone { throw UnsupportedOperationException("no permission") }.open())
     }
 
+    @Test
+    fun aMicrophoneThatFailsWhileRecordingIsAMicrophoneError() {
+        // The phone's microphone answers a read with an error code once it has stopped working.
+        ShadowAudioRecord.setSourceProvider {
+            object : ShadowAudioRecord.AudioRecordSource {
+                override fun readInShortArray(audioData: ShortArray, offsetInShorts: Int, sizeInShorts: Int, isBlocking: Boolean) =
+                    AudioRecord.ERROR_INVALID_OPERATION
+            }
+        }
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { SongListener(AudioRecordMicrophone(), shazam).listen() })
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aMicrophoneThatWontStartIsReleasedAndNoRecording() {
+        var made: AudioRecord? = null
+        val busy = AudioRecordMicrophone {
+            object : AudioRecord(MediaRecorder.AudioSource.MIC, 16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 32_000) {
+                // Another app holding the microphone.
+                override fun startRecording() = throw IllegalStateException("busy")
+            }.also { made = it }
+        }
+        assertNull(busy.open())
+        assertEquals(AudioRecord.STATE_UNINITIALIZED, made!!.state)
+    }
+
     private companion object {
         const val NO_MATCH = """{"matches":[],"timestamp":5,"tagid":"x"}"""
         const val MATCH = """{"matches":[{"id":"238534"}],"track":{"key":"238534","title":"Iris","subtitle":"The Goo Goo Dolls",""" +
