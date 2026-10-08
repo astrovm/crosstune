@@ -159,6 +159,16 @@ class SongListenerTest {
     }
 
     @Test
+    fun itCanListenAgainAfterASong() {
+        answer(MATCH)
+        microphone.play(3.0)
+        assertTrue(runBlocking { listener.listen() } is Heard.Song)
+        microphone.play(3.0)
+        assertTrue(runBlocking { listener.listen() } is Heard.Song)
+        assertEquals(2, fake.requestedUrls.size)
+    }
+
+    @Test
     fun aFailureStopsListeningRightAway() {
         microphone.play(3.0)
         answer("", code = 429)

@@ -26,8 +26,11 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
     fun positionAt(nowMs: Long): Long = if (playing) positionMs + ((nowMs - atMs) * speed).toLong() else positionMs
 }
 
-/** A song followed as it plays: where it is, the app playing it if one is, and whether a line can be jumped to. */
-internal data class Following(val clock: PlaybackClock, val app: String?, val canSeek: Boolean)
+/**
+ * A song followed as it plays: where it is, the app playing it if one is, by name and package, and
+ * whether a line can be jumped to.
+ */
+internal data class Following(val clock: PlaybackClock, val app: String?, val canSeek: Boolean, val appPackage: String? = null)
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
@@ -110,7 +113,7 @@ internal class MediaSessionPlayback(
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val clock = PlaybackClock(state.position, at, state.playbackSpeed.takeIf { it > 0f } ?: 1f, state.state == PlaybackState.STATE_PLAYING)
-        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L)
+        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName)
     }
 
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */

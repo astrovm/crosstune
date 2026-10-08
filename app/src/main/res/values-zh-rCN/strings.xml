@@ -35,6 +35,8 @@
     <string name="custom_template_hint">在歌曲名称的位置写上 {query}，例如 https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">请输入名称和包含 {query} 的网址。</string>
     <string name="settings_behaviour_title">行为</string>
+    <string name="settings_listening_title">识别与歌词</string>
+    <string name="settings_appearance_title">外观</string>
     <string name="setup_welcome_title">欢迎使用 Crosstune</string>
     <string name="setup_welcome_body">收到其他应用的音乐链接？点按一下，就会在你常用的应用中打开。</string>
     <string name="setup_get_started">开始使用</string>
@@ -177,10 +179,10 @@
     <string name="lyrics_failed">暂时无法获取歌词。</string>
     <string name="lyrics_sync_service">Crosstune 歌词同步</string>
     <string name="lyrics_follow_allow">让歌词跟随音乐应用中正在播放的歌曲。</string>
-    <string name="lyrics_follow_play">在音乐应用中播放这首歌，歌词就会跟着走。</string>
     <string name="lyrics_following_app">正在跟随 %1$s</string>
-    <string name="lyrics_following_heard">正在跟随 Crosstune 听到的位置</string>
     <string name="lyrics_jump">跳到这里</string>
+    <string name="lyrics_listen_along">一起听</string>
+    <string name="lyrics_stop_listening">停止收听</string>
     <string name="setting_theme">主题</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
@@ -189,10 +191,9 @@
     <string name="follow_help_restricted">然后打开“应用信息”，点按右上角的 ⋮，选择“允许受限制的设置”。Android 只会在第一次尝试之后才提供这个选项。</string>
     <string name="follow_help_access">回到“通知使用权”，开启 Crosstune。它只会看到你的音乐应用正在播放什么。</string>
     <string name="setting_lyrics_follow">歌词跟随音乐应用</string>
-    <string name="setting_lyrics_follow_description">使用通知使用权查看正在播放的内容，从不读取你的通知。</string>
+    <string name="setting_lyrics_follow_description">需要通知使用权。从不读取你的通知。</string>
     <string name="follow_help_app_info">应用信息</string>
     <string name="follow_help_access_button">通知使用权</string>
-    <string name="not_now_button">以后再说</string>
     <string name="song_search_title">歌曲</string>
     <string name="song_search_none">没有找到与“%1$s”匹配的歌曲。</string>
     <string name="song_search_label_for">“%1$s”的搜索结果</string>

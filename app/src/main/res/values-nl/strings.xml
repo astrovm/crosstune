@@ -35,6 +35,8 @@
     <string name="custom_template_hint">Zet {query} waar de titel van het nummer moet komen, bijv. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
     <string name="settings_behaviour_title">Gedrag</string>
+    <string name="settings_listening_title">Herkenning en songteksten</string>
+    <string name="settings_appearance_title">Weergave</string>
     <string name="setup_welcome_title">Welkom bij Crosstune</string>
     <string name="setup_welcome_body">Een muzieklink uit een andere app gekregen? Tik erop en hij opent waar je luistert.</string>
     <string name="setup_get_started">Aan de slag</string>
@@ -177,10 +179,10 @@
     <string name="lyrics_failed">Kon de tekst niet ophalen.</string>
     <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
     <string name="lyrics_follow_allow">Laat de tekst het nummer volgen dat in je muziek-app speelt.</string>
-    <string name="lyrics_follow_play">Speel dit nummer af in je muziek-app en de tekst volgt mee.</string>
     <string name="lyrics_following_app">Volgt %1$s</string>
-    <string name="lyrics_following_heard">Volgt wat Crosstune hoorde</string>
     <string name="lyrics_jump">Hierheen springen</string>
+    <string name="lyrics_listen_along">Meeluisteren</string>
+    <string name="lyrics_stop_listening">Stoppen met luisteren</string>
     <string name="setting_theme">Thema</string>
     <string name="theme_light">Licht</string>
     <string name="theme_dark">Donker</string>
@@ -189,10 +191,9 @@
     <string name="follow_help_restricted">Open daarna App-info, tik rechtsboven op ⋮ en kies Beperkte instellingen toestaan. Android biedt dat pas aan na die eerste poging.</string>
     <string name="follow_help_access">Terug in Toegang tot meldingen zet je Crosstune aan. Het ziet alleen wat je muziek-apps afspelen.</string>
     <string name="setting_lyrics_follow">Songtekst volgt je muziek-app</string>
-    <string name="setting_lyrics_follow_description">Gebruikt toegang tot meldingen om te zien wat er speelt. Je meldingen worden nooit gelezen.</string>
+    <string name="setting_lyrics_follow_description">Heeft toegang tot meldingen nodig. Je meldingen worden nooit gelezen.</string>
     <string name="follow_help_app_info">App-info</string>
     <string name="follow_help_access_button">Toegang tot meldingen</string>
-    <string name="not_now_button">Niet nu</string>
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
     <string name="song_search_label_for">Gevonden voor “%1$s”</string>

@@ -35,6 +35,8 @@
     <string name="custom_template_hint">Escreva {query} onde vai o nome da música, por ex. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Digite um nome e um URL que contenha {query}.</string>
     <string name="settings_behaviour_title">Comportamento</string>
+    <string name="settings_listening_title">Reconhecimento e letras</string>
+    <string name="settings_appearance_title">Aparência</string>
     <string name="setup_welcome_title">Boas-vindas ao Crosstune</string>
     <string name="setup_welcome_body">Recebeu um link de música de outro app? Toque nele e ele abre onde você ouve.</string>
     <string name="setup_get_started">Começar</string>
@@ -177,10 +179,10 @@
     <string name="lyrics_failed">Não foi possível obter a letra agora.</string>
     <string name="lyrics_sync_service">Sincronização de letras do Crosstune</string>
     <string name="lyrics_follow_allow">Deixe a letra acompanhar a música tocando no seu app de música.</string>
-    <string name="lyrics_follow_play">Toque esta música no seu app de música e a letra acompanha.</string>
     <string name="lyrics_following_app">Acompanhando %1$s</string>
-    <string name="lyrics_following_heard">Acompanhando o que o Crosstune ouviu</string>
     <string name="lyrics_jump">Ir para aqui</string>
+    <string name="lyrics_listen_along">Ouvir junto</string>
+    <string name="lyrics_stop_listening">Parar de ouvir</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Escuro</string>
@@ -189,10 +191,9 @@
     <string name="follow_help_restricted">Depois abra Informações do app, toque em ⋮ no canto superior direito e escolha Permitir configurações restritas. O Android só oferece isso depois dessa primeira tentativa.</string>
     <string name="follow_help_access">De volta ao Acesso a notificações, ative o Crosstune. Ele só vê o que seus apps de música estão tocando.</string>
     <string name="setting_lyrics_follow">A letra acompanha seu app de música</string>
-    <string name="setting_lyrics_follow_description">Usa o acesso a notificações para ver o que está tocando. Suas notificações nunca são lidas.</string>
+    <string name="setting_lyrics_follow_description">Precisa de acesso a notificações. Suas notificações nunca são lidas.</string>
     <string name="follow_help_app_info">Informações do app</string>
     <string name="follow_help_access_button">Acesso a notificações</string>
-    <string name="not_now_button">Agora não</string>
     <string name="song_search_title">Músicas</string>
     <string name="song_search_none">Nenhuma música encontrada para “%1$s”.</string>
     <string name="song_search_label_for">Encontradas para “%1$s”</string>

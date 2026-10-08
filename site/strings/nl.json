@@ -57,7 +57,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 5 oktober 2026",
+  "updated": "Laatst bijgewerkt: 7 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "Als je de songtekst het nummer laat volgen dat in je muziek-app speelt, vraagt Android je om Crosstune toegang tot meldingen te geven. Crosstune gebruikt die alleen om te zien welk nummer je muziek-apps zeggen af te spelen en hoe ver ze zijn, zodat de tekst meeloopt en een regel waarop je tikt het nummer daarheen kan laten springen. Het leest nooit je meldingen, en niets hiervan verlaat je telefoon. Je kunt dit altijd uitzetten in de instellingen van Android."
+    ],
+    [
+      "p",
       "Zoals bij andere internetverzoeken krijgt de benaderde service je IP-adres en de gebruikelijke verzoekinformatie te zien. Die services kunnen verzoeklogboeken bewaren en informatie verwerken volgens hun eigen privacybeleid. De ontwikkelaar heeft geen invloed op hoe zij die gegevens verwerken of bewaren. Een muziekservice kan een eigen account of abonnement vereisen nadat je hem opent."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "Als je Crosstune een nummer laat herkennen, neemt het alleen tijdens het luisteren geluid op met de microfoon, maximaal 12 seconden, en stopt het zodra het het nummer vindt. Op je telefoon maakt het van het geluid een vingerafdruk van de luidste punten. Alleen die vingerafdruk gaat naar Shazam, nooit de audio, en de opname wordt niet bewaard. Crosstune stuurt je locatie niet mee. Shazam antwoordt met de titel, artiest, hoes en Apple Music-ID van het nummer, en Crosstune zoekt het nummer daarna op als een geplakte link. Net als andere verzoeken geeft dit verzoek je IP-adres door aan Shazam, dat het verwerkt volgens zijn eigen privacybeleid. In Instellingen kun je in plaats daarvan Shazam of de Google-app kiezen om nummers te herkennen; die luisteren volgens hun eigen privacybeleid."
+    ],
+    [
+      "p",
+      "Karaoke, en de songtekst van een nummer dat Crosstune net herkende, blijven op dezelfde manier luisteren zolang de tekst in beeld is: om de paar seconden stuurt Crosstune Shazam een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat."
     ],
     [
       "h2",

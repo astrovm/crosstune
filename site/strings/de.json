@@ -57,7 +57,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 5. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 7. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten."
+    ],
+    [
+      "p",
       "Wie andere Internetanfragen geben diese Anfragen deine IP-Adresse und die üblichen Anfrageinformationen an den kontaktierten Dienst weiter. Diese Dienste können Anfrageprotokolle aufbewahren und Informationen nach ihren eigenen Datenschutzrichtlinien verarbeiten. Der Entwickler hat keinen Einfluss darauf, wie sie diese Daten verarbeiten oder aufbewahren. Ein Musikdienst kann nach dem Öffnen ein eigenes Konto oder Abo verlangen."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "Wenn du Crosstune einen Song erkennen lässt, nimmt es nur während des Zuhörens Ton über das Mikrofon auf, höchstens 12 Sekunden, und hört auf, sobald es den Song gefunden hat. Auf deinem Handy macht es aus dem Ton einen Fingerabdruck seiner lautesten Stellen. Nur dieser Fingerabdruck geht an Shazam, nie die Aufnahme, und die Aufnahme wird nicht gespeichert. Crosstune sendet deinen Standort nicht. Shazam antwortet mit Titel, Künstler, Cover und Apple-Music-ID des Songs, und Crosstune schlägt den Song dann wie einen eingefügten Link nach. Wie andere Anfragen gibt diese deine IP-Adresse an Shazam weiter, das sie nach seiner eigenen Datenschutzerklärung verarbeitet. In den Einstellungen kannst du stattdessen Shazam oder die Google App zum Erkennen wählen; sie hören nach ihren eigenen Datenschutzerklärungen zu."
+    ],
+    [
+      "p",
+      "Karaoke und der Text eines Songs, den Crosstune gerade erkannt hat, hören auf dieselbe Weise weiter zu, solange der Text angezeigt wird: Alle paar Sekunden schickt Crosstune Shazam einen neuen Fingerabdruck, nie Audio, um im Takt des Songs zu bleiben und den nächsten zu erkennen. Das Zuhören endet, sobald du den Text schließt, es ausschaltest oder die App verlässt."
     ],
     [
       "h2",

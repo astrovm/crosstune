@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.provider.Settings
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -67,6 +69,8 @@ class ListeningTest {
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
+        MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
+        MainActivity.hearingFactory = null
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -141,8 +145,9 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         // No music app plays it, so it follows what Crosstune heard: the line sung from 10 seconds in.
-        waitForText(string(R.string.lyrics_following_heard))
-        composeRule.onNode(hasText("Ten") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        composeRule.waitUntil(TIMEOUT_MS) {
+            composeRule.onAllNodes(hasText("Ten") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNode(hasText("Late") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)).assertExists()
     }
 
@@ -299,6 +304,131 @@ class ListeningTest {
         launch(Intent(MainActivity.ACTION_LISTEN).setClass(app, MainActivity::class.java))
         assertTrue(!shown(string(R.string.listening_text)))
         assertEquals(0, microphone.opened)
+    }
+
+    /** Hears whatever a test says, one song or silence per listen, and counts the listens. */
+    private class FakeHearing : SongHearing {
+        val next = Channel<Heard>(Channel.UNLIMITED)
+
+        @Volatile
+        var listens = 0
+
+        override suspend fun listen(): Heard {
+            listens++
+            return next.receive()
+        }
+
+        /** [title] by Band, heard [seconds] into it, just now. */
+        fun song(title: String, seconds: Double) =
+            next.trySend(Heard.Song(MusicMetadata(title, "Band"), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime()))
+    }
+
+    /**
+     * Listening along with [hearing] for ears; LRCLIB has "<title> one" at the start of each song,
+     * "<title> two" from 10 seconds in, and "<title> three" from 40.
+     */
+    private fun listeningAlong(hearing: FakeHearing) {
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { hearing }
+        fake.handler = { request ->
+            val title = request.url.queryParameter("track_name")
+            FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] $title one\n[00:10.00] $title two\n[00:40.00] $title three"}]""")
+        }
+    }
+
+    private fun described(label: String) = composeRule.onAllNodes(hasContentDescription(label)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun lit(line: String) = composeRule.onAllNodes(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        .fetchSemanticsNodes().isNotEmpty()
+
+    /** Recognizes Demo 2 seconds in, and opens its words, which keep listening along. */
+    private fun demoWords(hearing: FakeHearing) {
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun wordsListeningAlongKeepSteadyFollowSkipsAndTheNextSong() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+
+        // Heard far from where the words are, once, it might be the chorus heard as its other time:
+        // nothing moves until a second hearing agrees, as a real skip would.
+        hearing.song("Demo", 12.5)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        assertTrue(lit("Demo one"))
+        // Close to where they are, a hearing changes nothing either.
+        hearing.song("Demo", 2.5)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+        assertTrue(lit("Demo one"))
+        hearing.song("Demo", 12.5)
+        hearing.song("Demo", 12.6)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+
+        // Nothing heard, the song's taken to have stopped; heard again further on, it follows on from there.
+        hearing.next.trySend(Heard.Nothing)
+        hearing.song("Demo", 41.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo three") }
+
+        // Shazam busy, it's asked again, and the next song takes over the words.
+        hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+        hearing.next.trySend(Heard.Song(MusicMetadata("Other", "Band"), "1109658204", 0, SystemClock.elapsedRealtime()))
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        assertTrue(shown("Other"))
+        // Each song heard along the way joins Recent: by its Apple Music link when Shazam knows one.
+        val recent = HistoryStore(prefs()).load()
+        assertEquals(listOf("Other", "Demo"), recent.map { it.metadata.title })
+        assertEquals(MusicService.APPLE_MUSIC, recent.first().link.service)
+        assertEquals(null, recent[1].link.service)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 10 }
+
+        // Stopped, it listens no more, and the words stay.
+        click(string(R.string.lyrics_stop_listening))
+        hearing.song("Demo", 0.0)
+        composeRule.waitForIdle()
+        assertEquals(10, hearing.listens)
+        assertTrue(shown("Other one"))
+        assertTrue(described(string(R.string.lyrics_listen_along)))
+    }
+
+    @Test
+    fun withoutTheMicrophoneListeningAlongStopsAndSaysSo() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
+        // The words stay; closed, the song says why it stopped.
+        click(string(R.string.dismiss_button))
+        waitForText(string(R.string.error_microphone))
+    }
+
+    @Test
+    fun listeningAlongPausesOutOfSightAndTurnsOffAndOn() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // The next song, one with no Apple Music link, joins Recent by its name.
+        hearing.song("Third", 0.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Third one") }
+        val third = HistoryStore(prefs()).load().first()
+        assertEquals("Third", third.metadata.title)
+        assertEquals(null, third.link.service)
+
+        // Out of sight, it stops listening; back, it listens again.
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        controller!!.pause().stop()
+        controller!!.start().resume()
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+
+        // Turned off and on from the words themselves.
+        click(string(R.string.lyrics_stop_listening))
+        click(string(R.string.lyrics_listen_along))
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
     }
 
     private companion object {

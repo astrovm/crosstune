@@ -35,6 +35,8 @@
     <string name="custom_template_hint">Tulis {query} di tempat judul lagu, misalnya https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Masukkan nama dan URL yang berisi {query}.</string>
     <string name="settings_behaviour_title">Perilaku</string>
+    <string name="settings_listening_title">Pengenalan dan lirik</string>
+    <string name="settings_appearance_title">Tampilan</string>
     <string name="setup_welcome_title">Selamat datang di Crosstune</string>
     <string name="setup_welcome_body">Dapat tautan musik dari aplikasi lain? Ketuk dan tautan terbuka di tempat kamu mendengarkan.</string>
     <string name="setup_get_started">Mulai</string>
@@ -177,10 +179,10 @@
     <string name="lyrics_failed">Tidak bisa mengambil lirik saat ini.</string>
     <string name="lyrics_sync_service">Sinkronisasi lirik Crosstune</string>
     <string name="lyrics_follow_allow">Biarkan lirik mengikuti lagu yang diputar di aplikasi musikmu.</string>
-    <string name="lyrics_follow_play">Putar lagu ini di aplikasi musikmu dan liriknya akan mengikuti.</string>
     <string name="lyrics_following_app">Mengikuti %1$s</string>
-    <string name="lyrics_following_heard">Mengikuti yang didengar Crosstune</string>
     <string name="lyrics_jump">Lompat ke sini</string>
+    <string name="lyrics_listen_along">Dengarkan bersama</string>
+    <string name="lyrics_stop_listening">Berhenti mendengarkan</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Terang</string>
     <string name="theme_dark">Gelap</string>
@@ -189,10 +191,9 @@
     <string name="follow_help_restricted">Lalu buka Info aplikasi, ketuk ⋮ di kanan atas, dan pilih Izinkan setelan terbatas. Android baru menawarkannya setelah percobaan pertama itu.</string>
     <string name="follow_help_access">Kembali ke Akses notifikasi, aktifkan Crosstune. Crosstune hanya melihat apa yang diputar aplikasi musikmu.</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>
-    <string name="setting_lyrics_follow_description">Memakai akses notifikasi untuk melihat apa yang diputar. Notifikasimu tidak pernah dibaca.</string>
+    <string name="setting_lyrics_follow_description">Perlu akses notifikasi. Notifikasimu tidak pernah dibaca.</string>
     <string name="follow_help_app_info">Info aplikasi</string>
     <string name="follow_help_access_button">Akses notifikasi</string>
-    <string name="not_now_button">Lain kali</string>
     <string name="song_search_title">Lagu</string>
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
     <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>

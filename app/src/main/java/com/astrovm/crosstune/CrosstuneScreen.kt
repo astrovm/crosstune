@@ -184,6 +184,9 @@ internal data class ScreenActions(
     val onShowLyrics: () -> Unit = {},
     /** Closes the words. */
     val onDismissLyrics: () -> Unit = {},
+    /** Keeps the microphone listening along with the words shown, to stay in time with them. */
+    val onListenAlong: () -> Unit = {},
+    val onStopListeningAlong: () -> Unit = {},
     /** Moves the music app playing the song to where a line of its words is sung. */
     val onSeekLyrics: (Long) -> Unit = {},
     /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */

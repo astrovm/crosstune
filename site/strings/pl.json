@@ -57,7 +57,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 5 października 2026",
+  "updated": "Ostatnia aktualizacja: 7 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida."
+    ],
+    [
+      "p",
       "Jak każde zapytanie w internecie, te zapytania ujawniają serwisowi, z którym się łączą, Twój adres IP i standardowe informacje o zapytaniu. Te serwisy mogą przechowywać logi zapytań i przetwarzać informacje zgodnie z własnymi politykami prywatności. Deweloper nie ma wpływu na to, jak przetwarzają lub przechowują te dane. Serwis muzyczny może po otwarciu wymagać własnego konta lub subskrypcji."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "Gdy prosisz Crosstune o rozpoznanie utworu, nagrywa dźwięk z mikrofonu tylko podczas słuchania, maksymalnie przez 12 sekund, i przestaje, gdy tylko znajdzie utwór. Na telefonie zamienia dźwięk w odcisk jego najgłośniejszych punktów. Do Shazama trafia tylko ten odcisk, nigdy nagranie, a nagranie nie jest zapisywane. Crosstune nie wysyła Twojej lokalizacji. Shazam odpowiada tytułem, wykonawcą, okładką i identyfikatorem Apple Music utworu, a Crosstune wyszukuje go potem jak wklejony link. Jak inne żądania, to ujawnia Twój adres IP Shazamowi, który przetwarza je zgodnie z własnymi zasadami prywatności. W ustawieniach możesz zamiast tego wybrać Shazama lub aplikację Google do rozpoznawania utworów; słuchają one zgodnie z własnymi zasadami prywatności."
+    ],
+    [
+      "p",
+      "Karaoke oraz tekst utworu, który Crosstune właśnie rozpoznał, nasłuchują dalej w ten sam sposób, dopóki tekst jest na ekranie: co kilka sekund Crosstune wysyła do Shazam nowy odcisk, nigdy dźwięk, by nadążać za utworem i wychwycić następny. Nasłuchiwanie kończy się, gdy tylko zamkniesz tekst, wyłączysz je lub wyjdziesz z aplikacji."
     ],
     [
       "h2",
