@@ -74,6 +74,12 @@
     <string name="show_song_short">Nummer tonen</string>
     <string name="setting_exact_match">Exacte match openen</string>
     <string name="setting_exact_match_description">Opent het nummer zelf als de app dat ondersteunt. Anders wordt er gezocht.</string>
+    <string name="setting_not_found">Als een nummer niet wordt gevonden</string>
+    <string name="not_found_ask">Vraag het mij</string>
+    <string name="not_found_original">Open het waar het vandaan komt</string>
+    <string name="not_found_search">Toch zoeken</string>
+    <string name="not_found_on">Niet op %1$s</string>
+    <string name="search_anyway">Toch zoeken op %1$s</string>
     <string name="setting_clean_links">Tracking uit links halen</string>
     <string name="setting_clean_links_description">Haalt trackingonderdelen zoals ?si= of utm_ uit links die je opent, kopieert of deelt.</string>
     <string name="setting_share_sheet_apps">Apps in het deelmenu</string>

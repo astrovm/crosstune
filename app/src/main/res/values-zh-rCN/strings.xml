@@ -74,6 +74,12 @@
     <string name="show_song_short">查看歌曲</string>
     <string name="setting_exact_match">打开精确匹配</string>
     <string name="setting_exact_match_description">应用支持时直接打开歌曲本身，否则进行搜索。</string>
+    <string name="setting_not_found">找不到歌曲时</string>
+    <string name="not_found_ask">询问我</string>
+    <string name="not_found_original">在来源处打开</string>
+    <string name="not_found_search">仍然搜索</string>
+    <string name="not_found_on">%1$s 上没有</string>
+    <string name="search_anyway">仍在 %1$s 中搜索</string>
     <string name="setting_clean_links">去除链接中的跟踪参数</string>
     <string name="setting_clean_links_description">从你打开、复制或分享的链接中去掉 ?si=、utm_ 等跟踪参数。</string>
     <string name="setting_share_sheet_apps">分享菜单中的应用</string>

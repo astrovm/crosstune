@@ -198,6 +198,12 @@ internal data class ScreenActions(
     val onOpenAppInfo: () -> Unit = {},
     val onDismissFollowHelp: () -> Unit = {},
     val onThemeChange: (ThemeMode) -> Unit = {},
+    /** Searches where the result goes, though it wasn't found there. */
+    val onSearchAnyway: () -> Unit = {},
+    val onNotFoundActionChange: (NotFoundAction) -> Unit = {},
+    /** Takes the not-found offer's way: where the song is, or a search where it was going. */
+    val onTakeNotFoundOffer: (original: Boolean) -> Unit = {},
+    val onDismissNotFoundOffer: () -> Unit = {},
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
@@ -263,6 +269,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     }
     // Asked for from the words or from settings, so it shows over either.
     if (state.followHelp) FollowHelp(actions)
+    state.notFoundOffer?.let { NotFoundDialog(it, state, actions) }
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
@@ -991,6 +998,17 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             }
         }
         val main = mainAction(result, state, actions)
+        val missing = state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH
+        // It was looked for where it's going and isn't there, which is worth saying before the button.
+        AnimatedVisibility(visible = missing, enter = Motion.appear, exit = Motion.disappear) {
+            Text(
+                stringResource(R.string.not_found_on, destination.label()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+            )
+        }
         // One split button: the main part opens it, the arrow picks another app for just this result.
         Row(
             modifier = Modifier
@@ -1015,7 +1033,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             ) {
                 // Picking another app swaps the icon and label in place. The icon says which app,
                 // so a short label fits on one line; screen readers hear the app's name too.
-                AnimatedContent(targetState = Triple(destination, main.label, main.description), transitionSpec = { swap() }, label = "open") { (shown, text, description) ->
+                AnimatedContent(targetState = Triple(main.icon ?: destination, main.label, main.description), transitionSpec = { swap() }, label = "open") { (shown, text, description) ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = if (description != text) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier
@@ -1027,6 +1045,12 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
             DestinationMenuButton(state, actions)
+        }
+        // Playing it where it is leads; a search there is still a tap away, e.g. for another name.
+        AnimatedVisibility(visible = missing && state.link?.service != null, enter = Motion.appear, exit = Motion.disappear) {
+            TextButton(onClick = actions.onSearchAnyway, modifier = Modifier.padding(top = 4.dp)) {
+                Text(stringResource(R.string.search_anyway, destination.label()))
+            }
         }
         // A later part shows its own, down by its button.
         QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
@@ -1084,7 +1108,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
 }
 
 /** What a result's main button says and does. [description] adds the app's name, which its icon shows. */
-private class MainAction(val label: String, val description: String, val enabled: Boolean, val onClick: () -> Unit)
+private class MainAction(val label: String, val description: String, val enabled: Boolean, val icon: Destination? = null, val onClick: () -> Unit)
 
 @Composable
 private fun mainAction(result: MusicMetadata, state: UiState, actions: ScreenActions): MainAction {
@@ -1106,12 +1130,17 @@ private fun mainAction(result: MusicMetadata, state: UiState, actions: ScreenAct
             MainAction(stringResource(R.string.play_all_button), stringResource(R.string.play_all_in, app), enabled) { actions.onPlayAll(0) }
         }
     }
+    // Not there, the song plays where it is instead, unless searching anyway was picked.
+    state.link?.service?.takeIf { state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH }?.let { original ->
+        val label = stringResource(original.openLabelRes)
+        return MainAction(label, label, enabled, Destination.Service(original), actions.onOpenOriginal)
+    }
     val label = if (state.destinationUrls[destination]?.exact == false) {
         stringResource(R.string.search_in_destination, app)
     } else {
         destination.openLabel()
     }
-    return MainAction(label, label, enabled, actions.onOpen)
+    return MainAction(label, label, enabled, onClick = actions.onOpen)
 }
 
 /**
@@ -1623,4 +1652,27 @@ internal fun CrosstuneScreenPreview() {
             actions = ScreenActions()
         )
     }
+}
+
+/**
+ * A song from Recent or a playlist that the app it goes to doesn't have: where it is, by its own app,
+ * leads, and a search there is still offered, e.g. for another name.
+ */
+@Composable
+private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: ScreenActions) {
+    val app = offer.destination.label()
+    AlertDialog(
+        onDismissRequest = actions.onDismissNotFoundOffer,
+        icon = { DestinationIcon(offer.destination, state.installed) },
+        title = { Text(offer.song.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = { Text(stringResource(R.string.not_found_on, app)) },
+        confirmButton = {
+            offer.original?.service?.let { service ->
+                TextButton(onClick = { actions.onTakeNotFoundOffer(true) }) { Text(stringResource(service.openLabelRes)) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { actions.onTakeNotFoundOffer(false) }) { Text(stringResource(R.string.search_anyway, app)) }
+        }
+    )
 }

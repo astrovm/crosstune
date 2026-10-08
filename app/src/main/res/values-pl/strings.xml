@@ -74,6 +74,12 @@
     <string name="show_song_short">Pokaż utwór</string>
     <string name="setting_exact_match">Otwieraj dokładne dopasowanie</string>
     <string name="setting_exact_match_description">Otwiera sam utwór, gdy aplikacja na to pozwala. W przeciwnym razie go wyszukuje.</string>
+    <string name="setting_not_found">Gdy utwór nie zostanie znaleziony</string>
+    <string name="not_found_ask">Pytaj</string>
+    <string name="not_found_original">Otwórz tam, skąd pochodzi</string>
+    <string name="not_found_search">Szukaj mimo to</string>
+    <string name="not_found_on">Brak w %1$s</string>
+    <string name="search_anyway">Szukaj mimo to w %1$s</string>
     <string name="setting_clean_links">Usuwaj śledzenie z linków</string>
     <string name="setting_clean_links_description">Usuwa elementy śledzące, takie jak ?si= czy utm_, z linków, które otwierasz, kopiujesz lub udostępniasz.</string>
     <string name="setting_share_sheet_apps">Aplikacje w menu udostępniania</string>

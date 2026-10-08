@@ -75,6 +75,12 @@
     <string name="show_song_short">曲を表示</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
     <string name="setting_exact_match_description">アプリが対応していれば曲そのものを開きます。そうでなければ検索します。</string>
+    <string name="setting_not_found">曲が見つからないとき</string>
+    <string name="not_found_ask">確認する</string>
+    <string name="not_found_original">元のアプリで開く</string>
+    <string name="not_found_search">とにかく検索する</string>
+    <string name="not_found_on">%1$s にはありません</string>
+    <string name="search_anyway">%1$s でとにかく検索</string>
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
     <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
     <string name="setting_share_sheet_apps">共有メニューのアプリ</string>

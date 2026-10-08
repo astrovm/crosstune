@@ -74,6 +74,12 @@
     <string name="show_song_short">Показать трек</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
     <string name="setting_exact_match_description">Открывает сам трек, если приложение это поддерживает. Иначе ищет его.</string>
+    <string name="setting_not_found">Если песня не найдена</string>
+    <string name="not_found_ask">Спрашивать</string>
+    <string name="not_found_original">Открывать там, откуда она</string>
+    <string name="not_found_search">Всё равно искать</string>
+    <string name="not_found_on">Нет в %1$s</string>
+    <string name="search_anyway">Всё равно искать в %1$s</string>
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
     <string name="setting_clean_links_description">Удаляет метки отслеживания вроде ?si= или utm_ из ссылок, которые вы открываете, копируете или отправляете.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>

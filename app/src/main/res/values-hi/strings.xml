@@ -74,6 +74,12 @@
     <string name="show_song_short">गाना देखें</string>
     <string name="setting_exact_match">सटीक मैच खोलें</string>
     <string name="setting_exact_match_description">ऐप सपोर्ट करे तो सीधे गाना खोलता है, वरना खोजता है।</string>
+    <string name="setting_not_found">जब कोई गाना न मिले</string>
+    <string name="not_found_ask">मुझसे पूछें</string>
+    <string name="not_found_original">जहाँ से आया वहीं खोलें</string>
+    <string name="not_found_search">फिर भी खोजें</string>
+    <string name="not_found_on">%1$s पर नहीं है</string>
+    <string name="search_anyway">फिर भी %1$s पर खोजें</string>
     <string name="setting_clean_links">लिंक से ट्रैकिंग हटाएँ</string>
     <string name="setting_clean_links_description">आप जो लिंक खोलते, कॉपी करते या शेयर करते हैं, उनसे ?si= या utm_ जैसे ट्रैकिंग हिस्से हटा देता है।</string>
     <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>

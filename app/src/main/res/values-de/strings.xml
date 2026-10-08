@@ -74,6 +74,12 @@
     <string name="show_song_short">Song zeigen</string>
     <string name="setting_exact_match">Genauen Treffer öffnen</string>
     <string name="setting_exact_match_description">Öffnet direkt den Song, wenn die App das unterstützt. Sonst wird gesucht.</string>
+    <string name="setting_not_found">Wenn ein Song nicht gefunden wird</string>
+    <string name="not_found_ask">Fragen</string>
+    <string name="not_found_original">Dort öffnen, wo er herkommt</string>
+    <string name="not_found_search">Trotzdem suchen</string>
+    <string name="not_found_on">Nicht auf %1$s</string>
+    <string name="search_anyway">Trotzdem auf %1$s suchen</string>
     <string name="setting_clean_links">Tracking aus Links entfernen</string>
     <string name="setting_clean_links_description">Entfernt Tracking-Teile wie ?si= oder utm_ aus Links, die du öffnest, kopierst oder teilst.</string>
     <string name="setting_share_sheet_apps">Apps beim Teilen</string>

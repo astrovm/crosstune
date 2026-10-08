@@ -74,6 +74,12 @@
     <string name="show_song_short">노래 보기</string>
     <string name="setting_exact_match">정확한 항목 열기</string>
     <string name="setting_exact_match_description">앱이 지원하면 해당 곡을 바로 열고, 아니면 검색해요.</string>
+    <string name="setting_not_found">곡을 찾지 못했을 때</string>
+    <string name="not_found_ask">물어보기</string>
+    <string name="not_found_original">원래 앱에서 열기</string>
+    <string name="not_found_search">그래도 검색</string>
+    <string name="not_found_on">%1$s에 없음</string>
+    <string name="search_anyway">그래도 %1$s에서 검색</string>
     <string name="setting_clean_links">링크에서 추적 정보 제거</string>
     <string name="setting_clean_links_description">열거나 복사하거나 공유하는 링크에서 ?si=, utm_ 같은 추적 정보를 지워요.</string>
     <string name="setting_share_sheet_apps">공유 메뉴의 앱</string>
