@@ -391,8 +391,8 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions) {
             LyricLineText(
                 line.text,
                 place = following?.let { index.compareTo(active) },
-                canSeek = following?.canSeek == true,
-                onClick = { actions.onSeekLyrics(line.timeMs) },
+                // Tapping a line moves the music app there, when it can.
+                onSeek = if (following?.canSeek == true) ({ actions.onSeekLyrics(line.timeMs) }) else null,
                 help = state.learning.helpFor(index)
             )
         }
@@ -412,7 +412,7 @@ private fun LyricLines(state: UiState, actions: ScreenActions) {
         modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(state.lyrics.lines()) { index, line ->
-            LyricLineText(line, place = null, canSeek = false, onClick = {}, help = state.learning.helpFor(index))
+            LyricLineText(line, place = null, onSeek = null, help = state.learning.helpFor(index))
         }
     }
 }
@@ -444,7 +444,7 @@ private fun FollowOffer(actions: ScreenActions) {
  * null while nothing says where the song is, when every line reads alike, calmer, as a page.
  */
 @Composable
-private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: () -> Unit, help: LineHelp? = null) {
+private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, help: LineHelp? = null) {
     val lit = place == 0
     val alpha by animateFloatAsState(
         if (place == null) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.55f,
@@ -468,7 +468,7 @@ private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: 
                 scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
-            .then(if (canSeek) Modifier.clickable(onClickLabel = stringResource(R.string.lyrics_jump), onClick = onClick) else Modifier)
+            .then(onSeek?.let { Modifier.clickable(onClickLabel = stringResource(R.string.lyrics_jump), onClick = it) } ?: Modifier)
             .padding(vertical = 6.dp)
     ) {
         val reading = help?.reading

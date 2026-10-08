@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
+import android.annotation.SuppressLint
 import android.icu.text.Transliterator
 import android.os.Build
+import androidx.annotation.RequiresApi
 import com.atilika.kuromoji.ipadic.Tokenizer
 
 /** The writing systems whose words read differently from how they look, and so have readings shown. */
@@ -31,6 +33,8 @@ internal object Readings {
     }
 
     /** How each of [lines] reads, in [script]. Japanese takes a moment the first time, to load its dictionary. */
+    // Words are only ever Chinese from Android 10 on, see scriptOf.
+    @SuppressLint("NewApi")
     fun of(lines: List<String>, script: Script): List<LineReading> = when (script) {
         Script.JAPANESE -> lines.map(::japanese)
         Script.CHINESE -> lines.map(::chinese)
@@ -68,11 +72,16 @@ internal object Readings {
         )
     }
 
-    private val pinyin by lazy { Transliterator.getInstance("Han-Latin") }
+    private var transliterator: Transliterator? = null
 
+    /** Android's own pinyin, made once, the first time it's needed. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun pinyin(): Transliterator = transliterator ?: Transliterator.getInstance("Han-Latin").also { transliterator = it }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun chinese(line: String): LineReading {
-        val parts = line.map { char -> if (isHan(char)) Ruby(char.toString(), pinyin.transliterate(char.toString())) else Ruby(char.toString()) }
-        val romanized = pinyin.transliterate(line).trim()
+        val parts = line.map { char -> if (isHan(char)) Ruby(char.toString(), pinyin().transliterate(char.toString())) else Ruby(char.toString()) }
+        val romanized = pinyin().transliterate(line).trim()
         return LineReading(joined(parts), romanized, romanized)
     }
 

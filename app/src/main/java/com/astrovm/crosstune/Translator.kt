@@ -35,7 +35,7 @@ internal class Translator(
      * nothing to translate; null for all of them when it couldn't be done, maybe offline or out of
      * the day's translations.
      */
-    suspend fun translate(lines: List<String>, target: String, server: TranslationServer? = null): List<String?>? {
+    suspend fun translate(lines: List<String>, target: String, server: TranslationServer?): List<String?>? {
         val words = lines.filter(::worthTranslating).distinct()
         val key = { line: String -> "${server?.url.orEmpty()}|$target|$line" }
         val known = words.associateWith { cache.get(key(it)) }

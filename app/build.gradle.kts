@@ -47,6 +47,13 @@ android {
         compose = true
     }
 
+    packaging {
+        resources {
+            // Kuromoji's core and dictionary jars each carry the same notes; one copy is enough.
+            pickFirsts += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+        }
+    }
+
     bundle {
         // The in-app language picker needs every language on the phone, not only the phone's own.
         language {
