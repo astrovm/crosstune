@@ -673,6 +673,8 @@ internal class MainViewModel(
         val link = (input as? LinkInput.Link)?.link
         // The link as parsed is kept, since Recent doesn't save which frontend's site it came from.
         val saved = link?.let { wanted -> uiState.history.firstOrNull { it.link.url == wanted.url }?.copy(link = wanted) }
+            // An album or playlist kept without its songs, e.g. by a version that couldn't read them, is looked up again for them.
+            ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
         job = viewModelScope.launch {
             // A video from another app that isn't music, like a tutorial, opens as it would without Crosstune.
             val video = link?.takeIf {

@@ -1126,6 +1126,20 @@ class MainActivityTest {
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
+    @Test
+    fun aListKeptWithoutItsSongsIsLookedUpAgainForThem() {
+        val url = "https://www.deezer.com/playlist/9"
+        // Kept by an older version, which couldn't read its songs.
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "9", url), MusicMetadata("Mix", "", ItemType.PLAYLIST)))
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Tune","artist":{"name":"Band"}}]}}""")
+        }
+        launch()
+        resolveTyped(url)
+        assertTrue(fake.requestedUrls.contains("https://api.deezer.com/playlist/9"))
+        assertTextShown("First Tune")
+    }
+
     private fun notOnDeezer() {
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") FakeSpotify.html(request, """{"data":[]}""")
