@@ -85,18 +85,19 @@ val AppShapes = Shapes(
 /** One color's tones for a theme: the accent itself, what's written on it, and its softer container. */
 internal class Accent(val primary: Color, val onPrimary: Color, val container: Color, val onContainer: Color, val secondary: Color = primary)
 
+/** The logo's violet, with its lime. */
+private val violetDark = Accent(VioletLight, Color(0xFF1F0F66), Color(0xFF3A27A8), Color(0xFFE7E0FF), Lime)
+private val violetLight = Accent(Violet, Color.White, Color(0xFFE6DEFF), Color(0xFF1A0A63), LimeDark)
+
 /**
- * The app's color: Crosstune's own violet with its lime, a few others, or the wallpaper's colors, which
- * Android shares from 12 on. Each has its tones for dark and for light; the grounds stay neutral, so
- * the covers bring their own colors in whichever is picked.
+ * The app's color: the wallpaper's, which Android shares from 12 on, or one of a few of its own,
+ * in the order they're offered. Each has its tones for dark and for light; the grounds stay neutral,
+ * so the covers bring their own colors in whichever is picked.
  */
 enum class Palette(internal val dark: Accent, internal val light: Accent) {
-    CROSSTUNE(
-        Accent(VioletLight, Color(0xFF1F0F66), Color(0xFF3A27A8), Color(0xFFE7E0FF), Lime),
-        Accent(Violet, Color.White, Color(0xFFE6DEFF), Color(0xFF1A0A63), LimeDark)
-    ),
-    // Crosstune's own until Android says otherwise, e.g. before Android 12, which shares no wallpaper colors.
-    WALLPAPER(CROSSTUNE.dark, CROSSTUNE.light),
+    // Violet until Android says otherwise, e.g. before Android 12, which shares no wallpaper colors.
+    WALLPAPER(violetDark, violetLight),
+    VIOLET(violetDark, violetLight),
     OCEAN(
         Accent(Color(0xFF9CCAFF), Color(0xFF003258), Color(0xFF00497D), Color(0xFFD0E4FF)),
         Accent(Color(0xFF0061A4), Color.White, Color(0xFFD1E4FF), Color(0xFF001D36))
@@ -140,15 +141,11 @@ internal fun ColorScheme.pureBlack(): ColorScheme = copy(
     surfaceContainerHighest = Color(0xFF232329)
 )
 
-/**
- * The app's look: dark or light, in [palette]'s color, and with [pureBlack] true black grounds in the
- * dark. By default Crosstune's own colors, the logo's violet with a lime accent, rather than the
- * wallpaper's: the covers bring their colors in, and a neutral, slightly violet ground lets them show.
- */
+/** The app's look: dark or light, in [palette]'s color, and with [pureBlack] true black grounds in the dark. */
 @Composable
 fun CrosstuneTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    palette: Palette = Palette.CROSSTUNE,
+    palette: Palette = Palette.VIOLET,
     pureBlack: Boolean = false,
     content: @Composable () -> Unit
 ) {

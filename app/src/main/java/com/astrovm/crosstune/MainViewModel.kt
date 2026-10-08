@@ -9,6 +9,7 @@ import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
+import com.astrovm.crosstune.ui.theme.wallpaperColors
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,8 +91,8 @@ internal data class UiState(
     val followHelp: Boolean = false,
     /** Light, dark, or as the phone is. */
     val theme: ThemeMode = ThemeMode.SYSTEM,
-    /** The app's color: Crosstune's own, another, or the wallpaper's. */
-    val palette: Palette = Palette.CROSSTUNE,
+    /** The app's color: the wallpaper's, or one of the app's own. */
+    val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
     /** Songs found for typed text that wasn't a link, offered to pick from. */
@@ -189,6 +190,18 @@ internal data class UiState(
 /** One-shot requests for the Activity, delivered even if they arrive while it is being recreated. */
 internal enum class AfterLookup { OPEN, SHARE }
 
+/** The wallpaper's colors where Android shares them, from 12 on; violet before that. */
+internal fun defaultPalette(): Palette = if (wallpaperColors) Palette.WALLPAPER else Palette.VIOLET
+
+/**
+ * The color picked before, by name: "CROSSTUNE" is what violet was called, and the wallpaper's, picked
+ * on a phone since moved back to an Android that doesn't share it, is the default there.
+ */
+internal fun savedPalette(name: String?): Palette {
+    val saved = if (name == "CROSSTUNE") Palette.VIOLET else Palette.entries.firstOrNull { it.name == name }
+    return saved?.takeIf { it != Palette.WALLPAPER || wallpaperColors } ?: defaultPalette()
+}
+
 /** The app's look: as the phone is set, or always light or dark. */
 internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
@@ -245,7 +258,7 @@ internal class MainViewModel(
             showSongFirst = preferences.getBoolean(KEY_SHOW_SONG_FIRST, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
-            palette = Palette.entries.firstOrNull { it.name == preferences.getString(KEY_PALETTE, null) } ?: Palette.CROSSTUNE,
+            palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),

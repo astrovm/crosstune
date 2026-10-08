@@ -2609,9 +2609,8 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         val ocean = composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
         ocean.assertIsNotSelected()
-        composeRule.onNodeWithContentDescription(string(R.string.palette_crosstune)).assertIsSelected()
-        // The wallpaper's colors are offered where Android shares them.
-        composeRule.onNodeWithContentDescription(string(R.string.palette_wallpaper)).assertExists()
+        // Where Android shares the wallpaper's colors, they're the app's until another is picked.
+        composeRule.onNodeWithContentDescription(string(R.string.palette_wallpaper)).assertIsSelected()
         ocean.performClick()
         composeRule.waitForIdle()
         ocean.assertIsSelected()
@@ -2633,11 +2632,21 @@ class MainActivityTest {
 
     @Test
     @Config(sdk = [30])
-    fun beforeAndroid12TheWallpapersColorsArentOffered() {
+    fun beforeAndroid12TheWallpapersColorsArentOfferedAndVioletIsTheApps() {
+        // Even picked before, e.g. on a phone since moved back to an Android that doesn't share them.
+        prefs().edit().putString("palette", "WALLPAPER").commit()
         launch()
         click(string(R.string.settings_button))
-        composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
+        composeRule.onNodeWithContentDescription(string(R.string.palette_violet)).performScrollTo().assertIsSelected()
         composeRule.onNodeWithContentDescription(string(R.string.palette_wallpaper)).assertDoesNotExist()
+    }
+
+    @Test
+    fun violetPickedWhenItWasCalledCrosstuneIsStillPicked() {
+        prefs().edit().putString("palette", "CROSSTUNE").commit()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithContentDescription(string(R.string.palette_violet)).performScrollTo().assertIsSelected()
     }
 
     @Test

@@ -511,7 +511,7 @@ private fun Swatch(color: Color, onColor: Color, name: String, isSelected: Boole
 
 private val Palette.labelRes: Int
     get() = when (this) {
-        Palette.CROSSTUNE -> R.string.palette_crosstune
+        Palette.VIOLET -> R.string.palette_violet
         Palette.WALLPAPER -> R.string.palette_wallpaper
         Palette.OCEAN -> R.string.palette_ocean
         Palette.FOREST -> R.string.palette_forest
