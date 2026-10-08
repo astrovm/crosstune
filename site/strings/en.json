@@ -57,7 +57,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 7, 2026",
+  "updated": "Last updated: October 8, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Karaoke, and the lyrics of a song Crosstune just recognized, keep listening the same way while the lyrics are on screen: every few seconds Crosstune sends Shazam a new fingerprint, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app."
+      "Lyrics can also listen along: right after Crosstune recognizes a song, or when you tap the microphone in the lyrics. While the lyrics are on screen, Crosstune keeps listening the same way, sending Shazam a new fingerprint every few seconds, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app."
     ],
     [
       "h2",

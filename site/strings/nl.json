@@ -57,7 +57,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 7 oktober 2026",
+  "updated": "Laatst bijgewerkt: 8 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Karaoke, en de songtekst van een nummer dat Crosstune net herkende, blijven op dezelfde manier luisteren zolang de tekst in beeld is: om de paar seconden stuurt Crosstune Shazam een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat."
+      "De songtekst kan ook meeluisteren: direct nadat Crosstune een nummer herkent, of wanneer je in de tekst op de microfoon tikt. Zolang de tekst in beeld is, blijft Crosstune op dezelfde manier luisteren en stuurt het Shazam om de paar seconden een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat."
     ],
     [
       "h2",

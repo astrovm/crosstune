@@ -57,7 +57,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 7 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 8 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Il karaoke, e il testo di un brano che Crosstune ha appena riconosciuto, continuano ad ascoltare allo stesso modo finché il testo è sullo schermo: ogni pochi secondi Crosstune invia a Shazam una nuova impronta, mai l'audio, per restare a tempo con il brano e cogliere il successivo. L'ascolto si ferma appena chiudi il testo, lo disattivi o esci dall'app."
+      "Il testo può anche ascoltare insieme: subito dopo che Crosstune ha riconosciuto un brano, o quando tocchi il microfono nel testo. Finché il testo è sullo schermo, Crosstune continua ad ascoltare allo stesso modo e invia a Shazam una nuova impronta ogni pochi secondi, mai l'audio, per restare a tempo con il brano e cogliere il successivo. L'ascolto si ferma appena chiudi il testo, lo disattivi o esci dall'app."
     ],
     [
       "h2",

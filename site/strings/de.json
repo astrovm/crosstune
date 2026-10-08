@@ -57,7 +57,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 7. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 8. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Karaoke und der Text eines Songs, den Crosstune gerade erkannt hat, hören auf dieselbe Weise weiter zu, solange der Text angezeigt wird: Alle paar Sekunden schickt Crosstune Shazam einen neuen Fingerabdruck, nie Audio, um im Takt des Songs zu bleiben und den nächsten zu erkennen. Das Zuhören endet, sobald du den Text schließt, es ausschaltest oder die App verlässt."
+      "Der Liedtext kann auch mithören: gleich nachdem Crosstune einen Song erkannt hat, oder wenn du im Liedtext auf das Mikrofon tippst. Solange der Text angezeigt wird, hört Crosstune auf dieselbe Weise weiter zu und schickt Shazam alle paar Sekunden einen neuen Fingerabdruck, nie Audio, um im Takt des Songs zu bleiben und den nächsten zu erkennen. Das Zuhören endet, sobald du den Text schließt, es ausschaltest oder die App verlässt."
     ],
     [
       "h2",

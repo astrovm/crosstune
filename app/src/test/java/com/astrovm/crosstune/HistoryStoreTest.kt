@@ -33,6 +33,24 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun theSameSongLinkedAnotherWayIsOneEntry() {
+        val fromAlbum = HistoryEntry(
+            MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1060484510", "https://music.apple.com/us/album/dreams-come-true/1060484503?i=1060484510"),
+            MusicMetadata("Dreams Come True", "S.E.S.")
+        )
+        val onItsOwn = fromAlbum.copy(link = fromAlbum.link.copy(url = "https://music.apple.com/us/song/1060484510"))
+        store.add(fromAlbum)
+        store.add(entry(1))
+        store.add(onItsOwn)
+        assertEquals(listOf(onItsOwn, entry(1)), HistoryStore(preferences).load())
+
+        // The same id on another service, or of another kind, is something else.
+        store.add(entry(1, service = MusicService.SPOTIFY))
+        store.add(entry(1, type = ItemType.ALBUM))
+        assertEquals(4, HistoryStore(preferences).load().size)
+    }
+
+    @Test
     fun keepsNewestFirstWithoutDuplicatesAndCapsAtTwenty() {
         (1..25).forEach { store.add(entry(it)) }
         store.add(entry(10))

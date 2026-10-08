@@ -57,7 +57,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 7 de octubre de 2026",
+  "updated": "Última actualización: 8 de octubre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "El karaoke, y la letra de una canción que Crosstune acaba de reconocer, siguen escuchando de la misma forma mientras la letra está en pantalla: cada pocos segundos Crosstune le manda a Shazam una nueva huella, nunca el audio, para seguir el ritmo de la canción y detectar la siguiente. Deja de escuchar apenas cerrás la letra, lo desactivás o salís de la app."
+      "La letra también puede escuchar en sincronía: justo después de que Crosstune reconoce una canción, o cuando tocás el micrófono en la letra. Mientras la letra está en pantalla, Crosstune sigue escuchando de la misma forma y le manda a Shazam una nueva huella cada pocos segundos, nunca el audio, para seguir el ritmo de la canción y detectar la siguiente. Deja de escuchar apenas cerrás la letra, lo desactivás o salís de la app."
     ],
     [
       "h2",

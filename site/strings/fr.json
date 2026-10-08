@@ -57,7 +57,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 7 octobre 2026",
+  "updated": "Dernière mise à jour : 8 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Le karaoké, et les paroles d'une chanson que Crosstune vient de reconnaître, continuent d'écouter de la même façon tant que les paroles sont à l'écran : toutes les quelques secondes, Crosstune envoie à Shazam une nouvelle empreinte, jamais l'audio, pour rester en rythme avec la chanson et repérer la suivante. L'écoute s'arrête dès que vous fermez les paroles, la désactivez ou quittez l'app."
+      "Les paroles peuvent aussi écouter en même temps : juste après que Crosstune a reconnu une chanson, ou quand vous touchez le micro dans les paroles. Tant que les paroles sont à l'écran, Crosstune continue d'écouter de la même façon et envoie à Shazam une nouvelle empreinte toutes les quelques secondes, jamais l'audio, pour rester en rythme avec la chanson et repérer la suivante. L'écoute s'arrête dès que vous fermez les paroles, la désactivez ou quittez l'app."
     ],
     [
       "h2",

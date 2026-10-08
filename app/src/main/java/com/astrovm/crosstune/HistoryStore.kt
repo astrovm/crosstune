@@ -24,7 +24,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
-        val updated = (listOf(entry) + load().filterNot { it.link.url == entry.link.url }).take(MAX_ENTRIES)
+        val updated = (listOf(entry) + load().filterNot { it.link.isSameItem(entry.link) }).take(MAX_ENTRIES)
         save(updated)
         return updated
     }
@@ -122,3 +122,10 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         const val MAX_ENTRIES = 20
     }
 }
+
+/**
+ * The same thing, however it was linked: one link, or the same item on the same service, e.g. a song
+ * shared once from its album's page and once on its own.
+ */
+private fun MusicLink.isSameItem(other: MusicLink): Boolean =
+    url == other.url || (service != null && service == other.service && type == other.type && id == other.id)

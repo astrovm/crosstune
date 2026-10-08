@@ -314,7 +314,7 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions) {
         itemsIndexed(lines) { index, line ->
             LyricLineText(
                 line.text,
-                place = if (following == null) 0 else index.compareTo(active),
+                place = following?.let { index.compareTo(active) },
                 canSeek = following?.canSeek == true,
                 onClick = { actions.onSeekLyrics(line.timeMs) }
             )
@@ -341,18 +341,26 @@ private fun FollowOffer(actions: ScreenActions) {
 }
 
 /**
- * One line, by its [place]: the one being sung (0, or every line while nothing is followed), one
- * already sung (below 0), or one to come.
+ * One line, by its [place]: the one being sung (0), one already sung (below 0), or one to come; or
+ * null while nothing says where the song is, when every line reads alike, calmer, as a page.
  */
 @Composable
-private fun LyricLineText(text: String, place: Int, canSeek: Boolean, onClick: () -> Unit) {
+private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: () -> Unit) {
     val lit = place == 0
-    val alpha by animateFloatAsState(if (lit) 1f else if (place < 0) 0.4f else 0.55f, spring(stiffness = Spring.StiffnessLow), label = "line alpha")
-    val scale by animateFloatAsState(if (lit) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
+    val alpha by animateFloatAsState(
+        if (place == null) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.55f,
+        spring(stiffness = Spring.StiffnessLow),
+        label = "line alpha"
+    )
+    val scale by animateFloatAsState(if (lit || place == null) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
     Text(
         // A gap with no words, e.g. a solo, is a note rather than an empty line.
         text = text.ifBlank { "♪" },
-        style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
+        style = MaterialTheme.typography.headlineSmall.copy(
+            fontSize = if (place == null) 22.sp else 26.sp,
+            lineHeight = if (place == null) 30.sp else 34.sp,
+            fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold
+        ),
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .fillMaxWidth()
