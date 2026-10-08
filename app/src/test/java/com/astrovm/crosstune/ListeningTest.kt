@@ -554,7 +554,14 @@ class ListeningTest {
         val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals(string(R.string.floating_notification), shadowOf(notification).contentTitle)
 
-        // Tapped, they show what they can do: stop listening along, and start it again.
+        // Tapped, they show what they can do, for a moment.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.floating_close)))
+        composeRule.mainClock.advanceTimeBy(5_000)
+        composeRule.waitForIdle()
+        assertFalse(described(string(R.string.floating_close)))
+        // Stop listening along, and start it again.
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
         composeRule.waitForIdle()
         click(string(R.string.lyrics_stop_listening))
@@ -593,15 +600,16 @@ class ListeningTest {
         val top = (view.layoutParams as WindowManager.LayoutParams).y
         assertEquals(300, top)
         fun touch(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, 100f, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
-        touch(MotionEvent.ACTION_DOWN, 500f)
-        touch(MotionEvent.ACTION_MOVE, 501f)
-        touch(MotionEvent.ACTION_MOVE, 800f)
-        touch(MotionEvent.ACTION_MOVE, 900f)
-        touch(MotionEvent.ACTION_UP, 900f)
+        // On the words, a finger's wobble is still a tap; past it, a drag.
+        touch(MotionEvent.ACTION_DOWN, 20f)
+        touch(MotionEvent.ACTION_MOVE, 21f)
+        touch(MotionEvent.ACTION_MOVE, 320f)
+        touch(MotionEvent.ACTION_MOVE, 420f)
+        touch(MotionEvent.ACTION_UP, 420f)
         assertEquals(top + 400, (view.layoutParams as WindowManager.LayoutParams).y)
         assertEquals(top + 400, prefs().getInt("floating_top", -1))
         // Never off the screen.
-        touch(MotionEvent.ACTION_DOWN, 500f)
+        touch(MotionEvent.ACTION_DOWN, 20f)
         touch(MotionEvent.ACTION_MOVE, -100_000f)
         touch(MotionEvent.ACTION_CANCEL, -100_000f)
         assertEquals(0, prefs().getInt("floating_top", -1))
@@ -631,6 +639,8 @@ class ListeningTest {
         FloatingLyricsService.host = null
         val alone = Robolectric.buildService(FloatingLyricsService::class.java).create().startCommand(0, 1)
         assertTrue(shadowOf(alone.get()).isStoppedBySelf)
+        // Nothing binds to it: it's only started.
+        assertEquals(null, alone.get().onBind(Intent()))
         // An unlock from an old notification finds nothing to unlock.
         alone.command(FloatingLyricsService.ACTION_UNLOCK)
 

@@ -95,7 +95,6 @@ class MainActivity : ComponentActivity() {
             ThemeMode.LIGHT -> false
             ThemeMode.SYSTEM -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         }
-        override suspend fun loadArtwork(url: String) = viewModel.artwork.load(url)
         override fun toggleListening() = when {
             viewModel.uiState.listeningAlong -> viewModel.stopListeningAlong()
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> viewModel.listenAlong()

@@ -100,7 +100,8 @@ internal fun FloatingLyrics(
         }
         FloatingLook.PLAIN -> Modifier.background(surface)
         FloatingLook.SEE_THROUGH -> Modifier.clip(MaterialTheme.shapes.large).background(Color.Black.copy(alpha = 0.55f))
-        FloatingLook.NONE -> Modifier
+        // None: only the words.
+        else -> Modifier
     }
     // Over another app the words are white, which reads on the dark band or, outlined, on anything.
     val ink = if (look.overApps) Color.White else MaterialTheme.colorScheme.onSurface
@@ -160,7 +161,7 @@ internal class FloatingActions(
  * them up or down is up to their window. Locked, touches go through to the app below, so none reach here.
  */
 @Composable
-internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, actions: FloatingActions) {
+internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
     var controls by remember { mutableStateOf(false) }
     LaunchedEffect(controls) {
         if (controls) {
@@ -174,7 +175,8 @@ internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> I
     ) {
         FloatingLyrics(
             state,
-            loadArtwork,
+            // Over other apps the words show what's below, never the cover's color.
+            loadArtwork = { null },
             overApps = true,
             modifier = Modifier
                 .fillMaxWidth()

@@ -21,7 +21,6 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -43,7 +42,6 @@ import kotlin.math.abs
 internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
-    suspend fun loadArtwork(url: String): ImageBitmap?
     fun toggleListening()
     fun setLocked(locked: Boolean)
     fun moveTo(top: Int)
@@ -136,7 +134,6 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) {
                     FloatingOverApps(
                         state,
-                        host::loadArtwork,
                         FloatingActions(
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,
@@ -189,8 +186,11 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     downY = event.rawY
                     downTop = params.y
                 }
-                // Past a tap's wobble it's a drag: the words' own taps are let go.
-                MotionEvent.ACTION_MOVE -> return abs(event.rawY - downY) > slop
+                // Past a tap's wobble it's a drag: the words' own taps are let go, and they move from here.
+                MotionEvent.ACTION_MOVE -> if (abs(event.rawY - downY) > slop) {
+                    onDrag(downTop, event.rawY - downY)
+                    return true
+                }
             }
             return false
         }
