@@ -42,6 +42,7 @@ import kotlin.math.abs
 internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
+    val artwork: ArtworkLoader
     fun toggleListening()
     fun setLocked(locked: Boolean)
     fun moveTo(top: Int)
@@ -134,6 +135,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) {
                     FloatingOverApps(
                         state,
+                        host.artwork::load,
                         FloatingActions(
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,

@@ -161,7 +161,7 @@ internal class FloatingActions(
  * them up or down is up to their window. Locked, touches go through to the app below, so none reach here.
  */
 @Composable
-internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
+internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, actions: FloatingActions) {
     var controls by remember { mutableStateOf(false) }
     LaunchedEffect(controls) {
         if (controls) {
@@ -175,8 +175,7 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
     ) {
         FloatingLyrics(
             state,
-            // Over other apps the words show what's below, never the cover's color.
-            loadArtwork = { null },
+            loadArtwork,
             overApps = true,
             modifier = Modifier
                 .fillMaxWidth()
