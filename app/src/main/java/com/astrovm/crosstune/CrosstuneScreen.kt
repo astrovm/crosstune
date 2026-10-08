@@ -674,15 +674,11 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     val shownText = rememberSaveable(state.result, state.error) { state.linkText }
     val shown = (state.result != null || state.error != null) && state.linkText == shownText
     val press = rememberPress()
-    AnimatedVisibility(visible = !shown, enter = Motion.appear, exit = Motion.disappear) {
+    // Only once there's something to convert: an empty field needs no button under it.
+    AnimatedVisibility(visible = !shown && state.linkText.isNotBlank(), enter = Motion.appear, exit = Motion.disappear) {
         // The main action until there's a result; then the result's Open button is.
         if (state.result == null) {
-            // Waiting for a link, it stays quiet rather than a gray slab under the field.
-            val quiet = ButtonDefaults.buttonColors(
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Button(onClick = resolve, enabled = canConvert, colors = quiet, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
+            Button(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
         } else {
             FilledTonalButton(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
         }

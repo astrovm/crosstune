@@ -1632,8 +1632,8 @@ class MainActivityTest {
     @Test
     fun invalidInputsShowErrorWithoutNetworkCalls() {
         launch()
-        // Nothing to convert yet, so the button waits for text.
-        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        // Nothing to convert yet, so there's no button until there's text.
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertDoesNotExist()
         val invalid = listOf(
             "https://example.com/track/$TRACK_ID",
             "https://open.spotify.com/show/$TRACK_ID",
@@ -1962,7 +1962,7 @@ class MainActivityTest {
     fun lookalikeHostsAndMalformedIdsAreRejected() {
         launch()
         typeUrl("   ")
-        composeRule.onNodeWithText(string(R.string.resolve_button)).assertIsNotEnabled()
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertDoesNotExist()
         click(string(R.string.clear_button))
         val rejected = listOf(
             "https://notspotify.com/track/$TRACK_ID",
@@ -4695,7 +4695,7 @@ class MainActivityTest {
         launch()
 
         // The screen is up while Android is still to be asked, with no notice yet rather than a wrong one.
-        assertTextShown(string(R.string.resolve_button))
+        assertTextShown(string(R.string.spotify_link_label))
         assertTextAbsent(string(R.string.notice_app_still_opens, "Spotify"))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
         // Share sheet targets wait for the installed apps too, rather than drop out for a moment.
