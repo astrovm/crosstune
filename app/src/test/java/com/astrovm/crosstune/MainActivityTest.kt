@@ -2722,6 +2722,8 @@ class MainActivityTest {
     fun theAppsColorAndPureBlackArePickedInSettingsAndKept() {
         launch()
         click(string(R.string.settings_button))
+        // The swatches scroll sideways inside the page, so the page is scrolled to their row first.
+        composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
         val ocean = composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
         ocean.assertIsNotSelected()
         // Where Android shares the wallpaper's colors, they're the app's until another is picked.
