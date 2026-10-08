@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark }
                 )
             }
-            CrosstuneTheme(darkTheme = dark) {
+            CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
                 CrosstuneScreen(
                     state = viewModel.uiState,
                     actions = ScreenActions(
@@ -228,6 +228,8 @@ class MainActivity : ComponentActivity() {
                         onOpenAppInfo = ::openAppInfo,
                         onDismissFollowHelp = viewModel::dismissFollowHelp,
                         onThemeChange = ::selectTheme,
+                        onPaletteChange = viewModel::selectPalette,
+                        onPureBlackChange = viewModel::setPureBlack,
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,

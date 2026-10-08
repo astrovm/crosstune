@@ -186,6 +186,15 @@
     <string name="setting_theme">Thème</string>
     <string name="theme_light">Clair</string>
     <string name="theme_dark">Sombre</string>
+    <string name="setting_color">Couleur</string>
+    <string name="palette_violet">Violet</string>
+    <string name="palette_wallpaper">Fond d\'écran</string>
+    <string name="palette_ocean">Océan</string>
+    <string name="palette_forest">Forêt</string>
+    <string name="palette_sunset">Coucher de soleil</string>
+    <string name="palette_rose">Rose</string>
+    <string name="setting_pure_black">Noir pur</string>
+    <string name="setting_pure_black_description">Du vrai noir en mode sombre. Mieux pour les écrans OLED et leur batterie.</string>
     <string name="follow_help_title">Faire suivre votre musique aux paroles</string>
     <string name="follow_help_try">Ouvrez Accès aux notifications et essayez d\'activer Crosstune. Si Android indique qu\'il s\'agit d\'un paramètre restreint, fermez ce message.</string>
     <string name="follow_help_restricted">Ouvrez ensuite Infos sur l\'appli, touchez ⋮ en haut à droite et choisissez Autoriser les paramètres restreints. Android ne le propose qu\'après ce premier essai.</string>

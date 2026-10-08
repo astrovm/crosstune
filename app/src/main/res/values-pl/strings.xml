@@ -186,6 +186,15 @@
     <string name="setting_theme">Motyw</string>
     <string name="theme_light">Jasny</string>
     <string name="theme_dark">Ciemny</string>
+    <string name="setting_color">Kolor</string>
+    <string name="palette_violet">Fiolet</string>
+    <string name="palette_wallpaper">Tapeta</string>
+    <string name="palette_ocean">Ocean</string>
+    <string name="palette_forest">Las</string>
+    <string name="palette_sunset">Zachód słońca</string>
+    <string name="palette_rose">Róża</string>
+    <string name="setting_pure_black">Czysta czerń</string>
+    <string name="setting_pure_black_description">Prawdziwa czerń w trybie ciemnym. Lepsza dla ekranów OLED i ich baterii.</string>
     <string name="follow_help_title">Niech tekst podąża za Twoją muzyką</string>
     <string name="follow_help_try">Otwórz Dostęp do powiadomień i spróbuj włączyć Crosstune. Jeśli Android powie, że to ustawienie z ograniczonym dostępem, zamknij ten komunikat.</string>
     <string name="follow_help_restricted">Potem otwórz Informacje o aplikacji, kliknij ⋮ w prawym górnym rogu i wybierz Zezwól na ustawienia z ograniczonym dostępem. Android pokazuje tę opcję dopiero po pierwszej próbie.</string>

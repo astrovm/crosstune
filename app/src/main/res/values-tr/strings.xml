@@ -186,6 +186,15 @@
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Açık</string>
     <string name="theme_dark">Koyu</string>
+    <string name="setting_color">Renk</string>
+    <string name="palette_violet">Mor</string>
+    <string name="palette_wallpaper">Duvar kâğıdı</string>
+    <string name="palette_ocean">Okyanus</string>
+    <string name="palette_forest">Orman</string>
+    <string name="palette_sunset">Gün batımı</string>
+    <string name="palette_rose">Gül</string>
+    <string name="setting_pure_black">Saf siyah</string>
+    <string name="setting_pure_black_description">Koyu modda gerçek siyah. OLED ekranlar ve pilleri için daha iyi.</string>
     <string name="follow_help_title">Sözler müziğini takip etsin</string>
     <string name="follow_help_try">Bildirim erişimi\'ni aç ve Crosstune\'u açmayı dene. Android bunun kısıtlanmış bir ayar olduğunu söylerse o mesajı kapat.</string>
     <string name="follow_help_restricted">Sonra Uygulama bilgileri\'ni aç, sağ üstteki ⋮ simgesine dokun ve Kısıtlanmış ayarlara izin ver\'i seç. Android bunu ancak o ilk denemeden sonra sunar.</string>

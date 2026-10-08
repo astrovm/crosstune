@@ -2,6 +2,11 @@ package com.astrovm.crosstune
 
 import android.content.res.Configuration
 import androidx.compose.material3.MaterialTheme
+import com.astrovm.crosstune.ui.theme.Day
+import com.astrovm.crosstune.ui.theme.Palette
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -150,6 +155,61 @@ class PreviewAndThemeTest {
         }
         composeRule.waitForIdle()
         assertEquals(listOf(VioletLight, Night), colors.take(2))
+    }
+
+    @Test
+    fun eachColorHasItsOwnTonesInDarkAndLight() {
+        val seen = mutableListOf<Pair<Color, Color>>()
+        composeRule.setContent {
+            Palette.entries.filter { it != Palette.WALLPAPER }.forEach { palette ->
+                listOf(true, false).forEach { dark ->
+                    CrosstuneTheme(darkTheme = dark, palette = palette) {
+                        seen += MaterialTheme.colorScheme.primary to (if (dark) palette.dark else palette.light).primary
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        assertEquals(10, seen.size)
+        seen.forEach { (shown, expected) -> assertEquals(expected, shown) }
+        // Every color is its own.
+        assertEquals(10, seen.map { it.first }.distinct().size)
+    }
+
+    @Test
+    fun pureBlackIsBlackInTheDarkOnly() {
+        val surfaces = mutableListOf<Color>()
+        composeRule.setContent {
+            CrosstuneTheme(darkTheme = true, pureBlack = true) { surfaces += MaterialTheme.colorScheme.surface }
+            CrosstuneTheme(darkTheme = false, pureBlack = true) { surfaces += MaterialTheme.colorScheme.surface }
+        }
+        composeRule.waitForIdle()
+        assertEquals(listOf(Color.Black, Day), surfaces.take(2))
+    }
+
+    @Test
+    fun theWallpapersColorsAreAndroidsOwn() {
+        val colors = mutableListOf<Color>()
+        lateinit var expected: List<Color>
+        composeRule.setContent {
+            val context = LocalContext.current
+            expected = listOf(dynamicDarkColorScheme(context).primary, dynamicLightColorScheme(context).primary)
+            CrosstuneTheme(darkTheme = true, palette = Palette.WALLPAPER) { colors += MaterialTheme.colorScheme.primary }
+            CrosstuneTheme(darkTheme = false, palette = Palette.WALLPAPER) { colors += MaterialTheme.colorScheme.primary }
+        }
+        composeRule.waitForIdle()
+        assertEquals(expected, colors.take(2))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12TheWallpaperIsCrosstunesOwnColors() {
+        val colors = mutableListOf<Color>()
+        composeRule.setContent {
+            CrosstuneTheme(darkTheme = true, palette = Palette.WALLPAPER) { colors += MaterialTheme.colorScheme.primary }
+        }
+        composeRule.waitForIdle()
+        assertEquals(VioletLight, colors.first())
     }
 
     @Test

@@ -1,5 +1,24 @@
 package com.astrovm.crosstune
 
+import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import com.astrovm.crosstune.ui.theme.Palette
+import com.astrovm.crosstune.ui.theme.wallpaperColors
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
@@ -213,6 +232,15 @@ private fun SettingsList(
         Group {
             ThemeRow(state.theme, actions.onThemeChange)
             GroupDivider()
+            PaletteRow(state.palette, actions.onPaletteChange)
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_pure_black),
+                description = stringResource(R.string.setting_pure_black_description),
+                checked = state.pureBlack,
+                onCheckedChange = actions.onPureBlackChange
+            )
+            GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
 
@@ -424,6 +452,72 @@ private fun ThemeRow(theme: ThemeMode, onSelect: (ThemeMode) -> Unit) {
         }
     }
 }
+
+/**
+ * The app's color, picked from swatches in the look it has now, dark or light. The wallpaper's is
+ * offered only where Android shares it.
+ */
+@Composable
+private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+        // The picked one by name, as the other rows say theirs, since a swatch alone doesn't say it.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .padding(top = 12.dp)
+                .horizontalScroll(rememberScrollState())
+                .selectableGroup()
+        ) {
+            Palette.entries.filter { it != Palette.WALLPAPER || wallpaperColors }.forEach { palette ->
+                val wallpaper = if (palette == Palette.WALLPAPER && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)).primary
+                } else {
+                    null
+                }
+                val accent = if (dark) palette.dark else palette.light
+                Swatch(wallpaper ?: accent.primary, accent.onPrimary, stringResource(palette.labelRes), palette == selected) { onSelect(palette) }
+            }
+        }
+    }
+}
+
+/** One color to pick: a round of it, ringed and ticked when it's the one picked. */
+@Composable
+private fun Swatch(color: Color, onColor: Color, name: String, isSelected: Boolean, onClick: () -> Unit) {
+    // The ring fades rather than thins: a border of no width is still drawn, as a hairline.
+    val ring by animateFloatAsState(if (isSelected) 1f else 0f, label = "swatch ring")
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(44.dp)
+            .border(3.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
+            .padding(5.dp)
+            .clip(CircleShape)
+            .background(color)
+            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = name }
+    ) {
+        AnimatedVisibility(visible = isSelected, enter = Motion.pop, exit = fadeOut(Motion.fadeOut)) {
+            Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = onColor, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+private val Palette.labelRes: Int
+    get() = when (this) {
+        Palette.VIOLET -> R.string.palette_violet
+        Palette.WALLPAPER -> R.string.palette_wallpaper
+        Palette.OCEAN -> R.string.palette_ocean
+        Palette.FOREST -> R.string.palette_forest
+        Palette.SUNSET -> R.string.palette_sunset
+        Palette.ROSE -> R.string.palette_rose
+    }
 
 /** Picks the app's language, or the phone's with "System default". */
 @Composable

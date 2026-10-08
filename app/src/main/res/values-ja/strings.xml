@@ -187,6 +187,15 @@
     <string name="setting_theme">テーマ</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>
+    <string name="setting_color">カラー</string>
+    <string name="palette_violet">バイオレット</string>
+    <string name="palette_wallpaper">壁紙</string>
+    <string name="palette_ocean">オーシャン</string>
+    <string name="palette_forest">フォレスト</string>
+    <string name="palette_sunset">サンセット</string>
+    <string name="palette_rose">ローズ</string>
+    <string name="setting_pure_black">純黒</string>
+    <string name="setting_pure_black_description">ダークモードで本当の黒を使います。OLED 画面とバッテリーにやさしくなります。</string>
     <string name="follow_help_title">歌詞を音楽に合わせる</string>
     <string name="follow_help_try">[通知へのアクセス] を開き、Crosstune をオンにしてみてください。制限付き設定だと表示されたら、そのメッセージを閉じます。</string>
     <string name="follow_help_restricted">次に [アプリ情報] を開き、右上の ⋮ をタップして [制限付き設定を許可] を選びます。この項目は最初に試したあとにだけ表示されます。</string>

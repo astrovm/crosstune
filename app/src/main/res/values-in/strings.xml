@@ -186,6 +186,15 @@
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Terang</string>
     <string name="theme_dark">Gelap</string>
+    <string name="setting_color">Warna</string>
+    <string name="palette_violet">Ungu</string>
+    <string name="palette_wallpaper">Wallpaper</string>
+    <string name="palette_ocean">Samudra</string>
+    <string name="palette_forest">Hutan</string>
+    <string name="palette_sunset">Senja</string>
+    <string name="palette_rose">Mawar</string>
+    <string name="setting_pure_black">Hitam pekat</string>
+    <string name="setting_pure_black_description">Hitam sungguhan di mode gelap. Lebih hemat untuk layar OLED dan baterainya.</string>
     <string name="follow_help_title">Biarkan lirik mengikuti musikmu</string>
     <string name="follow_help_try">Buka Akses notifikasi dan coba aktifkan Crosstune. Jika Android bilang itu setelan terbatas, tutup pesan itu.</string>
     <string name="follow_help_restricted">Lalu buka Info aplikasi, ketuk ⋮ di kanan atas, dan pilih Izinkan setelan terbatas. Android baru menawarkannya setelah percobaan pertama itu.</string>

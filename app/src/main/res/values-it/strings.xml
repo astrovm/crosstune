@@ -187,6 +187,15 @@
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Chiaro</string>
     <string name="theme_dark">Scuro</string>
+    <string name="setting_color">Colore</string>
+    <string name="palette_violet">Viola</string>
+    <string name="palette_wallpaper">Sfondo</string>
+    <string name="palette_ocean">Oceano</string>
+    <string name="palette_forest">Foresta</string>
+    <string name="palette_sunset">Tramonto</string>
+    <string name="palette_rose">Rosa</string>
+    <string name="setting_pure_black">Nero puro</string>
+    <string name="setting_pure_black_description">Nero vero in modalità scura. Meglio per gli schermi OLED e la loro batteria.</string>
     <string name="follow_help_title">Fai seguire la tua musica al testo</string>
     <string name="follow_help_try">Apri Accesso alle notifiche e prova ad attivare Crosstune. Se Android dice che è un\'impostazione con limitazioni, chiudi il messaggio.</string>
     <string name="follow_help_restricted">Poi apri Informazioni app, tocca ⋮ in alto a destra e scegli Consenti impostazioni con limitazioni. Android lo propone solo dopo quel primo tentativo.</string>

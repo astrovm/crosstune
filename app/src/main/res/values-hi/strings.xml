@@ -186,6 +186,15 @@
     <string name="setting_theme">थीम</string>
     <string name="theme_light">लाइट</string>
     <string name="theme_dark">डार्क</string>
+    <string name="setting_color">रंग</string>
+    <string name="palette_violet">बैंगनी</string>
+    <string name="palette_wallpaper">वॉलपेपर</string>
+    <string name="palette_ocean">सागर</string>
+    <string name="palette_forest">जंगल</string>
+    <string name="palette_sunset">सूर्यास्त</string>
+    <string name="palette_rose">गुलाब</string>
+    <string name="setting_pure_black">गहरा काला</string>
+    <string name="setting_pure_black_description">डार्क मोड में असली काला। OLED स्क्रीन और उसकी बैटरी के लिए बेहतर।</string>
     <string name="follow_help_title">बोल को अपने संगीत के साथ चलाएँ</string>
     <string name="follow_help_try">सूचना ऐक्सेस खोलें और Crosstune को चालू करके देखें। अगर Android कहे कि यह प्रतिबंधित सेटिंग है, तो वह संदेश बंद करें।</string>
     <string name="follow_help_restricted">फिर ऐप की जानकारी खोलें, ऊपर दाईं ओर ⋮ पर टैप करें, और प्रतिबंधित सेटिंग की अनुमति दें चुनें। Android यह विकल्प उस पहली कोशिश के बाद ही दिखाता है।</string>
