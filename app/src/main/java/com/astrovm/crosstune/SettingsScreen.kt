@@ -190,20 +190,27 @@ private fun SettingsList(
                 checked = state.shareSheetApps,
                 onCheckedChange = actions.onShareSheetAppsChange
             )
+        }
+
+        // What happens around a song once it's found: naming one playing nearby, and its words.
+        SectionHeader(stringResource(R.string.settings_listening_title))
+        Group {
             // Which app names a song playing nearby, when there's more than one.
             if (actions.recognizers.size > 1) {
-                GroupDivider()
                 RecognizerRow(actions)
+                GroupDivider()
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
                 description = stringResource(R.string.setting_lyrics_follow_description),
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
-            GroupDivider()
+        }
+
+        SectionHeader(stringResource(R.string.settings_appearance_title))
+        Group {
             ThemeRow(state.theme, actions.onThemeChange)
             GroupDivider()
             LanguageRow(actions.onLanguageChange)

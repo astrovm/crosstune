@@ -57,7 +57,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 5, 2026",
+  "updated": "Last updated: October 7, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "If you let lyrics follow the song playing in your music app, Android asks you to allow Crosstune's notification access. Crosstune uses it only to see which song your music apps say they're playing and how far into it they are, so the lyrics can follow along and a line you tap can move the song there. It never reads your notifications, and none of this leaves your phone. You can turn it off in Android's settings at any time."
+    ],
+    [
+      "p",
       "Like other internet requests, these requests expose your IP address and normal request information to the contacted service. Those services may retain request logs and process information under their own privacy policies. The developer doesn't control how they process or keep that data. A music service may require its own account or subscription after you open it."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "When you ask Crosstune to recognize a song, it records sound from the microphone only while it listens, for up to 12 seconds, and stops as soon as it finds the song. On your phone, it turns the sound into a fingerprint of its loudest points. Only that fingerprint goes to Shazam, never the audio, and the recording isn't saved. Crosstune doesn't send your location. Shazam answers with the song's title, artist, cover and Apple Music ID, and Crosstune then looks the song up like a pasted link. Like other requests, this one exposes your IP address to Shazam, which processes it under its own privacy policy. In Settings, you can choose Shazam or the Google app to recognize songs instead; they listen under their own privacy policies."
+    ],
+    [
+      "p",
+      "Karaoke, and the lyrics of a song Crosstune just recognized, keep listening the same way while the lyrics are on screen: every few seconds Crosstune sends Shazam a new fingerprint, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app."
     ],
     [
       "h2",

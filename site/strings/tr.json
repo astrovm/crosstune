@@ -57,7 +57,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 5 Ekim 2026",
+  "updated": "Son güncelleme: 7 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin."
+    ],
+    [
+      "p",
       "Diğer internet istekleri gibi bu istekler de IP adresinizi ve normal istek bilgilerini iletişim kurulan servise açar. Bu servisler istek kayıtlarını saklayabilir ve bilgileri kendi gizlilik politikalarına göre işleyebilir. Geliştirici, bu verileri nasıl işlediklerini veya sakladıklarını kontrol etmez. Bir müzik servisi, açtıktan sonra kendi hesabını veya aboneliğini gerektirebilir."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Ayarlar'da şarkı tanımak için bunun yerine Shazam'ı veya Google uygulamasını seçebilirsiniz; bunlar kendi gizlilik politikalarına göre dinler."
+    ],
+    [
+      "p",
+      "Karaoke ve Crosstune'un az önce tanıdığı bir şarkının sözleri, sözler ekrandayken aynı şekilde dinlemeye devam eder: Crosstune birkaç saniyede bir Shazam'a ses değil, yeni bir parmak izi gönderir; böylece şarkıyla uyumlu kalır ve sonrakini yakalar. Sözleri kapattığın, bunu kapattığın ya da uygulamadan çıktığın anda dinleme durur."
     ],
     [
       "h2",

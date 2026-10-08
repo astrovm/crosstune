@@ -16,6 +16,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -77,6 +78,13 @@ internal data class UiState(
     val following: Following? = null,
     /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
     val canFollowApps: Boolean = false,
+    /**
+     * Set while the microphone keeps listening along with the words, to follow the song, or the next
+     * one; it stays set while that's paused with Crosstune out of sight.
+     */
+    val listeningAlong: Boolean = false,
+    /** Set when listening along last heard no song it knew. */
+    val listenAlongMissed: Boolean = false,
     /** Set while showing how to let Crosstune see what music apps play, step by step. */
     val followHelp: Boolean = false,
     /** Light, dark, or as the phone is. */
@@ -203,9 +211,11 @@ internal class MainViewModel(
     /** Lives here so loaded covers survive configuration changes. */
     val artwork: ArtworkLoader,
     /** Names a song playing nearby. */
-    private val listener: SongListener,
+    private val listener: SongHearing,
     /** Where Android is asked about apps and links: many slow calls that mustn't hold up the screen. */
-    private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** How long listening along waits after naming a song before it listens again. */
+    private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -771,7 +781,11 @@ internal class MainViewModel(
      * follow the song while something says where it is.
      */
     fun showLyrics() {
-        val song = uiState.result ?: return
+        // Retry asks again for the words shown, which in karaoke may be another song than the result's.
+        showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
+    }
+
+    private fun showLyricsFor(song: MusicMetadata) {
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return
@@ -797,6 +811,79 @@ internal class MainViewModel(
             }
             follow(song)
         }
+        // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
+        if (heardSong?.metadata?.let { sameSong(it, song) } == true) listenAlong()
+    }
+
+    private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
+        SongNames.same(one.title, other.title) && SongNames.sameArtist(one.artist, other.artist)
+
+    /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
+    private fun heardFollowing(song: MusicMetadata): Following? =
+        heardSong?.takeIf { sameSong(it.metadata, song) }?.clock?.let { Following(it, app = null, canSeek = false) }
+
+    private var alongJob: Job? = null
+
+    /** Karaoke: the words of whatever plays nearby, each song followed as it plays, and the next one too. */
+    fun startKaraoke() {
+        cancelContentWork()
+        listenAlong()
+    }
+
+    /**
+     * Keeps the microphone listening along with the words: every little while it asks what's
+     * playing nearby and how far into it, so a pause, a skip or the next song is followed. Only
+     * while the words are on screen and Crosstune is in sight.
+     */
+    fun listenAlong() {
+        if (alongJob?.isActive == true) return
+        uiState = uiState.copy(listeningAlong = true, listenAlongMissed = false)
+        alongJob = viewModelScope.launch {
+            while (isActive) {
+                when (val heard = listener.listen()) {
+                    is Heard.Song -> {
+                        heardSong = heard
+                        uiState = uiState.copy(listenAlongMissed = false)
+                        heardAlong(heard.metadata)
+                        delay(listenAlongPauseMs)
+                    }
+                    Heard.Nothing -> uiState = uiState.copy(listenAlongMissed = true)
+                    is Heard.Failed -> {
+                        // Without the microphone there's nothing to listen with; anything else, e.g. the
+                        // network or Shazam being busy, is tried again in a while.
+                        if (heard.error == AppError.MICROPHONE) {
+                            stopListeningAlong()
+                            uiState = uiState.copy(error = AppError.MICROPHONE, canRetry = false)
+                            return@launch
+                        }
+                        delay(listenAlongPauseMs * 2)
+                    }
+                }
+            }
+        }
+    }
+
+    /** The song heard: the one shown keeps in time with it; another one takes over the words. */
+    private fun heardAlong(song: MusicMetadata) {
+        val shown = uiState.lyricsFor
+        if (shown == null || !sameSong(song, shown)) return showLyricsFor(song)
+        // A music app playing it says where it is more exactly than a microphone can.
+        if (uiState.following?.app == null) uiState = uiState.copy(following = heardFollowing(shown))
+    }
+
+    fun stopListeningAlong() {
+        pauseListeningAlong()
+        uiState = uiState.copy(listeningAlong = false, listenAlongMissed = false)
+    }
+
+    /** Crosstune went out of sight: the microphone stops, and starts again when it's back. */
+    fun pauseListeningAlong() {
+        alongJob?.cancel()
+        alongJob = null
+    }
+
+    fun resumeListeningAlong() {
+        if (uiState.listeningAlong) listenAlong()
     }
 
     /**
@@ -806,12 +893,10 @@ internal class MainViewModel(
     private fun follow(song: MusicMetadata) {
         stopFollowing()
         if (uiState.lyricLines.isEmpty()) return
-        val heard = heardSong?.takeIf { SongNames.same(it.metadata.title, song.title) && SongNames.sameArtist(it.metadata.artist, song.artist) }
-            ?.clock?.let { Following(it, app = null, canSeek = false) }
-        uiState = uiState.copy(following = heard)
+        uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {
-            source.follow(song).collect { playing -> uiState = uiState.copy(following = playing ?: heard) }
+            source.follow(song).collect { playing -> uiState = uiState.copy(following = playing ?: heardFollowing(song)) }
         }
     }
 
@@ -881,6 +966,7 @@ internal class MainViewModel(
         lyricsJob?.cancel()
         lyricsJob = null
         stopFollowing()
+        stopListeningAlong()
         askedForAccess = false
         uiState = uiState.copy(
             lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false, followHelp = false
@@ -1257,6 +1343,9 @@ internal class MainViewModel(
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_THEME = "theme"
+
+        /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
+        const val LISTEN_ALONG_PAUSE_MS = 8_000L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

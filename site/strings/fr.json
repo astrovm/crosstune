@@ -57,7 +57,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 5 octobre 2026",
+  "updated": "Dernière mise à jour : 7 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -110,6 +110,10 @@
     ],
     [
       "p",
+      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android."
+    ],
+    [
+      "p",
       "Comme toute requête sur Internet, ces requêtes communiquent votre adresse IP et les informations habituelles de la requête au service contacté. Ces services peuvent conserver des journaux de requêtes et traiter des informations selon leurs propres politiques de confidentialité. Le développeur ne contrôle pas la façon dont ils traitent ou conservent ces données. Un service de musique peut exiger son propre compte ou abonnement une fois ouvert."
     ],
     [
@@ -119,6 +123,10 @@
     [
       "p",
       "Quand vous demandez à Crosstune de reconnaître un titre, il enregistre le son du micro uniquement pendant l'écoute, 12 secondes au maximum, et s'arrête dès qu'il trouve le titre. Sur votre téléphone, il transforme le son en une empreinte de ses points les plus forts. Seule cette empreinte est envoyée à Shazam, jamais l'audio, et l'enregistrement n'est pas conservé. Crosstune n'envoie pas votre position. Shazam répond avec le titre, l'artiste, la pochette et l'identifiant Apple Music du morceau, puis Crosstune le recherche comme un lien collé. Comme les autres requêtes, celle-ci expose votre adresse IP à Shazam, qui la traite selon sa propre politique de confidentialité. Dans les paramètres, vous pouvez choisir plutôt Shazam ou l'application Google pour reconnaître les titres ; ils écoutent selon leurs propres politiques de confidentialité."
+    ],
+    [
+      "p",
+      "Le karaoké, et les paroles d'une chanson que Crosstune vient de reconnaître, continuent d'écouter de la même façon tant que les paroles sont à l'écran : toutes les quelques secondes, Crosstune envoie à Shazam une nouvelle empreinte, jamais l'audio, pour rester en rythme avec la chanson et repérer la suivante. L'écoute s'arrête dès que vous fermez les paroles, la désactivez ou quittez l'app."
     ],
     [
       "h2",

@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.provider.Settings
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -67,6 +69,8 @@ class ListeningTest {
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
+        MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
+        MainActivity.hearingFactory = null
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -299,6 +303,118 @@ class ListeningTest {
         launch(Intent(MainActivity.ACTION_LISTEN).setClass(app, MainActivity::class.java))
         assertTrue(!shown(string(R.string.listening_text)))
         assertEquals(0, microphone.opened)
+    }
+
+    /** Hears whatever a test says, one song or silence per listen, and counts the listens. */
+    private class FakeHearing : SongHearing {
+        val next = Channel<Heard>(Channel.UNLIMITED)
+
+        @Volatile
+        var listens = 0
+
+        override suspend fun listen(): Heard {
+            listens++
+            return next.receive()
+        }
+
+        /** [title] by Band, heard [seconds] into it, just now. */
+        fun song(title: String, seconds: Double) =
+            next.trySend(Heard.Song(MusicMetadata(title, "Band"), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime()))
+    }
+
+    /** Karaoke with [hearing] for ears; LRCLIB has "<title> one" at the start of each song, and "<title> two" from 10 seconds in. */
+    private fun karaoke(hearing: FakeHearing) {
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { hearing }
+        fake.handler = { request ->
+            val title = request.url.queryParameter("track_name")
+            FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] $title one\n[00:10.00] $title two"}]""")
+        }
+    }
+
+    private fun described(label: String) = composeRule.onAllNodes(hasContentDescription(label)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun lit(line: String) = composeRule.onAllNodes(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        .fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun karaokeFollowsWhatPlaysNearbyAndTheNextSong() {
+        val hearing = FakeHearing()
+        karaoke(hearing)
+        allowMicrophone()
+        launch()
+        click(string(R.string.karaoke_button))
+        // Before a song's heard, it says it's listening.
+        waitForText(string(R.string.karaoke_listening))
+        assertTrue(shown(string(R.string.karaoke_button)))
+
+        // A song heard 12.5 seconds in: its words, in time, the second line sung.
+        hearing.song("Demo", 12.5)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        // It keeps listening: Shazam busy, it's asked again, and the next song takes over the words.
+        hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+        hearing.song("Other", 0.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        assertTrue(shown("Other"))
+        // Heard again further on, the same song keeps in time with it.
+        hearing.song("Other", 11.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other two") }
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
+
+        // Stopped, it listens no more, and the words stay.
+        click(string(R.string.lyrics_stop_listening))
+        hearing.song("Demo", 0.0)
+        composeRule.waitForIdle()
+        assertEquals(5, hearing.listens)
+        assertTrue(shown("Other two"))
+        assertTrue(described(string(R.string.lyrics_listen_along)))
+    }
+
+    @Test
+    fun karaokeSaysSoWhenItHearsNoSongAndStopsWithoutTheMicrophone() {
+        val hearing = FakeHearing()
+        karaoke(hearing)
+        allowMicrophone()
+        launch()
+        click(string(R.string.karaoke_button))
+        hearing.next.trySend(Heard.Nothing)
+        waitForText(string(R.string.karaoke_nothing))
+        // Closed before a song's heard, it's back where it was.
+        click(string(R.string.dismiss_button))
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.karaoke_nothing)) }
+
+        // A microphone that won't work stops it, and says so.
+        click(string(R.string.karaoke_button))
+        hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
+        waitForText(string(R.string.error_microphone))
+        assertTrue(!shown(string(R.string.karaoke_listening)))
+    }
+
+    @Test
+    fun theWordsOfASongJustHeardKeepListeningAndPauseOutOfSight() {
+        val hearing = FakeHearing()
+        karaoke(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // Still playing nearby, it keeps listening, and follows the song on to where it's heard next.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        hearing.song("Demo", 15.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+
+        // Out of sight, it stops listening; back, it listens again.
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        controller!!.pause().stop()
+        controller!!.start().resume()
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+
+        // Turned off and on from the words themselves.
+        click(string(R.string.lyrics_stop_listening))
+        click(string(R.string.lyrics_listen_along))
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
     }
 
     private companion object {

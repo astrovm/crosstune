@@ -67,16 +67,20 @@ class MainActivity : ComponentActivity() {
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
-                    SongListener(microphoneFactory(), Shazam(client)),
-                    systemDispatcher
+                    hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client)),
+                    systemDispatcher,
+                    listenAlongPauseMs
                 )
             }
         }
     }
 
+    /** What asked for the microphone: listening for a song, karaoke, or listening along with the words. */
+    private var afterMicrophone: () -> Unit = { viewModel.listen() }
+
     /** Asked on the first listen; without it, the error offers Android's settings for Crosstune. */
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) viewModel.listen() else viewModel.showError(AppError.MICROPHONE)
+        if (granted) afterMicrophone() else viewModel.showError(AppError.MICROPHONE)
     }
 
     /** Set when launched to read the clipboard, which Android only allows once the window has focus. */
@@ -118,6 +122,14 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** How long listening along waits between songs heard; tests don't wait. */
+        @VisibleForTesting
+        internal var listenAlongPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
+
+        /** What hears songs nearby, when a test stands in for the microphone and Shazam both. */
+        @VisibleForTesting
+        internal var hearingFactory: (() -> SongHearing)? = null
 
         @VisibleForTesting
         internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
@@ -206,6 +218,9 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
+                        onKaraoke = { withMicrophone(viewModel::startKaraoke) },
+                        onListenAlong = { withMicrophone(viewModel::listenAlong) },
+                        onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
                         onOpenFollowAccess = {
                             viewModel.openingFollowAccess()
@@ -274,17 +289,28 @@ class MainActivity : ComponentActivity() {
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
     }
 
+    /** Back in sight, listening along with the words picks up again. */
+    override fun onStart() {
+        super.onStart()
+        viewModel.resumeListeningAlong()
+    }
+
     /** Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it. */
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations && viewModel.uiState.listening) viewModel.stopListening()
+        if (isChangingConfigurations) return
+        if (viewModel.uiState.listening) viewModel.stopListening()
+        viewModel.pauseListeningAlong()
     }
 
-    /** Listens, asking for the microphone first if it hasn't been allowed. */
-    private fun listen() {
+    private fun listen() = withMicrophone { viewModel.listen() }
+
+    /** Does [action], asking for the microphone first if it hasn't been allowed. */
+    private fun withMicrophone(action: () -> Unit) {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            viewModel.listen()
+            action()
         } else {
+            afterMicrophone = action
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }

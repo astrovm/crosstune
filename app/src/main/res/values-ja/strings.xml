@@ -36,6 +36,8 @@
     <string name="custom_template_hint">曲名を入れる場所に {query} を書きます（例: https://example.com/search?q={query}）</string>
     <string name="custom_template_invalid">名前と、{query} を含む URL を入力してください。</string>
     <string name="settings_behaviour_title">動作</string>
+    <string name="settings_listening_title">曲の認識と歌詞</string>
+    <string name="settings_appearance_title">表示</string>
     <string name="setup_welcome_title">Crosstune へようこそ</string>
     <string name="setup_welcome_body">ほかのアプリから音楽リンクが届いた？タップすると、いつも聴いているアプリで開きます。</string>
     <string name="setup_get_started">始める</string>
@@ -180,8 +182,14 @@
     <string name="lyrics_follow_allow">音楽アプリで再生中の曲に歌詞を合わせます。</string>
     <string name="lyrics_follow_play">この曲を音楽アプリで再生すると、歌詞が曲に合わせて進みます。</string>
     <string name="lyrics_following_app">%1$s に合わせています</string>
-    <string name="lyrics_following_heard">Crosstune が聞き取った位置に合わせています</string>
+    <string name="lyrics_following_heard">Crosstune が聞いている位置に合わせています</string>
     <string name="lyrics_jump">ここへ移動</string>
+    <string name="karaoke_button">カラオケ</string>
+    <string name="lyrics_listen_along">一緒に聞く</string>
+    <string name="lyrics_stop_listening">聞くのをやめる</string>
+    <string name="karaoke_listening">曲を聞いています…</string>
+    <string name="karaoke_nothing">まだ曲が聞こえません。近くで音楽を流し続けてください。</string>
+    <string name="lyrics_listening">聞いています…</string>
     <string name="setting_theme">テーマ</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>
@@ -190,7 +198,7 @@
     <string name="follow_help_restricted">次に [アプリ情報] を開き、右上の ⋮ をタップして [制限付き設定を許可] を選びます。この項目は最初に試したあとにだけ表示されます。</string>
     <string name="follow_help_access">[通知へのアクセス] に戻り、Crosstune をオンにします。音楽アプリが再生しているものだけを確認します。</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>
-    <string name="setting_lyrics_follow_description">通知へのアクセスを使って再生中の曲を確認します。通知の内容を読むことはありません。</string>
+    <string name="setting_lyrics_follow_description">通知へのアクセスが必要です。通知の内容を読むことはありません。</string>
     <string name="follow_help_app_info">アプリ情報</string>
     <string name="follow_help_access_button">通知へのアクセス</string>
     <string name="not_now_button">後で</string>

@@ -35,6 +35,8 @@
     <string name="custom_template_hint">Wpisz {query} w miejscu nazwy utworu, np. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Wpisz nazwę i adres URL zawierający {query}.</string>
     <string name="settings_behaviour_title">Działanie</string>
+    <string name="settings_listening_title">Rozpoznawanie i teksty</string>
+    <string name="settings_appearance_title">Wygląd</string>
     <string name="setup_welcome_title">Witaj w Crosstune</string>
     <string name="setup_welcome_body">Dostałeś link do muzyki z innej aplikacji? Kliknij, a otworzy się tam, gdzie słuchasz.</string>
     <string name="setup_get_started">Zaczynamy</string>
@@ -179,8 +181,14 @@
     <string name="lyrics_follow_allow">Niech tekst podąża za utworem grającym w Twojej aplikacji muzycznej.</string>
     <string name="lyrics_follow_play">Odtwórz ten utwór w aplikacji muzycznej, a tekst będzie za nim podążał.</string>
     <string name="lyrics_following_app">Podąża za %1$s</string>
-    <string name="lyrics_following_heard">Podąża za tym, co usłyszał Crosstune</string>
+    <string name="lyrics_following_heard">Podąża za tym, co słyszy Crosstune</string>
     <string name="lyrics_jump">Przejdź tutaj</string>
+    <string name="karaoke_button">Karaoke</string>
+    <string name="lyrics_listen_along">Słuchaj razem</string>
+    <string name="lyrics_stop_listening">Przestań słuchać</string>
+    <string name="karaoke_listening">Nasłuchiwanie utworu…</string>
+    <string name="karaoke_nothing">Nie słychać jeszcze utworu. Niech muzyka gra w pobliżu.</string>
+    <string name="lyrics_listening">Słucham…</string>
     <string name="setting_theme">Motyw</string>
     <string name="theme_light">Jasny</string>
     <string name="theme_dark">Ciemny</string>
@@ -189,7 +197,7 @@
     <string name="follow_help_restricted">Potem otwórz Informacje o aplikacji, kliknij ⋮ w prawym górnym rogu i wybierz Zezwól na ustawienia z ograniczonym dostępem. Android pokazuje tę opcję dopiero po pierwszej próbie.</string>
     <string name="follow_help_access">Wróć do Dostępu do powiadomień i włącz Crosstune. Widzi tylko, co odtwarzają Twoje aplikacje muzyczne.</string>
     <string name="setting_lyrics_follow">Tekst podąża za aplikacją muzyczną</string>
-    <string name="setting_lyrics_follow_description">Używa dostępu do powiadomień, by widzieć, co gra. Twoje powiadomienia nigdy nie są czytane.</string>
+    <string name="setting_lyrics_follow_description">Wymaga dostępu do powiadomień. Twoje powiadomienia nigdy nie są czytane.</string>
     <string name="follow_help_app_info">Informacje o aplikacji</string>
     <string name="follow_help_access_button">Dostęp do powiadomień</string>
     <string name="not_now_button">Nie teraz</string>

@@ -169,6 +169,11 @@ private fun micRecord(): AudioRecord {
     return AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimum, rate * 2))
 }
 
+/** Something that hears what's playing nearby and names it. */
+internal fun interface SongHearing {
+    suspend fun listen(): Heard
+}
+
 /**
  * Listens for up to [ShazamSignature.SAMPLES], asking Shazam every [STEP] samples with all there
  * is so far, and stops at the first answer that names the song.
@@ -180,10 +185,10 @@ internal class SongListener(
     private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** When the recording starts, so a song's words can follow on from what was heard. */
     private val clock: () -> Long = SystemClock::elapsedRealtime
-) {
+) : SongHearing {
     private data class Progress(val recorded: Int, val done: Boolean, val failed: Boolean = false)
 
-    suspend fun listen(): Heard = coroutineScope {
+    override suspend fun listen(): Heard = coroutineScope {
         val audio = ShortArray(ShazamSignature.SAMPLES)
         val progress = MutableStateFlow(Progress(0, done = false))
         val startedAt = clock()
