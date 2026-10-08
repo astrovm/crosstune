@@ -378,9 +378,14 @@ class ListeningTest {
 
         // Shazam busy, it's asked again, and the next song takes over the words.
         hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
-        hearing.song("Other", 0.0)
+        hearing.next.trySend(Heard.Song(MusicMetadata("Other", "Band"), "1109658204", 0, SystemClock.elapsedRealtime()))
         composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
         assertTrue(shown("Other"))
+        // Each song heard along the way joins Recent: by its Apple Music link when Shazam knows one.
+        val recent = HistoryStore(prefs()).load()
+        assertEquals(listOf("Other", "Demo"), recent.map { it.metadata.title })
+        assertEquals(MusicService.APPLE_MUSIC, recent.first().link.service)
+        assertEquals(null, recent[1].link.service)
         composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 10 }
 
         // Stopped, it listens no more, and the words stay.
@@ -407,17 +412,23 @@ class ListeningTest {
     fun listeningAlongPausesOutOfSightAndTurnsOffAndOn() {
         val hearing = FakeHearing()
         demoWords(hearing)
+        // The next song, one with no Apple Music link, joins Recent by its name.
+        hearing.song("Third", 0.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Third one") }
+        val third = HistoryStore(prefs()).load().first()
+        assertEquals("Third", third.metadata.title)
+        assertEquals(null, third.link.service)
 
         // Out of sight, it stops listening; back, it listens again.
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
         controller!!.pause().stop()
         controller!!.start().resume()
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
 
         // Turned off and on from the words themselves.
         click(string(R.string.lyrics_stop_listening))
         click(string(R.string.lyrics_listen_along))
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
     }
 
     private companion object {

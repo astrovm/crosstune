@@ -877,11 +877,24 @@ internal class MainViewModel(
             heardSong = song
             heardClock = heard.clock
             unconfirmed = null
-            if (shown == null || !sameSong(song, shown)) return showLyricsFor(song)
+            if (shown == null || !sameSong(song, shown)) {
+                remember(heard)
+                return showLyricsFor(song)
+            }
         } else {
             heardClock = steadied(heardClock, heard.clock ?: return)
         }
         keepInTime()
+    }
+
+    /**
+     * A song heard along the way joins Recent, as one Crosstune listened for does: by its Apple Music
+     * link when Shazam knows it, or else by its name. Nothing needs looking up to keep it.
+     */
+    private fun remember(heard: Heard.Song) {
+        val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
+            ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
+        uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
     }
 
     /**
