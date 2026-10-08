@@ -217,4 +217,26 @@
     <string name="song_search_title">노래</string>
     <string name="song_search_none">“%1$s”에 해당하는 노래가 없어요.</string>
     <string name="song_search_label_for">“%1$s” 검색 결과</string>
+    <string name="settings_floating_title">떠 있는 가사</string>
+    <string name="settings_floating_description">가사를 연 채로 Crosstune을 나갈 때.</string>
+    <string name="setting_floating_look">배경</string>
+    <string name="floating_look_cover">커버 색상</string>
+    <string name="floating_look_plain">단색</string>
+    <string name="floating_look_see_through">반투명</string>
+    <string name="floating_look_none">없음</string>
+    <string name="floating_allow_over_apps">다른 앱 위에 표시 허용</string>
+    <string name="floating_allow_over_apps_description">반투명 가사가 앱 위에 떠 있습니다. Android가 먼저 묻습니다.</string>
+    <string name="setting_floating_size">글자 크기</string>
+    <string name="floating_size_small">작게</string>
+    <string name="floating_size_medium">보통</string>
+    <string name="floating_size_large">크게</string>
+    <string name="setting_floating_next_line">다음 줄 보기</string>
+    <string name="setting_floating_locked">터치 통과</string>
+    <string name="setting_floating_locked_description">가사 아래 앱을 탭할 수 있습니다. 알림에서 잠금을 해제하세요.</string>
+    <string name="floating_open">Crosstune 열기</string>
+    <string name="floating_lock">터치 통과</string>
+    <string name="floating_unlock">잠금 해제</string>
+    <string name="floating_close">닫기</string>
+    <string name="floating_channel">떠 있는 가사</string>
+    <string name="floating_notification">앱 위에 가사가 떠 있음</string>
 </resources>

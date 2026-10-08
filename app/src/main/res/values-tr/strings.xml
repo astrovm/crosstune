@@ -217,4 +217,26 @@
     <string name="song_search_title">Şarkılar</string>
     <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
     <string name="song_search_label_for">“%1$s” için bulundu</string>
+    <string name="settings_floating_title">Yüzen sözler</string>
+    <string name="settings_floating_description">Sözler açıkken Crosstune\'dan çıktığında.</string>
+    <string name="setting_floating_look">Arka plan</string>
+    <string name="floating_look_cover">Kapak rengi</string>
+    <string name="floating_look_plain">Düz</string>
+    <string name="floating_look_see_through">Yarı saydam</string>
+    <string name="floating_look_none">Yok</string>
+    <string name="floating_allow_over_apps">Diğer uygulamaların üzerinde göstermeye izin ver</string>
+    <string name="floating_allow_over_apps_description">Yarı saydam sözler uygulamalarının üzerinde yüzer. Android önce sorar.</string>
+    <string name="setting_floating_size">Yazı boyutu</string>
+    <string name="floating_size_small">Küçük</string>
+    <string name="floating_size_medium">Orta</string>
+    <string name="floating_size_large">Büyük</string>
+    <string name="setting_floating_next_line">Sonraki satırı göster</string>
+    <string name="setting_floating_locked">Dokunuşları geçir</string>
+    <string name="setting_floating_locked_description">Sözlerin altındaki uygulamaya dokun. Kilidi bildiriminden aç.</string>
+    <string name="floating_open">Crosstune\'u aç</string>
+    <string name="floating_lock">Dokunuşları geçir</string>
+    <string name="floating_unlock">Kilidi aç</string>
+    <string name="floating_close">Kapat</string>
+    <string name="floating_channel">Yüzen sözler</string>
+    <string name="floating_notification">Sözler uygulamalarının üzerinde yüzüyor</string>
 </resources>

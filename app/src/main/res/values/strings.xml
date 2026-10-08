@@ -235,4 +235,26 @@
     <string name="error_recognition_unavailable">Song recognition isn\'t available right now.</string>
     <string name="open_settings_button">Open settings</string>
     <string name="open_app_button">Open %1$s</string>
+    <string name="settings_floating_title">Floating lyrics</string>
+    <string name="settings_floating_description">When you leave Crosstune with lyrics open.</string>
+    <string name="setting_floating_look">Background</string>
+    <string name="floating_look_cover">Cover color</string>
+    <string name="floating_look_plain">Plain</string>
+    <string name="floating_look_see_through">See-through</string>
+    <string name="floating_look_none">None</string>
+    <string name="floating_allow_over_apps">Allow display over other apps</string>
+    <string name="floating_allow_over_apps_description">See-through lyrics float over your apps. Android asks first.</string>
+    <string name="setting_floating_size">Text size</string>
+    <string name="floating_size_small">Small</string>
+    <string name="floating_size_medium">Medium</string>
+    <string name="floating_size_large">Large</string>
+    <string name="setting_floating_next_line">Show the next line</string>
+    <string name="setting_floating_locked">Let touches through</string>
+    <string name="setting_floating_locked_description">Tap the app under the lyrics. Unlock them from their notification.</string>
+    <string name="floating_open">Open Crosstune</string>
+    <string name="floating_lock">Let touches through</string>
+    <string name="floating_unlock">Unlock</string>
+    <string name="floating_close">Close</string>
+    <string name="floating_channel">Floating lyrics</string>
+    <string name="floating_notification">Lyrics floating over your apps</string>
 </resources>

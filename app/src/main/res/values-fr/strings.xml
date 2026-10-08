@@ -217,4 +217,26 @@
     <string name="song_search_title">Titres</string>
     <string name="song_search_none">Aucun titre trouvé pour « %1$s ».</string>
     <string name="song_search_label_for">Trouvées pour « %1$s »</string>
+    <string name="settings_floating_title">Paroles flottantes</string>
+    <string name="settings_floating_description">Quand vous quittez Crosstune avec les paroles ouvertes.</string>
+    <string name="setting_floating_look">Arrière-plan</string>
+    <string name="floating_look_cover">Couleur de la pochette</string>
+    <string name="floating_look_plain">Uni</string>
+    <string name="floating_look_see_through">Transparent</string>
+    <string name="floating_look_none">Aucun</string>
+    <string name="floating_allow_over_apps">Autoriser l\'affichage par-dessus les autres applis</string>
+    <string name="floating_allow_over_apps_description">Les paroles transparentes flottent sur vos applis. Android demande d\'abord.</string>
+    <string name="setting_floating_size">Taille du texte</string>
+    <string name="floating_size_small">Petite</string>
+    <string name="floating_size_medium">Moyenne</string>
+    <string name="floating_size_large">Grande</string>
+    <string name="setting_floating_next_line">Afficher la ligne suivante</string>
+    <string name="setting_floating_locked">Laisser passer les touchers</string>
+    <string name="setting_floating_locked_description">Touchez l\'appli sous les paroles. Déverrouillez-les depuis leur notification.</string>
+    <string name="floating_open">Ouvrir Crosstune</string>
+    <string name="floating_lock">Laisser passer les touchers</string>
+    <string name="floating_unlock">Déverrouiller</string>
+    <string name="floating_close">Fermer</string>
+    <string name="floating_channel">Paroles flottantes</string>
+    <string name="floating_notification">Paroles flottant sur vos applis</string>
 </resources>

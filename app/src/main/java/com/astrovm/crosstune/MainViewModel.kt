@@ -95,6 +95,10 @@ internal data class UiState(
     val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
+    /** How the words floating over other apps look, and where they are. */
+    val floating: FloatingOptions = FloatingOptions(),
+    /** Whether Android lets Crosstune show over other apps, which see-through floating words need. */
+    val canFloatOverApps: Boolean = false,
     /** What happens when the app a song goes to doesn't have it. */
     val notFoundAction: NotFoundAction = NotFoundAction.ASK,
     /** A song not found where it was going, from Recent or a playlist, with what can be done instead. */
@@ -282,6 +286,13 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
+            floating = FloatingOptions(
+                look = FloatingLook.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_LOOK, null) } ?: FloatingLook.COVER,
+                size = FloatingSize.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_SIZE, null) } ?: FloatingSize.MEDIUM,
+                nextLine = preferences.getBoolean(KEY_FLOATING_NEXT_LINE, true),
+                locked = preferences.getBoolean(KEY_FLOATING_LOCKED, false),
+                top = preferences.getInt(KEY_FLOATING_TOP, -1)
+            ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -1115,6 +1126,37 @@ internal class MainViewModel(
         uiState = uiState.copy(pureBlack = on)
     }
 
+    fun selectFloatingLook(look: FloatingLook) {
+        preferences.edit { putString(KEY_FLOATING_LOOK, look.name) }
+        uiState = uiState.copy(floating = uiState.floating.copy(look = look))
+    }
+
+    fun selectFloatingSize(size: FloatingSize) {
+        preferences.edit { putString(KEY_FLOATING_SIZE, size.name) }
+        uiState = uiState.copy(floating = uiState.floating.copy(size = size))
+    }
+
+    fun setFloatingNextLine(on: Boolean) {
+        preferences.edit { putBoolean(KEY_FLOATING_NEXT_LINE, on) }
+        uiState = uiState.copy(floating = uiState.floating.copy(nextLine = on))
+    }
+
+    /** Locked, the words over other apps let touches through to the app below. */
+    fun setFloatingLocked(locked: Boolean) {
+        preferences.edit { putBoolean(KEY_FLOATING_LOCKED, locked) }
+        uiState = uiState.copy(floating = uiState.floating.copy(locked = locked))
+    }
+
+    /** Where the words over other apps were left, in pixels from the top. */
+    fun moveFloating(top: Int) {
+        preferences.edit { putInt(KEY_FLOATING_TOP, top) }
+        uiState = uiState.copy(floating = uiState.floating.copy(top = top))
+    }
+
+    fun setCanFloatOverApps(can: Boolean) {
+        uiState = uiState.copy(canFloatOverApps = can)
+    }
+
     fun selectTheme(theme: ThemeMode) {
         preferences.edit { putString(KEY_THEME, theme.name) }
         uiState = uiState.copy(theme = theme)
@@ -1522,6 +1564,11 @@ internal class MainViewModel(
         const val KEY_PALETTE = "palette"
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
+        private const val KEY_FLOATING_LOOK = "floating_look"
+        private const val KEY_FLOATING_SIZE = "floating_size"
+        private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"
+        private const val KEY_FLOATING_LOCKED = "floating_locked"
+        private const val KEY_FLOATING_TOP = "floating_top"
 
         /** How far apart two hearings of a song can be and still be the same place in it. */
         const val STEADY_MS = 2_000L
