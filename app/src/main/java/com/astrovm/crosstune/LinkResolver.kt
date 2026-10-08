@@ -41,7 +41,8 @@ internal sealed interface Resolution {
  */
 internal class LinkResolver(
     private val client: OkHttpClient,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val apis: ServiceApis = ServiceApis(client, java.util.Locale.getDefault().country, ioDispatcher)
 ) {
     suspend fun resolve(input: LinkInput): Resolution = when (input) {
         is LinkInput.Link -> resolveLink(input.link)
@@ -95,30 +96,36 @@ internal class LinkResolver(
         }
         when (val metadata = parse(link, body)) {
             null -> Resolution.Failed(if (isApiNotFound(link)) AppError.NOT_FOUND else AppError.METADATA_UNAVAILABLE, link)
-            else -> Resolution.Resolved(link, withSpotifyTracks(link, metadata, body))
+            else -> Resolution.Resolved(link, withTracks(link, metadata, body))
         }
     }
 
     /**
-     * Spotify's album and playlist pages don't list the songs, but their embed pages do. They're
-     * extra, so the album or playlist still shows without them when that page can't be read. A
-     * playlist's own [page] has its first songs' covers.
+     * The songs of an album or playlist whose page doesn't list them, from where its service's own
+     * website gets them: Spotify's embed pages, and the APIs behind TIDAL's, SoundCloud's and
+     * Audiomack's websites. They're extra, so the album or playlist still shows without them when
+     * they can't be read. A Spotify playlist's own [page] has its first songs' covers.
      */
-    private suspend fun withSpotifyTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
-        if (link.service != MusicService.SPOTIFY || (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM)) return metadata
+    private suspend fun withTracks(link: MusicLink, metadata: MusicMetadata, page: String): MusicMetadata {
+        if (link.type != ItemType.PLAYLIST && link.type != ItemType.ALBUM) return metadata
         val tracks = try {
-            val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
-            if (response.isSuccessful) MetadataParsers.spotifyEmbedTracks(body) else emptyList()
+            when (link.service) {
+                MusicService.SPOTIFY -> {
+                    val (response, body) = fetch("https://open.spotify.com/embed/${link.type.name.lowercase()}/${link.id}")
+                    val covers = if (link.type == ItemType.PLAYLIST) MetadataParsers.spotifyCovers(page) else emptyMap()
+                    if (response.isSuccessful) MetadataParsers.spotifyEmbedTracks(body).map { track -> covers[track.url]?.let { track.copy(artworkUrl = it) } ?: track } else emptyList()
+                }
+                MusicService.TIDAL -> apis.tidalTracks(link.type, link.id)
+                MusicService.SOUNDCLOUD -> apis.soundCloudTracks(link.url)
+                MusicService.AUDIOMACK -> apis.audiomackTracks(link.type, link.id)
+                else -> return metadata
+            }
         } catch (_: IOException) {
             emptyList()
         } catch (_: JSONException) {
             emptyList()
         }
-        val covers = if (link.type == ItemType.PLAYLIST) MetadataParsers.spotifyCovers(page) else emptyMap()
-        return metadata.copy(
-            tracks = tracks.map { track -> covers[track.url]?.let { track.copy(artworkUrl = it) } ?: track },
-            trackCount = metadata.trackCount?.takeIf { it > tracks.size }
-        )
+        return metadata.copy(tracks = tracks, trackCount = metadata.trackCount?.takeIf { it > tracks.size })
     }
 
     /** The iTunes Lookup API reports missing items as an empty result inside a successful response. */

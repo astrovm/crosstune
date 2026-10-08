@@ -25,16 +25,18 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
- * Search API and Deezer's public API, plus the search behind Bandcamp's and YouTube Music's own
- * websites, which have no documented API. Other destinations need credentials, so they keep using a
- * search. Any failure or uncertain match returns null so the caller falls back to a search.
+ * Search API and Deezer's public API, plus the search behind Bandcamp's, YouTube Music's, TIDAL's,
+ * SoundCloud's and Audiomack's own websites, and Qobuz's store pages, which have no documented API.
+ * Spotify and Amazon Music need an account, so they keep using a search. Any failure or uncertain
+ * match returns null so the caller falls back to a search.
  */
 internal class ExactMatcher(
     private val client: OkHttpClient,
     private val country: String = Locale.getDefault().country,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Where what's found is remembered, so the same song isn't looked up again. */
-    private val cache: LookupCache? = null
+    private val cache: LookupCache? = null,
+    private val apis: ServiceApis = ServiceApis(client, country, ioDispatcher)
 ) {
 
     /** What an artist's own Bandcamp page name may add to their name. */
@@ -99,6 +101,10 @@ internal class ExactMatcher(
                             MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
                             MusicService.DEEZER -> findOnDeezer(metadata)
                             MusicService.BANDCAMP -> findOnBandcamp(metadata)
+                            MusicService.TIDAL -> findOnTidal(metadata)
+                            MusicService.SOUNDCLOUD -> findOnSoundCloud(metadata)
+                            MusicService.AUDIOMACK -> findOnAudiomack(metadata)
+                            MusicService.QOBUZ -> findOnQobuz(metadata)
                             MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
                             // YouTube.
                             else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
@@ -268,6 +274,99 @@ internal class ExactMatcher(
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
     }
 
+    /** TIDAL's catalogue is the labels' own, so a match by name and artist is the item itself. */
+    private suspend fun findOnTidal(metadata: MusicMetadata): String? {
+        val (kind, path) = when (metadata.type) {
+            ItemType.TRACK -> "tracks" to "track"
+            ItemType.ALBUM -> "albums" to "album"
+            else -> "artists" to "artist"
+        }
+        return apis.tidalSearch(kind, searchQuery(metadata)).firstOrNull { result ->
+            when (metadata.type) {
+                ItemType.TRACK -> ServiceApis.tidalTrack(result)?.let { matches(metadata, it.title, it.artist) } == true
+                ItemType.ALBUM -> matches(metadata, result.optString("title"), result.optJSONArray("artists").objects().joinToString(", ") { it.optString("name") })
+                else -> matches(metadata, result.optString("name"), "")
+            }
+        }?.let { "https://tidal.com/browse/$path/${it.optLong("id")}" }
+    }
+
+    /**
+     * Anyone can upload to SoundCloud under any name, so a song or album counts only when it's the
+     * artist's own, or a verified account's, and an artist only when verified.
+     */
+    private suspend fun findOnSoundCloud(metadata: MusicMetadata): String? {
+        fun owned(user: JSONObject?) = user != null && (user.optBoolean("verified") || sameArtist(metadata, user.optString("username")))
+        val found = when (metadata.type) {
+            ItemType.TRACK -> apis.soundCloudSearch("tracks", searchQuery(metadata)).firstOrNull { result ->
+                ServiceApis.soundCloudTrack(result)?.let { matches(metadata, it.title, it.artist) } == true && owned(result.optJSONObject("user"))
+            }
+            ItemType.ALBUM -> apis.soundCloudSearch("albums", searchQuery(metadata)).firstOrNull { result ->
+                val user = result.optJSONObject("user")
+                matches(metadata, result.optString("title"), user?.optString("username").orEmpty()) && owned(user)
+            }
+            else -> apis.soundCloudSearch("users", searchQuery(metadata)).firstOrNull { result ->
+                result.optBoolean("verified") && matches(metadata, result.optString("username"), "")
+            }
+        }
+        return found?.optString("permalink_url")?.ifBlank { null }
+    }
+
+    /** Like SoundCloud, anyone can upload to Audiomack, so only the artist's own or a verified account's upload counts. */
+    private suspend fun findOnAudiomack(metadata: MusicMetadata): String? {
+        fun owned(uploader: JSONObject?) = uploader != null && (uploader.optString("verified") == "yes" || sameArtist(metadata, uploader.optString("name")))
+        val kind = when (metadata.type) {
+            ItemType.TRACK -> "songs"
+            ItemType.ALBUM -> "albums"
+            else -> "artists"
+        }
+        val found = apis.audiomackSearch(kind, searchQuery(metadata)).firstOrNull { result ->
+            if (metadata.type == ItemType.ARTIST) {
+                result.optString("verified") == "yes" && matches(metadata, result.optString("name"), "")
+            } else {
+                matches(metadata, result.optString("title"), result.optString("artist")) && owned(result.optJSONObject("uploader"))
+            }
+        } ?: return null
+        val slug = found.optString("url_slug").ifBlank { return null }
+        if (metadata.type == ItemType.ARTIST) return "https://audiomack.com/$slug"
+        val owner = found.optJSONObject("uploader")?.optString("url_slug")?.ifBlank { null } ?: return null
+        return "https://audiomack.com/$owner/${if (metadata.type == ItemType.TRACK) "song" else "album"}/$slug"
+    }
+
+    /**
+     * Qobuz's API needs an account, but its store's search page lists each song with its album:
+     * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
+     */
+    private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
+        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
+        val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
+        val page = client.newCall(Request.Builder().url(url).get().build()).executeAsync().use { response ->
+            if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
+            withContext(ioDispatcher) { response.body.stringAtMost() }
+        }
+        val songs = qobuzItemRegex.findAll(page).mapNotNull { item ->
+            val html = item.value
+            val (title, credit) = qobuzTitleRegex.find(html)?.groupValues?.drop(1)?.map(::htmlText) ?: return@mapNotNull null
+            val (artist, album) = credit.split("•").map(String::trim).let { it.first() to it.getOrElse(1) { "" } }
+            QobuzSong(title, artist, album, qobuzTrackRegex.find(html)?.groupValues?.get(1), qobuzAlbumRegex.find(html)?.groupValues?.get(1))
+        }
+        return if (metadata.type == ItemType.TRACK) {
+            songs.firstOrNull { it.track != null && matches(metadata, it.title, it.artist) }?.let { "https://open.qobuz.com/track/${it.track}" }
+        } else {
+            songs.firstOrNull { it.album != null && matches(metadata, it.albumTitle, it.artist) }?.let { "https://open.qobuz.com/album/${it.album}" }
+        }
+    }
+
+    private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
+
+    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(Regex("<[^>]+>"), " "), android.text.Html.FROM_HTML_MODE_LEGACY)
+        .toString().replace(Regex("\\s+"), " ").trim()
+
+    /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
+    private fun sameArtist(metadata: MusicMetadata, name: String): Boolean {
+        val wanted = SongNames.artists(metadata.artist)
+        return SongNames.artists(name).any(wanted::contains)
+    }
+
     /**
      * Songs and albums only. An artist match would rest on the name alone, and anyone can register a page
      * named after a famous artist (or share their name), so artists are left to the search.
@@ -429,6 +528,12 @@ internal class ExactMatcher(
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
+        /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
+        private val qobuzItemRegex = Regex("""<div class="ListItem">.*?</li>""", RegexOption.DOT_MATCHES_ALL)
+        private val qobuzTitleRegex = Regex("""class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
+        private val qobuzTrackRegex = Regex("""track&#x2F;(\d+)""")
+        private val qobuzAlbumRegex = Regex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
+
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
         const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
@@ -459,13 +564,18 @@ internal class ExactMatcher(
 }
 
 /** The apps whose search needs no account. */
-private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
+private val matchable = setOf(
+    MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
+    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ
+)
 
 /**
  * Whether Crosstune can look [type] up in [target] itself, so that finding nothing there means it isn't
- * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else.
+ * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else;
+ * Qobuz's artists aren't told apart, see ExactMatcher.findOnQobuz.
  */
-internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean = type != ItemType.PLAYLIST && target in matchable
+internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
+    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST)
 
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album

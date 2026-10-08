@@ -8,7 +8,7 @@ Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een ande
 <li>Afspeellijsten en albums tonen hun nummers: open er een in je app, kopieer of deel de lijst, of speel alles af in YouTube Music of YouTube.</li>
 <li>Stuur elke service ergens anders heen, bijvoorbeeld YouTube-links naar YouTube Music en al het andere naar Apple Music.</li>
 <li>Vragen welke app: kies een app telkens als je op een link tikt of deze deelt.</li>
-<li>Exacte match openen: Apple Music, Deezer en YouTube Music kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, Bandcamp het nummer of album, en YouTube het nummer.</li>
+<li>Exacte match openen: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud en Audiomack kunnen het nummer, album of de artiest zelf openen in plaats van een zoekopdracht, Bandcamp en Qobuz het nummer of album, en YouTube het nummer.</li>
 <li>Voeg andere apps en sites met een zoekpagina toe.</li>
 <li>Plak met één tik, doorzoek en open recente links opnieuw, of open een gekopieerde link via de widget op je startscherm, de tegel in Snelle instellingen of door het app-icoon lang ingedrukt te houden.</li>
 <li>Herkent een nummer in de buurt: Crosstune luistert zelf, of opent Shazam of de nummerzoekfunctie van Google. Opent ook Shazam-links en nummers gedeeld vanuit Now Playing op je Pixel.</li>

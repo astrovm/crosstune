@@ -30,6 +30,8 @@
         <package android:name="com.soundcloud.android" />
         <package android:name="com.bandcamp.android" />
         <package android:name="com.amazon.mp3" />
+        <package android:name="com.audiomack" />
+        <package android:name="com.qobuz.music" />
         <!-- Apps that name a song playing nearby (SongRecognizers). -->
         <package android:name="com.shazam.android" />
         <package android:name="com.google.android.googlequicksearchbox" />
@@ -178,6 +180,16 @@
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" android:host="bandcamp.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="audiomack.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="www.audiomack.com" />
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />

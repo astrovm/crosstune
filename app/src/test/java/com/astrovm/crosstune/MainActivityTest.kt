@@ -4946,10 +4946,11 @@ class MainActivityTest {
         assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
         assertEquals("", model.uiState.linkText)
 
-        model.selectDefault(Destination.Service(MusicService.TIDAL))
+        // An app with no exact match, only a search.
+        model.selectDefault(Destination.Service(MusicService.AMAZON_MUSIC))
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://listen.tidal.com/search?q=Remember%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.amazon.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
         assertNull(model.uiState.result)
     }
 

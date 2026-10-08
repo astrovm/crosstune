@@ -8,7 +8,7 @@ Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. T
 <li>Las playlists y los álbumes muestran sus canciones: abrí cualquiera en tu app, copiá o compartí la lista, o reproducila entera en YouTube Music o YouTube.</li>
 <li>Mandá cada servicio a un lugar distinto, por ejemplo los links de YouTube a YouTube Music y todo lo demás a Apple Music.</li>
 <li>Preguntar qué app usar: elegí una app cada vez que tocás o compartís un link.</li>
-<li>Abrir la coincidencia exacta: Apple Music, Deezer y YouTube Music pueden abrir la canción, el álbum o el artista en sí, en vez de una búsqueda, Bandcamp la canción o el álbum, y YouTube la canción.</li>
+<li>Abrir la coincidencia exacta: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud y Audiomack pueden abrir la canción, el álbum o el artista en sí, en vez de una búsqueda, Bandcamp y Qobuz la canción o el álbum, y YouTube la canción.</li>
 <li>Agregá otras apps y sitios que tengan página de búsqueda.</li>
 <li>Pegá con un toque, buscá y volvé a abrir links recientes, o abrí un link copiado desde el widget de la pantalla de inicio, el mosaico de Configuración rápida o manteniendo apretado el ícono de la app.</li>
 <li>Reconoce una canción que suena cerca: Crosstune escucha por su cuenta, o abre Shazam o la búsqueda de canciones de Google. También abre links de Shazam y canciones compartidas desde Now Playing del Pixel.</li>

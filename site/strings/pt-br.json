@@ -102,7 +102,7 @@
     ],
     [
       "p",
-      "Quando “Abrir o resultado exato” está ativado, o app envia o título e o artista do item ao serviço de busca do destino: Apple Music, Deezer, YouTube Music, YouTube ou Bandcamp. Você pode desativar essa opção nas Configurações. Quando você abre um destino, o app ou site selecionado recebe o link de destino ou os termos de busca. Quando você usa “Tocar tudo” em uma playlist ou álbum, o app envia o título e o artista de cada música à busca do YouTube Music e depois envia a lista de vídeos encontrados ao YouTube, que retorna uma playlist temporária. Destinos personalizados recebem os termos de busca no modelo de URL que você configurar. Compartilhar um resultado o envia para o app ou destinatário que você selecionar."
+      "Quando “Abrir o resultado exato” está ativado, o app envia o título e o artista do item ao serviço de busca do destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Você pode desativar essa opção nas Configurações. Quando você abre um destino, o app ou site selecionado recebe o link de destino ou os termos de busca. Quando você usa “Tocar tudo” em uma playlist ou álbum, o app envia o título e o artista de cada música à busca do YouTube Music e depois envia a lista de vídeos encontrados ao YouTube, que retorna uma playlist temporária. Destinos personalizados recebem os termos de busca no modelo de URL que você configurar. Compartilhar um resultado o envia para o app ou destinatário que você selecionar."
     ],
     [
       "p",
