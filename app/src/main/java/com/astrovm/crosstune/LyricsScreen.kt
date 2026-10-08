@@ -285,6 +285,21 @@ private fun PlainLyrics(words: String) {
 }
 
 /**
+ * The line of [lines] being sung, or -1 before the first or while nothing says where the song is.
+ * Checked every frame while the song plays, so a line lights as it's sung; it only changes when the
+ * line does. A paused song stays where it is.
+ */
+@Composable
+internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): Int {
+    fun sung() = following?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
+    val active by produceState(sung(), following, lines) {
+        value = sung()
+        while (following?.clock?.playing == true) value = withInfiniteAnimationFrameMillis { sung() }
+    }
+    return active
+}
+
+/**
  * Timed words, one line at a time. While the song is followed the line being sung is lit, those
  * sung dim behind it, and the list glides to keep it a third of the way down; tapping a line moves
  * the music app there when it can.
@@ -293,13 +308,7 @@ private fun PlainLyrics(words: String) {
 private fun TimedLyrics(state: UiState, actions: ScreenActions) {
     val lines = state.lyricLines
     val following = state.following
-    fun sung() = following?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
-    // Checked every frame while the song plays, so a line lights as it's sung; the list only changes
-    // when the line does. A paused song stays where it is.
-    val active by produceState(sung(), following, lines) {
-        value = sung()
-        while (following?.clock?.playing == true) value = withInfiniteAnimationFrameMillis { sung() }
-    }
+    val active = rememberSungLine(lines, following)
     val list = rememberLazyListState()
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     LaunchedEffect(active) {

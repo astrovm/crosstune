@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import org.junit.Assert.assertFalse
+import android.os.Looper
 import android.Manifest
 import android.app.Application
 import android.content.ComponentName
@@ -429,6 +431,78 @@ class ListeningTest {
         click(string(R.string.lyrics_stop_listening))
         click(string(R.string.lyrics_listen_along))
         composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
+    }
+
+    @Test
+    fun lyricsFromAnywhereNameTheSongAndShowItsWordsListeningAlong() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        hearing.song("Demo", 2.0)
+        launch(MainActivity.lyricsIntent(app))
+        // No result to tap Lyrics on first: the words open as soon as the song is named, and keep listening.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun theWordsFloatOverOtherAppsWithTheMicrophoneThere() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        val activity = controller!!.get()
+
+        // Floating, only the line being sung and the next one show.
+        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(lit("Demo one") || shown("Demo one"))
+        assertTrue(shown("Demo two"))
+
+        // The window's microphone stops listening along, and starts it again.
+        FloatingListenReceiver().onReceive(app, Intent())
+        shadowOf(Looper.getMainLooper()).idle()
+        composeRule.waitForIdle()
+        activity.onPictureInPictureModeChanged(false, activity.resources.configuration)
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
+        FloatingListenReceiver().onReceive(app, Intent())
+        shadowOf(Looper.getMainLooper()).idle()
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun floatingWithoutTimedWordsShowsTheSong() {
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Just words"}]""") }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitForText("Just words")
+        val activity = controller!!.get()
+        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(shown("Band"))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12LeavingWithTheWordsOnScreenFloatsThem() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        val activity = controller!!.get()
+        controller!!.userLeaving()
+        assertTrue(activity.isInPictureInPictureMode)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12LeavingWithoutWordsDoesntFloat() {
+        allowMicrophone()
+        launch()
+        val activity = controller!!.get()
+        controller!!.userLeaving()
+        assertFalse(activity.isInPictureInPictureMode)
     }
 
     private companion object {

@@ -1,5 +1,11 @@
 package com.astrovm.crosstune
 
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
+import android.util.Rational
 import android.app.UiModeManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -75,6 +81,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Set while the words float over other apps, in picture-in-picture. */
+    private var floating by mutableStateOf(false)
+
     /** What asked for the microphone: listening for a song, or listening along with the words. */
     private var afterMicrophone: () -> Unit = { viewModel.listen() }
 
@@ -97,6 +106,12 @@ class MainActivity : ComponentActivity() {
         const val ACTION_LISTEN = "com.astrovm.crosstune.action.LISTEN"
         /** The unexported alias the widget listens through, so no other app can make Crosstune listen. */
         const val LISTEN_ALIAS = "com.astrovm.crosstune.ListenForSong"
+        /** On a listen, opens the words of the song as soon as it's named, and keeps listening along. */
+        const val EXTRA_LYRICS = "com.astrovm.crosstune.extra.LYRICS"
+
+        /** Listens for the song playing nearby and shows its words, as the widget's and tile's Lyrics do. */
+        fun lyricsIntent(context: Context): Intent = Intent(ACTION_LISTEN).setClassName(context, LISTEN_ALIAS).putExtra(EXTRA_LYRICS, true)
+
         /** On a link, shows it here first, as the widget's songs do when tapped. */
         const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
 
@@ -138,6 +153,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // The floating window's microphone: listens along, or stops.
+        lifecycleScope.launch {
+            FloatingListenReceiver.taps.collect {
+                if (viewModel.uiState.listeningAlong) viewModel.stopListeningAlong() else withMicrophone(viewModel::listenAlong)
+            }
+        }
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
         val incomingLink = savedInstanceState?.getString(STATE_INCOMING_LINK)
         when {
@@ -192,7 +213,15 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark }
                 )
             }
+            // Words on screen float over other apps when Crosstune is left, with the microphone as it is now.
+            val lyricsShown = viewModel.uiState.lyricsFor != null
+            val listening = viewModel.uiState.listeningAlong
+            LaunchedEffect(lyricsShown, listening) { setPictureInPictureParams(floatingParams(lyricsShown, listening)) }
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
+                if (floating) {
+                    FloatingLyrics(viewModel.uiState, viewModel.artwork::load)
+                    return@CrosstuneTheme
+                }
                 CrosstuneScreen(
                     state = viewModel.uiState,
                     actions = ScreenActions(
@@ -228,7 +257,11 @@ class MainActivity : ComponentActivity() {
                         onOpenAppInfo = ::openAppInfo,
                         onDismissFollowHelp = viewModel::dismissFollowHelp,
                         onThemeChange = ::selectTheme,
-                        onPaletteChange = viewModel::selectPalette,
+                        onPaletteChange = { palette ->
+                            viewModel.selectPalette(palette)
+                            // The widgets wear the app's color too.
+                            lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
+                        },
                         onPureBlackChange = viewModel::setPureBlack,
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
@@ -288,6 +321,34 @@ class MainActivity : ComponentActivity() {
         viewModel.refreshFollowing()
         recognizers = SongRecognizers.available(this)
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
+    }
+
+    /**
+     * The floating window: wide enough for a line, with the microphone to listen along or stop. From
+     * Android 12 it opens by itself when Crosstune is left with words on screen; before, see onUserLeaveHint.
+     */
+    private fun floatingParams(lyricsShown: Boolean, listening: Boolean): PictureInPictureParams {
+        val toggle = PendingIntent.getBroadcast(this, 0, Intent(this, FloatingListenReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val label = getString(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along)
+        val action = RemoteAction(Icon.createWithResource(this, R.drawable.ic_recognize), label, label, toggle)
+        return PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+            .setActions(listOf(action))
+            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(lyricsShown) }
+            .build()
+    }
+
+    /** Before Android 12, leaving Crosstune with words on screen floats them here. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || viewModel.uiState.lyricsFor == null) return
+        // A phone, or a user, that turned picture-in-picture off just leaves.
+        runCatching { enterPictureInPictureMode(floatingParams(lyricsShown = true, listening = viewModel.uiState.listeningAlong)) }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        floating = isInPictureInPictureMode
     }
 
     /** Back in sight, listening along with the words picks up again. */
@@ -351,7 +412,7 @@ class MainActivity : ComponentActivity() {
                 show = viewModel.uiState.showSongFirst
             )
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
-            ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) listen()
+            ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) withMicrophone { viewModel.listen(lyrics = intent.getBooleanExtra(EXTRA_LYRICS, false)) }
         }
     }
 

@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">Buka link disalin</string>
     <string name="shortcut_paste_long">Buka link musik yang disalin</string>
     <string name="widget_description">Lagu terbaru, dan buka link yang disalin</string>
+    <string name="tile_lyrics_label">Lirik lagu yang diputar</string>
+    <string name="widget_recognize_label">Kenali</string>
+    <string name="widget_recognize_description">Mengenali lagu yang diputar di dekatmu dengan sekali ketuk</string>
+    <string name="widget_lyrics_label">Lirik</string>
+    <string name="widget_lyrics_description">Mengenali lagu yang diputar di dekatmu dan menampilkan liriknya, seirama</string>
     <string name="error_clipboard_empty">Salin link musik dulu.</string>
     <string name="copy_search_action">Salin teks pencarian</string>
     <string name="share_search_link">Bagikan link pencarian</string>

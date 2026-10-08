@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">Gekopieerde link openen</string>
     <string name="shortcut_paste_long">Gekopieerde muzieklink openen</string>
     <string name="widget_description">Recente nummers, en een gekopieerde link openen</string>
+    <string name="tile_lyrics_label">Songtekst van wat er speelt</string>
+    <string name="widget_recognize_label">Herkennen</string>
+    <string name="widget_recognize_description">Herkent het nummer dat in de buurt speelt met één tik</string>
+    <string name="widget_lyrics_label">Songtekst</string>
+    <string name="widget_lyrics_description">Herkent het nummer dat in de buurt speelt en toont de tekst, in de maat</string>
     <string name="error_clipboard_empty">Kopieer eerst een muzieklink.</string>
     <string name="copy_search_action">Zoektekst kopiëren</string>
     <string name="share_search_link">Zoeklink delen</string>

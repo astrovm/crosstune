@@ -251,10 +251,13 @@
             singleTop so a link, share or tile tap reaching Crosstune while it's already on screen
             is delivered to onNewIntent instead of just bringing the old screen back.
         -->
+        <!-- The words float over other apps in picture-in-picture, which resizes the window rather than restarting it. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:supportsPictureInPicture="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -585,11 +588,54 @@
                 android:resource="@xml/widget_crosstune" />
         </receiver>
 
+        <!-- One tap: name the song playing nearby. -->
+        <receiver
+            android:name=".RecognizeWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_recognize_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_recognize" />
+        </receiver>
+
+        <!-- One tap: name the song playing nearby and show its words. -->
+        <receiver
+            android:name=".LyricsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_lyrics_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lyrics" />
+        </receiver>
+
         <service
             android:name=".ClipboardTileService"
             android:exported="true"
             android:icon="@drawable/ic_open_link"
             android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- The floating words' microphone; unexported, so only Crosstune's own window sends it. -->
+        <receiver
+            android:name=".FloatingListenReceiver"
+            android:exported="false" />
+
+        <!-- Names the song playing nearby and shows its words, from Quick Settings. -->
+        <service
+            android:name=".LyricsTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_lyrics"
+            android:label="@string/tile_lyrics_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
