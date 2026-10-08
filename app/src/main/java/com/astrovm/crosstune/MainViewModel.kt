@@ -791,7 +791,7 @@ internal class MainViewModel(
      * follow the song while something says where it is.
      */
     fun showLyrics() {
-        // Retry asks again for the words shown, which in karaoke may be another song than the result's.
+        // Retry asks again for the words shown, which after listening along may be another song than the result's.
         showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
     }
 

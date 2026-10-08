@@ -57,7 +57,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 7 października 2026",
+  "updated": "Ostatnia aktualizacja: 8 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Karaoke oraz tekst utworu, który Crosstune właśnie rozpoznał, nasłuchują dalej w ten sam sposób, dopóki tekst jest na ekranie: co kilka sekund Crosstune wysyła do Shazam nowy odcisk, nigdy dźwięk, by nadążać za utworem i wychwycić następny. Nasłuchiwanie kończy się, gdy tylko zamkniesz tekst, wyłączysz je lub wyjdziesz z aplikacji."
+      "Tekst może też słuchać razem: zaraz po tym, jak Crosstune rozpozna utwór, albo gdy klikniesz mikrofon w tekście. Dopóki tekst jest na ekranie, Crosstune nasłuchuje dalej w ten sam sposób i co kilka sekund wysyła do Shazam nowy odcisk, nigdy dźwięk, by nadążać za utworem i wychwycić następny. Nasłuchiwanie kończy się, gdy tylko zamkniesz tekst, wyłączysz je lub wyjdziesz z aplikacji."
     ],
     [
       "h2",

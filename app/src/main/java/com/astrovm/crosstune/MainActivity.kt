@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** What asked for the microphone: listening for a song, karaoke, or listening along with the words. */
+    /** What asked for the microphone: listening for a song, or listening along with the words. */
     private var afterMicrophone: () -> Unit = { viewModel.listen() }
 
     /** Asked on the first listen; without it, the error offers Android's settings for Crosstune. */

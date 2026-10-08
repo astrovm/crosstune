@@ -57,7 +57,7 @@
   "privacy_link": "Política de privacidade",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidade do Crosstune",
-  "updated": "Última atualização: 7 de outubro de 2026",
+  "updated": "Última atualização: 8 de outubro de 2026",
   "short_h2": "Em resumo",
   "short_items": [
     "Sem conta, anúncios ou análises.",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "O karaokê, e a letra de uma música que o Crosstune acabou de reconhecer, continuam ouvindo da mesma forma enquanto a letra está na tela: a cada poucos segundos o Crosstune envia ao Shazam uma nova impressão, nunca o áudio, para acompanhar a música e perceber a próxima. Ele para de ouvir assim que você fecha a letra, desativa isso ou sai do app."
+      "A letra também pode ouvir junto: logo depois que o Crosstune reconhece uma música, ou quando você toca no microfone na letra. Enquanto a letra está na tela, o Crosstune continua ouvindo da mesma forma e envia ao Shazam uma nova impressão a cada poucos segundos, nunca o áudio, para acompanhar a música e perceber a próxima. Ele para de ouvir assim que você fecha a letra, desativa isso ou sai do app."
     ],
     [
       "h2",
