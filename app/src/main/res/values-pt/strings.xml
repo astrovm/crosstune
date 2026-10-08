@@ -239,4 +239,15 @@
     <string name="floating_close">Fechar</string>
     <string name="floating_channel">Letra flutuante</string>
     <string name="floating_notification">Letra flutuando sobre seus apps</string>
+    <string name="lyrics_learn">Leituras e tradução</string>
+    <string name="lyrics_readings">Leitura sobre as palavras</string>
+    <string name="lyrics_romanized">Em letras latinas</string>
+    <string name="lyrics_translation">Tradução</string>
+    <string name="lyrics_translating">Traduzindo…</string>
+    <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
+    <string name="setting_translation_server">Traduções de</string>
+    <string name="translation_server_address">Servidor LibreTranslate</string>
+    <string name="translation_server_key">Chave de API, se precisar</string>
+    <string name="translation_server_description">Deixe vazio para o MyMemory, grátis para algumas músicas por dia.</string>
+    <string name="translation_server_invalid">Digite um endereço web, como https://libretranslate.com</string>
 </resources>

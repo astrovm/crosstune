@@ -47,6 +47,13 @@ android {
         compose = true
     }
 
+    packaging {
+        resources {
+            // Kuromoji's core and dictionary jars each carry the same notes; one copy is enough.
+            pickFirsts += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+        }
+    }
+
     bundle {
         // The in-app language picker needs every language on the phone, not only the phone's own.
         language {
@@ -106,6 +113,9 @@ dependencies {
     // The home screen widget, in the app's own Material You style.
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.glance:glance-material3:1.2.0")
+
+    // Reads Japanese lyrics' kanji, for the kana over them; its dictionary is in the jar, so it works offline.
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
 
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.0")

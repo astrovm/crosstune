@@ -239,4 +239,15 @@
     <string name="floating_close">닫기</string>
     <string name="floating_channel">떠 있는 가사</string>
     <string name="floating_notification">앱 위에 가사가 떠 있음</string>
+    <string name="lyrics_learn">읽기와 번역</string>
+    <string name="lyrics_readings">단어 위에 읽기</string>
+    <string name="lyrics_romanized">라틴 문자로</string>
+    <string name="lyrics_translation">번역</string>
+    <string name="lyrics_translating">번역 중…</string>
+    <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
+    <string name="setting_translation_server">번역 제공</string>
+    <string name="translation_server_address">LibreTranslate 서버</string>
+    <string name="translation_server_key">API 키(필요한 경우)</string>
+    <string name="translation_server_description">비워 두면 MyMemory를 씁니다. 하루 몇 곡까지 무료입니다.</string>
+    <string name="translation_server_invalid">https://libretranslate.com 같은 웹 주소를 입력하세요</string>
 </resources>

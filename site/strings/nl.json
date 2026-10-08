@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Als je de naam van een nummer typt in plaats van een link, stuurt Crosstune die naam naar de openbare nummerzoekopdrachten van Deezer en Apple en toont de gevonden nummers, zodat je het nummer dat je bedoelde zonder link kunt openen. Als je de tekst van een nummer opvraagt, stuurt de app de titel en artiest naar LRCLIB, een tekstservice die geen account of sleutel nodig heeft."
+      "Als je de naam van een nummer typt in plaats van een link, stuurt Crosstune die naam naar de openbare nummerzoekopdrachten van Deezer en Apple en toont de gevonden nummers, zodat je het nummer dat je bedoelde zonder link kunt openen. Als je de tekst van een nummer opvraagt, stuurt de app de titel en artiest naar LRCLIB, een tekstservice die geen account of sleutel nodig heeft. Als je in de tekst Vertaling aanzet, stuurt de app de regels naar MyMemory, een vertaaldienst zonder account, of naar de LibreTranslate-server die je in Instellingen opgeeft. Uitspraak, zoals kana boven kanji, wordt op je telefoon bepaald en nergens heen gestuurd."
     ],
     [
       "p",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "De songtekst kan ook meeluisteren: direct nadat Crosstune een nummer herkent, of wanneer je in de tekst op de microfoon tikt. Zolang de tekst in beeld is, blijft Crosstune op dezelfde manier luisteren en stuurt het Shazam om de paar seconden een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat."
+      "De songtekst kan ook meeluisteren: direct nadat Crosstune een nummer herkent, of wanneer je in de tekst op de microfoon tikt. Zolang de tekst in beeld is, blijft Crosstune op dezelfde manier luisteren en stuurt het Shazam om de paar seconden een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat. Zolang de tekst over je andere apps zweeft, blijft hij luisteren tot je hem sluit."
     ],
     [
       "h2",
@@ -134,7 +134,7 @@
     ],
     [
       "p",
-      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent, en gebruikt de microfoon alleen tijdens het luisteren. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres."
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent, en gebruikt de microfoon alleen tijdens het luisteren. Kies je een doorzichtige achtergrond voor zwevende tekst, dan vraagt hij om weergave over andere apps en om een melding, die de tekst zichtbaar houdt en waarmee je hem ontgrendelt of sluit. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres."
     ],
     [
       "h2",

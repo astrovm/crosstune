@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave."
+      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave. Quando attivi la traduzione nel testo, l'app invia le sue righe a MyMemory, un servizio di traduzione senza account, o al server LibreTranslate che imposti nelle Impostazioni. Le letture, come i kana sopra i kanji, vengono calcolate sul telefono e non vengono inviate da nessuna parte."
     ],
     [
       "p",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Il testo può anche ascoltare insieme: subito dopo che Crosstune ha riconosciuto un brano, o quando tocchi il microfono nel testo. Finché il testo è sullo schermo, Crosstune continua ad ascoltare allo stesso modo e invia a Shazam una nuova impronta ogni pochi secondi, mai l'audio, per restare a tempo con il brano e cogliere il successivo. L'ascolto si ferma appena chiudi il testo, lo disattivi o esci dall'app."
+      "Il testo può anche ascoltare insieme: subito dopo che Crosstune ha riconosciuto un brano, o quando tocchi il microfono nel testo. Finché il testo è sullo schermo, Crosstune continua ad ascoltare allo stesso modo e invia a Shazam una nuova impronta ogni pochi secondi, mai l'audio, per restare a tempo con il brano e cogliere il successivo. L'ascolto si ferma appena chiudi il testo, lo disattivi o esci dall'app. Finché il testo fluttua sopra le altre app, continua ad ascoltare finché non lo chiudi."
     ],
     [
       "h2",
@@ -134,7 +134,7 @@
     ],
     [
       "p",
-      "Crosstune usa l'autorizzazione Internet di Android per ottenere informazioni musicali e copertine. Chiede l'autorizzazione del microfono la prima volta che riconosci un brano e usa il microfono solo mentre ascolta. Non richiede autorizzazioni per posizione, fotocamera, contatti o ID pubblicità. Le richieste integrate ai servizi musicali usano HTTPS. Se aggiungi una destinazione personalizzata, scegli un indirizzo HTTPS affidabile."
+      "Crosstune usa l'autorizzazione Internet di Android per ottenere informazioni musicali e copertine. Chiede l'autorizzazione del microfono la prima volta che riconosci un brano e usa il microfono solo mentre ascolta. Se scegli uno sfondo trasparente per il testo fluttuante, chiede di mostrarsi sopra le altre app e di mostrare una notifica, che lo tiene visibile e ti permette di sbloccarlo o chiuderlo. Non richiede autorizzazioni per posizione, fotocamera, contatti o ID pubblicità. Le richieste integrate ai servizi musicali usano HTTPS. Se aggiungi una destinazione personalizzata, scegli un indirizzo HTTPS affidabile."
     ],
     [
       "h2",

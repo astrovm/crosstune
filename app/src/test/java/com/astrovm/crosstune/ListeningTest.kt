@@ -683,6 +683,100 @@ class ListeningTest {
         floating.get()
     }
 
+    /** MyMemory translating each row of what it's asked into "[row]", or answering [code]. */
+    private fun translation(request: okhttp3.Request, code: Int = 200): okhttp3.Response {
+        val rows = request.url.queryParameter("q").orEmpty().split("\n").joinToString("\\n") { "[$it]" }
+        return FakeSpotify.html(request, """{"responseData":{"translatedText":"$rows"},"responseStatus":200}""", code = code)
+    }
+
+    /** Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers [translations]. */
+    private fun wordsOf(synced: String?, plain: String, translations: Int = 200) {
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.mymemory.translated.net" -> translation(request, translations)
+                else -> {
+                    val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
+                    FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"$plain"$timed}]""")
+                }
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+    }
+
+    private fun learnMenu() = click(string(R.string.lyrics_learn))
+
+    @Test
+    fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
+        assertTrue(shown("べる"))
+        assertTrue(prefs().getBoolean("lyrics_readings", false))
+        click(string(R.string.lyrics_romanized))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        click(string(R.string.lyrics_translation))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        assertTrue(shown("[食べる]"))
+
+        // Floating, the line being sung brings its reading, romaji and translation along.
+        val activity = controller!!.get()
+        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(shown("よぞらにほしが"))
+        assertTrue(shown("yozora ni hoshi ga"))
+        assertTrue(shown("[夜空に星が]"))
+        activity.onPictureInPictureModeChanged(false, activity.resources.configuration)
+        composeRule.waitForIdle()
+
+        // Switched off, each goes; kept off for the next song.
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        click(string(R.string.lyrics_romanized))
+        click(string(R.string.lyrics_translation))
+        composeRule.waitForIdle()
+        assertFalse(shown("よぞら"))
+        assertFalse(shown("[食べる]"))
+        assertFalse(prefs().getBoolean("lyrics_translation", true))
+    }
+
+    @Test
+    fun aTranslationThatCantBeDoneSaysSoAndIsTriedAgain() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars", translations = 503)
+        waitForText(string(R.string.lyrics_translation_failed))
+        assertFalse(shown("[Stars]"))
+        fake.handler = { request -> translation(request) }
+        click(string(R.string.retry_button))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+        assertFalse(shown(string(R.string.lyrics_translation_failed)))
+        // English has no readings to offer, only a translation.
+        learnMenu()
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        assertFalse(shown(string(R.string.lyrics_romanized)))
+    }
+
+    @Test
+    fun untimedKoreanWordsAreRomanizedLineByLine() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        wordsOf(null, "사랑해\\n한국")
+        waitForText("한국")
+        learnMenu()
+        // Hangul reads as it's written, so there are only Latin letters.
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        click(string(R.string.lyrics_romanized))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("saranghae") }
+        assertTrue(shown("hanguk"))
+    }
+
     private companion object {
         const val TIMEOUT_MS = 5_000L
         const val NO_MATCH = """{"matches":[]}"""

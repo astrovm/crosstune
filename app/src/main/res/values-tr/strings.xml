@@ -239,4 +239,15 @@
     <string name="floating_close">Kapat</string>
     <string name="floating_channel">Yüzen sözler</string>
     <string name="floating_notification">Sözler uygulamalarının üzerinde yüzüyor</string>
+    <string name="lyrics_learn">Okunuş ve çeviri</string>
+    <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
+    <string name="lyrics_romanized">Latin harfleriyle</string>
+    <string name="lyrics_translation">Çeviri</string>
+    <string name="lyrics_translating">Çevriliyor…</string>
+    <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
+    <string name="setting_translation_server">Çeviriler</string>
+    <string name="translation_server_address">LibreTranslate sunucusu</string>
+    <string name="translation_server_key">Gerekirse API anahtarı</string>
+    <string name="translation_server_description">MyMemory için boş bırak, günde birkaç şarkı ücretsiz.</string>
+    <string name="translation_server_invalid">https://libretranslate.com gibi bir web adresi gir</string>
 </resources>

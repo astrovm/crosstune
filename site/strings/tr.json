@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir."
+      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye ya da Ayarlar'da belirlediğin LibreTranslate sunucusuna gönderir. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez."
     ],
     [
       "p",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Sözler birlikte de dinleyebilir: Crosstune bir şarkıyı tanıdıktan hemen sonra ya da sözlerdeki mikrofona dokunduğunda. Sözler ekrandayken Crosstune aynı şekilde dinlemeye devam eder ve birkaç saniyede bir Shazam'a ses değil, yeni bir parmak izi gönderir; böylece şarkıyla uyumlu kalır ve sonrakini yakalar. Sözleri kapattığın, bunu kapattığın ya da uygulamadan çıktığın anda dinleme durur."
+      "Sözler birlikte de dinleyebilir: Crosstune bir şarkıyı tanıdıktan hemen sonra ya da sözlerdeki mikrofona dokunduğunda. Sözler ekrandayken Crosstune aynı şekilde dinlemeye devam eder ve birkaç saniyede bir Shazam'a ses değil, yeni bir parmak izi gönderir; böylece şarkıyla uyumlu kalır ve sonrakini yakalar. Sözleri kapattığın, bunu kapattığın ya da uygulamadan çıktığın anda dinleme durur. Sözler diğer uygulamalarının üzerinde yüzerken, sen kapatana kadar dinlemeye devam eder."
     ],
     [
       "h2",
@@ -134,7 +134,7 @@
     ],
     [
       "p",
-      "Crosstune, müzik bilgilerini ve kapakları almak için Android'in internet iznini kullanır. Mikrofon iznini ilk kez şarkı tanıdığınızda ister ve mikrofonu yalnızca dinlerken kullanır. Konum, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Özel bir hedef eklerseniz güvenilir bir HTTPS adresi seçin."
+      "Crosstune, müzik bilgilerini ve kapakları almak için Android'in internet iznini kullanır. Mikrofon iznini ilk kez şarkı tanıdığınızda ister ve mikrofonu yalnızca dinlerken kullanır. Yüzen sözler için yarı saydam bir arka plan seçersen, diğer uygulamaların üzerinde gösterme ve bildirim gösterme izni ister. Bildirim sözleri ekranda tutar ve kilidini açmanı ya da kapatmanı sağlar. Konum, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Özel bir hedef eklerseniz güvenilir bir HTTPS adresi seçin."
     ],
     [
       "h2",
