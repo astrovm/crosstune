@@ -218,4 +218,26 @@
     <string name="song_search_title">曲</string>
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
     <string name="song_search_label_for">「%1$s」の検索結果</string>
+    <string name="settings_floating_title">フローティング歌詞</string>
+    <string name="settings_floating_description">歌詞を開いたまま Crosstune を離れたとき。</string>
+    <string name="setting_floating_look">背景</string>
+    <string name="floating_look_cover">ジャケットの色</string>
+    <string name="floating_look_plain">シンプル</string>
+    <string name="floating_look_see_through">半透明</string>
+    <string name="floating_look_none">なし</string>
+    <string name="floating_allow_over_apps">他のアプリの上に表示を許可</string>
+    <string name="floating_allow_over_apps_description">半透明の歌詞がアプリの上に浮かびます。Android が先に確認します。</string>
+    <string name="setting_floating_size">文字サイズ</string>
+    <string name="floating_size_small">小</string>
+    <string name="floating_size_medium">中</string>
+    <string name="floating_size_large">大</string>
+    <string name="setting_floating_next_line">次の行を表示</string>
+    <string name="setting_floating_locked">タッチを通す</string>
+    <string name="setting_floating_locked_description">歌詞の下のアプリをタップできます。通知からロックを解除します。</string>
+    <string name="floating_open">Crosstune を開く</string>
+    <string name="floating_lock">タッチを通す</string>
+    <string name="floating_unlock">ロック解除</string>
+    <string name="floating_close">閉じる</string>
+    <string name="floating_channel">フローティング歌詞</string>
+    <string name="floating_notification">歌詞をアプリの上に表示中</string>
 </resources>

@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only while listening for a song playing nearby, see SongListener. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Lyrics floating over other apps, see-through, kept up by a notification, still listening along. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Phones without a microphone can still install Crosstune; they just can't listen. -->
     <uses-feature
         android:name="android.hardware.microphone"
@@ -629,6 +635,16 @@
         <receiver
             android:name=".FloatingListenReceiver"
             android:exported="false" />
+
+        <!-- Keeps the words floating over other apps while Crosstune is out of sight. -->
+        <service
+            android:name=".FloatingLyricsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|microphone">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows the lyrics of the song playing over other apps, in time with it, until the user closes them." />
+        </service>
 
         <!-- Names the song playing nearby and shows its words, from Quick Settings. -->
         <service

@@ -217,4 +217,26 @@
     <string name="song_search_title">Треки</string>
     <string name="song_search_none">Треки для «%1$s» не найдены.</string>
     <string name="song_search_label_for">Найдено по запросу «%1$s»</string>
+    <string name="settings_floating_title">Плавающий текст</string>
+    <string name="settings_floating_description">Когда вы выходите из Crosstune с открытым текстом.</string>
+    <string name="setting_floating_look">Фон</string>
+    <string name="floating_look_cover">Цвет обложки</string>
+    <string name="floating_look_plain">Простой</string>
+    <string name="floating_look_see_through">Прозрачный</string>
+    <string name="floating_look_none">Нет</string>
+    <string name="floating_allow_over_apps">Разрешить показ поверх других приложений</string>
+    <string name="floating_allow_over_apps_description">Прозрачный текст парит над приложениями. Android сначала спросит.</string>
+    <string name="setting_floating_size">Размер текста</string>
+    <string name="floating_size_small">Мелкий</string>
+    <string name="floating_size_medium">Средний</string>
+    <string name="floating_size_large">Крупный</string>
+    <string name="setting_floating_next_line">Показывать следующую строку</string>
+    <string name="setting_floating_locked">Пропускать касания</string>
+    <string name="setting_floating_locked_description">Нажимайте на приложение под текстом. Разблокируйте его из уведомления.</string>
+    <string name="floating_open">Открыть Crosstune</string>
+    <string name="floating_lock">Пропускать касания</string>
+    <string name="floating_unlock">Разблокировать</string>
+    <string name="floating_close">Закрыть</string>
+    <string name="floating_channel">Плавающий текст</string>
+    <string name="floating_notification">Текст поверх ваших приложений</string>
 </resources>

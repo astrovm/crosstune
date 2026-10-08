@@ -36,6 +36,7 @@ import android.net.Uri
 import androidx.compose.ui.test.performTextInput
 import android.os.Bundle
 import android.os.Looper
+import android.Manifest
 import android.provider.Settings
 import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
@@ -77,6 +78,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.shadows.ShadowSettings
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
@@ -2741,6 +2743,57 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo().assertIsOn()
+    }
+
+    @Test
+    fun floatingLyricsArePickedInSettingsAndSeeThroughOnesAskAndroidFirst() {
+        ShadowSettings.setCanDrawOverlays(false)
+        val activity = launch()
+        click(string(R.string.settings_button))
+        // Over other apps, see-through, Android has to allow it, and its notification unlocks them.
+        composeRule.onNodeWithText(string(R.string.setting_floating_look)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.floating_look_see_through)).performClick()
+        composeRule.waitForIdle()
+        assertEquals("SEE_THROUGH", prefs().getString("floating_look", null))
+        assertEquals(Manifest.permission.POST_NOTIFICATIONS, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
+        composeRule.onNodeWithText(string(R.string.floating_allow_over_apps)).performScrollTo().performClick()
+        val allow = nextStartedActivity()!!
+        assertEquals(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, allow.action)
+        assertEquals("package:${app.packageName}", allow.dataString)
+        // Allowed, and back.
+        ShadowSettings.setCanDrawOverlays(true)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.floating_allow_over_apps))
+
+        val locked = composeRule.onNodeWithText(string(R.string.setting_floating_locked)).performScrollTo()
+        locked.assertIsOff()
+        locked.performClick()
+        locked.assertIsOn()
+        assertTrue(prefs().getBoolean("floating_locked", false))
+
+        composeRule.onNodeWithText(string(R.string.setting_floating_size)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.floating_size_large)).performClick()
+        assertEquals("LARGE", prefs().getString("floating_size", null))
+        val next = composeRule.onNodeWithText(string(R.string.setting_floating_next_line)).performScrollTo()
+        next.assertIsOn()
+        next.performClick()
+        assertFalse(prefs().getBoolean("floating_next_line", true))
+
+        // In Android's own window, which always has a ground, touches can't go through.
+        composeRule.onNodeWithText(string(R.string.setting_floating_look)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.floating_look_plain)).performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setting_floating_locked))
+
+        // Kept for the next launch.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.floating_size_large)).performScrollTo().assertExists()
+        composeRule.onNodeWithText(string(R.string.floating_look_plain)).assertExists()
+        composeRule.onNodeWithText(string(R.string.setting_floating_next_line)).assertIsOff()
+        ShadowSettings.setCanDrawOverlays(false)
     }
 
     @Test

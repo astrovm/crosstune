@@ -3,6 +3,14 @@ package com.astrovm.crosstune
 import org.junit.Assert.assertFalse
 import android.os.Looper
 import android.Manifest
+import org.robolectric.shadows.ShadowSettings
+import org.robolectric.shadows.ShadowWindowManagerImpl
+import org.robolectric.shadow.api.Shadow
+import org.robolectric.android.controller.ServiceController
+import android.view.WindowManager
+import android.view.View
+import android.view.MotionEvent
+import android.app.NotificationManager
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -73,6 +81,8 @@ class ListeningTest {
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
+        FloatingLyricsService.host = null
+        ShadowSettings.setCanDrawOverlays(false)
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -503,6 +513,164 @@ class ListeningTest {
         val activity = controller!!.get()
         controller!!.userLeaving()
         assertFalse(activity.isInPictureInPictureMode)
+    }
+
+    /** Leaves Crosstune with Demo's words on screen in [look], with Android letting them over other apps, and floats them there. */
+    private fun floatOverApps(hearing: FakeHearing, look: FloatingLook = FloatingLook.NONE): ServiceController<FloatingLyricsService> {
+        prefs().edit().putString("floating_look", look.name).commit()
+        ShadowSettings.setCanDrawOverlays(true)
+        demoWords(hearing)
+        controller!!.userLeaving()
+        val started = shadowOf(app).nextStartedService
+        assertEquals(FloatingLyricsService::class.java.name, started.component!!.className)
+        controller!!.pause().stop()
+        return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
+    }
+
+    private fun windowViews(service: FloatingLyricsService): List<View> =
+        Shadow.extract<ShadowWindowManagerImpl>(service.getSystemService(WindowManager::class.java)).views
+
+    private fun overlay(service: FloatingLyricsService): View =
+        windowViews(service).single { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY }
+
+    private fun ServiceController<FloatingLyricsService>.command(action: String) {
+        withIntent(Intent(app, FloatingLyricsService::class.java).setAction(action)).startCommand(0, 2)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun seeThroughWordsFloatInTheirOwnWindowStillListeningAlong() {
+        val hearing = FakeHearing()
+        val floating = floatOverApps(hearing)
+        val service = floating.get()
+        // Not Android's own window: the words float over the app below, which shows through.
+        assertFalse(controller!!.get().isInPictureInPictureMode)
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(shown("Demo two"))
+        // Out of sight, it still listens along.
+        val listens = hearing.listens
+        hearing.song("Demo", 12.0)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
+        assertEquals(string(R.string.floating_notification), shadowOf(notification).contentTitle)
+
+        // Tapped, they show what they can do: stop listening along, and start it again.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_stop_listening))
+        assertTrue(described(string(R.string.lyrics_listen_along)))
+        click(string(R.string.lyrics_listen_along))
+        assertTrue(described(string(R.string.lyrics_stop_listening)))
+
+        // Locked, touches go through to the app below, and the notification can unlock them.
+        click(string(R.string.floating_lock))
+        val window = overlay(service).layoutParams as WindowManager.LayoutParams
+        assertTrue(window.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
+        assertEquals(0.8f, window.alpha)
+        assertTrue(prefs().getBoolean("floating_locked", false))
+        val locked = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
+        assertEquals(listOf(string(R.string.floating_unlock), string(R.string.floating_close)), locked.actions.map { it.title.toString() })
+        floating.command(FloatingLyricsService.ACTION_UNLOCK)
+        assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE == 0)
+        assertFalse(prefs().getBoolean("floating_locked", true))
+
+        // Open Crosstune brings it back, and back in sight they stop floating.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.floating_open))
+        assertEquals(MainActivity::class.java.name, shadowOf(service).nextStartedActivity.component!!.className)
+        controller!!.start()
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        assertEquals(null, FloatingLyricsService.host)
+    }
+
+    @Test
+    fun floatingWordsAreDraggedUpAndDownAndStayWhereTheyWereLeft() {
+        // Where they were left last time, in the app's dark look.
+        prefs().edit().putInt("floating_top", 300).putString("theme", "DARK").commit()
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        val top = (view.layoutParams as WindowManager.LayoutParams).y
+        assertEquals(300, top)
+        fun touch(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, 100f, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        touch(MotionEvent.ACTION_DOWN, 500f)
+        touch(MotionEvent.ACTION_MOVE, 501f)
+        touch(MotionEvent.ACTION_MOVE, 800f)
+        touch(MotionEvent.ACTION_MOVE, 900f)
+        touch(MotionEvent.ACTION_UP, 900f)
+        assertEquals(top + 400, (view.layoutParams as WindowManager.LayoutParams).y)
+        assertEquals(top + 400, prefs().getInt("floating_top", -1))
+        // Never off the screen.
+        touch(MotionEvent.ACTION_DOWN, 500f)
+        touch(MotionEvent.ACTION_MOVE, -100_000f)
+        touch(MotionEvent.ACTION_CANCEL, -100_000f)
+        assertEquals(0, prefs().getInt("floating_top", -1))
+        floating.destroy()
+        assertTrue(windowViews(floating.get()).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
+    }
+
+    @Test
+    fun floatingWordsCloseFromThemselvesTheNotificationOrCrosstuneClosing() {
+        prefs().edit().putString("theme", "LIGHT").commit()
+        val floating = floatOverApps(FakeHearing(), FloatingLook.SEE_THROUGH)
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.floating_close))
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+
+        floating.command(FloatingLyricsService.ACTION_CLOSE)
+        assertTrue(shadowOf(floating.get()).isStoppedBySelf)
+
+        controller!!.destroy()
+        controller = null
+        assertEquals(null, FloatingLyricsService.host)
+    }
+
+    @Test
+    fun withoutAnythingToFloatOutOfOrAllowedTheWindowStopsAtOnce() {
+        FloatingLyricsService.host = null
+        val alone = Robolectric.buildService(FloatingLyricsService::class.java).create().startCommand(0, 1)
+        assertTrue(shadowOf(alone.get()).isStoppedBySelf)
+        // An unlock from an old notification finds nothing to unlock.
+        alone.command(FloatingLyricsService.ACTION_UNLOCK)
+
+        // Taken back in Android's settings since Crosstune was left.
+        prefs().edit().putString("floating_look", FloatingLook.NONE.name).commit()
+        ShadowSettings.setCanDrawOverlays(true)
+        demoWords(FakeHearing())
+        controller!!.userLeaving()
+        ShadowSettings.setCanDrawOverlays(false)
+        val service = Robolectric.buildService(FloatingLyricsService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1).get()
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertTrue(windowViews(service).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
+    }
+
+    @Test
+    fun seeThroughWordsNotAllowedOverOtherAppsFloatPlainInAndroidsWindow() {
+        prefs().edit().putString("floating_look", FloatingLook.NONE.name).putBoolean("floating_next_line", false).commit()
+        ShadowSettings.setCanDrawOverlays(false)
+        demoWords(FakeHearing())
+        controller!!.userLeaving()
+        assertEquals(null, shadowOf(app).nextStartedService)
+        val activity = controller!!.get()
+        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        // Only the line being sung, as set.
+        assertFalse(shown("Demo two"))
+    }
+
+    @Test
+    fun floatingWordsWithoutTheMicrophoneOpenCrosstuneToAskForIt() {
+        val hearing = FakeHearing()
+        val floating = floatOverApps(hearing)
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_stop_listening))
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        click(string(R.string.lyrics_listen_along))
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component!!.className)
+        floating.get()
     }
 
     private companion object {

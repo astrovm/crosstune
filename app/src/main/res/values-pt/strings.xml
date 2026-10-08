@@ -217,4 +217,26 @@
     <string name="song_search_title">Músicas</string>
     <string name="song_search_none">Nenhuma música encontrada para “%1$s”.</string>
     <string name="song_search_label_for">Encontradas para “%1$s”</string>
+    <string name="settings_floating_title">Letra flutuante</string>
+    <string name="settings_floating_description">Quando você sai do Crosstune com a letra aberta.</string>
+    <string name="setting_floating_look">Fundo</string>
+    <string name="floating_look_cover">Cor da capa</string>
+    <string name="floating_look_plain">Simples</string>
+    <string name="floating_look_see_through">Transparente</string>
+    <string name="floating_look_none">Nenhum</string>
+    <string name="floating_allow_over_apps">Permitir sobreposição a outros apps</string>
+    <string name="floating_allow_over_apps_description">A letra transparente flutua sobre seus apps. O Android pergunta antes.</string>
+    <string name="setting_floating_size">Tamanho do texto</string>
+    <string name="floating_size_small">Pequeno</string>
+    <string name="floating_size_medium">Médio</string>
+    <string name="floating_size_large">Grande</string>
+    <string name="setting_floating_next_line">Mostrar a próxima linha</string>
+    <string name="setting_floating_locked">Deixar os toques passarem</string>
+    <string name="setting_floating_locked_description">Toque no app embaixo da letra. Desbloqueie pela notificação dela.</string>
+    <string name="floating_open">Abrir o Crosstune</string>
+    <string name="floating_lock">Deixar os toques passarem</string>
+    <string name="floating_unlock">Desbloquear</string>
+    <string name="floating_close">Fechar</string>
+    <string name="floating_channel">Letra flutuante</string>
+    <string name="floating_notification">Letra flutuando sobre seus apps</string>
 </resources>

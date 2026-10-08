@@ -217,4 +217,26 @@
     <string name="song_search_title">Lagu</string>
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
     <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>
+    <string name="settings_floating_title">Lirik melayang</string>
+    <string name="settings_floating_description">Saat kamu keluar dari Crosstune dengan lirik terbuka.</string>
+    <string name="setting_floating_look">Latar</string>
+    <string name="floating_look_cover">Warna sampul</string>
+    <string name="floating_look_plain">Polos</string>
+    <string name="floating_look_see_through">Tembus pandang</string>
+    <string name="floating_look_none">Tidak ada</string>
+    <string name="floating_allow_over_apps">Izinkan tampil di atas aplikasi lain</string>
+    <string name="floating_allow_over_apps_description">Lirik tembus pandang melayang di atas aplikasimu. Android bertanya dulu.</string>
+    <string name="setting_floating_size">Ukuran teks</string>
+    <string name="floating_size_small">Kecil</string>
+    <string name="floating_size_medium">Sedang</string>
+    <string name="floating_size_large">Besar</string>
+    <string name="setting_floating_next_line">Tampilkan baris berikutnya</string>
+    <string name="setting_floating_locked">Teruskan sentuhan</string>
+    <string name="setting_floating_locked_description">Ketuk aplikasi di bawah lirik. Buka kuncinya dari notifikasinya.</string>
+    <string name="floating_open">Buka Crosstune</string>
+    <string name="floating_lock">Teruskan sentuhan</string>
+    <string name="floating_unlock">Buka kunci</string>
+    <string name="floating_close">Tutup</string>
+    <string name="floating_channel">Lirik melayang</string>
+    <string name="floating_notification">Lirik melayang di atas aplikasimu</string>
 </resources>

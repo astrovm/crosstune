@@ -217,4 +217,26 @@
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
     <string name="song_search_label_for">Gevonden voor “%1$s”</string>
+    <string name="settings_floating_title">Zwevende tekst</string>
+    <string name="settings_floating_description">Als je Crosstune verlaat met de tekst open.</string>
+    <string name="setting_floating_look">Achtergrond</string>
+    <string name="floating_look_cover">Kleur van de hoes</string>
+    <string name="floating_look_plain">Effen</string>
+    <string name="floating_look_see_through">Doorzichtig</string>
+    <string name="floating_look_none">Geen</string>
+    <string name="floating_allow_over_apps">Weergeven over andere apps toestaan</string>
+    <string name="floating_allow_over_apps_description">Doorzichtige tekst zweeft over je apps. Android vraagt het eerst.</string>
+    <string name="setting_floating_size">Tekstgrootte</string>
+    <string name="floating_size_small">Klein</string>
+    <string name="floating_size_medium">Normaal</string>
+    <string name="floating_size_large">Groot</string>
+    <string name="setting_floating_next_line">Volgende regel tonen</string>
+    <string name="setting_floating_locked">Aanrakingen doorlaten</string>
+    <string name="setting_floating_locked_description">Tik op de app onder de tekst. Ontgrendel hem via de melding.</string>
+    <string name="floating_open">Crosstune openen</string>
+    <string name="floating_lock">Aanrakingen doorlaten</string>
+    <string name="floating_unlock">Ontgrendelen</string>
+    <string name="floating_close">Sluiten</string>
+    <string name="floating_channel">Zwevende tekst</string>
+    <string name="floating_notification">Tekst zweeft over je apps</string>
 </resources>

@@ -84,6 +84,31 @@ class MainActivity : ComponentActivity() {
     /** Set while the words float over other apps, in picture-in-picture. */
     private var floating by mutableStateOf(false)
 
+    /** Set while the words float over other apps in a window of their own, which keeps listening along. */
+    private var floatingOverApps = false
+
+    /** What the words floating in their own window show and do, all from here. */
+    private val floatingHost = object : FloatingHost {
+        override val state get() = viewModel.uiState
+        override val dark get() = when (viewModel.uiState.theme) {
+            ThemeMode.DARK -> true
+            ThemeMode.LIGHT -> false
+            ThemeMode.SYSTEM -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        }
+        override suspend fun loadArtwork(url: String) = viewModel.artwork.load(url)
+        override fun toggleListening() = when {
+            viewModel.uiState.listeningAlong -> viewModel.stopListeningAlong()
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> viewModel.listenAlong()
+            // The microphone is asked for here, in sight.
+            else -> startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        }
+        override fun setLocked(locked: Boolean) = viewModel.setFloatingLocked(locked)
+        override fun moveTo(top: Int) = viewModel.moveFloating(top)
+    }
+
+    /** Words over other apps that are locked can only be unlocked from their notification, which Android 13 asks about. */
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     /** What asked for the microphone: listening for a song, or listening along with the words. */
     private var afterMicrophone: () -> Unit = { viewModel.listen() }
 
@@ -214,7 +239,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
             // Words on screen float over other apps when Crosstune is left, with the microphone as it is now.
-            val lyricsShown = viewModel.uiState.lyricsFor != null
+            // Words that show what's below float in a window of their own instead; see onUserLeaveHint.
+            val lyricsShown = viewModel.uiState.lyricsFor != null && !floatsOverApps()
             val listening = viewModel.uiState.listeningAlong
             LaunchedEffect(lyricsShown, listening) { setPictureInPictureParams(floatingParams(lyricsShown, listening)) }
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
@@ -267,6 +293,11 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
                         },
                         onPureBlackChange = viewModel::setPureBlack,
+                        onFloatingLookChange = ::selectFloatingLook,
+                        onFloatingSizeChange = viewModel::selectFloatingSize,
+                        onFloatingNextLineChange = viewModel::setFloatingNextLine,
+                        onFloatingLockedChange = viewModel::setFloatingLocked,
+                        onAllowFloatOverApps = { tryStartActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())) },
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,
@@ -325,6 +356,18 @@ class MainActivity : ComponentActivity() {
         viewModel.refreshFollowing()
         recognizers = SongRecognizers.available(this)
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
+        // Or let it show over other apps.
+        viewModel.setCanFloatOverApps(Settings.canDrawOverlays(this))
+    }
+
+    /** Whether the words, once Crosstune is left, float in a window that shows what's below. */
+    private fun floatsOverApps() = viewModel.uiState.floating.look.overApps && viewModel.uiState.canFloatOverApps
+
+    private fun selectFloatingLook(look: FloatingLook) {
+        viewModel.selectFloatingLook(look)
+        if (look.overApps && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     /**
@@ -342,10 +385,20 @@ class MainActivity : ComponentActivity() {
             .build()
     }
 
-    /** Before Android 12, leaving Crosstune with words on screen floats them here. */
+    /**
+     * Leaving Crosstune with words on screen floats them: in a window of their own over other apps,
+     * started while Crosstune is still in sight so it may keep listening along, or, before Android 12,
+     * in picture-in-picture.
+     */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || viewModel.uiState.lyricsFor == null) return
+        if (viewModel.uiState.lyricsFor == null) return
+        if (floatsOverApps()) {
+            floatingOverApps = true
+            FloatingLyricsService.start(this, floatingHost)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
         // A phone, or a user, that turned picture-in-picture off just leaves.
         runCatching { enterPictureInPictureMode(floatingParams(lyricsShown = true, listening = viewModel.uiState.listeningAlong)) }
     }
@@ -355,18 +408,30 @@ class MainActivity : ComponentActivity() {
         floating = isInPictureInPictureMode
     }
 
-    /** Back in sight, listening along with the words picks up again. */
+    /** Back in sight, the words stop floating, and listening along with them picks up again. */
     override fun onStart() {
         super.onStart()
+        // Even from a screen made again since, in a new look or language.
+        if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
+        floatingOverApps = false
         viewModel.resumeListeningAlong()
     }
 
-    /** Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it. */
+    /**
+     * Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it,
+     * and so do words floating in their own window, which listen along.
+     */
     override fun onStop() {
         super.onStop()
         if (isChangingConfigurations) return
         if (viewModel.uiState.listening) viewModel.stopListening()
-        viewModel.pauseListeningAlong()
+        if (!floatingOverApps) viewModel.pauseListeningAlong()
+    }
+
+    /** Closed for good, nothing's left for the words to float out of. */
+    override fun onDestroy() {
+        super.onDestroy()
+        if (!isChangingConfigurations && FloatingLyricsService.host === floatingHost) FloatingLyricsService.stop(this)
     }
 
     private fun listen() = withMicrophone { viewModel.listen() }
