@@ -41,6 +41,8 @@ import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.performTouchInput
@@ -2599,6 +2601,43 @@ class MainActivityTest {
         // Switched off: Android's page again, where it's turned off.
         follow.performClick()
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+    }
+
+    @Test
+    fun theAppsColorAndPureBlackArePickedInSettingsAndKept() {
+        launch()
+        click(string(R.string.settings_button))
+        val ocean = composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
+        ocean.assertIsNotSelected()
+        composeRule.onNodeWithContentDescription(string(R.string.palette_crosstune)).assertIsSelected()
+        // The wallpaper's colors are offered where Android shares them.
+        composeRule.onNodeWithContentDescription(string(R.string.palette_wallpaper)).assertExists()
+        ocean.performClick()
+        composeRule.waitForIdle()
+        ocean.assertIsSelected()
+        assertEquals("OCEAN", prefs().getString("palette", null))
+
+        val black = composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
+        black.assertIsOff()
+        black.performClick()
+        black.assertIsOn()
+        assertTrue(prefs().getBoolean("pure_black", false))
+
+        // Kept for the next launch.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
+        composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo().assertIsOn()
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12TheWallpapersColorsArentOffered() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
+        composeRule.onNodeWithContentDescription(string(R.string.palette_wallpaper)).assertDoesNotExist()
     }
 
     @Test

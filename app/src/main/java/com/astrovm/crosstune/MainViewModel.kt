@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,6 +90,10 @@ internal data class UiState(
     val followHelp: Boolean = false,
     /** Light, dark, or as the phone is. */
     val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** The app's color: Crosstune's own, another, or the wallpaper's. */
+    val palette: Palette = Palette.CROSSTUNE,
+    /** True black grounds in the dark. */
+    val pureBlack: Boolean = false,
     /** Songs found for typed text that wasn't a link, offered to pick from. */
     val songSearch: List<MusicMetadata> = emptyList(),
     /** What was searched for, so an empty list can say what it found nothing for. */
@@ -240,6 +245,8 @@ internal class MainViewModel(
             showSongFirst = preferences.getBoolean(KEY_SHOW_SONG_FIRST, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
+            palette = Palette.entries.firstOrNull { it.name == preferences.getString(KEY_PALETTE, null) } ?: Palette.CROSSTUNE,
+            pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -997,6 +1004,16 @@ internal class MainViewModel(
         uiState = uiState.copy(followHelp = false)
     }
 
+    fun selectPalette(palette: Palette) {
+        preferences.edit { putString(KEY_PALETTE, palette.name) }
+        uiState = uiState.copy(palette = palette)
+    }
+
+    fun setPureBlack(on: Boolean) {
+        preferences.edit { putBoolean(KEY_PURE_BLACK, on) }
+        uiState = uiState.copy(pureBlack = on)
+    }
+
     fun selectTheme(theme: ThemeMode) {
         preferences.edit { putString(KEY_THEME, theme.name) }
         uiState = uiState.copy(theme = theme)
@@ -1391,6 +1408,8 @@ internal class MainViewModel(
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_THEME = "theme"
+        private const val KEY_PALETTE = "palette"
+        private const val KEY_PURE_BLACK = "pure_black"
 
         /** How far apart two hearings of a song can be and still be the same place in it. */
         const val STEADY_MS = 2_000L

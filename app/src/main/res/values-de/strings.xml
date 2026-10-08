@@ -186,6 +186,15 @@
     <string name="setting_theme">Design</string>
     <string name="theme_light">Hell</string>
     <string name="theme_dark">Dunkel</string>
+    <string name="setting_color">Farbe</string>
+    <string name="palette_crosstune">Crosstune</string>
+    <string name="palette_wallpaper">Hintergrundbild</string>
+    <string name="palette_ocean">Ozean</string>
+    <string name="palette_forest">Wald</string>
+    <string name="palette_sunset">Sonnenuntergang</string>
+    <string name="palette_rose">Rose</string>
+    <string name="setting_pure_black">Reines Schwarz</string>
+    <string name="setting_pure_black_description">Echtes Schwarz im dunklen Modus. Schonender für OLED-Displays und ihren Akku.</string>
     <string name="follow_help_title">Lass den Text deiner Musik folgen</string>
     <string name="follow_help_try">Öffne den Benachrichtigungszugriff und versuche, Crosstune einzuschalten. Wenn Android meldet, dass es eine eingeschränkte Einstellung ist, schließe die Meldung.</string>
     <string name="follow_help_restricted">Öffne dann die App-Info, tippe oben rechts auf ⋮ und wähle Eingeschränkte Einstellungen zulassen. Android bietet das erst nach diesem ersten Versuch an.</string>

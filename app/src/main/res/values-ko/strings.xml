@@ -186,6 +186,15 @@
     <string name="setting_theme">테마</string>
     <string name="theme_light">라이트</string>
     <string name="theme_dark">다크</string>
+    <string name="setting_color">색상</string>
+    <string name="palette_crosstune">Crosstune</string>
+    <string name="palette_wallpaper">배경화면</string>
+    <string name="palette_ocean">오션</string>
+    <string name="palette_forest">포레스트</string>
+    <string name="palette_sunset">선셋</string>
+    <string name="palette_rose">로즈</string>
+    <string name="setting_pure_black">완전한 검정</string>
+    <string name="setting_pure_black_description">다크 모드에서 진짜 검정을 씁니다. OLED 화면과 배터리에 더 좋습니다.</string>
     <string name="follow_help_title">가사가 음악을 따라가게 하기</string>
     <string name="follow_help_try">알림 접근을 열고 Crosstune을 켜 보세요. Android에서 제한된 설정이라고 하면 그 메시지를 닫으세요.</string>
     <string name="follow_help_restricted">그런 다음 앱 정보를 열고 오른쪽 위의 ⋮을 탭한 뒤 제한된 설정 허용을 선택하세요. Android는 처음 시도한 후에만 이 옵션을 보여 줍니다.</string>

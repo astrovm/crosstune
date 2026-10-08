@@ -186,6 +186,15 @@
     <string name="setting_theme">Тема</string>
     <string name="theme_light">Светлая</string>
     <string name="theme_dark">Тёмная</string>
+    <string name="setting_color">Цвет</string>
+    <string name="palette_crosstune">Crosstune</string>
+    <string name="palette_wallpaper">Обои</string>
+    <string name="palette_ocean">Океан</string>
+    <string name="palette_forest">Лес</string>
+    <string name="palette_sunset">Закат</string>
+    <string name="palette_rose">Роза</string>
+    <string name="setting_pure_black">Чистый чёрный</string>
+    <string name="setting_pure_black_description">Настоящий чёрный в тёмном режиме. Бережнее к OLED-экранам и их батарее.</string>
     <string name="follow_help_title">Текст в такт вашей музыке</string>
     <string name="follow_help_try">Откройте «Доступ к уведомлениям» и попробуйте включить Crosstune. Если Android скажет, что это настройка с ограниченным доступом, закройте сообщение.</string>
     <string name="follow_help_restricted">Затем откройте «О приложении», нажмите ⋮ вверху справа и выберите «Разрешить доступ к настройкам с ограниченным доступом». Android предлагает это только после первой попытки.</string>

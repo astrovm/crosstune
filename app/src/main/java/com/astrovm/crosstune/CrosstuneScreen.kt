@@ -115,6 +115,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import com.astrovm.crosstune.ui.theme.Palette
 
 internal const val RESULT_TAG = "result"
 internal const val RESULT_TEXT_TAG = "result-text"
@@ -197,6 +198,8 @@ internal data class ScreenActions(
     val onOpenAppInfo: () -> Unit = {},
     val onDismissFollowHelp: () -> Unit = {},
     val onThemeChange: (ThemeMode) -> Unit = {},
+    val onPaletteChange: (Palette) -> Unit = {},
+    val onPureBlackChange: (Boolean) -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */

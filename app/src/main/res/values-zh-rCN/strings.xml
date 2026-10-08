@@ -186,6 +186,15 @@
     <string name="setting_theme">主题</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
+    <string name="setting_color">颜色</string>
+    <string name="palette_crosstune">Crosstune</string>
+    <string name="palette_wallpaper">壁纸</string>
+    <string name="palette_ocean">海洋</string>
+    <string name="palette_forest">森林</string>
+    <string name="palette_sunset">日落</string>
+    <string name="palette_rose">玫瑰</string>
+    <string name="setting_pure_black">纯黑</string>
+    <string name="setting_pure_black_description">深色模式使用真正的黑色，对 OLED 屏幕和电池更友好。</string>
     <string name="follow_help_title">让歌词跟随你的音乐</string>
     <string name="follow_help_try">打开“通知使用权”，试着开启 Crosstune。如果 Android 提示这是受限制的设置，关闭该提示。</string>
     <string name="follow_help_restricted">然后打开“应用信息”，点按右上角的 ⋮，选择“允许受限制的设置”。Android 只会在第一次尝试之后才提供这个选项。</string>
