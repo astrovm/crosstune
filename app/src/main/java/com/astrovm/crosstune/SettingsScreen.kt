@@ -195,6 +195,16 @@ private fun SettingsList(
                 GroupDivider()
                 RecognizerRow(actions)
             }
+            // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_lyrics_follow),
+                description = stringResource(R.string.setting_lyrics_follow_description),
+                checked = state.canFollowApps,
+                onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
+            )
+            GroupDivider()
+            ThemeRow(state.theme, actions.onThemeChange)
             GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
@@ -359,6 +369,47 @@ private fun RecognizerRow(actions: ScreenActions) {
                         onClick = {
                             expanded = false
                             actions.onRecognizerChange(recognizer)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Picks light or dark, or the phone's with "System default". */
+@Composable
+private fun ThemeRow(theme: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+    val labels = listOf(
+        ThemeMode.SYSTEM to stringResource(R.string.language_system_default),
+        ThemeMode.LIGHT to stringResource(R.string.theme_light),
+        ThemeMode.DARK to stringResource(R.string.theme_dark)
+    )
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = true }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = stringResource(R.string.setting_theme), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = labels.first { it.first == theme }.second,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                labels.forEach { (mode, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            expanded = false
+                            onSelect(mode)
                         }
                     )
                 }
@@ -711,7 +762,7 @@ private fun AddCustomDestinationForm(onAdd: (String, String) -> Boolean, onCance
 @Preview(showBackground = true)
 @Composable
 internal fun SettingsScreenPreview() {
-    CrosstuneTheme(dynamicColor = false) {
+    CrosstuneTheme {
         SettingsScreen(
             state = UiState(
                 intercepted = setOf(MusicService.SPOTIFY, MusicService.YOUTUBE),

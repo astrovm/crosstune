@@ -3,7 +3,11 @@ package com.astrovm.crosstune
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandHorizontally
@@ -180,6 +184,16 @@ internal data class ScreenActions(
     val onShowLyrics: () -> Unit = {},
     /** Closes the words. */
     val onDismissLyrics: () -> Unit = {},
+    /** Moves the music app playing the song to where a line of its words is sung. */
+    val onSeekLyrics: (Long) -> Unit = {},
+    /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */
+    val onAllowFollowing: () -> Unit = {},
+    /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */
+    val onOpenFollowAccess: () -> Unit = {},
+    /** Opens Crosstune's App info, where restricted settings are allowed. */
+    val onOpenAppInfo: () -> Unit = {},
+    val onDismissFollowHelp: () -> Unit = {},
+    val onThemeChange: (ThemeMode) -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */
@@ -211,13 +225,16 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
+        state.lyricsFor != null -> Screen.LYRICS
         else -> Screen.MAIN
     }
     AnimatedContent(
         targetState = screen,
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
-            if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
+            // The words rise over the song they're of, and sink back into it.
+            if (initialState == Screen.LYRICS || targetState == Screen.LYRICS) rise(up = targetState == Screen.LYRICS)
+            else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
         },
         label = "screen"
     ) { shown ->
@@ -232,15 +249,19 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             Handoff(state, actions)
         } else if (shown == Screen.LISTENING) {
             ListeningScreen(actions)
+        } else if (shown == Screen.LYRICS) {
+            LyricsScreen(state, actions)
         } else {
             MainScreen(state, guided, onOpenSettings = { showSettings = true })
         }
     }
+    // Asked for from the words or from settings, so it shows over either.
+    if (state.followHelp) FollowHelp(actions)
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 private enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
 }
 
 private const val GUIDE_ALLOW = "allow"
@@ -328,7 +349,7 @@ internal fun Page(
                                 titleLeading()
                                 Spacer(Modifier.width(12.dp))
                             }
-                            Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     navigationIcon = navigationIcon,
@@ -369,7 +390,6 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     if (state.showDestinationPicker && state.systemStateKnown) {
         DestinationPicker(state, actions.loadArtwork, onPick = actions.onOpenWith, onDismiss = actions.onDismissPicker)
     }
-    LyricsSheet(state, actions.onDismissLyrics, actions.onShowLyrics)
     // Only while a name is being looked up: a song picked or dismissed leaves nothing to show.
     if (state.isSearchingSongs || state.songSearch.isNotEmpty() || state.songSearchQuery.isNotBlank()) {
         SongSearchSheet(state, actions.loadArtwork, actions.onPickSong, actions.onDismissSongSearch)
@@ -643,7 +663,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     val convertModifier = Modifier
         .fillMaxWidth()
         .padding(top = 12.dp)
-        .heightIn(min = 52.dp)
+        .heightIn(min = 56.dp)
     val canConvert = !busy && state.linkText.isNotBlank()
     val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
     // The text the result or error on screen came from: converting it again would change nothing,
@@ -654,7 +674,12 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     AnimatedVisibility(visible = !shown, enter = Motion.appear, exit = Motion.disappear) {
         // The main action until there's a result; then the result's Open button is.
         if (state.result == null) {
-            Button(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
+            // Waiting for a link, it stays quiet rather than a gray slab under the field.
+            val quiet = ButtonDefaults.buttonColors(
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Button(onClick = resolve, enabled = canConvert, colors = quiet, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
         } else {
             FilledTonalButton(onClick = resolve, enabled = canConvert, interactionSource = press.source, modifier = convertModifier.then(press.modifier)) { convertLabel() }
         }
@@ -715,71 +740,6 @@ internal fun DefaultDestinationMenu(
             }
         }
     }
-}
-
-/**
- * A song's words, in a sheet over the screen. They're fetched when the button is tapped, so
- * nothing is asked for a song the user never wanted the words of, and a song with none says so
- * rather than sitting empty.
- */
-@Composable
-private fun LyricsSheet(state: UiState, onDismiss: () -> Unit, onRetry: () -> Unit) {
-    val song = state.lyricsFor ?: return
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text(stringResource(R.string.lyrics_title))
-                Text(
-                    listOf(song.title, song.artist).filter { it.isNotBlank() }.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        text = {
-            when {
-                state.isLoadingLyrics -> {
-                    Column {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        Text(
-                            stringResource(R.string.lyrics_loading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .padding(top = 10.dp)
-                                .semantics { liveRegion = LiveRegionMode.Polite }
-                        )
-                    }
-                }
-                // Empty once the lookup has answered means the service has none, which is worth saying.
-                state.lyricsFailed -> Column {
-                    Text(stringResource(R.string.lyrics_failed), style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) {
-                        Text(stringResource(R.string.retry_button))
-                    }
-                }
-                state.lyrics.isEmpty() -> Text(
-                    stringResource(R.string.lyrics_none),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                else -> Text(
-                    text = state.lyrics,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        // The words are the point, so they read as one block rather than by line.
-                        .semantics(mergeDescendants = true) {}
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss_button)) }
-        }
-    )
 }
 
 /**
@@ -960,144 +920,162 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
     val link = state.link
     val destination = state.resultDestination
     val destinationReady = !state.isMatching
-    Surface(
+    // The cover lights the space behind it in its own color, which eases in once it's known.
+    val glow by animateColorAsState(
+        coverColor(result.artworkUrl, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
+        tween(durationMillis = 700),
+        label = "glow"
+    )
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 24.dp)
-            .animateContentSize()
+            .padding(top = 8.dp)
+            .animateContentSize(Motion.size)
             .testTag(RESULT_TAG),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainer
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CoverArt(result.artworkUrl, actions.loadArtwork, size = 96.dp)
-                // Tapping the song copies its search text, e.g. to paste into an app Crosstune can't open.
-                Column(
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .testTag(RESULT_TEXT_TAG)
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable(onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
-                        // Inset inside the clip so the rounded corner doesn't cut into the first glyph.
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Text(
-                        text = listOfNotNull(
-                            stringResource(result.type.labelRes),
-                            link?.service?.let { stringResource(R.string.from_service, stringResource(it.labelRes)) }
-                        ).joinToString(" "),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = result.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                    if (result.artist.isNotBlank()) {
-                        Text(
-                            text = result.artist,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(296.dp)
+                .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.5f), Color.Transparent)))
+        ) {
+            CoverArt(
+                result.artworkUrl,
+                actions.loadArtwork,
+                size = 208.dp,
+                modifier = Modifier.shadow(28.dp, MaterialTheme.shapes.medium, ambientColor = glow, spotColor = glow)
+            )
+        }
+        // Tapping the song copies its search text, e.g. to paste into an app Crosstune can't open.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .testTag(RESULT_TEXT_TAG)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = stringResource(R.string.copy_search_action), onClick = actions.onCopySearch)
+                // Inset inside the clip so the rounded corner doesn't cut into the first glyph.
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = listOfNotNull(
+                    stringResource(result.type.labelRes),
+                    link?.service?.let { stringResource(R.string.from_service, stringResource(it.labelRes)) }
+                ).joinToString(" "),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = result.title,
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            if (result.artist.isNotBlank()) {
+                Text(
+                    text = result.artist,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        val main = mainAction(result, state, actions)
+        // One split button: the main part opens it, the arrow picks another app for just this result.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 20.dp)
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            val press = rememberPress()
+            Button(
+                onClick = main.onClick,
+                enabled = main.enabled,
+                shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 8.dp, bottomEnd = 8.dp),
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                interactionSource = press.source,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 56.dp)
+                    .then(press.modifier)
+                    // Once it scrolls away, a floating copy of it takes over.
+                    .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
+            ) {
+                // Picking another app swaps the icon and label in place. The icon says which app,
+                // so a short label fits on one line; screen readers hear the app's name too.
+                AnimatedContent(targetState = Triple(destination, main.label, main.description), transitionSpec = { swap() }, label = "open") { (shown, text, description) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = if (description != text) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier
+                    ) {
+                        DestinationIcon(shown, state.installed, size = 24.dp)
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        Text(text, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
                     }
                 }
             }
-            val main = mainAction(result, state, actions)
-            // One split button: the main part opens it, the arrow picks another app for just this result.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp)
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                val press = rememberPress()
-                Button(
-                    onClick = main.onClick,
-                    enabled = main.enabled,
-                    shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp, topEnd = 6.dp, bottomEnd = 6.dp),
-                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-                    interactionSource = press.source,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 52.dp)
-                        .then(press.modifier)
-                        // Once it scrolls away, a floating copy of it takes over.
-                        .onGloballyPositioned { onMainButtonShown(it.boundsInWindow().height > 0f) }
-                ) {
-                    // Picking another app swaps the icon and label in place. The icon says which app,
-                    // so a short label fits on one line; screen readers hear the app's name too.
-                    AnimatedContent(targetState = Triple(destination, main.label, main.description), transitionSpec = { swap() }, label = "open") { (shown, text, description) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = if (description != text) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier
-                        ) {
-                            DestinationIcon(shown, state.installed, size = 24.dp)
-                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                            Text(text, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-                DestinationMenuButton(state, actions)
+            DestinationMenuButton(state, actions)
+        }
+        // A later part shows its own, down by its button.
+        QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
+        // Asking or showing first, the app picked last is remembered instead.
+        if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
+            TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(stringResource(R.string.make_default_named, destination.label()))
             }
-            // A later part shows its own, down by its button.
-            QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
-            // Asking or showing first, the app picked last is remembered instead.
-            if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
-                TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text(stringResource(R.string.make_default_named, destination.label()))
-                }
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Same height even when only one label wraps.
-                // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
-                // the list to another service, rather than a search for its name. The songs listed
-                // right below say what's copied, so the label is short; screen readers hear it all.
-                val songs = result.tracks.isNotEmpty()
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Same height even when only one label wraps.
+            // With its songs listed, the songs are what's worth copying or sharing, e.g. to move
+            // the list to another service, rather than a search for its name. The songs listed
+            // right below say what's copied, so the label is short; screen readers hear it all.
+            val songs = result.tracks.isNotEmpty()
+            SecondaryAction(
+                R.drawable.ic_content_copy,
+                stringResource(if (songs) R.string.copy_button else R.string.copy_link_button),
+                if (songs) actions.onCopySongs else actions.onCopyLink,
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                enabled = songs || destinationReady,
+                description = if (songs) stringResource(R.string.copy_songs_button) else null
+            )
+            SecondaryAction(
+                R.drawable.ic_share,
+                stringResource(if (songs) R.string.share_button else R.string.share_link_button),
+                if (songs) actions.onShareSongs else actions.onShareSearch,
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                enabled = songs || destinationReady,
+                description = if (songs) stringResource(R.string.share_songs_button) else null
+            )
+            // Only a song has words, and one whose artist is unknown can't be looked up safely.
+            if (result.type == ItemType.TRACK && result.artist.isNotBlank()) {
                 SecondaryAction(
-                    R.drawable.ic_content_copy,
-                    stringResource(if (songs) R.string.copy_button else R.string.copy_link_button),
-                    if (songs) actions.onCopySongs else actions.onCopyLink,
+                    R.drawable.ic_lyrics,
+                    stringResource(R.string.lyrics_button),
+                    actions.onShowLyrics,
                     Modifier
                         .weight(1f)
-                        .fillMaxHeight(),
-                    enabled = songs || destinationReady,
-                    description = if (songs) stringResource(R.string.copy_songs_button) else null
+                        .fillMaxHeight()
                 )
-                SecondaryAction(
-                    R.drawable.ic_share,
-                    stringResource(if (songs) R.string.share_button else R.string.share_link_button),
-                    if (songs) actions.onShareSongs else actions.onShareSearch,
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    enabled = songs || destinationReady,
-                    description = if (songs) stringResource(R.string.share_songs_button) else null
-                )
-                // Only a song has words, and one whose artist is unknown can't be looked up safely.
-                if (result.type == ItemType.TRACK && result.artist.isNotBlank()) {
-                    SecondaryAction(
-                        R.drawable.ic_lyrics,
-                        stringResource(R.string.lyrics_button),
-                        actions.onShowLyrics,
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        enabled = destinationReady
-                    )
-                }
             }
         }
     }
@@ -1192,8 +1170,8 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
     Box {
         Button(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 26.dp, bottomEnd = 26.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp),
+            shape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 28.dp, bottomEnd = 28.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             interactionSource = press.source,
             modifier = Modifier
                 .fillMaxHeight()
@@ -1224,6 +1202,7 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
     }
 }
 
+/** A light tile with an icon over its label, so three fit in a row without crowding the song. */
 @Composable
 private fun SecondaryAction(
     icon: Int,
@@ -1235,21 +1214,31 @@ private fun SecondaryAction(
     description: String? = null
 ) {
     val press = rememberPress()
-    FilledTonalButton(
+    val content = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f)
+    Surface(
         onClick = onClick,
         enabled = enabled,
-        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = content,
         interactionSource = press.source,
         modifier = modifier.then(press.modifier)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = if (description != null) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .padding(horizontal = 8.dp, vertical = 14.dp)
+                .then(if (description != null) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier)
         ) {
-            AppIcon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+            Icon(
+                painterResource(icon),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.38f),
+                modifier = Modifier.size(22.dp)
+            )
             // Long translations wrap to a second line instead of being cut off.
-            Text(label, textAlign = TextAlign.Center)
+            Text(label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -1269,7 +1258,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
     }
     BackHandler(enabled = searchExpanded) { closeSearch() }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 10.dp).heightIn(min = 56.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 32.dp, bottom = 4.dp).heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AnimatedContent(
@@ -1300,8 +1289,8 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
             } else {
                 Text(
                     text = stringResource(R.string.history_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -1320,13 +1309,12 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         val text = "${entry.metadata.title} ${entry.metadata.artist}".lowercase()
         words.all { it in text }
     }
-    Group {
+    Column(modifier = Modifier.animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         shown.forEachIndexed { index, entry ->
             // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
             key(entry.link.url) {
-                if (index > 0) GroupDivider()
                 // Only a row going somewhere other than the default app says where.
-                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions)
+                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index))
             }
         }
     }
@@ -1338,25 +1326,27 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
  * either way removes it.
  */
 @Composable
-private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions) {
+private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier) {
     val swipe = rememberSwipeToDismissBoxState()
     val remove = stringResource(R.string.remove_button)
     SwipeToDismissBox(
         state = swipe,
         onDismiss = { actions.onRemoveHistory(entry) },
-        backgroundContent = { RemoveBackground(swipe.dismissDirection) }
+        // Only while it's swiped, so its color never shows at a resting row's rounded edge.
+        backgroundContent = { if (swipe.dismissDirection != SwipeToDismissBoxValue.Settled) RemoveBackground(swipe.dismissDirection) },
+        modifier = modifier.clip(MaterialTheme.shapes.medium)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .background(MaterialTheme.colorScheme.surface)
                 .clickable { actions.onHistoryEntryClick(entry) }
                 // Swiping isn't something TalkBack can do, so removing is an action of its own there.
                 .semantics { customActions = listOf(CustomAccessibilityAction(remove) { actions.onRemoveHistory(entry); true }) }
-                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                .padding(start = 4.dp, end = 0.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 48.dp)
+            CoverArt(entry.metadata.artworkUrl, actions.loadArtwork, size = 56.dp)
             Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp).weight(1f)) {
                 Text(
                     text = entry.metadata.title,
@@ -1403,6 +1393,7 @@ private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clip(MaterialTheme.shapes.medium)
             .background(MaterialTheme.colorScheme.errorContainer)
             .padding(horizontal = 24.dp),
         contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
@@ -1605,7 +1596,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
 @Preview(showBackground = true)
 @Composable
 internal fun CrosstuneScreenPreview() {
-    CrosstuneTheme(dynamicColor = false) {
+    CrosstuneTheme {
         CrosstuneScreen(
             state = UiState(
                 linkText = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl",

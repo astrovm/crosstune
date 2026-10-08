@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,14 @@ import kotlin.math.min
 /** What listening found. */
 internal sealed interface Heard {
     /** [appleMusicId] is the song on Apple Music, when Shazam knows it. */
-    data class Song(val metadata: MusicMetadata, val appleMusicId: String?) : Heard
+    /**
+     * [offsetMs] is how far into the song the sound heard starts, and [startedAtMs] when that sound
+     * started, on the clock that counts since the phone started, so the words can follow on from there.
+     */
+    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null) : Heard {
+        /** Where the song is, as heard, when both halves are known. */
+        val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs) else null
+    }
     data object Nothing : Heard
     data class Failed(val error: AppError) : Heard
 }
@@ -97,7 +105,9 @@ internal class Shazam(
             artist = track.optString("subtitle"),
             artworkUrl = track.optJSONObject("images")?.optString("coverart")?.takeIf { it.isNotBlank() }
         )
-        return Heard.Song(metadata, appleMusicId)
+        // How far into the song the sound sent starts, in seconds.
+        val offset = JSONObject(body).optJSONArray("matches")?.optJSONObject(0)?.optDouble("offset")?.takeIf { it.isFinite() && it >= 0 }
+        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() })
     }
 
     companion object {
@@ -167,13 +177,16 @@ internal class SongListener(
     private val microphone: Microphone,
     private val shazam: Shazam,
     /** Reading the microphone blocks. */
-    private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** When the recording starts, so a song's words can follow on from what was heard. */
+    private val clock: () -> Long = SystemClock::elapsedRealtime
 ) {
     private data class Progress(val recorded: Int, val done: Boolean, val failed: Boolean = false)
 
     suspend fun listen(): Heard = coroutineScope {
         val audio = ShortArray(ShazamSignature.SAMPLES)
         val progress = MutableStateFlow(Progress(0, done = false))
+        val startedAt = clock()
         // It opens the microphone itself, so whatever it opens it closes, even when stopped meanwhile.
         val recorder = launch(recordDispatcher) {
             var recorded = 0
@@ -211,7 +224,8 @@ internal class SongListener(
             }
         }
         recorder.cancelAndJoin()
-        heard
+        // What's sent starts where the recording did.
+        if (heard is Heard.Song) heard.copy(startedAtMs = startedAt) else heard
     }
 
     companion object {
