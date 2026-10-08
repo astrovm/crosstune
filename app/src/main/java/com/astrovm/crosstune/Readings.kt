@@ -44,20 +44,60 @@ internal object Readings {
     private val tokenizer by lazy { Tokenizer() }
 
     private fun japanese(line: String): LineReading {
-        val tokens = tokenizer.tokenize(line)
-        val parts = mutableListOf<Ruby>()
-        val reading = StringBuilder()
-        val romanized = mutableListOf<String>()
-        for (token in tokens) {
-            val surface = token.surface
+        val pieces = together(tokenizer.tokenize(line).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
-            val kana = token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: surface
-            reading.append(kana)
-            if (surface.isNotBlank()) romanized += romaji(kana)
-            parts += if (surface.any(::isHan) && kana != surface) furigana(surface, kana) else listOf(Ruby(surface))
-        }
-        return LineReading(joined(parts), reading.toString(), romanized.joinToString(" "))
+            Piece(token.surface, token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface, token.partOfSpeechLevel1, token.partOfSpeechLevel2)
+        })
+        val parts = pieces.flatMap { if (it.surface.any(::isHan) && it.kana != it.surface) furigana(it.surface, it.kana) else listOf(Ruby(it.surface)) }
+        return LineReading(joined(parts), pieces.joinToString("") { it.kana }, romajiWords(pieces).joinToString(" ") { romaji(it) })
     }
+
+    /** A word as the dictionary splits a line, with how it reads and what part of speech it is. */
+    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String)
+
+    /**
+     * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん.
+     * Kept to numbers of people, the ones lyrics are full of.
+     */
+    private fun together(pieces: List<Piece>): List<Piece> {
+        val out = mutableListOf<Piece>()
+        for (piece in pieces) {
+            val last = out.lastOrNull()
+            val word = last?.let { TOGETHER[it.surface + piece.surface] }
+            if (word != null) out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般") else out += piece
+        }
+        return out
+    }
+
+    private val TOGETHER = mapOf("一人" to "ひとり", "二人" to "ふたり")
+
+    /**
+     * The words of a line in kana, as romaji spaces them: a verb with its endings is one word, e.g.
+     * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
+     * against what they're beside.
+     */
+    private fun romajiWords(pieces: List<Piece>): List<String> {
+        val words = mutableListOf<StringBuilder>()
+        var previous: Piece? = null
+        var opened = false
+        for (piece in pieces) {
+            if (piece.surface.isBlank()) {
+                previous = null
+                continue
+            }
+            val opening = piece.surface in OPENING
+            val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
+                (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
+            // An ending after a particle starts a word of its own: だけだった is dake datta.
+            val attaches = previous != null && (opened || (piece.kind == "記号" && !opening) || (ending && previous.kind != "助詞"))
+            if (attaches) words.last().append(piece.kana) else words += StringBuilder(piece.kana)
+            opened = opening
+            previous = piece
+        }
+        return words.map { it.toString() }
+    }
+
+    private const val OPENING = "「『（(【〈《“"
 
     /** Kana over only the kanji of [surface]: the kana it starts or ends with read as written. */
     private fun furigana(surface: String, kana: String): List<Ruby> {

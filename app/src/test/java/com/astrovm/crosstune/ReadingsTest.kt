@@ -55,6 +55,24 @@ class ReadingsTest {
     }
 
     @Test
+    fun romajiKeepsAVerbWithItsEndingsAndMarksAgainstTheirWords() {
+        fun romanized(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized
+        assertEquals("wakatta", romanized("分かった"))
+        assertEquals("tokete yuku", romanized("溶けてゆく"))
+        assertEquals("「sayonara」 dake datta", romanized("「さよなら」だけだった"))
+        assertEquals("kasanatte ita", romanized("重なっていた"))
+    }
+
+    @Test
+    fun numbersOfPeopleReadAsOneWord() {
+        val (line) = Readings.of(listOf("二人で一人"), Script.JAPANESE)
+        assertEquals(listOf(Ruby("二人", "ふたり"), Ruby("で"), Ruby("一人", "ひとり")), line.parts)
+        assertEquals("futari de hitori", line.romanized)
+        // Other numbers stay as the dictionary reads them.
+        assertEquals("さんにん", Readings.of(listOf("三人"), Script.JAPANESE).single().reading)
+    }
+
+    @Test
     fun romajiFollowsHepburn() {
         assertEquals("shashin", Readings.romaji("しゃしん"))
         assertEquals("kitte", Readings.romaji("きって"))
