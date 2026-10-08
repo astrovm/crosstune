@@ -18,6 +18,12 @@ internal data class Ruby(val text: String, val reading: String? = null)
  */
 internal data class LineReading(val parts: List<Ruby>, val reading: String, val romanized: String)
 
+/**
+ * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
+ * for its meaning, e.g. 分かる for 分かった.
+ */
+internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text)
+
 /** Readings of lyrics in Japanese, Chinese and Korean, all worked out on the phone. */
 internal object Readings {
 
@@ -44,16 +50,24 @@ internal object Readings {
     private val tokenizer by lazy { Tokenizer() }
 
     private fun japanese(line: String): LineReading {
-        val pieces = together(tokenizer.tokenize(line).map { token ->
-            // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
-            Piece(token.surface, token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface, token.partOfSpeechLevel1, token.partOfSpeechLevel2)
-        })
+        val pieces = together(pieces(line))
         val parts = pieces.flatMap { if (it.surface.any(::isHan) && it.kana != it.surface) furigana(it.surface, it.kana) else listOf(Ruby(it.surface)) }
         return LineReading(joined(parts), pieces.joinToString("") { it.kana }, romajiWords(pieces).joinToString(" ") { romaji(it) })
     }
 
+    private fun pieces(line: String): List<Piece> = tokenizer.tokenize(line).map { token ->
+            // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
+            Piece(
+                token.surface,
+                token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface,
+                token.partOfSpeechLevel1,
+                token.partOfSpeechLevel2,
+                token.baseForm?.takeIf { it != "*" } ?: token.surface
+            )
+        }
+
     /** A word as the dictionary splits a line, with how it reads and what part of speech it is. */
-    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String)
+    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface)
 
     /**
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん.
@@ -76,8 +90,11 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>): List<String> {
-        val words = mutableListOf<StringBuilder>()
+    private fun romajiWords(pieces: List<Piece>): List<String> = grouped(pieces).map { word -> word.joinToString("") { it.kana } }
+
+    /** [pieces] in words, as [romajiWords] spaces them. */
+    private fun grouped(pieces: List<Piece>): List<List<Piece>> {
+        val words = mutableListOf<MutableList<Piece>>()
         var previous: Piece? = null
         var opened = false
         for (piece in pieces) {
@@ -90,11 +107,50 @@ internal object Readings {
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta.
             val attaches = previous != null && (opened || (piece.kind == "記号" && !opening) || (ending && previous.kind != "助詞"))
-            if (attaches) words.last().append(piece.kana) else words += StringBuilder(piece.kana)
+            if (attaches) words.last() += piece else words += mutableListOf(piece)
             opened = opening
             previous = piece
         }
-        return words.map { it.toString() }
+        return words
+    }
+
+    /**
+     * The words of [line], to look up one by one: Japanese as its dictionary splits it, with each
+     * word's kana and the form it's listed under; Chinese, which has no spaces, as Android's own
+     * dictionary splits it, with its pinyin; anything else between its spaces.
+     */
+    // Words are only ever Chinese from Android 10 on, see scriptOf.
+    @SuppressLint("NewApi")
+    fun words(line: String, script: Script?): List<Word> = when (script) {
+        Script.JAPANESE -> grouped(together(pieces(line))).mapNotNull { word ->
+            val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
+            if (text.none(Char::isLetter)) return@mapNotNull null
+            val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
+            // Kana reads as written; the reading's only worth showing for kanji.
+            Word(text, kana.takeIf { it != text }, romaji(kana), lookup = word.first { it.kind != "記号" }.base)
+        }
+        else -> segments(line).map { text ->
+            when (script) {
+                Script.CHINESE -> chinese(text).let { Word(text, it.reading, null) }
+                Script.KOREAN -> Word(text, null, romaja(text))
+                else -> Word(text)
+            }
+        }
+    }
+
+    /** The words between [line]'s spaces and marks, or, in Chinese, between its words. */
+    private fun segments(line: String): List<String> {
+        val breaks = android.icu.text.BreakIterator.getWordInstance()
+        breaks.setText(line)
+        val words = mutableListOf<String>()
+        var start = breaks.first()
+        var end = breaks.next()
+        while (end != android.icu.text.BreakIterator.DONE) {
+            line.substring(start, end).takeIf { it.any(Char::isLetter) }?.let(words::add)
+            start = end
+            end = breaks.next()
+        }
+        return words
     }
 
     private const val OPENING = "「『（(【〈《“"

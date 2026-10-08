@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. Lines you save stay on your phone."
     ],
     [
       "p",

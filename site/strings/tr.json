@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye ya da Ayarlar'da belirlediğin LibreTranslate sunucusuna gönderir. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez."
+      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye ya da Ayarlar'da belirlediğin LibreTranslate sunucusuna gönderir. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Kaydettiğin satırlar telefonunda kalır."
     ],
     [
       "p",

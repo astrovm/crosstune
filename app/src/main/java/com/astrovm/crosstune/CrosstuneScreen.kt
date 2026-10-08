@@ -194,6 +194,12 @@ internal data class ScreenActions(
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
+    val onToggleSavedLine: (Int) -> Unit = {},
+    val onRemoveSavedLine: (SavedLine) -> Unit = {},
+    val onLookUpWord: (Word) -> Unit = {},
+    val onDismissWord: () -> Unit = {},
+    val onRepeatLine: (Int) -> Unit = {},
+    val onStopRepeating: () -> Unit = {},
     /** Sets where translations come from, by address and key; false when the address isn't one. */
     val onTranslationServerChange: (String, String) -> Boolean = { _, _ -> true },
     /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */

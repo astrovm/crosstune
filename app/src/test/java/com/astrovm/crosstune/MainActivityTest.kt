@@ -47,6 +47,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
@@ -2649,6 +2650,68 @@ class MainActivityTest {
         // Nothing left to follow, a resume changes nothing.
         controller!!.pause().resume()
         assertResultShown()
+    }
+
+    @Test
+    fun aLineOpensToStudyRepeatsInTheMusicAppAndIsKept() {
+        val playback = timedSong()
+        playback.access = true
+        controller!!.pause().resume()
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        // Held, a line opens to study; tapped, it still moves the app there.
+        composeRule.onNodeWithText("Two").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.lyrics_repeat_line))
+        assertTrue(playback.seeks.isEmpty())
+
+        // Repeated, the app goes to its start, and back again each time it reaches the next line.
+        click(string(R.string.lyrics_repeat_line))
+        assertEquals(listOf(20_000L), playback.seeks)
+        playback.playing.value = Following(PlaybackClock(40_500, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_200))
+        composeRule.waitForIdle()
+        assertEquals(listOf(20_000L, 20_000L), playback.seeks)
+        // Not sent back again while the app hasn't said where it went.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+        assertEquals(2, playback.seeks.size)
+        // Somewhere in the line, it plays on.
+        playback.playing.value = Following(PlaybackClock(22_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_200))
+        assertEquals(2, playback.seeks.size)
+        click(string(R.string.lyrics_stop_repeating))
+        assertTextShown(string(R.string.lyrics_repeat_line))
+        playback.playing.value = Following(PlaybackClock(41_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_200))
+        assertEquals(2, playback.seeks.size)
+
+        // A word tapped is looked up; with nothing to say what it means, that says so, and it's asked again.
+        composeRule.onNode(hasText("Two") and hasClickAction() and !hasTestTag(LYRIC_LINE_TAG)).performClick()
+        waitForText(string(R.string.lyrics_word_failed))
+        fake.handler = { request -> FakeSpotify.html(request, """{"responseData":{"translatedText":"Dos"},"responseStatus":200}""") }
+        composeRule.onNode(hasText("Two") and hasClickAction() and !hasTestTag(LYRIC_LINE_TAG)).performClick()
+        waitForText("Dos")
+
+        // Kept, with the song it's from.
+        click(string(R.string.lyrics_save_line))
+        assertTextShown(string(R.string.lyrics_line_saved))
+        assertTrue(prefs().getString("saved_lines", null)!!.contains("\"Two\""))
+        click(string(R.string.lyrics_line_saved))
+        assertTextShown(string(R.string.lyrics_save_line))
+        click(string(R.string.lyrics_save_line))
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).performSemanticsAction(SemanticsActions.Dismiss)
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.lyrics_save_line))
+
+        // Then found among the lines kept, and let go there.
+        click(string(R.string.lyrics_learn))
+        click(string(R.string.lyrics_saved_lines))
+        assertTextShown("Dakare Ni Kita Onna")
+        assertTextShown("Kingo Hamada")
+        click(string(R.string.remove_button))
+        // Nothing left, it's back to the words.
+        waitForText("Three")
+        assertTextAbsent(string(R.string.lyrics_saved_lines))
     }
 
     @Test

@@ -250,4 +250,11 @@
     <string name="translation_server_key">API कुंजी, अगर ज़रूरी हो</string>
     <string name="translation_server_description">MyMemory के लिए खाली छोड़ें, रोज़ कुछ गानों के लिए मुफ़्त।</string>
     <string name="translation_server_invalid">वेब पता डालें, जैसे https://libretranslate.com</string>
+    <string name="lyrics_study_line">यह लाइन सीखें</string>
+    <string name="lyrics_repeat_line">यह लाइन दोहराएं</string>
+    <string name="lyrics_stop_repeating">दोहराना बंद करें</string>
+    <string name="lyrics_save_line">लाइन सेव करें</string>
+    <string name="lyrics_line_saved">सेव हो गई</string>
+    <string name="lyrics_saved_lines">सेव की गई लाइनें</string>
+    <string name="lyrics_word_failed">अभी इसका मतलब नहीं मिला।</string>
 </resources>

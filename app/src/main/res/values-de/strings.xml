@@ -250,4 +250,11 @@
     <string name="translation_server_key">API-Schlüssel, falls nötig</string>
     <string name="translation_server_description">Leer lassen für MyMemory, kostenlos für ein paar Songs am Tag.</string>
     <string name="translation_server_invalid">Gib eine Webadresse ein, z. B. https://libretranslate.com</string>
+    <string name="lyrics_study_line">Diese Zeile lernen</string>
+    <string name="lyrics_repeat_line">Zeile wiederholen</string>
+    <string name="lyrics_stop_repeating">Nicht mehr wiederholen</string>
+    <string name="lyrics_save_line">Zeile speichern</string>
+    <string name="lyrics_line_saved">Gespeichert</string>
+    <string name="lyrics_saved_lines">Gespeicherte Zeilen</string>
+    <string name="lyrics_word_failed">Konnte die Bedeutung gerade nicht finden.</string>
 </resources>

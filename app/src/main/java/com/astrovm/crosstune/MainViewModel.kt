@@ -98,6 +98,12 @@ internal data class UiState(
     val pureBlack: Boolean = false,
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
+    /** Lines kept to study later, newest first. */
+    val savedLines: List<SavedLine> = emptyList(),
+    /** The line the music app keeps going back to, while it does. */
+    val repeating: Int? = null,
+    /** A word of the words being looked up, or looked up. */
+    val word: WordMeaning? = null,
     /** How the words floating over other apps look, and where they are. */
     val floating: FloatingOptions = FloatingOptions(),
     /** Whether Android lets Crosstune show over other apps, which see-through floating words need. */
@@ -229,6 +235,9 @@ internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
  * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
  * Then what's been worked out for the words shown, line by line.
  */
+/** A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none. */
+internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false)
+
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
@@ -295,6 +304,7 @@ internal class MainViewModel(
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
+    private val savedLinesStore = SavedLinesStore(preferences)
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
     init {
@@ -332,6 +342,7 @@ internal class MainViewModel(
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
+            savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
             systemStateKnown = false
         ).withDestinations()
@@ -1232,6 +1243,84 @@ internal class MainViewModel(
     private fun stopLearning() {
         readingsJob?.cancel()
         translationJob?.cancel()
+        wordJob?.cancel()
+        stopRepeating()
+        uiState = uiState.copy(word = null)
+    }
+
+    /** Keeps line [index] of the words shown, with what helps read it, or lets it go when it's kept. */
+    fun toggleSavedLine(index: Int) {
+        val song = uiState.lyricsFor ?: return
+        val text = wordLines().getOrNull(index) ?: return
+        val learning = uiState.learning
+        val reading = learning.lines.getOrNull(index)
+        val line = SavedLine(
+            text,
+            reading?.reading?.takeIf { it != text },
+            reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading },
+            learning.translations.getOrNull(index),
+            song.title,
+            song.artist
+        )
+        uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
+    }
+
+    fun removeSavedLine(line: SavedLine) {
+        uiState = uiState.copy(savedLines = savedLinesStore.remove(line))
+    }
+
+    private var wordJob: Job? = null
+
+    /** Finds what [word] means, in the app's language, the way the words are translated. */
+    fun lookUpWord(word: Word) {
+        val translator = translator ?: return
+        wordJob?.cancel()
+        uiState = uiState.copy(word = WordMeaning(word, looking = true))
+        wordJob = viewModelScope.launch {
+            val meaning = translator.translate(listOf(word.lookup), translationLanguage(), uiState.learning.server)
+            uiState = uiState.copy(word = WordMeaning(word, meaning?.firstOrNull(), failed = meaning == null))
+        }
+    }
+
+    fun dismissWord() {
+        wordJob?.cancel()
+        uiState = uiState.copy(word = null)
+    }
+
+    private var repeatJob: Job? = null
+
+    /**
+     * Has the music app play line [index] over and over: back to its start each time it reaches the
+     * next line, until stopped. Only while the words follow an app that can be moved.
+     */
+    fun repeatLine(index: Int) {
+        val song = uiState.lyricsFor ?: return
+        val lines = uiState.lyricLines
+        val start = lines.getOrNull(index)?.timeMs ?: return
+        if (uiState.following?.canSeek != true) return
+        // The last line has no next one to end at, so it's given a few seconds.
+        val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
+        repeatJob?.cancel()
+        uiState = uiState.copy(repeating = index)
+        playback?.seekTo(song, start)
+        var sought = now()
+        repeatJob = viewModelScope.launch {
+            while (isActive) {
+                delay(REPEAT_CHECK_MS)
+                val position = uiState.following?.clock?.positionAt(now()) ?: continue
+                // The app takes a moment to say where it went, so it isn't sent back again meanwhile.
+                if (position >= end && now() - sought >= SEEK_SETTLE_MS) {
+                    playback?.seekTo(song, start)
+                    sought = now()
+                }
+            }
+        }
+    }
+
+    fun stopRepeating() {
+        repeatJob?.cancel()
+        repeatJob = null
+        uiState = uiState.copy(repeating = null)
     }
 
     /** The words shown, line by line: the timed ones, or else the plain ones. */
@@ -1708,6 +1797,11 @@ internal class MainViewModel(
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
+
+        /** How long the last line repeats for, with no next line to end at. */
+        const val LAST_LINE_MS = 6_000L
+        private const val REPEAT_CHECK_MS = 100L
+        private const val SEEK_SETTLE_MS = 1_000L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */

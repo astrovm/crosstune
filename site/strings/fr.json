@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, ou au serveur LibreTranslate que vous indiquez dans les paramètres. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part."
+      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, ou au serveur LibreTranslate que vous indiquez dans les paramètres. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Les lignes que vous enregistrez restent sur votre téléphone."
     ],
     [
       "p",

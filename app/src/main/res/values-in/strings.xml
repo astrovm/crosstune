@@ -250,4 +250,11 @@
     <string name="translation_server_key">Kunci API, jika perlu</string>
     <string name="translation_server_description">Kosongkan untuk MyMemory, gratis untuk beberapa lagu per hari.</string>
     <string name="translation_server_invalid">Masukkan alamat web, seperti https://libretranslate.com</string>
+    <string name="lyrics_study_line">Pelajari baris ini</string>
+    <string name="lyrics_repeat_line">Ulangi baris ini</string>
+    <string name="lyrics_stop_repeating">Berhenti mengulang</string>
+    <string name="lyrics_save_line">Simpan baris</string>
+    <string name="lyrics_line_saved">Tersimpan</string>
+    <string name="lyrics_saved_lines">Baris tersimpan</string>
+    <string name="lyrics_word_failed">Tidak bisa menemukan artinya sekarang.</string>
 </resources>
