@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -65,6 +66,39 @@ class TranslatorTest {
     fun aLineAlreadyInTheLanguageIsntRepeatedUnderItself() {
         myMemory { if (it == "Hola") "hola" else "[$it]" }
         assertEquals(listOf(null, "[Hello]"), translate(listOf("Hola", "Hello")))
+    }
+
+    @Test
+    fun wordsAlreadyInTheLanguageMyMemoryRefusesComeBackAsTheyWere() {
+        // Asked for English into English, MyMemory says so as a 403 instead of answering.
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"responseData":{"translatedText":"PLEASE SELECT TWO DISTINCT LANGUAGES"},"responseDetails":"PLEASE SELECT TWO DISTINCT LANGUAGES","responseStatus":"403"}""")
+        }
+        assertEquals(listOf(null, null), runBlocking { translator().translate(listOf("Me and Michael", "So you think"), "en", null) })
+    }
+
+    @Test
+    fun aWordInTheAppsLanguageIsLookedUpInWiktionary() {
+        fake.handler = { request ->
+            when (request.url.encodedPathSegments.last()) {
+                "we're" -> FakeSpotify.html(
+                    request,
+                    """{"en":[{"partOfSpeech":"Contraction","definitions":[{"definition":""},{"definition":"<span><a href=\"/wiki/Appendix:Glossary\">Contraction</a> of <i>we</i> + <i>are</i></span>"}]}]}"""
+                )
+                "nothing" -> FakeSpotify.html(request, """{"en":[{"definitions":[]},{}]}""")
+                "empty" -> FakeSpotify.html(request, "{}")
+                "broken" -> FakeSpotify.html(request, "not json")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+        assertEquals("Contraction of we + are", runBlocking { translator().define("We're", "en") })
+        // Wikimedia is told who's asking.
+        assertTrue("User-Agent" to "Crosstune (https://github.com/astrovm/crosstune)" in fake.requestHeaders)
+        listOf("nothing", "empty", "broken", "unknown").forEach { assertNull(it, runBlocking { translator().define(it, "en") }) }
+        // Only English has a dictionary to ask.
+        val asked = fake.requestedUrls.size
+        assertNull(runBlocking { translator().define("palabra", "es") })
+        assertEquals(asked, fake.requestedUrls.size)
     }
 
     @Test

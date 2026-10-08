@@ -210,6 +210,7 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
             }
         }
         if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
+        IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
         SyncSource(state, actions)
     }
 }
@@ -259,13 +260,20 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
     )
 }
 
-/** While the words are being translated, or why they couldn't be. */
+/** While the words are being translated, why they couldn't be, or that they needn't be. */
 @Composable
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
-    AnimatedVisibility(visible = learning.translation && (learning.translating || learning.translationFailed), enter = Motion.appear, exit = Motion.disappear) {
+    val shown = learning.translation && (learning.translating || learning.translationFailed || learning.alreadyTranslated)
+    AnimatedVisibility(visible = shown, enter = Motion.appear, exit = Motion.disappear) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             Text(
-                stringResource(if (learning.translationFailed) R.string.lyrics_translation_failed else R.string.lyrics_translating),
+                stringResource(
+                    when {
+                        learning.translationFailed -> R.string.lyrics_translation_failed
+                        learning.translating -> R.string.lyrics_translating
+                        else -> R.string.lyrics_already_translated
+                    }
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(vertical = 12.dp)
@@ -427,6 +435,8 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
             LyricLineText(
                 line.text,
                 place = following?.let { index.compareTo(active) },
+                // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
+                waiting = active < 0,
                 // Tapping a line moves the music app there, when it can.
                 onSeek = if (following?.canSeek == true) ({ actions.onSeekLyrics(line.timeMs) }) else null,
                 onStudy = { onStudy(index) },
@@ -481,10 +491,10 @@ private fun FollowOffer(actions: ScreenActions) {
  * null while nothing says where the song is, when every line reads alike, calmer, as a page.
  */
 @Composable
-private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, onStudy: () -> Unit, help: LineHelp? = null) {
+private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, onStudy: () -> Unit, help: LineHelp? = null, waiting: Boolean = false) {
     val lit = place == 0
     val alpha by animateFloatAsState(
-        if (place == null) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.55f,
+        if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
         spring(stiffness = Spring.StiffnessLow),
         label = "line alpha"
     )
@@ -658,8 +668,10 @@ private fun WordCard(meaning: WordMeaning) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             } else if (meaning.failed) {
                 Text(stringResource(R.string.lyrics_word_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            } else if (meaning.meaning != null) {
+                Text(meaning.meaning, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
             } else {
-                meaning.meaning?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
+                Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

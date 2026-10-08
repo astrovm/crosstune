@@ -218,12 +218,8 @@ internal data class ScreenActions(
     val onDismissNotFoundOffer: () -> Unit = {},
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
-    val onFloatingLookChange: (FloatingLook) -> Unit = {},
-    val onFloatingSizeChange: (FloatingSize) -> Unit = {},
-    val onFloatingNextLineChange: (Boolean) -> Unit = {},
-    val onFloatingLockedChange: (Boolean) -> Unit = {},
-    /** Opens Android's settings to let Crosstune show over other apps. */
-    val onAllowFloatOverApps: () -> Unit = {},
+    /** Floats the words over other apps now, asking Android first if need be. */
+    val onFloat: () -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */
