@@ -1,5 +1,9 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.ui.theme.withAccent
+import com.astrovm.crosstune.ui.theme.wallpaperColors
+import com.astrovm.crosstune.ui.theme.Palette
+import androidx.glance.appwidget.updateAll
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -73,7 +77,8 @@ class CrosstuneWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val songs = widgetSongs(context)
-        provideContent { WidgetTheme { WidgetContent(songs) } }
+        val palette = widgetPalette(context)
+        provideContent { WidgetTheme(palette) { WidgetContent(songs) } }
     }
 
     internal companion object {
@@ -90,11 +95,28 @@ class CrosstuneWidget : GlanceAppWidget() {
         /** Covers are drawn at most this big, so a full Recent stays within a widget's memory. */
         const val COVER_PIXELS = 96
 
-        private val fallbackColors = ColorProviders(light = LightColorScheme, dark = DarkColorScheme)
+        /** The color picked in the app, so the widgets wear it too. */
+        fun widgetPalette(context: Context): Palette =
+            savedPalette(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).getString(MainViewModel.KEY_PALETTE, null))
 
+        /** The app's colors on the home screen: the wallpaper's where it's picked and Android shares it, or else [palette]'s. */
         @Composable
-        fun WidgetTheme(content: @Composable () -> Unit) =
-            GlanceTheme(colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) GlanceTheme.colors else fallbackColors, content = content)
+        fun WidgetTheme(palette: Palette, content: @Composable () -> Unit) =
+            GlanceTheme(
+                colors = if (palette == Palette.WALLPAPER && wallpaperColors) {
+                    GlanceTheme.colors
+                } else {
+                    ColorProviders(light = LightColorScheme.withAccent(palette.light), dark = DarkColorScheme.withAccent(palette.dark))
+                },
+                content = content
+            )
+
+        /** Every Crosstune widget, drawn again, e.g. in another color. */
+        suspend fun updateAllWidgets(context: Context) {
+            CrosstuneWidget().updateAll(context)
+            RecognizeWidget().updateAll(context)
+            LyricsWidget().updateAll(context)
+        }
 
         /** Recent, newest first, with the covers the app already saved, or downloads them. */
         suspend fun widgetSongs(context: Context): List<WidgetSong> {
@@ -165,6 +187,15 @@ internal fun WidgetContent(songs: List<WidgetSong>) {
                             imageProvider = ImageProvider(R.drawable.ic_recognize),
                             contentDescription = context.getString(R.string.recognize_button),
                             onClick = actionStartActivity(Intent(context, RecognizeSongActivity::class.java)),
+                            backgroundColor = GlanceTheme.colors.secondaryContainer,
+                            contentColor = GlanceTheme.colors.onSecondaryContainer
+                        )
+                        Spacer(GlanceModifier.width(6.dp))
+                        // Names the song and shows its words, in time with it.
+                        CircleIconButton(
+                            imageProvider = ImageProvider(R.drawable.ic_lyrics),
+                            contentDescription = context.getString(R.string.widget_lyrics_label),
+                            onClick = actionStartActivity(MainActivity.lyricsIntent(context)),
                             backgroundColor = GlanceTheme.colors.secondaryContainer,
                             contentColor = GlanceTheme.colors.onSecondaryContainer
                         )

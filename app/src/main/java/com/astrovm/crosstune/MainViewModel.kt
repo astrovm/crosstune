@@ -522,9 +522,9 @@ internal class MainViewModel(
     /**
      * Listens for a song playing nearby, then shows it as a pasted link would: by its Apple Music
      * link when Shazam knows it, like a Shazam link, or else by its name, like a Now Playing song.
-     * The microphone permission is already granted.
+     * With [lyrics], its words open as soon as it's named. The microphone permission is already granted.
      */
-    fun listen() {
+    fun listen(lyrics: Boolean = false) {
         cancelContentWork()
         heardSong = null
         heardClock = null
@@ -549,6 +549,8 @@ internal class MainViewModel(
                         ?: MusicLinks.recognizedSong(heard.metadata)
                     uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
                     resolve(input, openWhenReady = false)
+                    // Asked for its words, they open straight away, and keep listening along, song after song.
+                    if (lyrics) showLyricsFor(heard.metadata)
                 }
                 Heard.Nothing -> showListenError(AppError.NO_MATCH)
                 is Heard.Failed -> showListenError(heard.error)
@@ -1421,7 +1423,7 @@ internal class MainViewModel(
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_THEME = "theme"
-        private const val KEY_PALETTE = "palette"
+        const val KEY_PALETTE = "palette"
         private const val KEY_PURE_BLACK = "pure_black"
 
         /** How far apart two hearings of a song can be and still be the same place in it. */

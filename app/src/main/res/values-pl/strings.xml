@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">Otwórz skopiowany link</string>
     <string name="shortcut_paste_long">Otwórz skopiowany link muzyczny</string>
     <string name="widget_description">Ostatnie utwory i otwieranie skopiowanego linku</string>
+    <string name="tile_lyrics_label">Tekst tego, co gra</string>
+    <string name="widget_recognize_label">Rozpoznaj</string>
+    <string name="widget_recognize_description">Rozpoznaje utwór grający w pobliżu jednym dotknięciem</string>
+    <string name="widget_lyrics_label">Tekst</string>
+    <string name="widget_lyrics_description">Rozpoznaje utwór grający w pobliżu i pokazuje jego tekst w rytm</string>
     <string name="error_clipboard_empty">Najpierw skopiuj link muzyczny.</string>
     <string name="copy_search_action">Kopiuj tekst wyszukiwania</string>
     <string name="share_search_link">Udostępnij link wyszukiwania</string>

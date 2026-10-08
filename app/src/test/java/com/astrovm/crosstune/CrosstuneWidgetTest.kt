@@ -20,6 +20,7 @@ import androidx.glance.text.Text
 import androidx.glance.unit.ResourceColorProvider
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.LightColorScheme
+import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -87,6 +88,8 @@ class CrosstuneWidgetTest {
     @Test
     fun wideItNamesASongNearbyAndItsNameOpensTheApp() = widget(CrosstuneWidget.LIST, listOf(song)) {
         onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.recognize_button)))).assertAny(hasStartActivityClickAction(Intent(app, RecognizeSongActivity::class.java)))
+        // And names it and shows its words.
+        onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.widget_lyrics_label)))).assertAny(hasStartActivityClickAction(MainActivity.lyricsIntent(app)))
         onAllNodes(hasAnyDescendant(hasText(app.getString(R.string.app_name))))
             .assertAny(hasStartActivityClickAction(Intent(app, MainActivity::class.java)))
     }
@@ -107,10 +110,10 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun itFollowsTheWallpaperColors() = runGlanceAppWidgetUnitTest {
+    fun itFollowsTheWallpaperColorsByDefault() = runGlanceAppWidgetUnitTest {
         setContext(app)
         provideComposable {
-            CrosstuneWidget.WidgetTheme {
+            CrosstuneWidget.WidgetTheme(CrosstuneWidget.widgetPalette(app)) {
                 Text(if (GlanceTheme.colors.primary is ResourceColorProvider) "dynamic" else "own")
             }
         }
@@ -118,11 +121,23 @@ class CrosstuneWidgetTest {
     }
 
     @Test
+    fun itWearsTheColorPickedInTheApp() = runGlanceAppWidgetUnitTest {
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().putString(MainViewModel.KEY_PALETTE, "OCEAN").commit()
+        setContext(app)
+        provideComposable {
+            CrosstuneWidget.WidgetTheme(CrosstuneWidget.widgetPalette(app)) {
+                Text("${GlanceTheme.colors.primary.getColor(LocalContext.current).toArgb()}")
+            }
+        }
+        onNode(hasText("${Palette.OCEAN.light.primary.toArgb()}")).assertExists()
+    }
+
+    @Test
     @Config(sdk = [30])
     fun beforeAndroid12ItUsesTheAppsOwnColors() = runGlanceAppWidgetUnitTest {
         setContext(app)
         provideComposable {
-            CrosstuneWidget.WidgetTheme {
+            CrosstuneWidget.WidgetTheme(CrosstuneWidget.widgetPalette(app)) {
                 Text("${GlanceTheme.colors.primary.getColor(LocalContext.current).toArgb()}")
             }
         }
@@ -154,6 +169,37 @@ class CrosstuneWidgetTest {
             .add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "1", "https://open.spotify.com/track/1"), MusicMetadata("Track", "Band")))
         assertNotNull(CrosstuneWidgetReceiver().glanceAppWidget.compose(app, size = CrosstuneWidget.LIST))
         assertTrue(CrosstuneWidgetReceiver().glanceAppWidget is CrosstuneWidget)
+    }
+
+    @Test
+    fun theOneTapWidgetsRecognizeOrShowTheLyricsWithTheirNameWhereThereIsRoom() {
+        for ((widget, label, intent) in listOf(
+            Triple(RecognizeWidget(), R.string.widget_recognize_label, Intent(app, RecognizeSongActivity::class.java)),
+            Triple(LyricsWidget(), R.string.widget_lyrics_label, MainActivity.lyricsIntent(app))
+        )) {
+            runGlanceAppWidgetUnitTest {
+                setContext(app)
+                setAppWidgetSize(ActionWidget.LABELLED)
+                provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
+                onNode(hasContentDescription(app.getString(label))).assert(hasStartActivityClickAction(intent))
+                onNode(hasText(app.getString(label))).assertExists()
+            }
+            runGlanceAppWidgetUnitTest {
+                setContext(app)
+                setAppWidgetSize(ActionWidget.SMALL)
+                provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
+                // One cell, just the button.
+                onNode(hasText(app.getString(label))).assertDoesNotExist()
+            }
+        }
+    }
+
+    @Test
+    fun theOneTapWidgetsDrawForTheLauncherAndAllRedraw() = runBlocking {
+        assertNotNull(RecognizeWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.SMALL))
+        assertNotNull(LyricsWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.LABELLED))
+        // With none placed, there's nothing to redraw, and nothing goes wrong.
+        CrosstuneWidget.updateAllWidgets(app)
     }
 
     private fun sha256(text: String) =

@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">복사한 링크 열기</string>
     <string name="shortcut_paste_long">복사한 음악 링크 열기</string>
     <string name="widget_description">최근 노래와 복사한 링크 열기</string>
+    <string name="tile_lyrics_label">재생 중인 곡 가사</string>
+    <string name="widget_recognize_label">노래 인식</string>
+    <string name="widget_recognize_description">근처에서 재생 중인 곡을 한 번에 인식합니다</string>
+    <string name="widget_lyrics_label">가사</string>
+    <string name="widget_lyrics_description">근처에서 재생 중인 곡을 인식하고 곡에 맞춰 가사를 보여 줍니다</string>
     <string name="error_clipboard_empty">먼저 음악 링크를 복사하세요.</string>
     <string name="copy_search_action">검색어 복사</string>
     <string name="share_search_link">검색 링크 공유</string>

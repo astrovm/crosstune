@@ -151,6 +151,11 @@
     <string name="shortcut_paste_short">Open copied link</string>
     <string name="shortcut_paste_long">Open copied music link</string>
     <string name="widget_description">Recent songs, and open a copied link</string>
+    <string name="tile_lyrics_label">Lyrics of what\'s playing</string>
+    <string name="widget_recognize_label">Recognize</string>
+    <string name="widget_recognize_description">Names the song playing nearby with one tap</string>
+    <string name="widget_lyrics_label">Lyrics</string>
+    <string name="widget_lyrics_description">Names the song playing nearby and shows its lyrics, in time with it</string>
     <string name="error_clipboard_empty">Copy a music link first.</string>
     <string name="copy_search_action">Copy search text</string>
     <string name="share_search_link">Share search link</string>

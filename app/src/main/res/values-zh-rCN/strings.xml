@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">打开已复制的链接</string>
     <string name="shortcut_paste_long">打开已复制的音乐链接</string>
     <string name="widget_description">最近的歌曲，以及打开复制的链接</string>
+    <string name="tile_lyrics_label">正在播放的歌词</string>
+    <string name="widget_recognize_label">识别歌曲</string>
+    <string name="widget_recognize_description">一键识别附近正在播放的歌曲</string>
+    <string name="widget_lyrics_label">歌词</string>
+    <string name="widget_lyrics_description">识别附近正在播放的歌曲，并跟着节奏显示歌词</string>
     <string name="error_clipboard_empty">请先复制音乐链接。</string>
     <string name="copy_search_action">复制搜索文字</string>
     <string name="share_search_link">分享搜索链接</string>

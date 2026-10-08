@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">Kopierten Link öffnen</string>
     <string name="shortcut_paste_long">Kopierten Musik-Link öffnen</string>
     <string name="widget_description">Zuletzt gehörte Songs und einen kopierten Link öffnen</string>
+    <string name="tile_lyrics_label">Text zum laufenden Song</string>
+    <string name="widget_recognize_label">Erkennen</string>
+    <string name="widget_recognize_description">Erkennt den Song in der Nähe mit einem Tippen</string>
+    <string name="widget_lyrics_label">Liedtext</string>
+    <string name="widget_lyrics_description">Erkennt den Song in der Nähe und zeigt seinen Text, im Takt</string>
     <string name="error_clipboard_empty">Kopiere zuerst einen Musik-Link.</string>
     <string name="copy_search_action">Suchtext kopieren</string>
     <string name="share_search_link">Such-Link teilen</string>

@@ -102,6 +102,11 @@
     <string name="shortcut_paste_short">कॉपी किया लिंक खोलें</string>
     <string name="shortcut_paste_long">कॉपी किया म्यूज़िक लिंक खोलें</string>
     <string name="widget_description">हाल के गाने, और कॉपी किया लिंक खोलें</string>
+    <string name="tile_lyrics_label">चल रहे गाने के बोल</string>
+    <string name="widget_recognize_label">पहचानें</string>
+    <string name="widget_recognize_description">पास में चल रहे गाने को एक टैप में पहचानता है</string>
+    <string name="widget_lyrics_label">बोल</string>
+    <string name="widget_lyrics_description">पास में चल रहे गाने को पहचानता है और उसकी ताल पर बोल दिखाता है</string>
     <string name="error_clipboard_empty">पहले कोई म्यूज़िक लिंक कॉपी करें।</string>
     <string name="copy_search_action">सर्च टेक्स्ट कॉपी करें</string>
     <string name="share_search_link">सर्च लिंक शेयर करें</string>
