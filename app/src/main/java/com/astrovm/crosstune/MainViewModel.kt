@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.content.SharedPreferences
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -83,8 +85,6 @@ internal data class UiState(
      * one; it stays set while that's paused with Crosstune out of sight.
      */
     val listeningAlong: Boolean = false,
-    /** Set when listening along last heard no song it knew. */
-    val listenAlongMissed: Boolean = false,
     /** Set while showing how to let Crosstune see what music apps play, step by step. */
     val followHelp: Boolean = false,
     /** Light, dark, or as the phone is. */
@@ -215,7 +215,9 @@ internal class MainViewModel(
     /** Where Android is asked about apps and links: many slow calls that mustn't hold up the screen. */
     private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** How long listening along waits after naming a song before it listens again. */
-    private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS
+    private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
+    /** The clock a song's place is kept on, the one that counts since the phone started. */
+    private val now: () -> Long = SystemClock::elapsedRealtime
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -505,6 +507,7 @@ internal class MainViewModel(
     fun listen() {
         cancelContentWork()
         heardSong = null
+        heardClock = null
         retryListens = true
         uiState = uiState.copy(
             listening = true, isLoading = false, isMatching = false, error = null, linkText = "", result = null,
@@ -520,7 +523,8 @@ internal class MainViewModel(
             when (heard) {
                 is Heard.Song -> {
                     retryListens = false
-                    heardSong = heard
+                    heardSong = heard.metadata
+                    heardClock = heard.clock
                     val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
                         ?: MusicLinks.recognizedSong(heard.metadata)
                     uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
@@ -772,8 +776,14 @@ internal class MainViewModel(
     private var lyricsJob: Job? = null
     private var followJob: Job? = null
 
-    /** The last song Crosstune heard, with where in it the sound heard starts, so its words can follow on. */
-    private var heardSong: Heard.Song? = null
+    /** The last song Crosstune heard, so its words can follow on from where it was heard. */
+    private var heardSong: MusicMetadata? = null
+
+    /** Where [heardSong] is, as far as hearing it can tell, kept steady against what one hearing gets wrong. */
+    private var heardClock: PlaybackClock? = null
+
+    /** A place heard far from where the words are, held until a second hearing agrees with it. */
+    private var unconfirmed: PlaybackClock? = null
 
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
@@ -812,7 +822,7 @@ internal class MainViewModel(
             follow(song)
         }
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
-        if (heardSong?.metadata?.let { sameSong(it, song) } == true) listenAlong()
+        if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
@@ -820,15 +830,9 @@ internal class MainViewModel(
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =
-        heardSong?.takeIf { sameSong(it.metadata, song) }?.clock?.let { Following(it, app = null, canSeek = false) }
+        heardClock?.takeIf { heardSong?.let { sameSong(it, song) } == true }?.let { Following(it, app = null, canSeek = false) }
 
     private var alongJob: Job? = null
-
-    /** Karaoke: the words of whatever plays nearby, each song followed as it plays, and the next one too. */
-    fun startKaraoke() {
-        cancelContentWork()
-        listenAlong()
-    }
 
     /**
      * Keeps the microphone listening along with the words: every little while it asks what's
@@ -837,17 +841,19 @@ internal class MainViewModel(
      */
     fun listenAlong() {
         if (alongJob?.isActive == true) return
-        uiState = uiState.copy(listeningAlong = true, listenAlongMissed = false)
+        uiState = uiState.copy(listeningAlong = true)
         alongJob = viewModelScope.launch {
             while (isActive) {
                 when (val heard = listener.listen()) {
                     is Heard.Song -> {
-                        heardSong = heard
-                        uiState = uiState.copy(listenAlongMissed = false)
-                        heardAlong(heard.metadata)
+                        heardAlong(heard)
                         delay(listenAlongPauseMs)
                     }
-                    Heard.Nothing -> uiState = uiState.copy(listenAlongMissed = true)
+                    // Nothing heard, the music has most likely stopped, so the words stop where they are.
+                    Heard.Nothing -> heardClock?.takeIf { it.playing }?.let { clock ->
+                        heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
+                        keepInTime()
+                    }
                     is Heard.Failed -> {
                         // Without the microphone there's nothing to listen with; anything else, e.g. the
                         // network or Shazam being busy, is tried again in a while.
@@ -864,16 +870,45 @@ internal class MainViewModel(
     }
 
     /** The song heard: the one shown keeps in time with it; another one takes over the words. */
-    private fun heardAlong(song: MusicMetadata) {
+    private fun heardAlong(heard: Heard.Song) {
+        val song = heard.metadata
         val shown = uiState.lyricsFor
-        if (shown == null || !sameSong(song, shown)) return showLyricsFor(song)
-        // A music app playing it says where it is more exactly than a microphone can.
+        if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
+            heardSong = song
+            heardClock = heard.clock
+            unconfirmed = null
+            if (shown == null || !sameSong(song, shown)) return showLyricsFor(song)
+        } else {
+            heardClock = steadied(heardClock, heard.clock ?: return)
+        }
+        keepInTime()
+    }
+
+    /**
+     * Where the song is, from a new hearing of it. Each hearing is off by a moment, so one close to
+     * where the words already are changes nothing; one far off, e.g. the chorus heard as its other
+     * time, is only believed once a second hearing agrees, as a skip would. A song that had stopped
+     * starts again from where it's heard.
+     */
+    private fun steadied(current: PlaybackClock?, heard: PlaybackClock): PlaybackClock {
+        if (current == null || !current.playing) return heard.also { unconfirmed = null }
+        val at = now()
+        if (abs(heard.positionAt(at) - current.positionAt(at)) <= STEADY_MS) return current.also { unconfirmed = null }
+        val earlier = unconfirmed
+        if (earlier != null && abs(heard.positionAt(at) - earlier.positionAt(at)) <= STEADY_MS) return heard.also { unconfirmed = null }
+        unconfirmed = heard
+        return current
+    }
+
+    /** The words shown keep to where the song was heard, unless a music app playing it says, more exactly. */
+    private fun keepInTime() {
+        val shown = uiState.lyricsFor ?: return
         if (uiState.following?.app == null) uiState = uiState.copy(following = heardFollowing(shown))
     }
 
     fun stopListeningAlong() {
         pauseListeningAlong()
-        uiState = uiState.copy(listeningAlong = false, listenAlongMissed = false)
+        uiState = uiState.copy(listeningAlong = false)
     }
 
     /** Crosstune went out of sight: the microphone stops, and starts again when it's back. */
@@ -1343,6 +1378,9 @@ internal class MainViewModel(
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_THEME = "theme"
+
+        /** How far apart two hearings of a song can be and still be the same place in it. */
+        const val STEADY_MS = 2_000L
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L

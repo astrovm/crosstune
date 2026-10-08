@@ -3,7 +3,6 @@ package com.astrovm.crosstune
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -20,11 +19,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,7 +37,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,12 +47,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
@@ -72,7 +71,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
 internal const val LYRIC_LINE_TAG = "lyric-line"
@@ -84,12 +82,10 @@ internal const val LYRIC_LINE_TAG = "lyric-line"
  */
 @Composable
 internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
-    // Karaoke opens before any song is heard, and waits for one.
-    val song = state.lyricsFor
-    if (song == null && !state.listeningAlong) return
+    val song = state.lyricsFor ?: return
     BackHandler(onBack = actions.onDismissLyrics)
     val tint by animateColorAsState(
-        coverColor(song?.artworkUrl, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
+        coverColor(song.artworkUrl, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
@@ -108,13 +104,11 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, state.listeningAlong, actions)
+            LyricsHeader(song, state, actions)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
-                    if (shown == LyricsShown.WAITING) {
-                        Waiting(state.listenAlongMissed)
-                    } else if (shown == LyricsShown.LOADING) {
+                    if (shown == LyricsShown.LOADING) {
                         LyricsMessage(stringResource(R.string.lyrics_loading), loading = true)
                     } else if (shown == LyricsShown.FAILED) {
                         LyricsMessage(stringResource(R.string.lyrics_failed)) {
@@ -131,16 +125,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
-            FollowBar(state, actions)
         }
     }
     }
 }
 
-private enum class LyricsShown { WAITING, LOADING, FAILED, NONE, TIMED, PLAIN }
+private enum class LyricsShown { LOADING, FAILED, NONE, TIMED, PLAIN }
 
 private fun lyricsShown(state: UiState): LyricsShown = when {
-    state.lyricsFor == null -> LyricsShown.WAITING
     state.isLoadingLyrics -> LyricsShown.LOADING
     state.lyricsFailed -> LyricsShown.FAILED
     state.lyrics.isEmpty() -> LyricsShown.NONE
@@ -148,12 +140,9 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
     else -> LyricsShown.PLAIN
 }
 
-/**
- * The song the words are of, or Karaoke while none is heard yet, the way back, and the microphone,
- * which keeps listening along to stay in time with the song, and the next.
- */
+/** The song the words are of, the way back, and where their timing comes from. */
 @Composable
-private fun LyricsHeader(song: MusicMetadata?, listening: Boolean, actions: ScreenActions) {
+private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenActions) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -166,11 +155,11 @@ private fun LyricsHeader(song: MusicMetadata?, listening: Boolean, actions: Scre
         // The next song heard swaps in for the last.
         AnimatedContent(targetState = song, transitionSpec = { swap() }, label = "lyrics song", modifier = Modifier.weight(1f)) { shown ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CoverArt(shown?.artworkUrl, actions.loadArtwork, size = 48.dp, modifier = Modifier.padding(start = 4.dp))
+                CoverArt(shown.artworkUrl, actions.loadArtwork, size = 48.dp, modifier = Modifier.padding(start = 4.dp))
                 Column(modifier = Modifier.padding(start = 14.dp)) {
-                    Text(shown?.title ?: stringResource(R.string.karaoke_button), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(shown.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        shown?.artist ?: stringResource(R.string.lyrics_listening),
+                        shown.artist,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -179,7 +168,37 @@ private fun LyricsHeader(song: MusicMetadata?, listening: Boolean, actions: Scre
                 }
             }
         }
-        ListenAlongButton(listening, actions)
+        SyncSource(state, actions)
+    }
+}
+
+/**
+ * Where the words' timing comes from, in the header's corner rather than over the words: the music
+ * app playing the song, by its icon, or else the microphone, lit while it listens along to what
+ * plays nearby and there to tap when it doesn't.
+ */
+@Composable
+private fun SyncSource(state: UiState, actions: ScreenActions) {
+    val app = state.following?.takeIf { it.app != null }
+    AnimatedContent(targetState = app?.app to app?.appPackage, transitionSpec = { swap() }, label = "sync source") { (name, packageName) ->
+        if (name != null) {
+            AppSource(name, packageName)
+        } else {
+            ListenAlongButton(state.listeningAlong, actions)
+        }
+    }
+}
+
+/** The music app the words follow, by its icon, or a note when it has none to show. */
+@Composable
+private fun AppSource(name: String, packageName: String?) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        packageName?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
+    }
+    val description = stringResource(R.string.lyrics_following_app, name)
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp).semantics { contentDescription = description }) {
+        if (icon != null) Image(icon, null, Modifier.size(28.dp).clip(CircleShape)) else Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp))
     }
 }
 
@@ -206,29 +225,6 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
                 modifier = Modifier.size(22.dp)
             )
         }
-    }
-}
-
-/** Karaoke before a song is heard: waves from the microphone, and a word when nothing's heard yet. */
-@Composable
-private fun Waiting(missed: Boolean) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp)
-    ) {
-        Waves()
-        Text(
-            stringResource(if (missed) R.string.karaoke_nothing else R.string.karaoke_listening),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .padding(top = 24.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }
-        )
     }
 }
 
@@ -323,6 +319,24 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions) {
                 onClick = { actions.onSeekLyrics(line.timeMs) }
             )
         }
+        // Nothing says where the song is: after the words, how they can follow a music app.
+        if (following == null && !state.listeningAlong && !state.canFollowApps) {
+            item { FollowOffer(actions) }
+        }
+    }
+}
+
+/** A quiet line after the words, not over them: they can follow the music app playing the song. */
+@Composable
+private fun FollowOffer(actions: ScreenActions) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
+        Text(
+            stringResource(R.string.lyrics_follow_allow),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
     }
 }
 
@@ -354,84 +368,6 @@ private fun LyricLineText(text: String, place: Int, canSeek: Boolean, onClick: (
             .padding(vertical = 6.dp)
     )
 }
-
-/**
- * Under timed words, only while there's something to say: what they follow, for a moment once
- * they start to, with a dot that beats while it plays; how to have them follow the song, until it's
- * done or put away; or, briefly, to play it in a music app.
- */
-@Composable
-private fun FollowBar(state: UiState, actions: ScreenActions) {
-    val timed = state.lyricLines.isNotEmpty() && !state.isLoadingLyrics && !state.lyricsFailed
-    val following = state.following
-    val shown = when {
-        following != null -> FollowShown.FOLLOWING
-        state.listeningAlong -> FollowShown.LISTENING
-        !state.canFollowApps -> FollowShown.ALLOW
-        else -> FollowShown.PLAY
-    }
-    // Saying what they follow, or to play the song, is news once; after that the words say it.
-    var fresh by remember(shown, following?.app) { mutableStateOf(true) }
-    LaunchedEffect(shown, following?.app) {
-        delay(ANNOUNCE_MS)
-        fresh = false
-    }
-    var putAway by rememberSaveable { mutableStateOf(false) }
-    // Listening, it says so until it's in time with the song; that's worth knowing the whole while.
-    val visible = state.lyricsFor != null && when (shown) {
-        FollowShown.LISTENING -> true
-        FollowShown.ALLOW -> timed && !putAway
-        else -> timed && fresh
-    }
-    AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
-        AnimatedContent(targetState = shown to following?.app, transitionSpec = { fade() }, label = "follow bar") { (now, app) ->
-            if (now == FollowShown.FOLLOWING || now == FollowShown.LISTENING) {
-                // A small tag, centered, rather than a bar: it's only saying so.
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                            Beat(playing = now == FollowShown.LISTENING || following?.clock?.playing != false)
-                            Spacer(Modifier.size(10.dp))
-                            Text(
-                                if (now == FollowShown.LISTENING) {
-                                    stringResource(if (state.listenAlongMissed) R.string.karaoke_nothing else R.string.lyrics_listening)
-                                } else if (app != null) {
-                                    stringResource(R.string.lyrics_following_app, app)
-                                } else {
-                                    stringResource(R.string.lyrics_following_heard)
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            } else {
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 6.dp, bottom = 6.dp).heightIn(min = 48.dp)) {
-                        if (now == FollowShown.ALLOW) {
-                            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
-                            IconButton(onClick = { putAway = true }) {
-                                AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.not_now_button), modifier = Modifier.size(20.dp))
-                            }
-                        } else {
-                            Text(stringResource(R.string.lyrics_follow_play), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 16.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private enum class FollowShown { FOLLOWING, LISTENING, ALLOW, PLAY }
 
 /**
  * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an
@@ -471,24 +407,3 @@ private fun FollowStep(number: Int, text: String, button: String, onClick: () ->
         }
     }
 }
-
-/** A dot in the accent color, beating while the song plays and still while it's paused. */
-@Composable
-private fun Beat(playing: Boolean) {
-    val transition = rememberInfiniteTransition(label = "beat")
-    val pulse by transition.animateFloat(0.7f, 1.15f, infiniteRepeatable(tween(520), RepeatMode.Reverse), label = "pulse")
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .graphicsLayer {
-                val beat = if (playing) pulse else 1f
-                scaleX = beat
-                scaleY = beat
-            }
-            .background(if (playing) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant, CircleShape)
-    )
-}
-
-/** How long saying what the words follow, or to play the song, stays up. */
-private const val ANNOUNCE_MS = 4_000L
-

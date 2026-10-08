@@ -119,16 +119,10 @@
     <string name="lyrics_failed">Couldn\'t get lyrics just now.</string>
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>
     <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
-    <string name="lyrics_follow_play">Play this song in your music app and the words follow along.</string>
     <string name="lyrics_following_app">Following %1$s</string>
-    <string name="lyrics_following_heard">Following what Crosstune hears</string>
     <string name="lyrics_jump">Jump here</string>
-    <string name="karaoke_button">Karaoke</string>
     <string name="lyrics_listen_along">Listen along</string>
     <string name="lyrics_stop_listening">Stop listening</string>
-    <string name="karaoke_listening">Listening for a song…</string>
-    <string name="karaoke_nothing">Can\'t hear a song yet. Keep the music playing nearby.</string>
-    <string name="lyrics_listening">Listening…</string>
     <string name="setting_theme">Theme</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
@@ -140,7 +134,6 @@
     <string name="setting_lyrics_follow_description">Needs notification access. Your notifications are never read.</string>
     <string name="follow_help_app_info">App info</string>
     <string name="follow_help_access_button">Notification access</string>
-    <string name="not_now_button">Not now</string>
     <string name="song_search_title">Songs</string>
     <string name="song_search_label_for">Found for “%1$s”</string>
     <string name="song_search_none">No songs found for “%1$s”.</string>

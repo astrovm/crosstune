@@ -55,7 +55,7 @@ internal fun ListeningScreen(actions: ScreenActions) {
 
 /** Rings that grow and fade from the microphone, one after another. */
 @Composable
-internal fun Waves() {
+private fun Waves() {
     val transition = rememberInfiniteTransition(label = "waves")
     val waves = (0 until WAVES).map { wave ->
         transition.animateFloat(

@@ -184,8 +184,6 @@ internal data class ScreenActions(
     val onShowLyrics: () -> Unit = {},
     /** Closes the words. */
     val onDismissLyrics: () -> Unit = {},
-    /** Karaoke: the words of whatever plays nearby, followed as it plays, song after song. */
-    val onKaraoke: () -> Unit = {},
     /** Keeps the microphone listening along with the words shown, to stay in time with them. */
     val onListenAlong: () -> Unit = {},
     val onStopListeningAlong: () -> Unit = {},
@@ -230,7 +228,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
-        state.lyricsFor != null || state.listeningAlong -> Screen.LYRICS
+        state.lyricsFor != null -> Screen.LYRICS
         else -> Screen.MAIN
     }
     AnimatedContent(
@@ -421,9 +419,6 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
         actions = {
-            IconButton(onClick = actions.onKaraoke) {
-                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.karaoke_button))
-            }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }

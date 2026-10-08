@@ -179,16 +179,10 @@
     <string name="lyrics_failed">Nie udało się pobrać tekstu.</string>
     <string name="lyrics_sync_service">Synchronizacja tekstów Crosstune</string>
     <string name="lyrics_follow_allow">Niech tekst podąża za utworem grającym w Twojej aplikacji muzycznej.</string>
-    <string name="lyrics_follow_play">Odtwórz ten utwór w aplikacji muzycznej, a tekst będzie za nim podążał.</string>
     <string name="lyrics_following_app">Podąża za %1$s</string>
-    <string name="lyrics_following_heard">Podąża za tym, co słyszy Crosstune</string>
     <string name="lyrics_jump">Przejdź tutaj</string>
-    <string name="karaoke_button">Karaoke</string>
     <string name="lyrics_listen_along">Słuchaj razem</string>
     <string name="lyrics_stop_listening">Przestań słuchać</string>
-    <string name="karaoke_listening">Nasłuchiwanie utworu…</string>
-    <string name="karaoke_nothing">Nie słychać jeszcze utworu. Niech muzyka gra w pobliżu.</string>
-    <string name="lyrics_listening">Słucham…</string>
     <string name="setting_theme">Motyw</string>
     <string name="theme_light">Jasny</string>
     <string name="theme_dark">Ciemny</string>
@@ -200,7 +194,6 @@
     <string name="setting_lyrics_follow_description">Wymaga dostępu do powiadomień. Twoje powiadomienia nigdy nie są czytane.</string>
     <string name="follow_help_app_info">Informacje o aplikacji</string>
     <string name="follow_help_access_button">Dostęp do powiadomień</string>
-    <string name="not_now_button">Nie teraz</string>
     <string name="song_search_title">Utwory</string>
     <string name="song_search_none">Nie znaleziono utworów dla „%1$s”.</string>
     <string name="song_search_label_for">Znalezione dla „%1$s”</string>

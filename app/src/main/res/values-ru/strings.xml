@@ -179,16 +179,10 @@
     <string name="lyrics_failed">Не удалось получить текст.</string>
     <string name="lyrics_sync_service">Синхронизация текстов Crosstune</string>
     <string name="lyrics_follow_allow">Пусть текст следует за песней, которая играет в вашем музыкальном приложении.</string>
-    <string name="lyrics_follow_play">Включите эту песню в музыкальном приложении, и текст пойдёт следом.</string>
     <string name="lyrics_following_app">Следует за %1$s</string>
-    <string name="lyrics_following_heard">Следует за тем, что слышит Crosstune</string>
     <string name="lyrics_jump">Перейти сюда</string>
-    <string name="karaoke_button">Караоке</string>
     <string name="lyrics_listen_along">Слушать вместе</string>
     <string name="lyrics_stop_listening">Перестать слушать</string>
-    <string name="karaoke_listening">Слушаю песню…</string>
-    <string name="karaoke_nothing">Пока не слышно песню. Пусть музыка играет рядом.</string>
-    <string name="lyrics_listening">Слушаю…</string>
     <string name="setting_theme">Тема</string>
     <string name="theme_light">Светлая</string>
     <string name="theme_dark">Тёмная</string>
@@ -200,7 +194,6 @@
     <string name="setting_lyrics_follow_description">Нужен доступ к уведомлениям. Ваши уведомления никогда не читаются.</string>
     <string name="follow_help_app_info">О приложении</string>
     <string name="follow_help_access_button">Доступ к уведомлениям</string>
-    <string name="not_now_button">Не сейчас</string>
     <string name="song_search_title">Треки</string>
     <string name="song_search_none">Треки для «%1$s» не найдены.</string>
     <string name="song_search_label_for">Найдено по запросу «%1$s»</string>

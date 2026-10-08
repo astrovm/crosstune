@@ -108,7 +108,7 @@ class PlaybackTest {
         // Another song in one app, and this one, as a video, in another.
         shadowOf(sessions).addController(player("com.other.player", "Other", "Something Else", "Someone"))
         shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))
-        assertEquals(Following(PlaybackClock(42_000, PLAYED_AT, 1f, true), "YouTube", canSeek = true), followed().last())
+        assertEquals(Following(PlaybackClock(42_000, PLAYED_AT, 1f, true), "YouTube", canSeek = true, appPackage = "com.google.android.youtube"), followed().last())
     }
 
     @Test

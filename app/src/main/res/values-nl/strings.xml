@@ -179,16 +179,10 @@
     <string name="lyrics_failed">Kon de tekst niet ophalen.</string>
     <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
     <string name="lyrics_follow_allow">Laat de tekst het nummer volgen dat in je muziek-app speelt.</string>
-    <string name="lyrics_follow_play">Speel dit nummer af in je muziek-app en de tekst volgt mee.</string>
     <string name="lyrics_following_app">Volgt %1$s</string>
-    <string name="lyrics_following_heard">Volgt wat Crosstune hoort</string>
     <string name="lyrics_jump">Hierheen springen</string>
-    <string name="karaoke_button">Karaoke</string>
     <string name="lyrics_listen_along">Meeluisteren</string>
     <string name="lyrics_stop_listening">Stoppen met luisteren</string>
-    <string name="karaoke_listening">Luistert naar een nummer…</string>
-    <string name="karaoke_nothing">Nog geen nummer te horen. Laat de muziek in de buurt spelen.</string>
-    <string name="lyrics_listening">Luistert…</string>
     <string name="setting_theme">Thema</string>
     <string name="theme_light">Licht</string>
     <string name="theme_dark">Donker</string>
@@ -200,7 +194,6 @@
     <string name="setting_lyrics_follow_description">Heeft toegang tot meldingen nodig. Je meldingen worden nooit gelezen.</string>
     <string name="follow_help_app_info">App-info</string>
     <string name="follow_help_access_button">Toegang tot meldingen</string>
-    <string name="not_now_button">Niet nu</string>
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
     <string name="song_search_label_for">Gevonden voor “%1$s”</string>

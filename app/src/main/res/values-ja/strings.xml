@@ -180,16 +180,10 @@
     <string name="lyrics_failed">今は歌詞を取得できませんでした。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>
     <string name="lyrics_follow_allow">音楽アプリで再生中の曲に歌詞を合わせます。</string>
-    <string name="lyrics_follow_play">この曲を音楽アプリで再生すると、歌詞が曲に合わせて進みます。</string>
     <string name="lyrics_following_app">%1$s に合わせています</string>
-    <string name="lyrics_following_heard">Crosstune が聞いている位置に合わせています</string>
     <string name="lyrics_jump">ここへ移動</string>
-    <string name="karaoke_button">カラオケ</string>
     <string name="lyrics_listen_along">一緒に聞く</string>
     <string name="lyrics_stop_listening">聞くのをやめる</string>
-    <string name="karaoke_listening">曲を聞いています…</string>
-    <string name="karaoke_nothing">まだ曲が聞こえません。近くで音楽を流し続けてください。</string>
-    <string name="lyrics_listening">聞いています…</string>
     <string name="setting_theme">テーマ</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>
@@ -201,7 +195,6 @@
     <string name="setting_lyrics_follow_description">通知へのアクセスが必要です。通知の内容を読むことはありません。</string>
     <string name="follow_help_app_info">アプリ情報</string>
     <string name="follow_help_access_button">通知へのアクセス</string>
-    <string name="not_now_button">後で</string>
     <string name="song_search_title">曲</string>
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
     <string name="song_search_label_for">「%1$s」の検索結果</string>

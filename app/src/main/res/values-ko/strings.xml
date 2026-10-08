@@ -179,16 +179,10 @@
     <string name="lyrics_failed">지금은 가사를 가져올 수 없어요.</string>
     <string name="lyrics_sync_service">Crosstune 가사 동기화</string>
     <string name="lyrics_follow_allow">음악 앱에서 재생 중인 곡에 맞춰 가사가 흐르게 합니다.</string>
-    <string name="lyrics_follow_play">음악 앱에서 이 곡을 재생하면 가사가 따라갑니다.</string>
     <string name="lyrics_following_app">%1$s에 맞추는 중</string>
-    <string name="lyrics_following_heard">Crosstune이 듣는 위치에 맞추는 중</string>
     <string name="lyrics_jump">여기로 이동</string>
-    <string name="karaoke_button">노래방</string>
     <string name="lyrics_listen_along">함께 듣기</string>
     <string name="lyrics_stop_listening">듣기 중지</string>
-    <string name="karaoke_listening">노래를 듣는 중…</string>
-    <string name="karaoke_nothing">아직 노래가 들리지 않아요. 근처에서 음악을 계속 재생하세요.</string>
-    <string name="lyrics_listening">듣는 중…</string>
     <string name="setting_theme">테마</string>
     <string name="theme_light">라이트</string>
     <string name="theme_dark">다크</string>
@@ -200,7 +194,6 @@
     <string name="setting_lyrics_follow_description">알림 접근이 필요합니다. 알림 내용은 절대 읽지 않습니다.</string>
     <string name="follow_help_app_info">앱 정보</string>
     <string name="follow_help_access_button">알림 접근</string>
-    <string name="not_now_button">나중에</string>
     <string name="song_search_title">노래</string>
     <string name="song_search_none">“%1$s”에 해당하는 노래가 없어요.</string>
     <string name="song_search_label_for">“%1$s” 검색 결과</string>

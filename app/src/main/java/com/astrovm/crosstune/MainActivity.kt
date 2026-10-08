@@ -218,7 +218,6 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
-                        onKaraoke = { withMicrophone(viewModel::startKaraoke) },
                         onListenAlong = { withMicrophone(viewModel::listenAlong) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },

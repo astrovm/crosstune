@@ -2501,29 +2501,24 @@ class MainActivityTest {
             opened.getStringExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME)
         )
 
-        // Allowed and back, with no app playing it yet.
+        // Allowed and back, with no app playing it yet: the offer goes, and the microphone's still there.
         playback.access = true
         controller!!.pause().resume()
-        waitForText(string(R.string.lyrics_follow_play))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
 
-        // Its app plays it, paused 25 seconds in: the second line is lit, and it says what it follows,
-        // for a moment, then leaves the words to it.
-        composeRule.mainClock.autoAdvance = false
+        // Its app plays it, paused 25 seconds in: the second line is lit, and the app's in the header's
+        // corner instead of the microphone, not over the words.
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        shadowOf(Looper.getMainLooper()).idle()
-        composeRule.mainClock.advanceTimeBy(500)
-        assertTextShown(string(R.string.lyrics_following_app, "Spotify"))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
         assertLit("Two")
-        composeRule.mainClock.advanceTimeBy(5_000)
-        composeRule.mainClock.autoAdvance = true
-        composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.lyrics_following_app, "Spotify"))
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertDoesNotExist()
         // A line tapped moves the app there.
         composeRule.onNodeWithText("Three").performClick()
         assertEquals(listOf(40_000L), playback.seeks)
 
         // Playing on, past the last line; an app that can't jump isn't asked to.
-        playback.playing.value = Following(PlaybackClock(45_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = false)
+        playback.playing.value = Following(PlaybackClock(45_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = false, appPackage = app.packageName)
         composeRule.waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodes(hasText("Three") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
         }
@@ -2562,7 +2557,7 @@ class MainActivityTest {
         playback.access = true
         controller!!.pause().resume()
         assertTextAbsent(string(R.string.follow_help_title))
-        waitForText(string(R.string.lyrics_follow_play))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
@@ -2580,10 +2575,6 @@ class MainActivityTest {
         // Put away, they don't come back on their own.
         controller!!.pause().resume()
         assertTextAbsent(string(R.string.follow_help_title))
-
-        // Nor does the offer, once put away for these words.
-        click(string(R.string.not_now_button))
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
@@ -2660,7 +2651,6 @@ class MainActivityTest {
         click(string(R.string.lyrics_button))
         waitForText("Only plain")
         // Nothing to follow, so nothing says how to.
-        assertTextAbsent(string(R.string.lyrics_follow_play))
         assertTextAbsent(string(R.string.lyrics_follow_allow))
     }
 
