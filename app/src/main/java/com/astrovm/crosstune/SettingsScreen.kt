@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -397,9 +398,10 @@ private fun TranslationServerRow(server: TranslationServer?, onChange: (String, 
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 16.dp).weight(1f, fill = false)
+                // Against the right edge, like the picked choice in the rows around it.
+                modifier = Modifier.padding(start = 16.dp).widthIn(max = 200.dp)
             )
-            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(16.dp))
         }
         return
     }
