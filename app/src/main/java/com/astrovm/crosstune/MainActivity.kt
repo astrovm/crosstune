@@ -257,6 +257,10 @@ class MainActivity : ComponentActivity() {
                         onOpenAppInfo = ::openAppInfo,
                         onDismissFollowHelp = viewModel::dismissFollowHelp,
                         onThemeChange = ::selectTheme,
+                        onSearchAnyway = viewModel::searchAnyway,
+                        onNotFoundActionChange = viewModel::selectNotFoundAction,
+                        onTakeNotFoundOffer = viewModel::takeNotFoundOffer,
+                        onDismissNotFoundOffer = viewModel::dismissNotFoundOffer,
                         onPaletteChange = { palette ->
                             viewModel.selectPalette(palette)
                             // The widgets wear the app's color too.

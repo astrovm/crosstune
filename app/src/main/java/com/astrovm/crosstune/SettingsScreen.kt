@@ -195,6 +195,13 @@ private fun SettingsList(
                 checked = state.exactMatch,
                 onCheckedChange = actions.onExactMatchChange
             )
+            // Only a song looked for can be not found; without exact matching, everything is searched.
+            AnimatedVisibility(visible = state.exactMatch, enter = Motion.appear, exit = Motion.disappear) {
+                Column {
+                    GroupDivider()
+                    NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
+                }
+            }
             GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_clean_links),
@@ -404,6 +411,47 @@ private fun RecognizerRow(actions: ScreenActions) {
                         onClick = {
                             expanded = false
                             actions.onRecognizerChange(recognizer)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** What happens when the app a song goes to doesn't have it: ask, open it where it's from, or search anyway. */
+@Composable
+private fun NotFoundRow(action: NotFoundAction, onSelect: (NotFoundAction) -> Unit) {
+    val labels = listOf(
+        NotFoundAction.ASK to stringResource(R.string.not_found_ask),
+        NotFoundAction.ORIGINAL to stringResource(R.string.not_found_original),
+        NotFoundAction.SEARCH to stringResource(R.string.not_found_search)
+    )
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = true }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = stringResource(R.string.setting_not_found), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = labels.first { it.first == action }.second,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                labels.forEach { (choice, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            expanded = false
+                            onSelect(choice)
                         }
                     )
                 }

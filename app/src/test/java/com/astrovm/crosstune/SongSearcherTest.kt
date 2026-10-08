@@ -39,7 +39,8 @@ class SongSearcherTest {
             listOf(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada", url = "https://www.deezer.com/track/608098722", artworkUrl = cover)),
             songs
         )
-        val asked = fake.requestedUrls.first()
+        // Apple is asked alongside, so either can come first.
+        val asked = fake.requestedUrls.first { it.startsWith("https://api.deezer.com/") }
         assertTrue(asked, asked.startsWith("https://api.deezer.com/search/track?q="))
         assertTrue(asked, asked.contains("Dakare%20Ni%20Kita%20Onna"))
     }

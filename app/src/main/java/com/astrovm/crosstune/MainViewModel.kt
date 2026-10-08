@@ -95,6 +95,10 @@ internal data class UiState(
     val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
+    /** What happens when the app a song goes to doesn't have it. */
+    val notFoundAction: NotFoundAction = NotFoundAction.ASK,
+    /** A song not found where it was going, from Recent or a playlist, with what can be done instead. */
+    val notFoundOffer: NotFoundOffer? = null,
     /** Songs found for typed text that wasn't a link, offered to pick from. */
     val songSearch: List<MusicMetadata> = emptyList(),
     /** What was searched for, so an empty list can say what it found nothing for. */
@@ -179,6 +183,14 @@ internal data class UiState(
         get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
             frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
 
+    /**
+     * Set when the app the result goes to was searched for it and doesn't have it, e.g. a song only on
+     * SoundCloud, as opposed to an app Crosstune can't search, which may well have it.
+     */
+    val resultMissing: Boolean
+        get() = result != null && destinationUrls[resultDestination]?.let { !it.exact && it.matchingEnabled } == true &&
+            resultDestination.matchService?.let { canMatchExactly(it, result.type) } == true
+
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
         get() = selectedDestination ?: link?.let(::ruleFor) ?: defaultDestination
@@ -201,6 +213,15 @@ internal fun savedPalette(name: String?): Palette {
     val saved = if (name == "CROSSTUNE") Palette.VIOLET else Palette.entries.firstOrNull { it.name == name }
     return saved?.takeIf { it != Palette.WALLPAPER || wallpaperColors } ?: defaultPalette()
 }
+
+/** When a song isn't in the app it goes to: say so and offer both, open it where it's from, or search anyway. */
+internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
+
+/**
+ * A song not found in [destination], with its [original] link, which opens it where it is, when it has
+ * one, and a search there to try anyway.
+ */
+internal data class NotFoundOffer(val song: MusicMetadata, val destination: Destination, val original: MusicLink?, val searchUrl: String)
 
 /** The app's look: as the phone is set, or always light or dark. */
 internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -260,6 +281,7 @@ internal class MainViewModel(
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
+            notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -773,6 +795,10 @@ internal class MainViewModel(
                 }
             }
             val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
+            val service = destination.matchService
+            if (exactUrl == null && uiState.exactMatch && service != null && canMatchExactly(service, ItemType.TRACK)) {
+                return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
+            }
             effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
         }
     }
@@ -792,7 +818,67 @@ internal class MainViewModel(
 
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
         val url = prepareDestination(destination) ?: return
+        val original = uiState.link?.takeIf { it.service != null }
+        if (uiState.resultMissing) {
+            when (uiState.notFoundAction) {
+                // It stays here, saying it isn't there, with both ways on.
+                NotFoundAction.ASK -> {
+                    pendingOpen = false
+                    uiState = uiState.copy(handingOff = false, handlingIncomingLink = false, selectedDestination = destination)
+                    return
+                }
+                NotFoundAction.ORIGINAL -> if (original != null) {
+                    effectChannel.send(Effect.Open(original.url, original.service?.packageName, finishAfterOpen))
+                    return
+                }
+                NotFoundAction.SEARCH -> Unit
+            }
+        }
         effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
+    }
+
+    /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
+    fun searchAnyway() {
+        val destination = uiState.resultDestination
+        val url = uiState.destinationUrls[destination]?.url ?: return
+        effectChannel.trySend(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
+    }
+
+    /**
+     * A song from Recent or a playlist that [destination] doesn't have: searched, opened where it's
+     * from, or offered both, as set.
+     */
+    private suspend fun openMissing(song: MusicMetadata, original: MusicLink?, destination: Destination, searchUrl: String, finishAfterOpen: Boolean) {
+        val opensWhere = original?.takeIf { it.service != null }
+        when {
+            uiState.notFoundAction == NotFoundAction.SEARCH || (uiState.notFoundAction == NotFoundAction.ORIGINAL && opensWhere == null) ->
+                effectChannel.send(Effect.Open(searchUrl.forSharing(), destination.packageName, finishAfterOpen))
+            uiState.notFoundAction == NotFoundAction.ORIGINAL ->
+                effectChannel.send(Effect.Open(opensWhere!!.url, opensWhere.service?.packageName, finishAfterOpen))
+            else -> uiState = uiState.copy(
+                notFoundOffer = NotFoundOffer(song, destination, opensWhere, searchUrl), handingOff = false, handlingIncomingLink = false
+            )
+        }
+    }
+
+    /** The offer's way: where the song is, or a search where it was going. */
+    fun takeNotFoundOffer(original: Boolean) {
+        val offer = uiState.notFoundOffer ?: return
+        uiState = uiState.copy(notFoundOffer = null)
+        val link = offer.original
+        effectChannel.trySend(
+            if (original && link != null) Effect.Open(link.url, link.service?.packageName, finishAfterOpen = false)
+            else Effect.Open(offer.searchUrl.forSharing(), offer.destination.packageName, finishAfterOpen = false)
+        )
+    }
+
+    fun dismissNotFoundOffer() {
+        uiState = uiState.copy(notFoundOffer = null)
+    }
+
+    fun selectNotFoundAction(action: NotFoundAction) {
+        preferences.edit { putString(KEY_NOT_FOUND, action.name) }
+        uiState = uiState.copy(notFoundAction = action)
     }
 
     private var lyricsJob: Job? = null
@@ -1137,6 +1223,13 @@ internal class MainViewModel(
         job = viewModelScope.launch {
             val destination = destinationFor(entry)
             val url = urlForHistory(entry, destination) ?: return@launch
+            val prepared = uiState.history.firstOrNull { it.link.url == entry.link.url }?.destinationLinks?.get(destination.key)
+            val service = destination.matchService
+            if (prepared != null && prepared.url.forSharing() == url && !prepared.exact && prepared.matchingEnabled && service != null &&
+                canMatchExactly(service, entry.metadata.type)
+            ) {
+                return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
+            }
             effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
         }
     }
@@ -1224,6 +1317,9 @@ internal class MainViewModel(
         // YouTube and YouTube Music play the same videos, so one is shared as itself in the other.
         uiState.link?.takeIf { uiState.result?.type == ItemType.TRACK }?.youtubeVideoOn(destination.matchService)
             ?.let { return destination.adapt(it) }
+        // Not there, the song is shared where it is, rather than as a search that won't find it, unless
+        // searching anyway was picked.
+        uiState.link?.takeIf { uiState.resultMissing && uiState.notFoundAction != NotFoundAction.SEARCH && it.service != null }?.let { return it.url }
         // Every shown result has its link prepared before Copy and Share are enabled.
         return uiState.destinationUrls[destination]?.url?.forSharing()
     }
@@ -1424,6 +1520,7 @@ internal class MainViewModel(
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_THEME = "theme"
         const val KEY_PALETTE = "palette"
+        private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
 
         /** How far apart two hearings of a song can be and still be the same place in it. */

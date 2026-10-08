@@ -703,7 +703,7 @@ class MainActivityTest {
 
     @Test
     fun aTappedPlaylistShowsItsSongsAndEachOpensInTheDefaultApp() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
             {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
         fake.handler = { request ->
@@ -803,7 +803,8 @@ class MainActivityTest {
         click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
-        assertEquals(listOf("Second Song"), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
+        // Once among the songs, once among the videos.
+        assertEquals(listOf("Second Song", "Second Song"), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
     }
 
     @Test
@@ -1121,6 +1122,118 @@ class MainActivityTest {
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
+    private fun notOnDeezer() {
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") FakeSpotify.html(request, """{"data":[]}""")
+            else FakeSpotify.html(request, FakeSpotify.trackPage("Exact", "Artist · Song"))
+        }
+    }
+
+    @Test
+    fun theWidgetsPlayOnASongNotThereAsksWhereToPlayIt() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        val missing = mapOf("DEEZER" to PreparedLink("https://www.deezer.com/search/Saved%20Artist", exact = false, matchingEnabled = true))
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist"), missing))
+
+        val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
+
+        // It stays, saying so, rather than opening a search that finds nothing.
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+        click(string(R.string.open_in_spotify))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = nextStartedActivity()!!
+        assertEquals(url, opened.dataString)
+        assertEquals(MusicService.SPOTIFY.packageName, opened.`package`)
+        assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
+
+        // Asked again, a search anyway; and again, nothing at all.
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        composeRule.runOnIdle { model.openRecent(url) }
+        click(string(R.string.search_anyway, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Saved%20Artist", nextStartedActivity()!!.dataString)
+        composeRule.runOnIdle { model.openRecent(url) }
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        composeRule.runOnIdle { model.dismissNotFoundOffer() }
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertNull(nextStartedActivity())
+        // Nothing offered, there's nothing to take.
+        composeRule.runOnIdle { model.takeNotFoundOffer(true) }
+        assertNull(nextStartedActivity())
+
+        // Set to, it opens where it's from, or searches where it was going.
+        composeRule.runOnIdle { model.selectNotFoundAction(NotFoundAction.ORIGINAL) }
+        assertEquals(url, widgetPlays(url))
+        composeRule.runOnIdle { model.selectNotFoundAction(NotFoundAction.SEARCH) }
+        assertEquals("https://www.deezer.com/search/Saved%20Artist", widgetPlays(url))
+    }
+
+    @Test
+    fun aTappedLinkNotThereStaysToSaySo() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        notOnDeezer()
+        val activity = launch(trackLink())
+
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+        // Sharing it shares where it is, which has it.
+        click(string(R.string.share_link_button))
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT))
+        click(string(R.string.search_anyway, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aTappedLinkNotThereOpensWhereItsFromWhenSetSo() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        notOnDeezer()
+        val activity = launch(trackLink())
+
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = nextStartedActivity()!!
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
+        assertEquals(MusicService.SPOTIFY.packageName, opened.`package`)
+        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+    }
+
+    @Test
+    fun aPlaylistSongNotThereWithNowhereElseToPlayIsSearched() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "Playlist"))
+            }
+        }
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+
+        // A playlist's songs come without links of their own, so where it's from is only a search away.
+        composeRule.onNodeWithText("Second Song").performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Second%20Song", nextStartedActivity()!!.dataString)
+
+        // Asked, only the search is offered.
+        composeRule.runOnIdle { ViewModelProvider(activity)[MainViewModel::class.java].selectNotFoundAction(NotFoundAction.ASK) }
+        composeRule.onNodeWithText("First Song").performScrollTo().performClick()
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertTextAbsent(string(R.string.open_in_spotify))
+        assertNull(nextStartedActivity())
+        click(string(R.string.search_anyway, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/First%20Song%20Band", nextStartedActivity()!!.dataString)
+    }
+
     @Test
     fun theWidgetsPlayOpensASavedPlaylistAsAQueueNotASearch() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
@@ -1212,7 +1325,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOpensASavedAlbumAsTheAlbumNotAsAQueue() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
         collectionWithSongs(type = "album")
         val url = "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy"
         HistoryStore(prefs()).add(
@@ -3071,9 +3184,27 @@ class MainActivityTest {
         assertEquals("https://music.apple.com/us/song/1", nextStartedActivity()!!.dataString)
         assertEquals(requestsBeforeOpen, fake.requestedUrls.size)
 
+        // Not on Deezer, it says so, and plays where it's from unless a search is asked for anyway.
         chooseDefault(string(R.string.target_deezer))
         waitForDestinationReady()
-        click(string(R.string.open_in_deezer))
+        assertTextShown(string(R.string.not_found_on, string(R.string.target_deezer)))
+        click(string(R.string.copy_link_button))
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        click(string(R.string.open_in_spotify))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
+        click(string(R.string.search_anyway, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+
+        // Searching anyway picked in settings, it's a search like before.
+        inSettings {
+            composeRule.onNodeWithText(string(R.string.setting_not_found)).performScrollTo().performClick()
+            composeRule.onNodeWithText(string(R.string.not_found_search)).performClick()
+        }
+        assertEquals("SEARCH", prefs().getString("not_found", null))
+        assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
+        click(string(R.string.search_in_destination, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
 
@@ -3083,7 +3214,12 @@ class MainActivityTest {
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
 
-        inSettings { click(string(R.string.setting_exact_match)) }
+        inSettings {
+            click(string(R.string.setting_exact_match))
+            // Nothing's looked for without it, so nothing's ever not found.
+            composeRule.waitForIdle()
+            assertTextAbsent(string(R.string.setting_not_found))
+        }
         assertFalse(prefs().getBoolean("exact_match", true))
         click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/search?term=Exact%20Artist", clipboard.primaryClip!!.getItemAt(0).text.toString())
@@ -3100,7 +3236,7 @@ class MainActivityTest {
                 FakeSpotify.html(request, FakeSpotify.trackPage("Slow", "Artist · Song"))
             }
         }
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
         val activity = launch()
         resolveTyped()
 
@@ -4068,7 +4204,7 @@ class MainActivityTest {
     @Test
     fun theHandoffShowsASongWithoutAnArtist() {
         val release = CountDownLatch(1)
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)

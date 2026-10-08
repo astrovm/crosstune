@@ -74,6 +74,12 @@
     <string name="show_song_short">Ver música</string>
     <string name="setting_exact_match">Abrir o resultado exato</string>
     <string name="setting_exact_match_description">Abre a própria música quando o app permite. Caso contrário, faz uma busca.</string>
+    <string name="setting_not_found">Quando uma música não é encontrada</string>
+    <string name="not_found_ask">Perguntar</string>
+    <string name="not_found_original">Abrir onde ela está</string>
+    <string name="not_found_search">Pesquisar mesmo assim</string>
+    <string name="not_found_on">Não está no %1$s</string>
+    <string name="search_anyway">Pesquisar no %1$s mesmo assim</string>
     <string name="setting_clean_links">Remover rastreamento dos links</string>
     <string name="setting_clean_links_description">Tira partes de rastreamento, como ?si= ou utm_, dos links que você abre, copia ou compartilha.</string>
     <string name="setting_share_sheet_apps">Apps ao compartilhar</string>

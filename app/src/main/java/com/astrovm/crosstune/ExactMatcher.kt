@@ -36,8 +36,6 @@ internal class ExactMatcher(
     /** Where what's found is remembered, so the same song isn't looked up again. */
     private val cache: LookupCache? = null
 ) {
-    /** The apps whose search needs no account. */
-    private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -65,7 +63,7 @@ internal class ExactMatcher(
 
     private suspend fun match(target: MusicService, metadata: MusicMetadata): String? {
         // Other apps need an account to search, so there's nothing to look up or remember.
-        if (metadata.type == ItemType.PLAYLIST || target !in matchable) return null
+        if (!canMatchExactly(target, metadata.type)) return null
         return remembered("find", target.name, metadata) { lookUp(target, metadata) }
     }
 
@@ -346,7 +344,45 @@ internal class ExactMatcher(
         }
         // An exact match anywhere in the results beats a close one at the top.
         return items.firstNotNullOfOrNull { found(it, loose = false) }
-            ?: if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) } else null
+            ?: (if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) } else null)
+            // A song that was never released, e.g. one only on SoundCloud, may still be uploaded as a video.
+            ?: if (isSong) findVideoOnYouTubeMusic(metadata, watchUrl, client) else null
+    }
+
+    /**
+     * The song as a video on YouTube, which YouTube Music plays too: e.g. one its artist put up but
+     * never released. A video's title names more, "Artist - Song (Official Video)", so it counts when
+     * it's the song's words, its artist's and nothing else but such tags; a remix or a live take has
+     * words of its own and stays out.
+     */
+    private suspend fun findVideoOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, client: JSONObject): String? {
+        val body = JSONObject()
+            .put("context", JSONObject().put("client", client))
+            .put("query", searchQuery(metadata))
+            .put("params", YOUTUBE_MUSIC_VIDEOS)
+        return fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems().firstNotNullOfOrNull { item ->
+            val columns = item.optJSONArray("flexColumns")?.objects()
+                ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
+                ?: return@firstNotNullOfOrNull null
+            // The second line is "Channel • 1.2M views • 3:45".
+            val channel = columns.getOrNull(1).orEmpty().split(" • ").first()
+            if (!isTheSongsVideo(metadata, columns.firstOrNull().orEmpty(), channel)) return@firstNotNullOfOrNull null
+            item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }?.let { watchUrl + it }
+        }
+    }
+
+    private fun isTheSongsVideo(metadata: MusicMetadata, name: String, channel: String): Boolean {
+        val title = SongNames.words(SongNames.withoutEditionTag(metadata.title))
+        val words = SongNames.words(SongNames.withoutEditionTag(name))
+        if (title.isEmpty() || !words.containsAll(title)) return false
+        val artists = SongNames.artistNames(metadata.artist).map(SongNames::words).filter { it.isNotEmpty() }
+        val named = artists.filter { words.containsAll(it) }
+        // Its artist is who put it up, or is named in its title. A channel is the artist's own by its
+        // whole name, maybe with what YouTube adds to one: "Band - Topic", "BandVEVO".
+        val uploader = SongNames.normalize(channel)
+        val own = SongNames.artists(metadata.artist).any { it == uploader || uploader.removePrefix(it) in CHANNEL_SUFFIXES && uploader.startsWith(it) }
+        if (!own && named.isEmpty()) return false
+        return (words - title - named.flatten().toSet() - VIDEO_TAGS).isEmpty()
     }
 
     private fun JSONObject.text(): String =
@@ -406,5 +442,24 @@ internal class ExactMatcher(
         const val YOUTUBE_MUSIC_SONGS = "EgWKAQIIAWoKEAoQAxAEEAkQBQ=="
         const val YOUTUBE_MUSIC_ALBUMS = "EgWKAQIYAWoKEAoQAxAEEAkQBQ=="
         const val YOUTUBE_MUSIC_ARTISTS = "EgWKAQIgAWoKEAoQAxAEEAkQBQ=="
+        const val YOUTUBE_MUSIC_VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
+
+        /** What YouTube adds to an artist's own channel name. */
+        private val CHANNEL_SUFFIXES = setOf("topic", "vevo", "official", "music", "tv")
+
+        /** What a video's title adds that isn't another recording: "Official Video", "Lyrics", "HD". */
+        private val VIDEO_TAGS = setOf(
+            "official", "video", "audio", "music", "lyric", "lyrics", "visualizer", "visualiser", "hd", "hq", "4k", "mv",
+            "clip", "videoclip", "full", "version", "feat", "ft", "the"
+        )
     }
 }
+
+/** The apps whose search needs no account. */
+private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)
+
+/**
+ * Whether Crosstune can look [type] up in [target] itself, so that finding nothing there means it isn't
+ * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else.
+ */
+internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean = type != ItemType.PLAYLIST && target in matchable

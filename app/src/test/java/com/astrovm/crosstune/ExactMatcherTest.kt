@@ -291,6 +291,59 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
+    /** YouTube Music answers its songs tab with [songs] and its videos tab with [videos]. */
+    private fun youTubeMusicTabs(songs: List<String>, videos: List<String>) {
+        fake.handler = { request ->
+            val asked = fake.requestBodies.last()
+            FakeSpotify.html(request, youTubeMusicPage(*(if (asked.contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
+        }
+    }
+
+    @Test
+    fun aSongNeverReleasedIsFoundAsItsVideo() {
+        val demo = MusicMetadata("Bedroom Demo", "Tiny Band")
+        // Not among the songs, it's looked for among the videos, its artist's own upload taken.
+        youTubeMusicTabs(
+            songs = listOf(youTubeMusicRow("Bedroom Demo", "Someone Else • Album • 3:00", videoId = "other000000")),
+            videos = listOf(
+                youTubeMusicRow("Tiny Band - Bedroom Demo (Remix)", "Tiny Band • 1K views • 4:00", videoId = "remix000000"),
+                youTubeMusicRow("Bedroom Demo", "Someone Else • 9K views • 3:00", videoId = "other000000"),
+                youTubeMusicRow("Tiny Band - Bedroom Demo (Official Video)", "Tiny Band • 300 views • 3:00", videoId = "demo0000000")
+            )
+        )
+        assertEquals("https://music.youtube.com/watch?v=demo0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        assertTrue(fake.requestBodies.last(), fake.requestBodies.last().contains(VIDEOS_TAB))
+        // On YouTube it opens there.
+        assertEquals("https://www.youtube.com/watch?v=demo0000000", runBlocking { matcher().find(MusicService.YOUTUBE, demo) })
+
+        // Someone else's upload counts when the title names the artist; a live take is another recording.
+        youTubeMusicTabs(
+            songs = emptyList(),
+            videos = listOf(
+                youTubeMusicRow("Tiny Band - Bedroom Demo (Live)", "Tiny Band • 1K views • 4:00", videoId = "live0000000"),
+                youTubeMusicRow("Tiny Band - Bedroom Demo [Lyrics]", "Fan Channel • 50 views • 3:00", videoId = "upload00000")
+            )
+        )
+        assertEquals("https://music.youtube.com/watch?v=upload00000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        // The artist's own channel by what YouTube calls it, though the title names only the song.
+        youTubeMusicTabs(songs = emptyList(), videos = listOf(youTubeMusicRow("Bedroom Demo", "Tiny Band - Topic • 20 views • 3:00", videoId = "topic000000")))
+        assertEquals("https://music.youtube.com/watch?v=topic000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+
+        // Nothing but other recordings: not found.
+        youTubeMusicTabs(songs = emptyList(), videos = listOf(youTubeMusicRow("Tiny Band - Bedroom Demo (Live)", "Tiny Band • 1K views • 4:00", videoId = "live0000000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        // A video with no id, or a title with no words to compare, is no match either.
+        youTubeMusicTabs(songs = emptyList(), videos = listOf("""{"musicResponsiveListItemRenderer":{}}""", youTubeMusicRow("Bedroom Demo", "Tiny Band • 1 view • 3:00")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("夜", "Tiny Band")) })
+
+        // An album is only ever an album; no video is looked for.
+        youTubeMusicTabs(songs = emptyList(), videos = emptyList())
+        val before = fake.requestBodies.size
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Demos", "Tiny Band", ItemType.ALBUM)) })
+        assertEquals(before + 1, fake.requestBodies.size)
+    }
+
     @Test
     fun aRemasterTagDoesNotStopASongFromMatching() {
         respond(
@@ -527,11 +580,12 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} })
         assertEquals(2, asked)
 
-        // Nothing found is an answer, so it is not asked twice; failing twice gives up.
+        // Nothing found is an answer, so it is not asked twice: once among the songs and once among the
+        // videos. Failing twice gives up.
         asked = 0
         fake.handler = { request -> asked++; FakeSpotify.html(request, """{"contents":{}}""") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
-        assertEquals(1, asked)
+        assertEquals(2, asked)
         asked = 0
         fake.handler = { asked++; throw IOException("offline") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
@@ -637,5 +691,10 @@ class ExactMatcherTest {
         assertEquals("https://cdn/baby.jpg", matcher().cover(baby))
         // An artist who isn't credited still doesn't get the cover.
         assertNull(matcher().cover(baby.copy(artist = "Someone, Else", url = null)))
+    }
+
+    private companion object {
+        /** YouTube Music's videos tab, as its search encodes it. */
+        const val VIDEOS_TAB = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
     }
 }

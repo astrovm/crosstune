@@ -74,6 +74,12 @@
     <string name="show_song_short">Voir le titre</string>
     <string name="setting_exact_match">Ouvrir le résultat exact</string>
     <string name="setting_exact_match_description">Ouvre directement le morceau quand l’application le permet. Sinon, lance une recherche.</string>
+    <string name="setting_not_found">Quand une chanson est introuvable</string>
+    <string name="not_found_ask">Me demander</string>
+    <string name="not_found_original">L\'ouvrir là d\'où elle vient</string>
+    <string name="not_found_search">Rechercher quand même</string>
+    <string name="not_found_on">Pas sur %1$s</string>
+    <string name="search_anyway">Rechercher sur %1$s quand même</string>
     <string name="setting_clean_links">Retirer le pistage des liens</string>
     <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
     <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
