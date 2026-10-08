@@ -240,4 +240,15 @@
     <string name="floating_close">閉じる</string>
     <string name="floating_channel">フローティング歌詞</string>
     <string name="floating_notification">歌詞をアプリの上に表示中</string>
+    <string name="lyrics_learn">読みと翻訳</string>
+    <string name="lyrics_readings">単語の上に読み</string>
+    <string name="lyrics_romanized">ローマ字</string>
+    <string name="lyrics_translation">翻訳</string>
+    <string name="lyrics_translating">翻訳中…</string>
+    <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
+    <string name="setting_translation_server">翻訳の提供元</string>
+    <string name="translation_server_address">LibreTranslate サーバー</string>
+    <string name="translation_server_key">API キー（必要な場合）</string>
+    <string name="translation_server_description">空欄にすると MyMemory を使います。1 日に数曲まで無料です。</string>
+    <string name="translation_server_invalid">https://libretranslate.com のような Web アドレスを入力してください</string>
 </resources>

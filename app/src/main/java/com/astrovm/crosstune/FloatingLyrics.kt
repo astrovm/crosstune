@@ -122,8 +122,17 @@ internal fun FloatingLyrics(
             } else {
                 song?.title.orEmpty() to song?.artist
             }
+            // What helps read the line being sung, as switched on for the words: its reading, and its translation.
+            val help = state.learning.helpFor(line).takeIf { line >= 0 }
+            val reading = help?.reading
+            val helps = listOfNotNull(
+                reading?.reading?.takeIf { help.readings && it != first },
+                reading?.romanized?.takeIf { help.romanized && it.isNotBlank() },
+                help?.translation
+            )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Line(first, lit = true, options.size.scale, ink, outline)
+                helps.forEach { Line(it, lit = false, options.size.scale, ink, outline) }
                 if (options.nextLine) second?.let { Line(it, lit = false, options.size.scale, ink, outline) }
             }
         }

@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst utworu, aplikacja wysyła tytuł i wykonawcę do serwisu LRCLIB, który nie wymaga konta ani klucza."
+      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst utworu, aplikacja wysyła tytuł i wykonawcę do serwisu LRCLIB, który nie wymaga konta ani klucza. Gdy włączysz tłumaczenie w tekście, aplikacja wysyła jego wiersze do MyMemory, usługi tłumaczeń bez konta, albo do serwera LibreTranslate ustawionego w Ustawieniach. Czytania, takie jak kana nad kanji, powstają na telefonie i nie są nigdzie wysyłane."
     ],
     [
       "p",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Tekst może też słuchać razem: zaraz po tym, jak Crosstune rozpozna utwór, albo gdy klikniesz mikrofon w tekście. Dopóki tekst jest na ekranie, Crosstune nasłuchuje dalej w ten sam sposób i co kilka sekund wysyła do Shazam nowy odcisk, nigdy dźwięk, by nadążać za utworem i wychwycić następny. Nasłuchiwanie kończy się, gdy tylko zamkniesz tekst, wyłączysz je lub wyjdziesz z aplikacji."
+      "Tekst może też słuchać razem: zaraz po tym, jak Crosstune rozpozna utwór, albo gdy klikniesz mikrofon w tekście. Dopóki tekst jest na ekranie, Crosstune nasłuchuje dalej w ten sam sposób i co kilka sekund wysyła do Shazam nowy odcisk, nigdy dźwięk, by nadążać za utworem i wychwycić następny. Nasłuchiwanie kończy się, gdy tylko zamkniesz tekst, wyłączysz je lub wyjdziesz z aplikacji. Dopóki tekst unosi się nad innymi aplikacjami, nasłuchiwanie trwa, aż go zamkniesz."
     ],
     [
       "h2",
@@ -134,7 +134,7 @@
     ],
     [
       "p",
-      "Crosstune używa uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Prosi o uprawnienie do mikrofonu przy pierwszym rozpoznawaniu utworu i używa mikrofonu tylko podczas słuchania. Nie prosi o uprawnienia do lokalizacji, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane żądania do serwisów muzycznych używają HTTPS. Jeśli dodasz własne miejsce docelowe, wybierz zaufany adres HTTPS."
+      "Crosstune używa uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Prosi o uprawnienie do mikrofonu przy pierwszym rozpoznawaniu utworu i używa mikrofonu tylko podczas słuchania. Jeśli wybierzesz przezroczyste tło pływającego tekstu, aplikacja poprosi o wyświetlanie nad innymi aplikacjami i o powiadomienie, które utrzymuje tekst na ekranie i pozwala go odblokować lub zamknąć. Nie prosi o uprawnienia do lokalizacji, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane żądania do serwisów muzycznych używają HTTPS. Jeśli dodasz własne miejsce docelowe, wybierz zaufany adres HTTPS."
     ],
     [
       "h2",

@@ -239,4 +239,15 @@
     <string name="floating_close">Sluiten</string>
     <string name="floating_channel">Zwevende tekst</string>
     <string name="floating_notification">Tekst zweeft over je apps</string>
+    <string name="lyrics_learn">Uitspraak en vertaling</string>
+    <string name="lyrics_readings">Uitspraak boven de woorden</string>
+    <string name="lyrics_romanized">In Latijnse letters</string>
+    <string name="lyrics_translation">Vertaling</string>
+    <string name="lyrics_translating">Vertalen…</string>
+    <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
+    <string name="setting_translation_server">Vertalingen van</string>
+    <string name="translation_server_address">LibreTranslate-server</string>
+    <string name="translation_server_key">API-sleutel, als die nodig is</string>
+    <string name="translation_server_description">Laat leeg voor MyMemory, gratis voor een paar nummers per dag.</string>
+    <string name="translation_server_invalid">Vul een webadres in, zoals https://libretranslate.com</string>
 </resources>

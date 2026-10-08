@@ -57,6 +57,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performImeAction
@@ -2745,6 +2746,43 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo().assertIsOn()
+    }
+
+    @Test
+    fun translationsComeFromMyMemoryOrALibreTranslateServerSetInSettings() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_translation_server)).performScrollTo().performClick()
+        assertTextShown(string(R.string.translation_server_description))
+        val address = composeRule.onNodeWithText(string(R.string.translation_server_address))
+        address.performTextInput("not an address")
+        click(string(R.string.save_button))
+        assertTextShown(string(R.string.translation_server_invalid))
+        address.performTextClearance()
+        address.performTextInput("ftp://translate.example.org")
+        click(string(R.string.save_button))
+        assertTextShown(string(R.string.translation_server_invalid))
+        address.performTextClearance()
+        address.performTextInput("https://translate.example.org/ ")
+        composeRule.onNodeWithText(string(R.string.translation_server_key)).performTextInput(" secret ")
+        click(string(R.string.save_button))
+        assertTextShown("translate.example.org")
+        assertEquals("https://translate.example.org", prefs().getString("translation_server", null))
+        assertEquals("secret", prefs().getString("translation_key", null))
+
+        // Kept, and cleared back to MyMemory.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText("translate.example.org").performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.translation_server_address)).performTextClearance()
+        click(string(R.string.save_button))
+        assertTextShown("MyMemory")
+        assertFalse(prefs().contains("translation_server"))
+        // Cancel leaves it as it was.
+        click("MyMemory")
+        click(string(R.string.cancel_button))
+        assertTextShown("MyMemory")
     }
 
     @Test

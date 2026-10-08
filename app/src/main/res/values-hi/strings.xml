@@ -239,4 +239,15 @@
     <string name="floating_close">बंद करें</string>
     <string name="floating_channel">तैरते बोल</string>
     <string name="floating_notification">बोल आपके ऐप्स के ऊपर तैर रहे हैं</string>
+    <string name="lyrics_learn">उच्चारण और अनुवाद</string>
+    <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
+    <string name="lyrics_romanized">लैटिन अक्षरों में</string>
+    <string name="lyrics_translation">अनुवाद</string>
+    <string name="lyrics_translating">अनुवाद हो रहा है…</string>
+    <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
+    <string name="setting_translation_server">अनुवाद यहां से</string>
+    <string name="translation_server_address">LibreTranslate सर्वर</string>
+    <string name="translation_server_key">API कुंजी, अगर ज़रूरी हो</string>
+    <string name="translation_server_description">MyMemory के लिए खाली छोड़ें, रोज़ कुछ गानों के लिए मुफ़्त।</string>
+    <string name="translation_server_invalid">वेब पता डालें, जैसे https://libretranslate.com</string>
 </resources>

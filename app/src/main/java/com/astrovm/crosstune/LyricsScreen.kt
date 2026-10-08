@@ -1,6 +1,18 @@
 package com.astrovm.crosstune
 
 import android.os.SystemClock
+import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -105,6 +117,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .widthIn(max = ContentMaxWidth)
         ) {
             LyricsHeader(song, state, actions)
+            TranslationStatus(state.learning, actions)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -120,6 +133,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
                         TimedLyrics(state, actions)
+                    } else if (state.learning.shows) {
+                        // Read line by line, each with what helps read it.
+                        LyricLines(state, actions)
                     } else {
                         PlainLyrics(state.lyrics)
                     }
@@ -168,7 +184,58 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
+        if (state.lyrics.isNotEmpty()) LearnButton(state.learning, actions)
         SyncSource(state, actions)
+    }
+}
+
+/** Whether anything that helps read the words is switched on, and so shown under them. */
+private val Learning.shows get() = translation || (script != null && (readings || romanized))
+
+/**
+ * What helps read the words in another language, switched on and off here: readings over them for
+ * Japanese and Chinese, which Korean, read as written, doesn't need; Latin letters for all three;
+ * and a translation, for any.
+ */
+@Composable
+private fun LearnButton(learning: Learning, actions: ScreenActions) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
+                LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+            }
+            if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+            LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        }
+    }
+}
+
+/** One of what can help, ticked while it's on; the menu stays open, to switch on more. */
+@Composable
+private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(label)) },
+        trailingIcon = { Checkbox(checked = on, onCheckedChange = null) },
+        onClick = { onChange(!on) },
+        modifier = Modifier.semantics { toggleableState = ToggleableState(on) }
+    )
+}
+
+/** While the words are being translated, or why they couldn't be. */
+@Composable
+private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
+    AnimatedVisibility(visible = learning.translation && (learning.translating || learning.translationFailed), enter = Motion.appear, exit = Motion.disappear) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Text(
+                stringResource(if (learning.translationFailed) R.string.lyrics_translation_failed else R.string.lyrics_translating),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(vertical = 12.dp)
+            )
+            if (learning.translationFailed) TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+        }
     }
 }
 
@@ -325,7 +392,8 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions) {
                 line.text,
                 place = following?.let { index.compareTo(active) },
                 canSeek = following?.canSeek == true,
-                onClick = { actions.onSeekLyrics(line.timeMs) }
+                onClick = { actions.onSeekLyrics(line.timeMs) },
+                help = state.learning.helpFor(index)
             )
         }
         // Nothing says where the song is: after the words, how they can follow a music app.
@@ -333,6 +401,28 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions) {
             item { FollowOffer(actions) }
         }
     }
+}
+
+/** Words with no timings, line by line, when each has something under it to help read it. */
+@Composable
+private fun LyricLines(state: UiState, actions: ScreenActions) {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        itemsIndexed(state.lyrics.lines()) { index, line ->
+            LyricLineText(line, place = null, canSeek = false, onClick = {}, help = state.learning.helpFor(index))
+        }
+    }
+}
+
+/** What helps read a line, as switched on. */
+internal class LineHelp(val reading: LineReading?, val readings: Boolean, val romanized: Boolean, val translation: String?)
+
+internal fun Learning.helpFor(index: Int): LineHelp? {
+    if (!shows) return null
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation })
 }
 
 /** A quiet line after the words, not over them: they can follow the music app playing the song. */
@@ -354,7 +444,7 @@ private fun FollowOffer(actions: ScreenActions) {
  * null while nothing says where the song is, when every line reads alike, calmer, as a page.
  */
 @Composable
-private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: () -> Unit) {
+private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: () -> Unit, help: LineHelp? = null) {
     val lit = place == 0
     val alpha by animateFloatAsState(
         if (place == null) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.55f,
@@ -362,19 +452,16 @@ private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: 
         label = "line alpha"
     )
     val scale by animateFloatAsState(if (lit || place == null) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
-    Text(
-        // A gap with no words, e.g. a solo, is a note rather than an empty line.
-        text = text.ifBlank { "♪" },
-        style = MaterialTheme.typography.headlineSmall.copy(
-            fontSize = if (place == null) 22.sp else 26.sp,
-            lineHeight = if (place == null) 30.sp else 34.sp,
-            fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold
-        ),
-        color = MaterialTheme.colorScheme.onSurface,
+    val style = MaterialTheme.typography.headlineSmall.copy(
+        fontSize = if (place == null) 22.sp else 26.sp,
+        lineHeight = if (place == null) 30.sp else 34.sp,
+        fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold
+    )
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(LYRIC_LINE_TAG)
-            .semantics { selected = lit }
+            .semantics(mergeDescendants = true) { selected = lit }
             .graphicsLayer {
                 this.alpha = alpha
                 scaleX = scale
@@ -383,8 +470,49 @@ private fun LyricLineText(text: String, place: Int?, canSeek: Boolean, onClick: 
             }
             .then(if (canSeek) Modifier.clickable(onClickLabel = stringResource(R.string.lyrics_jump), onClick = onClick) else Modifier)
             .padding(vertical = 6.dp)
-    )
+    ) {
+        val reading = help?.reading
+        if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
+            RubyLine(reading.parts, style)
+        } else {
+            // A gap with no words, e.g. a solo, is a note rather than an empty line.
+            Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
+        }
+        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
+        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
+    }
 }
+
+/**
+ * A line with each piece's reading over it, in small type, the way furigana sit over kanji. It
+ * wraps between pieces, and between the words of a piece read as written.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RubyLine(parts: List<Ruby>, style: TextStyle) {
+    val over = style.copy(fontSize = style.fontSize * 0.45f, lineHeight = style.fontSize * 0.5f, fontWeight = FontWeight.Medium)
+    FlowRow {
+        parts.forEach { part ->
+            val reading = part.reading
+            if (reading == null) {
+                WORDS.findAll(part.text).forEach { word ->
+                    Text(word.value, style = style, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.align(Alignment.Bottom))
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Bottom)) {
+                    Text(reading, style = over, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(part.text, style = style, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+    }
+}
+
+/** A word and the space after it, or a run of space alone. */
+private val WORDS = Regex("""\S+\s*|\s+""")
 
 /**
  * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an

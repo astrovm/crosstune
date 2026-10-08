@@ -239,4 +239,15 @@
     <string name="floating_close">Schließen</string>
     <string name="floating_channel">Schwebender Songtext</string>
     <string name="floating_notification">Songtext schwebt über deinen Apps</string>
+    <string name="lyrics_learn">Lesungen und Übersetzung</string>
+    <string name="lyrics_readings">Lesung über den Wörtern</string>
+    <string name="lyrics_romanized">In lateinischen Buchstaben</string>
+    <string name="lyrics_translation">Übersetzung</string>
+    <string name="lyrics_translating">Wird übersetzt…</string>
+    <string name="lyrics_translation_failed">Konnte gerade nicht übersetzen.</string>
+    <string name="setting_translation_server">Übersetzungen von</string>
+    <string name="translation_server_address">LibreTranslate-Server</string>
+    <string name="translation_server_key">API-Schlüssel, falls nötig</string>
+    <string name="translation_server_description">Leer lassen für MyMemory, kostenlos für ein paar Songs am Tag.</string>
+    <string name="translation_server_invalid">Gib eine Webadresse ein, z. B. https://libretranslate.com</string>
 </resources>

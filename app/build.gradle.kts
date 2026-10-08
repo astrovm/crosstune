@@ -107,6 +107,9 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("androidx.glance:glance-material3:1.2.0")
 
+    // Reads Japanese lyrics' kanji, for the kana over them; its dictionary is in the jar, so it works offline.
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.0")
     // Installs the baseline profile on first launch when the app store didn't, e.g. F-Droid or a GitHub APK.

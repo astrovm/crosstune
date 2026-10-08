@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal data class UiState(
     val linkText: String = "",
@@ -95,6 +96,8 @@ internal data class UiState(
     val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
+    /** What helps read the words in another language, and what's been worked out for them. */
+    val learning: Learning = Learning(),
     /** How the words floating over other apps look, and where they are. */
     val floating: FloatingOptions = FloatingOptions(),
     /** Whether Android lets Crosstune show over other apps, which see-through floating words need. */
@@ -222,6 +225,30 @@ internal fun savedPalette(name: String?): Palette {
 internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
 
 /**
+ * What's switched on to help read a song's words in another language: [readings] over them, kana
+ * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
+ * Then what's been worked out for the words shown, line by line.
+ */
+internal data class Learning(
+    val readings: Boolean = false,
+    val romanized: Boolean = false,
+    val translation: Boolean = false,
+    /** Where translations come from instead of MyMemory, when set. */
+    val server: TranslationServer? = null,
+    /** The script the words are in, when it reads differently from how it looks. */
+    val script: Script? = null,
+    /** How each line reads, once worked out. */
+    val lines: List<LineReading> = emptyList(),
+    /** Each line translated, or null where it needs none, once done. */
+    val translations: List<String?> = emptyList(),
+    val translating: Boolean = false,
+    val translationFailed: Boolean = false
+) {
+    /** Only what's switched on, ready to work out for new words. */
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, server, script)
+}
+
+/**
  * A song not found in [destination], with its [original] link, which opens it where it is, when it has
  * one, and a search there to try anyway.
  */
@@ -260,7 +287,11 @@ internal class MainViewModel(
     /** How long listening along waits after naming a song before it listens again. */
     private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
     /** The clock a song's place is kept on, the one that counts since the phone started. */
-    private val now: () -> Long = SystemClock::elapsedRealtime
+    private val now: () -> Long = SystemClock::elapsedRealtime,
+    /** Where a song's words are translated; nullable so tests need no translation service. */
+    private val translator: Translator? = null,
+    /** The language words are translated into: the app's. */
+    private val translationLanguage: () -> String = { Translator.languageOf(java.util.Locale.getDefault()) }
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -286,6 +317,12 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
+            learning = Learning(
+                readings = preferences.getBoolean(KEY_READINGS, false),
+                romanized = preferences.getBoolean(KEY_ROMANIZED, false),
+                translation = preferences.getBoolean(KEY_TRANSLATION, false),
+                server = preferences.getString(KEY_TRANSLATION_SERVER, null)?.let { TranslationServer(it, preferences.getString(KEY_TRANSLATION_KEY, null).orEmpty()) }
+            ),
             floating = FloatingOptions(
                 look = FloatingLook.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_LOOK, null) } ?: FloatingLook.COVER,
                 size = FloatingSize.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_SIZE, null) } ?: FloatingSize.MEDIUM,
@@ -922,16 +959,21 @@ internal class MainViewModel(
         // that failed is worth asking again, so Retry is the one case that does fetch.
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         lyricsJob?.cancel()
+        stopLearning()
         stopFollowing()
         lyricsJob = viewModelScope.launch {
             uiState = uiState.copy(
-                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = true,
+                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
                 // A lookup that failed says so, rather than claiming the song has no words.
                 when (val answer = finder.lyricsOf(song)) {
-                    is LyricsFinder.Lyrics.Found -> uiState = uiState.copy(lyrics = answer.words, lyricLines = answer.lines, lyricsFailed = false)
+                    is LyricsFinder.Lyrics.Found -> {
+                        uiState = uiState.copy(lyrics = answer.words, lyricLines = answer.lines, lyricsFailed = false)
+                        uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
+                        learn()
+                    }
                     LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                     LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                 }
@@ -1173,12 +1215,98 @@ internal class MainViewModel(
     fun dismissLyrics() {
         lyricsJob?.cancel()
         lyricsJob = null
+        stopLearning()
         stopFollowing()
         stopListeningAlong()
         askedForAccess = false
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false, followHelp = false
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
+            learning = uiState.learning.fresh()
         )
+    }
+
+    private var readingsJob: Job? = null
+    private var translationJob: Job? = null
+
+    /** What was being worked out is for words no longer shown. */
+    private fun stopLearning() {
+        readingsJob?.cancel()
+        translationJob?.cancel()
+    }
+
+    /** The words shown, line by line: the timed ones, or else the plain ones. */
+    private fun wordLines(): List<String> = uiState.lyricLines.map { it.text }.ifEmpty { uiState.lyrics.lines() }
+
+    /** Works out what's switched on for the words shown, and isn't worked out yet. */
+    private fun learn() {
+        val learning = uiState.learning
+        val lines = wordLines()
+        val script = learning.script
+        if ((learning.readings || learning.romanized) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
+            readingsJob = viewModelScope.launch {
+                // Japanese loads its dictionary the first time, a moment better spent away from the screen.
+                val read = withContext(systemDispatcher) { Readings.of(lines, script) }
+                uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+            }
+        }
+        val translator = translator ?: return
+        if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
+            translationJob = viewModelScope.launch {
+                uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
+                val translated = translator.translate(lines, translationLanguage(), learning.server)
+                uiState = uiState.copy(
+                    learning = uiState.learning.copy(translations = translated.orEmpty(), translating = false, translationFailed = translated == null)
+                )
+            }
+        }
+    }
+
+    fun setReadings(on: Boolean) {
+        preferences.edit { putBoolean(KEY_READINGS, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(readings = on))
+        learn()
+    }
+
+    fun setRomanized(on: Boolean) {
+        preferences.edit { putBoolean(KEY_ROMANIZED, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(romanized = on))
+        learn()
+    }
+
+    fun setTranslation(on: Boolean) {
+        preferences.edit { putBoolean(KEY_TRANSLATION, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
+        learn()
+    }
+
+    /** Asks for the translation again, after it couldn't be done. */
+    fun retryTranslation() {
+        uiState = uiState.copy(learning = uiState.learning.copy(translationFailed = false))
+        learn()
+    }
+
+    /**
+     * Translates with the LibreTranslate server at [url] from now on, or with MyMemory again when
+     * it's blank. False, with nothing changed, when [url] isn't a web address.
+     */
+    fun setTranslationServer(url: String, key: String): Boolean {
+        val address = url.trim().trimEnd('/')
+        val server = if (address.isEmpty()) {
+            null
+        } else {
+            val parsed = address.toHttpUrlOrNull() ?: return false
+            if (!address.startsWith("http://") && !address.startsWith("https://")) return false
+            TranslationServer(parsed.toString().trimEnd('/'), key.trim())
+        }
+        preferences.edit {
+            if (server == null) remove(KEY_TRANSLATION_SERVER).remove(KEY_TRANSLATION_KEY)
+            else putString(KEY_TRANSLATION_SERVER, server.url).putString(KEY_TRANSLATION_KEY, server.key)
+        }
+        // What the last server said is no answer from this one.
+        translationJob?.cancel()
+        uiState = uiState.copy(learning = uiState.learning.copy(server = server, translations = emptyList(), translating = false, translationFailed = false))
+        learn()
+        return true
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {
@@ -1564,6 +1692,11 @@ internal class MainViewModel(
         const val KEY_PALETTE = "palette"
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
+        private const val KEY_READINGS = "lyrics_readings"
+        private const val KEY_ROMANIZED = "lyrics_romanized"
+        private const val KEY_TRANSLATION = "lyrics_translation"
+        private const val KEY_TRANSLATION_SERVER = "translation_server"
+        private const val KEY_TRANSLATION_KEY = "translation_key"
         private const val KEY_FLOATING_LOOK = "floating_look"
         private const val KEY_FLOATING_SIZE = "floating_size"
         private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"

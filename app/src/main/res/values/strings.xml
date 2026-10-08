@@ -257,4 +257,15 @@
     <string name="floating_close">Close</string>
     <string name="floating_channel">Floating lyrics</string>
     <string name="floating_notification">Lyrics floating over your apps</string>
+    <string name="lyrics_learn">Readings and translation</string>
+    <string name="lyrics_readings">Readings over the words</string>
+    <string name="lyrics_romanized">In Latin letters</string>
+    <string name="lyrics_translation">Translation</string>
+    <string name="lyrics_translating">Translating…</string>
+    <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
+    <string name="setting_translation_server">Translations from</string>
+    <string name="translation_server_address">LibreTranslate server</string>
+    <string name="translation_server_key">API key, if it needs one</string>
+    <string name="translation_server_description">Leave it empty for MyMemory, free for a few songs a day.</string>
+    <string name="translation_server_invalid">Enter a web address, like https://libretranslate.com</string>
 </resources>

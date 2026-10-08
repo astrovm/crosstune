@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere."
     ],
     [
       "p",
@@ -126,7 +126,7 @@
     ],
     [
       "p",
-      "Lyrics can also listen along: right after Crosstune recognizes a song, or when you tap the microphone in the lyrics. While the lyrics are on screen, Crosstune keeps listening the same way, sending Shazam a new fingerprint every few seconds, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app."
+      "Lyrics can also listen along: right after Crosstune recognizes a song, or when you tap the microphone in the lyrics. While the lyrics are on screen, Crosstune keeps listening the same way, sending Shazam a new fingerprint every few seconds, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app. While the lyrics float over your other apps, it goes on listening until you close them."
     ],
     [
       "h2",
@@ -134,7 +134,7 @@
     ],
     [
       "p",
-      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. If you pick a see-through background for floating lyrics, it asks to display over other apps and to show a notification, which keeps them up and lets you unlock or close them. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
     ],
     [
       "h2",

@@ -75,7 +75,10 @@ class MainActivity : ComponentActivity() {
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
                     hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client)),
                     systemDispatcher,
-                    listenAlongPauseMs
+                    listenAlongPauseMs,
+                    // Each line translated is kept, so a song read again needs no translating.
+                    translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
+                    translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) }
                 )
             }
         }
@@ -273,6 +276,11 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
+                        onReadingsChange = viewModel::setReadings,
+                        onRomanizedChange = viewModel::setRomanized,
+                        onTranslationChange = viewModel::setTranslation,
+                        onRetryTranslation = viewModel::retryTranslation,
+                        onTranslationServerChange = viewModel::setTranslationServer,
                         onListenAlong = { withMicrophone(viewModel::listenAlong) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
