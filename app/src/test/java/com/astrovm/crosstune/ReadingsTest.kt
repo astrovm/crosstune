@@ -103,4 +103,21 @@ class ReadingsTest {
         assertEquals("saranghae hanguk", line.romanized)
         assertEquals("kkotbat", Readings.romaja("꽃밭"))
     }
+
+    @Test
+    fun aLineSplitsIntoWordsToLookUp() {
+        assertEquals(
+            listOf(Word("夜空", "よぞら", "yozora", "夜空"), Word("に", null, "ni", "に"), Word("分かった", "わかった", "wakatta", "分かる")),
+            Readings.words("夜空に、分かった!", Script.JAPANESE)
+        )
+        // Marks alone aren't words.
+        assertEquals(listOf(Word("さよなら", null, "sayonara", "さよなら")), Readings.words("「さよなら」…", Script.JAPANESE))
+        // Chinese has no spaces: Android's dictionary splits it.
+        val chinese = Readings.words("我们喜欢音乐。", Script.CHINESE)
+        assertEquals(listOf("我们", "喜欢", "音乐"), chinese.map { it.text })
+        assertEquals("wǒ men", chinese.first().reading)
+        assertEquals(listOf(Word("사랑해", null, "saranghae"), Word("한국", null, "hanguk")), Readings.words("사랑해, 한국!", Script.KOREAN))
+        assertEquals(listOf(Word("Don't"), Word("stop"), Word("me")), Readings.words("Don't stop me 123 ♪", null))
+        assertEquals(emptyList<Word>(), Readings.words("", null))
+    }
 }

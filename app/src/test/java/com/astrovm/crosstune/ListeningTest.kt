@@ -25,6 +25,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
@@ -775,6 +776,15 @@ class ListeningTest {
         click(string(R.string.lyrics_romanized))
         composeRule.waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))
+
+        // With nothing to follow, a line tapped opens to study, its words looked up as the lines are translated.
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.lyrics_repeat_line)))
+        val chip = hasText("사랑해") and androidx.compose.ui.test.hasClickAction() and !androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(chip).performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
     }
 
     private companion object {

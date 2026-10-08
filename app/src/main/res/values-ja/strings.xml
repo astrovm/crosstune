@@ -251,4 +251,11 @@
     <string name="translation_server_key">API キー（必要な場合）</string>
     <string name="translation_server_description">空欄にすると MyMemory を使います。1 日に数曲まで無料です。</string>
     <string name="translation_server_invalid">https://libretranslate.com のような Web アドレスを入力してください</string>
+    <string name="lyrics_study_line">この行を学ぶ</string>
+    <string name="lyrics_repeat_line">この行をくり返す</string>
+    <string name="lyrics_stop_repeating">くり返しを止める</string>
+    <string name="lyrics_save_line">行を保存</string>
+    <string name="lyrics_line_saved">保存済み</string>
+    <string name="lyrics_saved_lines">保存した行</string>
+    <string name="lyrics_word_failed">今は意味が見つかりませんでした。</string>
 </resources>

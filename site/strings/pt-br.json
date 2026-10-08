@@ -106,7 +106,7 @@
     ],
     [
       "p",
-      "Quando você digita o nome de uma música em vez de um link, o Crosstune envia esse nome às buscas públicas de músicas do Deezer e da Apple e mostra as músicas encontradas, para você abrir a música que queria sem o link. Quando você pede a letra de uma música, o app envia o título e o artista à LRCLIB, um serviço de letras que não precisa de conta nem chave. Quando você ativa a Tradução na letra, o app envia as linhas dela para o MyMemory, um serviço de tradução que não pede conta, ou para o servidor LibreTranslate que você definir nas Configurações. As leituras, como kana sobre kanji, são feitas no seu celular e não são enviadas a lugar nenhum."
+      "Quando você digita o nome de uma música em vez de um link, o Crosstune envia esse nome às buscas públicas de músicas do Deezer e da Apple e mostra as músicas encontradas, para você abrir a música que queria sem o link. Quando você pede a letra de uma música, o app envia o título e o artista à LRCLIB, um serviço de letras que não precisa de conta nem chave. Quando você ativa a Tradução na letra, o app envia as linhas dela para o MyMemory, um serviço de tradução que não pede conta, ou para o servidor LibreTranslate que você definir nas Configurações. As leituras, como kana sobre kanji, são feitas no seu celular e não são enviadas a lugar nenhum. Uma palavra que você toca para ver o significado é enviada do mesmo jeito. As linhas que você salva ficam no seu celular."
     ],
     [
       "p",
