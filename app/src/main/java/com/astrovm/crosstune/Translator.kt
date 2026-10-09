@@ -159,9 +159,10 @@ internal class Translator(
         }
     }
 
-/** A page's styling, as Wiktionary leaves in some definitions. */
+}
+
 /** What a word means, and what [type] of word it is, e.g. "noun", when the dictionary says. */
 internal data class Definition(val type: String?, val meaning: String)
 
+/** A page's styling, as Wiktionary leaves in some definitions. */
 private val styleSheet = Regex("""<style[^>]*>.*?</style>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-}

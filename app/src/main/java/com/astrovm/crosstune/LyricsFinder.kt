@@ -361,6 +361,8 @@ internal class LyricsFinder(
 /** Whether any of it is written in Latin letters. */
 private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
+}
+
 /** Whether any of it is written in Japanese: kana, or the kanji Japanese shares with Chinese. */
 private fun String.hasJapanese() = any { it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' }
 
@@ -380,5 +382,4 @@ internal fun isRomaji(words: String): Boolean {
     if (all.isEmpty()) return false
     val japanese = all.count { romajiWord.matches(it) }
     return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
-}
 }
