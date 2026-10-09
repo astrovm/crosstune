@@ -45,7 +45,12 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
 - **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Shortcuts.** One-tap paste, a home screen widget with your Recent songs and a button to name a song nearby, a Quick Settings tile, and a long-press shortcut on the app icon.
+- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there.
+- **Floating lyrics.** Float them over any app. Drag them, resize them, pinch the text, and pick how see-through they are.
+- **Learn the words.** Kana, pinyin, romaji and translations under each line. Tap a word for its meaning, repeat a line in your music app, or save it for later.
+- **Not on your app?** Crosstune says so and opens the song where it's from, or searches anyway, as you choose in **Settings**.
+- **Your colors.** Light or dark, your wallpaper's color or one of a few, and pure black for OLED screens.
+- **Shortcuts.** One-tap paste, home screen widgets with your Recent songs or one tap to name a song or show its lyrics, Quick Settings tiles, and a long-press shortcut on the app icon.
 - **Recent.** Search it, and swipe a song away to remove it.
 - **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
 - **15 languages.** Follows your phone, or pick one in Settings.
@@ -59,12 +64,12 @@ Pasting or sharing a link to Crosstune works without any setup.
 | YouTube | Videos, Shorts, live streams, playlists, `youtu.be` | Songs |
 | Apple Music | Songs, albums, artists, playlists | Songs, albums, artists |
 | Deezer | Songs, albums, artists, playlists, `link.deezer.com` | Songs, albums, artists |
-| TIDAL | Songs, albums, artists, playlists | Search |
-| SoundCloud | Tracks, artists, sets, `on.soundcloud.com` | Search |
+| TIDAL | Songs, albums, artists, playlists | Songs, albums, artists |
+| SoundCloud | Tracks, artists, sets, `on.soundcloud.com` | Songs, albums, verified artists |
 | Bandcamp | Tracks, albums | Songs, albums |
-| Audiomack | Songs, albums, playlists | Search |
+| Audiomack | Songs, albums, playlists | Songs, albums, verified artists |
 | Amazon Music | Can't read its links | Search |
-| Qobuz | Can't read its links | Search |
+| Qobuz | Can't read its links | Songs, albums |
 
 Songs shared from Pixel **Now Playing** are also supported, in every language it shares in, and so are **Shazam** links and songs shared from Google's search, which open by their title.
 
@@ -79,14 +84,15 @@ Turn the service on in Crosstune's **Settings → Open links from**. Then in And
 It isn't a song, album, artist or playlist (a SoundCloud feed, for example), so Crosstune passes it on.
 
 **I got a search, not the song.**
-Check that **Open the exact match** is on. If it is, there was no confident match, so Crosstune searched instead.
+Check that **Open the exact match** is on. If it is, Crosstune found no confident match. It says the song isn't there and offers to open it where it's from, or to search anyway; pick which one happens on its own in **Settings → When a song isn't found**.
 
 ## Privacy
 
 - No account, analytics or ads.
 - History stays on your device.
 - Crosstune only asks the service a link comes from for its title, artist and cover.
-- With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube and Bandcamp website search).
+- With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack and Qobuz website search).
+- Lyrics come from [LRCLIB](https://lrclib.net) by title and artist. Translations go to [MyMemory](https://mymemory.translated.net) or your own LibreTranslate server, and English words to [Wiktionary](https://en.wiktionary.org). Readings are worked out on your phone.
 - Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).

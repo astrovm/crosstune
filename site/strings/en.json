@@ -12,8 +12,8 @@
   "lede": "Got a link from one service but listen on another? Tap it and the same song opens where you listen.",
   "download": "Download for Android",
   "note": "Free, open source and ad-free.",
-  "alt_home": "A song from Apple Music ready to open in YouTube Music",
-  "alt_list": "A Deezer playlist, ready to play all in YouTube Music",
+  "alt_home": "A link opened in YouTube Music, then a playlist's songs",
+  "alt_lyrics": "Lyrics following a song, with Latin letters and a translation, then floating over the home screen",
   "how_h2": "How it works",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Playlists too",
       "See every song and play them all at once."
+    ],
+    [
+      "Lyrics in time",
+      "They follow your music app, or listen along, song after song."
+    ],
+    [
+      "Floating lyrics",
+      "Over any app, see-through, at any size."
+    ],
+    [
+      "Learn the words",
+      "Kana, pinyin, romaji and translations, word by word."
     ],
     [
       "Name that song",
@@ -57,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 8, 2026",
+  "updated": "Last updated: October 9, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. Lines you save stay on your phone."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. If you pick a see-through background for floating lyrics, it asks to display over other apps and to show a notification, which keeps them up and lets you unlock or close them. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. If you float lyrics over other apps, it asks to display over other apps and, once, to show a notification, which keeps them up and lets you unlock or close them. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
     ],
     [
       "h2",

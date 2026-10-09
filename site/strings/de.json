@@ -12,8 +12,8 @@
   "lede": "Du hast einen Link von einem Dienst, hörst aber auf einem anderen? Tippe darauf, und derselbe Song öffnet sich dort, wo du hörst.",
   "download": "Für Android herunterladen",
   "note": "Kostenlos, Open Source und werbefrei.",
-  "alt_home": "Ein Song aus Apple Music, bereit zum Öffnen in YouTube Music",
-  "alt_list": "Eine Deezer-Playlist, bereit zum Abspielen in YouTube Music",
+  "alt_home": "Ein Link, bereit für YouTube Music, dann die Songs einer Playlist",
+  "alt_lyrics": "Songtext, der einem Song folgt, mit lateinischen Buchstaben und Übersetzung, dann schwebend über dem Startbildschirm",
   "how_h2": "So funktioniert's",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Ganze Playlists",
       "Sieh alle Songs und spiel alle auf einmal ab."
+    ],
+    [
+      "Songtexte im Takt",
+      "Sie folgen deiner Musik-App oder hören mit, Song für Song."
+    ],
+    [
+      "Schwebende Songtexte",
+      "Über jeder App, durchsichtig, in jeder Größe."
+    ],
+    [
+      "Lerne die Texte",
+      "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort."
     ],
     [
       "Welcher Song ist das?",
@@ -57,7 +69,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 8. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 9. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Wenn du statt eines Links den Namen eines Songs eintippst, sendet Crosstune den Namen an die öffentlichen Song-Suchen von Deezer und Apple und zeigt die gefundenen Songs, damit du den gesuchten Song ohne seinen Link öffnen kannst. Wenn du den Songtext anfragst, sendet die App Titel und Künstler an LRCLIB, einen Songtext-Dienst, der kein Konto und keinen Schlüssel benötigt. Wenn du im Songtext die Übersetzung einschaltest, sendet die App seine Zeilen an MyMemory, einen Übersetzungsdienst ohne Konto, oder an den LibreTranslate-Server, den du in den Einstellungen angibst. Lesungen, etwa Kana über Kanji, werden auf deinem Handy berechnet und nirgendwohin gesendet. Ein Wort, das du für seine Bedeutung antippst, wird genauso gesendet. Gespeicherte Zeilen bleiben auf deinem Handy."
+      "Wenn du statt eines Links den Namen eines Songs eintippst, sendet Crosstune den Namen an die öffentlichen Song-Suchen von Deezer und Apple und zeigt die gefundenen Songs, damit du den gesuchten Song ohne seinen Link öffnen kannst. Wenn du den Songtext anfragst, sendet die App Titel und Künstler an LRCLIB, einen Songtext-Dienst, der kein Konto und keinen Schlüssel benötigt. Wenn du im Songtext die Übersetzung einschaltest, sendet die App seine Zeilen an MyMemory, einen Übersetzungsdienst ohne Konto, oder an den LibreTranslate-Server, den du in den Einstellungen angibst. Lesungen, etwa Kana über Kanji, werden auf deinem Handy berechnet und nirgendwohin gesendet. Ein Wort, das du für seine Bedeutung antippst, wird genauso gesendet. Ist die App auf Englisch, wird ein englisches Wort stattdessen im Wörterbuch von Wiktionary nachgeschlagen. Gespeicherte Zeilen bleiben auf deinem Handy."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune nutzt die Internetberechtigung von Android, um Musikinformationen und Cover abzurufen. Die Mikrofonberechtigung fragt es beim ersten Erkennen eines Songs an, und es nutzt das Mikrofon nur während des Zuhörens. Wählst du für den schwebenden Songtext einen durchsichtigen Hintergrund, fragt sie, ob sie über anderen Apps einblenden und eine Benachrichtigung zeigen darf, die ihn offen hält und mit der du ihn entsperren oder schließen kannst. Es fragt keine Berechtigungen für Standort, Kamera, Kontakte oder Werbe-ID an. Integrierte Anfragen an Musikdienste nutzen HTTPS. Wenn du ein eigenes Ziel hinzufügst, wähle eine vertrauenswürdige HTTPS-Adresse."
+      "Crosstune nutzt die Internetberechtigung von Android, um Musikinformationen und Cover abzurufen. Die Mikrofonberechtigung fragt es beim ersten Erkennen eines Songs an, und es nutzt das Mikrofon nur während des Zuhörens. Lässt du den Songtext über anderen Apps schweben, fragt sie, ob sie über anderen Apps einblenden und einmalig eine Benachrichtigung zeigen darf, die ihn offen hält und mit der du ihn entsperren oder schließen kannst. Es fragt keine Berechtigungen für Standort, Kamera, Kontakte oder Werbe-ID an. Integrierte Anfragen an Musikdienste nutzen HTTPS. Wenn du ein eigenes Ziel hinzufügst, wähle eine vertrauenswürdige HTTPS-Adresse."
     ],
     [
       "h2",

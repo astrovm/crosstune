@@ -12,8 +12,8 @@
   "lede": "Vous avez reçu un lien d'un service mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s'ouvre là où vous écoutez.",
   "download": "Télécharger pour Android",
   "note": "Gratuite, open source et sans publicité.",
-  "alt_home": "Un morceau d'Apple Music prêt à s'ouvrir dans YouTube Music",
-  "alt_list": "Une playlist Deezer prête à être lue dans YouTube Music",
+  "alt_home": "Un lien prêt à s'ouvrir dans YouTube Music, puis les titres d'une playlist",
+  "alt_lyrics": "Des paroles qui suivent la chanson, en lettres latines et traduites, puis flottant sur l'écran d'accueil",
   "how_h2": "Comment ça marche",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Playlists entières",
       "Voyez tous les titres et lisez-les d'un coup."
+    ],
+    [
+      "Paroles synchronisées",
+      "Elles suivent votre appli de musique, ou écoutent avec vous, chanson après chanson."
+    ],
+    [
+      "Paroles flottantes",
+      "Par-dessus n'importe quelle appli, transparentes, à la taille voulue."
+    ],
+    [
+      "Apprenez les paroles",
+      "Kana, pinyin, romaji et traductions, mot par mot."
     ],
     [
       "Quel est ce titre ?",
@@ -57,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 8 octobre 2026",
+  "updated": "Dernière mise à jour : 9 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, ou au serveur LibreTranslate que vous indiquez dans les paramètres. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Les lignes que vous enregistrez restent sur votre téléphone."
+      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, ou au serveur LibreTranslate que vous indiquez dans les paramètres. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Il demande l'autorisation du micro la première fois que vous reconnaissez un titre, et n'utilise le micro que pendant l'écoute. Si vous choisissez un arrière-plan transparent pour les paroles flottantes, elle demande à s'afficher par-dessus les autres applis et à montrer une notification, qui les garde affichées et permet de les déverrouiller ou de les fermer. Il ne demande pas d'autorisation de localisation, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous ajoutez une destination personnalisée, choisissez une adresse HTTPS de confiance."
+      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Il demande l'autorisation du micro la première fois que vous reconnaissez un titre, et n'utilise le micro que pendant l'écoute. Si vous faites flotter les paroles par-dessus d'autres applis, elle demande l'autorisation de s'afficher par-dessus les autres applis et, une seule fois, d'afficher une notification, qui les garde visibles et permet de les déverrouiller ou de les fermer. Il ne demande pas d'autorisation de localisation, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous ajoutez une destination personnalisée, choisissez une adresse HTTPS de confiance."
     ],
     [
       "h2",

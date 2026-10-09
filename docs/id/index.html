@@ -81,15 +81,8 @@
   a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
   .note { font-size: .9rem; color: var(--muted); margin-top: 14px; }
   .shots { display: flex; justify-content: center; align-items: flex-start; gap: 14px; }
-  .shots img { width: 46%; max-width: 240px; height: auto; border-radius: 22px; border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(30, 15, 110, .18); }
+  .shots video { width: 46%; max-width: 240px; height: auto; aspect-ratio: 540 / 1200; object-fit: cover; border-radius: 22px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 20px 50px rgba(30, 15, 110, .18); }
   .shots .second { margin-top: 48px; }
-  .shots .dark { display: none; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .shots .light { display: none; }
-    :root:not([data-theme="light"]) .shots .dark { display: block; }
-  }
-  :root[data-theme="dark"] .shots .light { display: none; }
-  :root[data-theme="dark"] .shots .dark { display: block; }
   .theme { display: grid; place-items: center; margin-left: 18px; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
   .theme:hover { color: var(--text); }
   .theme svg { width: 20px; height: 20px; fill: currentColor; }
@@ -188,11 +181,10 @@
           </ul>
         </div>
       </div>
+      <!-- Short clips of the app, in the page's language and look; the script picks light or dark and plays them. -->
       <div class="shots">
-        <img class="light" src="/img/id/home-light.jpg" alt="Lagu dari Apple Music yang siap dibuka di YouTube Music" width="540" height="1200">
-        <img class="dark" src="/img/id/home-dark.jpg" alt="Lagu dari Apple Music yang siap dibuka di YouTube Music" width="540" height="1200">
-        <img class="light second" src="/img/id/list-light.jpg" alt="Playlist Deezer yang siap diputar di YouTube Music" width="540" height="1200">
-        <img class="dark second" src="/img/id/list-dark.jpg" alt="Playlist Deezer yang siap diputar di YouTube Music" width="540" height="1200">
+        <video data-shot="/img/id/home" poster="/img/id/home-light.jpg" aria-label="Tautan siap dibuka di YouTube Music, lalu lagu-lagu dalam playlist" width="540" height="1200" muted loop playsinline preload="none"></video>
+        <video class="second" data-shot="/img/lyrics" poster="/img/lyrics-light.jpg" aria-label="Lirik yang mengikuti lagu, dengan huruf Latin dan terjemahan, lalu melayang di atas layar utama" width="540" height="1200" muted loop playsinline preload="none"></video>
       </div>
     </div>
 
@@ -209,6 +201,9 @@
       <h2>Yang bisa dilakukan</h2>
       <div class="grid big">
         <div class="card"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M640-160q-50 0-85-35t-35-85q0-50 35-85t85-35q11 0 21 1.5t19 6.5v-288q0-17 11.5-28.5T720-720h120q17 0 28.5 11.5T880-680q0 17-11.5 28.5T840-640h-80v360q0 50-35 85t-85 35ZM160-320q-17 0-28.5-11.5T120-360q0-17 11.5-28.5T160-400h240q17 0 28.5 11.5T440-360q0 17-11.5 28.5T400-320H160Zm0-160q-17 0-28.5-11.5T120-520q0-17 11.5-28.5T160-560h400q17 0 28.5 11.5T600-520q0 17-11.5 28.5T560-480H160Zm0-160q-17 0-28.5-11.5T120-680q0-17 11.5-28.5T160-720h400q17 0 28.5 11.5T600-680q0 17-11.5 28.5T560-640H160Z"/></svg><div><h3>Satu playlist penuh</h3><p>Lihat semua lagu dan putar semuanya sekaligus.</p></div></div>
+        <div class="card"><svg viewBox="0 0 960 960" aria-hidden="true"><path d="M160,640L160,160Q160,160 160,160Q160,160 160,160L160,160Q160,160 160,160Q160,160 160,160L160,240Q160,265 160,295.5Q160,326 160,360Q160,394 160,424.5Q160,455 160,480L160,640Q160,640 160,640Q160,640 160,640L160,640ZM600,720L240,720L148,812Q129,831 104.5,820.5Q80,810 80,783L80,160Q80,127 103.5,103.5Q127,80 160,80L600,80Q633,80 656.5,103.5Q680,127 680,160L680,200Q680,217 668.5,228.5Q657,240 640,240Q623,240 611.5,228.5Q600,217 600,200L600,160Q600,160 600,160Q600,160 600,160L160,160Q160,160 160,160Q160,160 160,160L160,640L600,640Q600,640 600,640Q600,640 600,640L600,520Q600,503 611.5,491.5Q623,480 640,480Q657,480 668.5,491.5Q680,503 680,520L680,640Q680,673 656.5,696.5Q633,720 600,720ZM280,560L360,560Q377,560 388.5,548.5Q400,537 400,520Q400,503 388.5,491.5Q377,480 360,480L280,480Q263,480 251.5,491.5Q240,503 240,520Q240,537 251.5,548.5Q263,560 280,560ZM760,480Q710,480 675,445Q640,410 640,360Q640,310 675,275Q710,240 760,240Q771,240 781,242Q791,244 800,247L800,80Q800,63 811.5,51.5Q823,40 840,40L920,40Q937,40 948.5,51.5Q960,63 960,80Q960,97 948.5,108.5Q937,120 920,120L880,120L880,360Q880,410 845,445Q810,480 760,480ZM280,440L480,440Q497,440 508.5,428.5Q520,417 520,400Q520,383 508.5,371.5Q497,360 480,360L280,360Q263,360 251.5,371.5Q240,383 240,400Q240,417 251.5,428.5Q263,440 280,440ZM280,320L480,320Q497,320 508.5,308.5Q520,297 520,280Q520,263 508.5,251.5Q497,240 480,240L280,240Q263,240 251.5,251.5Q240,263 240,280Q240,297 251.5,308.5Q263,320 280,320Z"/></svg><div><h3>Lirik sesuai lagu</h3><p>Mengikuti aplikasi musikmu, atau ikut mendengarkan, lagu demi lagu.</p></div></div>
+        <div class="card"><svg viewBox="0 0 960 960" aria-hidden="true"><path d="M520,520L760,520Q777,520 788.5,508.5Q800,497 800,480L800,320Q800,303 788.5,291.5Q777,280 760,280L520,280Q503,280 491.5,291.5Q480,303 480,320L480,480Q480,497 491.5,508.5Q503,520 520,520ZM160,800Q127,800 103.5,776.5Q80,753 80,720L80,240Q80,207 103.5,183.5Q127,160 160,160L800,160Q833,160 856.5,183.5Q880,207 880,240L880,720Q880,753 856.5,776.5Q833,800 800,800L160,800ZM160,720L800,720Q800,720 800,720Q800,720 800,720L800,240Q800,240 800,240Q800,240 800,240L160,240Q160,240 160,240Q160,240 160,240L160,720Q160,720 160,720Q160,720 160,720Z"/></svg><div><h3>Lirik melayang</h3><p>Di atas aplikasi apa pun, tembus pandang, seukuran yang kamu mau.</p></div></div>
+        <div class="card"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="m603-202-34 97q-4 11-14 18t-22 7q-20 0-32.5-16.5T496-133l152-402q5-11 15-18t22-7h30q12 0 22 7t15 18l152 403q8 19-4 35.5T868-80q-13 0-22.5-7T831-106l-34-96H603ZM362-401 188-228q-11 11-27.5 11.5T132-228q-11-11-11-28t11-28l174-174q-35-35-63.5-80T190-640h84q20 39 40 68t48 58q33-33 68.5-92.5T484-720H80q-17 0-28.5-11.5T40-760q0-17 11.5-28.5T80-800h240v-40q0-17 11.5-28.5T360-880q17 0 28.5 11.5T400-840v40h240q17 0 28.5 11.5T680-760q0 17-11.5 28.5T640-720h-76q-21 72-63 148t-83 116l96 98-30 82-122-125Zm266 129h144l-72-204-72 204Z"/></svg><div><h3>Pelajari liriknya</h3><p>Kana, pinyin, romaji, dan terjemahan, kata demi kata.</p></div></div>
         <div class="card"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M280-280v-400q0-17 11.5-28.5T320-720q17 0 28.5 11.5T360-680v400q0 17-11.5 28.5T320-240q-17 0-28.5-11.5T280-280Zm160 160v-720q0-17 11.5-28.5T480-880q17 0 28.5 11.5T520-840v720q0 17-11.5 28.5T480-80q-17 0-28.5-11.5T440-120ZM120-440v-80q0-17 11.5-28.5T160-560q17 0 28.5 11.5T200-520v80q0 17-11.5 28.5T160-400q-17 0-28.5-11.5T120-440Zm480 160v-400q0-17 11.5-28.5T640-720q17 0 28.5 11.5T680-680v400q0 17-11.5 28.5T640-240q-17 0-28.5-11.5T600-280Zm160-160v-80q0-17 11.5-28.5T800-560q17 0 28.5 11.5T840-520v80q0 17-11.5 28.5T800-400q-17 0-28.5-11.5T760-440Z"/></svg><div><h3>Lagu apa ini?</h3><p>Crosstune mendengarkan, mengenali, lalu membukanya.</p></div></div>
         <div class="card"><svg viewBox="0 -960 960 960" aria-hidden="true"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm0-80h480v-400H240v400Zm240-120q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80ZM240-160v-400 400Z"/></svg><div><h3>Privat</h3><p>Tanpa akun, tanpa pelacakan. Riwayat tetap di ponselmu.</p></div></div>
       </div>
@@ -247,7 +242,26 @@
   const update = () => {
     button.innerHTML = '<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="' + (isDark() ? "M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM80-440q-17 0-28.5-11.5T40-480q0-17 11.5-28.5T80-520h80q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440H80Zm720 0q-17 0-28.5-11.5T760-480q0-17 11.5-28.5T800-520h80q17 0 28.5 11.5T920-480q0 17-11.5 28.5T880-440h-80ZM480-760q-17 0-28.5-11.5T440-800v-80q0-17 11.5-28.5T480-920q17 0 28.5 11.5T520-880v80q0 17-11.5 28.5T480-760Zm0 720q-17 0-28.5-11.5T440-80v-80q0-17 11.5-28.5T480-200q17 0 28.5 11.5T520-160v80q0 17-11.5 28.5T480-40ZM226-678l-43-42q-12-11-11.5-28t11.5-29q12-12 29-12t28 12l42 43q11 12 11 28t-11 28q-11 12-27.5 11.5T226-678Zm494 495-42-43q-11-12-11-28.5t11-27.5q11-12 27.5-11.5T734-282l43 42q12 11 11.5 28T777-183q-12 12-29 12t-28-12Zm-42-495q-12-11-11.5-27.5T678-734l42-43q11-12 28-11.5t29 11.5q12 12 12 29t-12 28l-43 42q-12 11-28 11t-28-11ZM183-183q-12-12-12-29t12-28l43-42q12-11 28.5-11t27.5 11q12 11 11.5 27.5T282-226l-42 43q-11 12-28 11.5T183-183Zm297-297Z" : "M480-120q-151 0-255.5-104.5T120-480q0-138 90-239.5T440-838q13-2 23 3.5t16 14.5q6 9 6.5 21t-7.5 23q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q11-7 22.5-6.5T819-479q10 5 15.5 15t3.5 24q-14 138-117.5 229T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z") + '"/></svg>';
     button.setAttribute("aria-label", isDark() ? "Beralih ke mode terang" : "Beralih ke mode gelap");
+    shots();
   };
+  // The clips in the page's look. With less motion asked for, each shows a still of itself instead.
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  const shots = () => document.querySelectorAll("video[data-shot]").forEach(video => {
+    const base = video.dataset.shot + "-" + (isDark() ? "dark" : "light");
+    if (video.dataset.base !== base) {
+      video.dataset.base = base;
+      video.poster = base + ".jpg";
+      video.src = base + ".mp4";
+    }
+    if (still.matches) {
+      video.pause();
+      video.preload = "none";
+    } else {
+      video.preload = "auto";
+      video.play().catch(() => {});
+    }
+  });
+  still.addEventListener("change", shots);
   button.addEventListener("click", () => {
     const next = isDark() ? "light" : "dark";
     document.documentElement.dataset.theme = next;
