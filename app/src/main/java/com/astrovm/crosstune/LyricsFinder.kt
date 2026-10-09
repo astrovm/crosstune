@@ -27,9 +27,6 @@ import java.io.IOException
 /** What LRCLIB's Retry-After asks for when it's busy. */
 internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
 
-/** How long a song found without words is believed, before asking again: the places with words keep getting more. */
-internal const val LYRICS_NONE_KEPT_MS = 3 * 24 * 60 * 60 * 1000L
-
 /** How far apart two recordings' lengths can be and still be the same one. */
 internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 
@@ -40,9 +37,11 @@ internal class LyricsFinder(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** How long to wait before asking again after a failed lookup; tests pass 0, so they don't wait. */
     private val busyPauseMs: Long = LYRICS_BUSY_PAUSE_MS,
-    /** What songs' words were, so a song shown again needs no lookup; a failed lookup isn't kept. */
-    private val cache: LookupCache? = null,
-    private val now: () -> Long = System::currentTimeMillis
+    /**
+     * What songs' words were, so a song shown again needs no lookup. Only words found are kept: a
+     * song without any is asked about again, since the places with words keep getting more.
+     */
+    private val cache: LookupCache? = null
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
@@ -78,24 +77,16 @@ internal class LyricsFinder(
     /** The song, whatever the case or spacing of its name. */
     private fun cacheKey(metadata: MusicMetadata) = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
 
-    /** Words as kept: the plain words and each timed line, or "none" for a song without any. */
-    private fun toCache(answer: Lyrics): String? = when (answer) {
-        is Lyrics.Found -> JSONObject()
-            .put("words", answer.words)
-            .put("lines", JSONArray().apply { answer.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+    /** Words as kept: the plain words and each timed line. */
+    private fun toCache(answer: Lyrics): String? = (answer as? Lyrics.Found)?.let { found ->
+        JSONObject()
+            .put("words", found.words)
+            .put("lines", JSONArray().apply { found.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
             .toString()
-        // When, so it's asked again in a while: the places that have words keep getting more.
-        Lyrics.None -> "$NONE${now()}"
-        Lyrics.Unavailable -> null
     }
 
     private fun fromCache(kept: String): Lyrics? {
-        // A song without words is believed for [LYRICS_NONE_KEPT_MS]; one kept with no time is from before
-        // there were other places to look, and is asked again.
-        if (kept.startsWith(NONE)) {
-            val at = kept.removePrefix(NONE).toLongOrNull() ?: return null
-            return Lyrics.None.takeIf { now() - at < LYRICS_NONE_KEPT_MS }
-        }
+        // "None", as earlier versions kept, isn't words, so it's asked again.
         return try {
             val json = JSONObject(kept)
             val lines = json.getJSONArray("lines").let { list ->
@@ -340,7 +331,6 @@ internal class LyricsFinder(
         const val LRCLIB_TIMEOUT_MS = 12_000L
         const val TRIES = 5
 
-        const val NONE = "none"
         const val SEARCH_URL = "https://lrclib.net/api/search"
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"

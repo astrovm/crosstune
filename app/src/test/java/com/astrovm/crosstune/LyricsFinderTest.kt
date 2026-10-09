@@ -192,11 +192,11 @@ class LyricsFinderTest {
         assertEquals(first, runBlocking { kept.lyricsOf(MusicMetadata("song", "BAND")) })
         assertEquals(1, fake.requestedUrls.size)
 
-        // A song without words is kept as such; one that couldn't be looked up isn't kept at all.
+        // Neither a song without words nor one that couldn't be looked up is kept, so both are asked again.
         respond("[]")
         assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
         fake.handler = { throw IOException("offline") }
-        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
+        assertEquals(Lyrics.Unavailable, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
         assertEquals(Lyrics.Unavailable, runBlocking { kept.lyricsOf(MusicMetadata("Other", "Band")) })
         respond("""[${answer("Other", "Band", "Words")}]""")
         assertEquals("Words", (runBlocking { kept.lyricsOf(MusicMetadata("Other", "Band")) } as Lyrics.Found).words)
@@ -315,22 +315,11 @@ class LyricsFinderTest {
 
 
     @Test
-    fun noWordsIsAskedAgainAfterAFewDaysAndOnceFromBeforeOtherPlacesWereAsked() {
+    fun noneKeptByAnEarlierVersionIsAskedAgain() {
         val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
-        var clock = 1_000_000L
         val cache = LookupCache(file, Dispatchers.Unconfined)
-        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache, now = { clock })
-        respond("[]")
-        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
-        respond("""[${answer("Quiet", "Band", "Words at last")}]""")
-        // Still believed a little before the days are up, asked again once they are.
-        clock += LYRICS_NONE_KEPT_MS - 1
-        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
-        clock += 1
-        assertEquals("Words at last", (runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) } as Lyrics.Found).words)
-
-        // "None" kept with no time, before other places were asked, is asked again.
         runBlocking { cache.put("${SongNames.normalize("Old")}\u0000${SongNames.normalize("Band")}", "none") }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
         respond("""[${answer("Old", "Band", "Found now")}]""")
         assertEquals("Found now", (runBlocking { kept.lyricsOf(MusicMetadata("Old", "Band")) } as Lyrics.Found).words)
     }
