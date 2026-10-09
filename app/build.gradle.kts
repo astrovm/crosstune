@@ -5,6 +5,11 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+// projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
+// builds, just with no visuals: they need the native library, and the app runs fine without it.
+val projectM = rootProject.file("third_party/projectm/CMakeLists.txt").exists()
+if (!projectM) logger.warn("third_party/projectm is missing, so this build has no MilkDrop visuals. Run: git submodule update --init --recursive")
+
 android {
     namespace = "com.astrovm.crosstune"
     compileSdk = 37
@@ -23,20 +28,24 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
-        externalNativeBuild {
-            cmake {
-                // One library, with nothing else to ship alongside it.
-                arguments += "-DANDROID_STL=c++_static"
+        if (projectM) {
+            externalNativeBuild {
+                cmake {
+                    // One library, with nothing else to ship alongside it.
+                    arguments += "-DANDROID_STL=c++_static"
+                }
             }
         }
     }
 
     // Pinned, so every build, F-Droid's too, makes the same native library.
     ndkVersion = "30.0.16248370"
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "4.1.2"
+    if (projectM) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "4.1.2"
+            }
         }
     }
 
