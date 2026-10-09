@@ -1061,9 +1061,12 @@ class ListeningTest {
         // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
         val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
         composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty() }
-        // Each of its words still taps for its meaning.
-        composeRule.onAllNodes(hasText("夜空") and inSheet).onFirst().performFirstLinkClick()
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("夜空") and !inSheet).fetchSemanticsNodes().size > 1 }
+        // Each of its words still taps for its meaning, once the dictionary that finds them is loaded.
+        composeRule.waitUntil(TIMEOUT_MS) {
+            runCatching { composeRule.onAllNodes(hasText("夜空") and inSheet).onFirst().performFirstLinkClick() }
+            composeRule.waitForIdle()
+            shown("yozora")
+        }
     }
 
     @Test
