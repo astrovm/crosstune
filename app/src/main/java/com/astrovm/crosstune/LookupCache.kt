@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicReference
  */
 internal class LookupCache(
     private val file: File,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** How many to keep; fewer where each one is big, such as a song's words. */
+    private val maxEntries: Int = MAX_ENTRIES
 ) {
     private val loading = Mutex()
     private var entries: LinkedHashMap<String, String>? = null
@@ -41,7 +43,7 @@ internal class LookupCache(
             // Moved to the end, so the oldest are dropped first.
             entries.remove(key)
             entries[key] = value
-            entries.keys.take(maxOf(0, entries.size - MAX_ENTRIES)).forEach(entries::remove)
+            entries.keys.take(maxOf(0, entries.size - maxEntries)).forEach(entries::remove)
             changed = true
         }
     }

@@ -195,6 +195,11 @@
     <string name="lyrics_jump">Vai qui</string>
     <string name="lyrics_listen_along">Ascolta insieme</string>
     <string name="lyrics_stop_listening">Smetti di ascoltare</string>
+    <string name="visuals_show">Mostra effetti visivi</string>
+    <string name="visuals_hide">Nascondi effetti visivi</string>
+    <string name="visuals_only">Solo effetti visivi</string>
+    <string name="visuals_options">Opzioni effetti visivi</string>
+    <string name="visuals_show_words">Mostra il testo</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Chiaro</string>
     <string name="theme_dark">Scuro</string>
@@ -211,6 +216,9 @@
     <string name="follow_help_try">Apri Accesso alle notifiche e prova ad attivare Crosstune. Se Android dice che è un\'impostazione con limitazioni, chiudi il messaggio.</string>
     <string name="follow_help_restricted">Poi apri Informazioni app, tocca ⋮ in alto a destra e scegli Consenti impostazioni con limitazioni. Android lo propone solo dopo quel primo tentativo.</string>
     <string name="follow_help_access">Tornato in Accesso alle notifiche, attiva Crosstune. Vede solo cosa riproducono le tue app di musica.</string>
+    <string name="setup_follow_body">Il testo segue la canzone nella tua app musicale, e Crosstune riconosce subito la canzone che suona sul telefono. Serve l\'accesso alle notifiche, ma le tue notifiche non vengono mai lette.</string>
+    <string name="follow_turn_on">Attiva</string>
+    <string name="follow_help_simple">Apri Accesso alle notifiche e attiva Crosstune. Vede solo cosa riproducono le tue app musicali.</string>
     <string name="setting_lyrics_follow">Il testo segue la tua app di musica</string>
     <string name="setting_lyrics_follow_description">Richiede l\'accesso alle notifiche. Le tue notifiche non vengono mai lette.</string>
     <string name="follow_help_app_info">Informazioni app</string>

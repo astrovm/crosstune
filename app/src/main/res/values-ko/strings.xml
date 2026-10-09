@@ -194,6 +194,11 @@
     <string name="lyrics_jump">여기로 이동</string>
     <string name="lyrics_listen_along">함께 듣기</string>
     <string name="lyrics_stop_listening">듣기 중지</string>
+    <string name="visuals_show">비주얼 표시</string>
+    <string name="visuals_hide">비주얼 숨기기</string>
+    <string name="visuals_only">비주얼만 보기</string>
+    <string name="visuals_options">비주얼 옵션</string>
+    <string name="visuals_show_words">가사 보기</string>
     <string name="setting_theme">테마</string>
     <string name="theme_light">라이트</string>
     <string name="theme_dark">다크</string>
@@ -210,6 +215,9 @@
     <string name="follow_help_try">알림 접근을 열고 Crosstune을 켜 보세요. Android에서 제한된 설정이라고 하면 그 메시지를 닫으세요.</string>
     <string name="follow_help_restricted">그런 다음 앱 정보를 열고 오른쪽 위의 ⋮을 탭한 뒤 제한된 설정 허용을 선택하세요. Android는 처음 시도한 후에만 이 옵션을 보여 줍니다.</string>
     <string name="follow_help_access">알림 접근으로 돌아가 Crosstune을 켜세요. 음악 앱에서 재생 중인 것만 확인합니다.</string>
+    <string name="setup_follow_body">가사가 음악 앱의 노래에 맞춰 흐르고, Crosstune이 휴대폰에서 재생 중인 노래를 바로 알아봅니다. 알림 접근 권한이 필요하지만 알림 내용은 절대 읽지 않습니다.</string>
+    <string name="follow_turn_on">켜기</string>
+    <string name="follow_help_simple">알림 접근을 열고 Crosstune을 켜세요. 음악 앱에서 재생 중인 것만 봅니다.</string>
     <string name="setting_lyrics_follow">가사가 음악 앱을 따라감</string>
     <string name="setting_lyrics_follow_description">알림 접근이 필요합니다. 알림 내용은 절대 읽지 않습니다.</string>
     <string name="follow_help_app_info">앱 정보</string>

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -43,6 +44,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import android.app.Activity
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -121,17 +128,25 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         return
     }
     BackHandler(onBack = actions.onDismissLyrics)
+    // Only the visuals, full screen, until a tap or Back brings the words back.
+    var visualsOnly by rememberSaveable { mutableStateOf(false) }
+    val onlyVisuals = visualsOnly && state.visuals
+    BackHandler(enabled = onlyVisuals) { visualsOnly = false }
     val tint by animateColorAsState(
         coverColor(song.artworkUrl, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
-    val surface = MaterialTheme.colorScheme.surface
-    Surface(color = surface, modifier = Modifier.fillMaxSize()) {
+    WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
+    Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to surface))
+            // The cover's colour would only tint the visuals, so it shows without them.
+            .then(
+                if (state.visuals) Modifier
+                else Modifier.background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
+            )
     ) {
         Column(
             modifier = Modifier
@@ -141,8 +156,15 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, state, actions, onOpenSaved = { savedShown = true })
+            LyricsHeader(song, state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
             TranslationStatus(state.learning, actions)
+            // Timed words with nothing saying where the song is: on top, how they can follow a music app.
+            var followOffered by rememberSaveable { mutableStateOf(true) }
+            AnimatedVisibility(
+                visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps && state.following == null && !state.listeningAlong
+            ) {
+                FollowOffer(actions, onDismiss = { followOffered = false })
+            }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -169,6 +191,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         }
     }
     }
+    }
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -176,6 +199,48 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         }
     }
 }
+
+/**
+ * The words over MilkDrop visuals when they're on, always in the dark so they read over them, on
+ * a ground that lets the visuals through; otherwise on the usual one. With [only], the visuals
+ * alone fill the screen, the phone's bars too, until a tap [onShowWords]. The visuals stay as they
+ * are either way, so the words coming and going don't start them over.
+ */
+@Composable
+private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
+    if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
+    CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            MilkdropVisuals(Modifier.fillMaxSize())
+            if (only) {
+                HiddenSystemBars()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
+                )
+            } else {
+                content(Color.Black.copy(alpha = VISUALS_SHADE))
+            }
+        }
+    }
+}
+
+/** The phone's status and navigation bars out of the way while this shows; a swipe from an edge brings them back for a moment. */
+@Composable
+private fun HiddenSystemBars() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? Activity)?.window ?: return@DisposableEffect onDispose {}
+        val bars = WindowCompat.getInsetsController(window, view)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose { bars.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+}
+
+/** How much the ground dims the visuals behind the words. */
+private const val VISUALS_SHADE = 0.45f
 
 private enum class LyricsShown { LOADING, FAILED, NONE, TIMED, PLAIN }
 
@@ -189,7 +254,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
 
 /** The song the words are of, the way back, and where their timing comes from. */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit) {
+private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -215,6 +280,7 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
+        VisualsButton(state.visuals, actions, onOnlyVisuals)
         if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
         // Floating shows the line being sung, which only timed words have.
         if (state.lyricLines.isNotEmpty()) {
@@ -348,6 +414,44 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
     }
 }
 
+/** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
+@Composable
+private fun VisualsButton(on: Boolean, actions: ScreenActions, onOnlyVisuals: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
+    val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
+    Box {
+        IconButton(onClick = { if (on) open = true else actions.onVisualsChange(true) }) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
+                Icon(
+                    painterResource(R.drawable.ic_visuals),
+                    contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
+                    tint = tint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        DropdownMenu(expanded = open && on, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.visuals_only)) },
+                leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onOnlyVisuals()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.visuals_hide)) },
+                leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
+                onClick = {
+                    open = false
+                    actions.onVisualsChange(false)
+                }
+            )
+        }
+    }
+}
+
 /** Why there are no words to read yet, or at all. */
 @Composable
 private fun LyricsMessage(text: String, loading: Boolean = false, action: @Composable () -> Unit = {}) {
@@ -452,10 +556,6 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
                 help = state.learning.helpFor(index)
             )
         }
-        // Nothing says where the song is: after the words, how they can follow a music app.
-        if (following == null && !state.listeningAlong && !state.canFollowApps) {
-            item { FollowOffer(actions) }
-        }
     }
 }
 
@@ -481,17 +581,20 @@ internal fun Learning.helpFor(index: Int): LineHelp? {
     return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation })
 }
 
-/** A quiet line after the words, not over them: they can follow the music app playing the song. */
+/** A strip over the words: they can follow the music app playing the song, once it's allowed. */
 @Composable
-private fun FollowOffer(actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
-        Text(
-            stringResource(R.string.lyrics_follow_allow),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
+private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.follow_turn_on)) }
+            IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+        }
     }
 }
 
@@ -589,33 +692,47 @@ private val WORDS = Regex("""\S+\s*|\s+""")
  * to allow restricted settings, after which the access turns on.
  */
 @Composable
-internal fun FollowHelp(actions: ScreenActions) {
-    val access = stringResource(R.string.follow_help_access_button)
+internal fun FollowHelp(state: UiState, actions: ScreenActions) {
     AlertDialog(
         onDismissRequest = actions.onDismissFollowHelp,
         title = { Text(stringResource(R.string.follow_help_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
-                FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
-                FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
-            }
-        },
+        text = { FollowSteps(state.followRestricted, actions, Modifier.verticalScroll(rememberScrollState())) },
         confirmButton = {
             TextButton(onClick = actions.onDismissFollowHelp) { Text(stringResource(R.string.dismiss_button)) }
         }
     )
 }
 
+/**
+ * The steps to the access, each with the button to the page it's done on: one, to turn it on, for
+ * an app from a store; three where Android holds it back, as for an app installed from a file.
+ */
 @Composable
-private fun FollowStep(number: Int, text: String, button: String, onClick: () -> Unit) {
+internal fun FollowSteps(restricted: Boolean, actions: ScreenActions, modifier: Modifier = Modifier) {
+    val access = stringResource(R.string.follow_help_access_button)
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = modifier) {
+        if (restricted) {
+            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
+            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
+            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
+        } else {
+            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess)
+        }
+    }
+}
+
+@Composable
+private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit) {
     Row {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        // A step on its own needs no number.
+        if (number != null) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
         }
-        Column(modifier = Modifier.padding(start = 14.dp)) {
+        Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
         }

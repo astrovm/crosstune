@@ -173,23 +173,17 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun theOneTapWidgetsRecognizeOrShowTheLyricsWithTheirNameWhereThereIsRoom() {
+    fun theOneTapWidgetsAreJustAButtonThatRecognizesOrShowsTheLyrics() {
         for ((widget, label, intent) in listOf(
             Triple(RecognizeWidget(), R.string.widget_recognize_label, Intent(app, RecognizeSongActivity::class.java)),
             Triple(LyricsWidget(), R.string.widget_lyrics_label, MainActivity.lyricsIntent(app))
         )) {
             runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
                 setContext(app)
-                setAppWidgetSize(ActionWidget.LABELLED)
+                setAppWidgetSize(DpSize(80.dp, 90.dp))
                 provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
                 onNode(hasContentDescription(app.getString(label))).assert(hasStartActivityClickAction(intent))
-                onNode(hasText(app.getString(label))).assertExists()
-            }
-            runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
-                setContext(app)
-                setAppWidgetSize(ActionWidget.SMALL)
-                provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
-                // One cell, just the button.
+                // Even with room, no name under it: just the button.
                 onNode(hasText(app.getString(label))).assertDoesNotExist()
             }
         }
@@ -198,7 +192,7 @@ class CrosstuneWidgetTest {
     @Test
     fun theOneTapWidgetsDrawForTheLauncherAndAllRedraw() = runBlocking {
         assertNotNull(RecognizeWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.SMALL))
-        assertNotNull(LyricsWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.LABELLED))
+        assertNotNull(LyricsWidgetReceiver().glanceAppWidget.compose(app, size = ActionWidget.SMALL))
         // With none placed, there's nothing to redraw, and nothing goes wrong.
         CrosstuneWidget.updateAllWidgets(app)
     }

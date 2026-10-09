@@ -129,6 +129,11 @@
     <string name="lyrics_jump">Jump here</string>
     <string name="lyrics_listen_along">Listen along</string>
     <string name="lyrics_stop_listening">Stop listening</string>
+    <string name="visuals_show">Show visuals</string>
+    <string name="visuals_hide">Hide visuals</string>
+    <string name="visuals_only">Only visuals</string>
+    <string name="visuals_options">Visuals options</string>
+    <string name="visuals_show_words">Show the words</string>
     <string name="setting_theme">Theme</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
@@ -145,6 +150,9 @@
     <string name="follow_help_try">Open Notification access and try to turn on Crosstune. If Android says it\'s a restricted setting, close that message.</string>
     <string name="follow_help_restricted">Then open App info, tap ⋮ at the top right, and choose Allow restricted settings. Android only offers it after that first try.</string>
     <string name="follow_help_access">Back in Notification access, turn on Crosstune. It only sees what your music apps are playing.</string>
+    <string name="setup_follow_body">Lyrics keep in time with the song in your music app, and Crosstune names the song your phone is playing right away. It needs notification access, but your notifications are never read.</string>
+    <string name="follow_turn_on">Turn on</string>
+    <string name="follow_help_simple">Open Notification access and turn on Crosstune. It only sees what your music apps are playing.</string>
     <string name="setting_lyrics_follow">Lyrics follow your music app</string>
     <string name="setting_lyrics_follow_description">Needs notification access. Your notifications are never read.</string>
     <string name="follow_help_app_info">App info</string>

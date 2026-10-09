@@ -71,6 +71,22 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aTitleThatsTwoNamesGetsTheCoverOfEither() {
+        val cover = "https://cdn-images.dzcdn.net/images/cover/mystery/500x500.jpg"
+        // Deezer only knows it by its English name.
+        fake.handler = { request ->
+            val query = request.url.queryParameter("q").orEmpty()
+            FakeSpotify.html(
+                request,
+                if (query.startsWith("Mystery Girl")) """{"data":[{"title":"Mystery Girl","artist":{"name":"I REIN FOR REIN"},"album":{"cover_big":"$cover"}}]}""" else """{"data":[]}"""
+            )
+        }
+        assertEquals(cover, runBlocking { matcher().cover(MusicMetadata("ミステリー・ガール - Mystery Girl", "I Re'in For Re'in")) })
+        // The whole title first, then each name in turn.
+        assertEquals(3, fake.requestedUrls.size)
+    }
+
+    @Test
     fun appleMusicSkipsRemixesAndIgnoresAccentsAndPunctuation() {
         respond(
             """{"results":[

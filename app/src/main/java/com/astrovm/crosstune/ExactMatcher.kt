@@ -263,7 +263,11 @@ internal class ExactMatcher(
         return fetchJson(oEmbed.toString()).optString("thumbnail_url").ifBlank { null }
     }
 
-    private suspend fun deezerCover(metadata: MusicMetadata): String? {
+    /** Deezer's cover for the song, under any of its names. */
+    private suspend fun deezerCover(metadata: MusicMetadata): String? =
+        SongNames.titleNames(metadata.title).firstNotNullOfOrNull { title -> deezerCoverNamed(metadata.copy(title = title)) }
+
+    private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
         // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
         val artists = SongNames.artists(metadata.artist)

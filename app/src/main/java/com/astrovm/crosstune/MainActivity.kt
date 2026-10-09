@@ -71,7 +71,12 @@ class MainActivity : ComponentActivity() {
                     LinkResolver(client, apis = apis),
                     // What was found for songs is kept, so a playlist played again needs no lookups.
                     ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis),
-                    LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
+                    LyricsFinder(
+                        client,
+                        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                        busyPauseMs = lyricsBusyPauseMs,
+                        cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300)
+                    ),
                     SongSearcher(client),
                     playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
@@ -176,6 +181,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
 
+        /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
+        @VisibleForTesting
+        internal var lyricsBusyPauseMs: Long = LYRICS_BUSY_PAUSE_MS
+
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting
         internal var listenAlongPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
@@ -186,6 +195,14 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
+
+        @VisibleForTesting
+        /** What draws the visuals behind the words; replaced in tests, which have no GPU or native library. */
+        internal var milkdropFactory: () -> Milkdrop = ::NativeMilkdrop
+
+        @VisibleForTesting
+        /** What the visuals hear the phone play through. */
+        internal var soundTapFactory: () -> SoundTap? = { OutputMixTap.open() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -303,6 +320,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onPureBlackChange = viewModel::setPureBlack,
                         onFloat = ::float,
+                        onVisualsChange = { on -> if (on) withMicrophone { viewModel.setVisuals(true) } else viewModel.setVisuals(false) },
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,

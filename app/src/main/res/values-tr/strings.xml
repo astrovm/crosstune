@@ -194,6 +194,11 @@
     <string name="lyrics_jump">Buraya atla</string>
     <string name="lyrics_listen_along">Birlikte dinle</string>
     <string name="lyrics_stop_listening">Dinlemeyi durdur</string>
+    <string name="visuals_show">Görselleri göster</string>
+    <string name="visuals_hide">Görselleri gizle</string>
+    <string name="visuals_only">Yalnızca görseller</string>
+    <string name="visuals_options">Görsel seçenekleri</string>
+    <string name="visuals_show_words">Sözleri göster</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Açık</string>
     <string name="theme_dark">Koyu</string>
@@ -210,6 +215,9 @@
     <string name="follow_help_try">Bildirim erişimi\'ni aç ve Crosstune\'u açmayı dene. Android bunun kısıtlanmış bir ayar olduğunu söylerse o mesajı kapat.</string>
     <string name="follow_help_restricted">Sonra Uygulama bilgileri\'ni aç, sağ üstteki ⋮ simgesine dokun ve Kısıtlanmış ayarlara izin ver\'i seç. Android bunu ancak o ilk denemeden sonra sunar.</string>
     <string name="follow_help_access">Bildirim erişimi\'ne dönüp Crosstune\'u aç. Yalnızca müzik uygulamalarının ne çaldığını görür.</string>
+    <string name="setup_follow_body">Şarkı sözleri müzik uygulamandaki şarkıyla senkron ilerler ve Crosstune telefonunda çalan şarkıyı hemen tanır. Bildirim erişimi gerekir, ancak bildirimlerin asla okunmaz.</string>
+    <string name="follow_turn_on">Aç</string>
+    <string name="follow_help_simple">Bildirim erişimini aç ve Crosstune\'u etkinleştir. Yalnızca müzik uygulamalarının ne çaldığını görür.</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>
     <string name="setting_lyrics_follow_description">Bildirim erişimi gerekir. Bildirimlerin asla okunmaz.</string>
     <string name="follow_help_app_info">Uygulama bilgileri</string>
