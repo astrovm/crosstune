@@ -196,6 +196,7 @@
     <string name="lyrics_stop_listening">सुनना बंद करें</string>
     <string name="visuals_show">विज़ुअल दिखाएँ</string>
     <string name="visuals_hide">विज़ुअल छिपाएँ</string>
+    <string name="visuals_next">अगला विज़ुअल</string>
     <string name="visuals_shade">विज़ुअल पर अंधेरा</string>
     <string name="visuals_only">सिर्फ़ विज़ुअल</string>
     <string name="visuals_options">विज़ुअल विकल्प</string>

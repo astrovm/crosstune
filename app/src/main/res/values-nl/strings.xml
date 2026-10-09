@@ -196,6 +196,7 @@
     <string name="lyrics_stop_listening">Stoppen met luisteren</string>
     <string name="visuals_show">Visuals tonen</string>
     <string name="visuals_hide">Visuals verbergen</string>
+    <string name="visuals_next">Volgende visual</string>
     <string name="visuals_shade">Verduistering van de visuals</string>
     <string name="visuals_only">Alleen visuals</string>
     <string name="visuals_options">Visuals-opties</string>

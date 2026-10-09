@@ -197,6 +197,7 @@
     <string name="lyrics_stop_listening">聞くのをやめる</string>
     <string name="visuals_show">ビジュアルを表示</string>
     <string name="visuals_hide">ビジュアルを非表示</string>
+    <string name="visuals_next">次のビジュアル</string>
     <string name="visuals_shade">ビジュアルの暗さ</string>
     <string name="visuals_only">ビジュアルのみ</string>
     <string name="visuals_options">ビジュアルのオプション</string>

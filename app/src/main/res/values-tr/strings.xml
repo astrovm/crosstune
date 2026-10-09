@@ -196,6 +196,7 @@
     <string name="lyrics_stop_listening">Dinlemeyi durdur</string>
     <string name="visuals_show">Görselleri göster</string>
     <string name="visuals_hide">Görselleri gizle</string>
+    <string name="visuals_next">Sonraki görsel</string>
     <string name="visuals_shade">Görsellerin kararması</string>
     <string name="visuals_only">Yalnızca görseller</string>
     <string name="visuals_options">Görsel seçenekleri</string>

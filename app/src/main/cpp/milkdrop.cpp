@@ -4,6 +4,9 @@
 
 namespace {
 projectm_handle handle(jlong instance) { return reinterpret_cast<projectm_handle>(instance); }
+
+// projectM says so when a preset won't load, e.g. a shader this phone can't compile.
+void failed(const char*, const char*, void* didFail) { *static_cast<bool*>(didFail) = true; }
 }
 
 extern "C" {
@@ -26,11 +29,16 @@ JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeResize(JN
     projectm_set_window_size(handle(instance), width, height);
 }
 
-JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeLoad(JNIEnv* env, jobject, jlong instance, jstring preset, jboolean smooth) {
+JNIEXPORT jboolean JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeLoad(JNIEnv* env, jobject, jlong instance, jstring preset, jboolean smooth) {
     const char* data = env->GetStringUTFChars(preset, nullptr);
-    if (data == nullptr) return;
+    if (data == nullptr) return JNI_FALSE;
+    // Loading happens right here, so whether it failed is known once it returns.
+    bool didFail = false;
+    projectm_set_preset_switch_failed_event_callback(handle(instance), failed, &didFail);
     projectm_load_preset_data(handle(instance), data, smooth);
+    projectm_set_preset_switch_failed_event_callback(handle(instance), nullptr, nullptr);
     env->ReleaseStringUTFChars(preset, data);
+    return didFail ? JNI_FALSE : JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeHear(JNIEnv* env, jobject, jlong instance, jbyteArray samples, jint count) {

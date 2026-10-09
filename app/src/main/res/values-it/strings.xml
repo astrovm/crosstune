@@ -197,6 +197,7 @@
     <string name="lyrics_stop_listening">Smetti di ascoltare</string>
     <string name="visuals_show">Mostra effetti visivi</string>
     <string name="visuals_hide">Nascondi effetti visivi</string>
+    <string name="visuals_next">Effetto successivo</string>
     <string name="visuals_shade">Oscuramento degli effetti visivi</string>
     <string name="visuals_only">Solo effetti visivi</string>
     <string name="visuals_options">Opzioni effetti visivi</string>

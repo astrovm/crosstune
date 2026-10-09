@@ -102,6 +102,8 @@ internal data class UiState(
     val visuals: Boolean = false,
     /** How dark the ground over the visuals is, from 0, none, to 1, black. */
     val visualsShade: Float = DEFAULT_VISUALS_SHADE,
+    /** How many times the next visual was asked for, so each ask moves on once. */
+    val visualsSkips: Int = 0,
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
     /** Lines kept to study later, newest first. */
@@ -1205,6 +1207,10 @@ internal class MainViewModel(
     fun setVisualsShade(shade: Float, save: Boolean) {
         if (save) preferences.edit { putFloat(KEY_VISUALS_SHADE, shade) }
         uiState = uiState.copy(visualsShade = shade)
+    }
+
+    fun nextVisual() {
+        uiState = uiState.copy(visualsSkips = uiState.visualsSkips + 1)
     }
 
     fun setVisuals(on: Boolean) {

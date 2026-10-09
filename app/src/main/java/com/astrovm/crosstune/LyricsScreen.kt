@@ -266,7 +266,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            MilkdropVisuals(Modifier.fillMaxSize())
+            MilkdropVisuals(state.visualsSkips, Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
@@ -530,6 +530,14 @@ private fun VisualsButton(on: Boolean, shade: Float, actions: ScreenActions, onO
                     modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
                 )
             }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.visuals_next)) },
+                leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
+                onClick = {
+                    open = false
+                    actions.onNextVisual()
+                }
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.visuals_only)) },
                 leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },

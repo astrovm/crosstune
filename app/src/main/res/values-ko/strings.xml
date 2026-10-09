@@ -196,6 +196,7 @@
     <string name="lyrics_stop_listening">듣기 중지</string>
     <string name="visuals_show">비주얼 표시</string>
     <string name="visuals_hide">비주얼 숨기기</string>
+    <string name="visuals_next">다음 비주얼</string>
     <string name="visuals_shade">비주얼 어둡기</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
