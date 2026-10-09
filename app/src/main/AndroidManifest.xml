@@ -269,13 +269,10 @@
             singleTop so a link, share or tile tap reaching Crosstune while it's already on screen
             is delivered to onNewIntent instead of just bringing the old screen back.
         -->
-        <!-- The words float over other apps in picture-in-picture, which resizes the window rather than restarting it. -->
         <activity
             android:name=".MainActivity"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:supportsPictureInPicture="true">
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -642,11 +639,6 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
-
-        <!-- The floating words' microphone; unexported, so only Crosstune's own window sends it. -->
-        <receiver
-            android:name=".FloatingListenReceiver"
-            android:exported="false" />
 
         <!-- Keeps the words floating over other apps while Crosstune is out of sight. -->
         <service
