@@ -341,6 +341,16 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun underItsOwnNamesNetEaseMayStillCreditTheArtistAsTheMusicAppDoes() {
+        // 初恋 by "Hiroko Mita" there, not by 三田 寛子 as the Japanese store has it.
+        japaneseSong(
+            netEase = { query -> if (query == "初恋 三田 寛子") """{"result":{"songs":[{"id":5,"name":"初恋","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{"songs":[]}}""" },
+            lyric = "[00:01.00]五月雨は緑色"
+        )
+        assertEquals("五月雨は緑色", words(hatsukoi))
+    }
+
+    @Test
     fun anArtistOnlyWrittenInJapaneseOnNetEaseCountsForARecordingAsLong() {
         val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
         piperSong(lengthMs = 187_000 + SAME_RECORDING_LENGTH_MS)

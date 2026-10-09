@@ -131,7 +131,9 @@ internal class LyricsFinder(
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
         if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
         val lengthMs = recording?.lengthMs
-        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs))) return answers.last()
+        // Under its own names the artist may still be credited as the music app names them, as
+        // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
+        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
         if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
         if (first is Lyrics.Found) return first
         return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
@@ -233,7 +235,7 @@ internal class LyricsFinder(
      * LRCLIB hasn't. Only a song of the same name by the same artist is taken, and the credits it
      * opens its words with are left off.
      */
-    private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+    private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long, alsoBy: String = metadata.artist): Lyrics = withTimeoutOrNull(timeoutMs) {
         try {
             val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("s", "${metadata.title} ${metadata.artist}")
@@ -249,7 +251,9 @@ internal class LyricsFinder(
                 // the recording lasts as long as the store's.
                 val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_RECORDING_LENGTH_MS
                 SongNames.same(song.optString("name"), metadata.title) &&
-                    artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) || (sameLength && !it.hasLatin()) }
+                    artists.any { name ->
+                        listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
+                    }
             }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
