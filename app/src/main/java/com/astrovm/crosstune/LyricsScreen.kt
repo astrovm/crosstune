@@ -132,7 +132,11 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
+            // The cover's colour would only tint the visuals, so it shows without them.
+            .then(
+                if (state.visuals) Modifier
+                else Modifier.background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
+            )
     ) {
         Column(
             modifier = Modifier
