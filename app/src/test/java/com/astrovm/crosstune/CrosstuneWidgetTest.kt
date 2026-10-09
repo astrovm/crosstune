@@ -13,6 +13,7 @@ import androidx.glance.appwidget.compose
 import androidx.glance.appwidget.testing.unit.GlanceAppWidgetUnitTest
 import androidx.glance.appwidget.testing.unit.hasStartActivityClickAction
 import androidx.glance.appwidget.testing.unit.runGlanceAppWidgetUnitTest
+import kotlin.time.Duration.Companion.seconds
 import androidx.glance.testing.unit.hasAnyDescendant
 import androidx.glance.testing.unit.hasContentDescription
 import androidx.glance.testing.unit.hasText
@@ -48,7 +49,7 @@ class CrosstuneWidgetTest {
     }
 
     private fun widget(size: DpSize, songs: List<WidgetSong>, block: GlanceAppWidgetUnitTest.() -> Unit) =
-        runGlanceAppWidgetUnitTest {
+        runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
             setContext(app)
             setAppWidgetSize(size)
             provideComposable { WidgetContent(songs) }
@@ -110,7 +111,7 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun itFollowsTheWallpaperColorsByDefault() = runGlanceAppWidgetUnitTest {
+    fun itFollowsTheWallpaperColorsByDefault() = runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
         setContext(app)
         provideComposable {
             CrosstuneWidget.WidgetTheme(CrosstuneWidget.widgetPalette(app)) {
@@ -121,7 +122,7 @@ class CrosstuneWidgetTest {
     }
 
     @Test
-    fun itWearsTheColorPickedInTheApp() = runGlanceAppWidgetUnitTest {
+    fun itWearsTheColorPickedInTheApp() = runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().putString(MainViewModel.KEY_PALETTE, "OCEAN").commit()
         setContext(app)
         provideComposable {
@@ -134,7 +135,7 @@ class CrosstuneWidgetTest {
 
     @Test
     @Config(sdk = [30])
-    fun beforeAndroid12ItUsesTheAppsOwnColors() = runGlanceAppWidgetUnitTest {
+    fun beforeAndroid12ItUsesTheAppsOwnColors() = runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
         setContext(app)
         provideComposable {
             CrosstuneWidget.WidgetTheme(CrosstuneWidget.widgetPalette(app)) {
@@ -177,14 +178,14 @@ class CrosstuneWidgetTest {
             Triple(RecognizeWidget(), R.string.widget_recognize_label, Intent(app, RecognizeSongActivity::class.java)),
             Triple(LyricsWidget(), R.string.widget_lyrics_label, MainActivity.lyricsIntent(app))
         )) {
-            runGlanceAppWidgetUnitTest {
+            runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
                 setContext(app)
                 setAppWidgetSize(ActionWidget.LABELLED)
                 provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
                 onNode(hasContentDescription(app.getString(label))).assert(hasStartActivityClickAction(intent))
                 onNode(hasText(app.getString(label))).assertExists()
             }
-            runGlanceAppWidgetUnitTest {
+            runGlanceAppWidgetUnitTest(timeout = WIDGET_TIMEOUT) {
                 setContext(app)
                 setAppWidgetSize(ActionWidget.SMALL)
                 provideComposable { ActionContent(widget.icon, widget.label, widget.intent(app)) }
@@ -204,4 +205,9 @@ class CrosstuneWidgetTest {
 
     private fun sha256(text: String) =
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        /** Glance gives up after 2 seconds, which a busy CI machine can take just to start. */
+        val WIDGET_TIMEOUT = 10.seconds
+    }
 }
