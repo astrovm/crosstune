@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -202,7 +204,8 @@ internal fun CoverArt(url: String?, load: suspend (String) -> ImageBitmap?, size
 internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): Color? {
     val color by produceState<Color?>(initialValue = null, url) {
         value = url?.let { load(it) }?.let { image ->
-            val pixel = Bitmap.createScaledBitmap(image.asAndroidBitmap(), 1, 1, true).getPixel(0, 0)
+            // Off the main thread: scaling a whole cover down takes a frame or two.
+            val pixel = withContext(Dispatchers.Default) { Bitmap.createScaledBitmap(image.asAndroidBitmap(), 1, 1, true).getPixel(0, 0) }
             val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(pixel, it) }
             Color.hsv(hsv[0], hsv[1].coerceIn(0.35f, 0.9f), hsv[2].coerceIn(0.55f, 0.95f))
         }
