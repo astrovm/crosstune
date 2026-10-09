@@ -14,10 +14,30 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2040100
-        versionName = "2.4.1"
+        versionCode = 2050000
+        versionName = "2.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // MilkDrop visuals, drawn by projectM, built for phones and for emulators.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                // One library, with nothing else to ship alongside it.
+                arguments += "-DANDROID_STL=c++_static"
+            }
+        }
+    }
+
+    // Pinned, so every build, F-Droid's too, makes the same native library.
+    ndkVersion = "30.0.16248370"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "4.1.2"
+        }
     }
 
     buildTypes {
@@ -83,6 +103,13 @@ baselineProfile {
 
 kover {
     reports {
+        filters {
+            excludes {
+                // The MilkDrop visuals' native library and GL thread need a GPU, which unit tests
+                // don't have; they're checked on a phone. What they're told to do is tested.
+                classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*")
+            }
+        }
         variant("debug") {
             verify {
                 rule {

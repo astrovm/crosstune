@@ -82,6 +82,9 @@ class ListeningTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.microphoneFactory = { microphone }
+        // Unit tests have no GPU or native library to draw visuals with.
+        MainActivity.milkdropFactory = { NoMilkdrop }
+        MainActivity.soundTapFactory = { null }
         prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
@@ -100,6 +103,8 @@ class ListeningTest {
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.milkdropFactory = ::NativeMilkdrop
+        MainActivity.soundTapFactory = { OutputMixTap.open() }
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
     }
@@ -495,6 +500,59 @@ class ListeningTest {
         controller!!.userLeaving()
         controller!!.pause().stop()
         assertEquals(null, shadowOf(app).nextStartedService)
+    }
+
+    @Test
+    fun visualsMoveBehindTheWordsUntilTurnedOff() {
+        demoWords(FakeHearing())
+        assertTrue(visualsShown().isEmpty())
+        click(string(R.string.visuals_show))
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        assertTrue(described(string(R.string.visuals_hide)))
+        // The words are still there, over them.
+        assertTrue(lit("Demo one"))
+        // Kept for next time.
+        assertTrue(prefs().getBoolean("visuals", false))
+
+        click(string(R.string.visuals_hide))
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
+        assertTrue(described(string(R.string.visuals_show)))
+        assertFalse(prefs().getBoolean("visuals", true))
+    }
+
+    @Test
+    fun visualsAskForTheMicrophoneFirstWhichAndroidNeedsToShareWhatPlays() {
+        demoWords(FakeHearing())
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        val activity = controller!!.get()
+        click(string(R.string.visuals_show))
+        val asked = shadowOf(activity).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+        assertTrue(visualsShown().isEmpty())
+        allowMicrophone()
+        activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        composeRule.waitForIdle()
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+    }
+
+    /** The visuals on screen, which draw nothing here, with no GPU. */
+    private fun visualsShown(): List<MilkdropView> {
+        fun find(view: View): List<MilkdropView> = when (view) {
+            is MilkdropView -> listOf(view)
+            is android.view.ViewGroup -> (0 until view.childCount).flatMap { find(view.getChildAt(it)) }
+            else -> emptyList()
+        }
+        return find(controller!!.get().window.decorView)
+    }
+
+    /** projectM, when it can't start. */
+    private object NoMilkdrop : Milkdrop {
+        override fun open(width: Int, height: Int) = false
+        override fun size(width: Int, height: Int) = Unit
+        override fun show(preset: String, smooth: Boolean) = Unit
+        override fun hear(samples: ByteArray, count: Int) = Unit
+        override fun draw() = Unit
+        override fun close() = Unit
     }
 
     @Test

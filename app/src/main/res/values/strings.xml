@@ -129,6 +129,8 @@
     <string name="lyrics_jump">Jump here</string>
     <string name="lyrics_listen_along">Listen along</string>
     <string name="lyrics_stop_listening">Stop listening</string>
+    <string name="visuals_show">Show visuals</string>
+    <string name="visuals_hide">Hide visuals</string>
     <string name="setting_theme">Theme</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>

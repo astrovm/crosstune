@@ -224,6 +224,8 @@ internal data class ScreenActions(
     val onPureBlackChange: (Boolean) -> Unit = {},
     /** Floats the words over other apps now, asking Android first if need be. */
     val onFloat: () -> Unit = {},
+    /** Visuals on or off behind the words; on asks for the microphone, which Android needs to share what plays. */
+    val onVisualsChange: (Boolean) -> Unit = {},
     /** Opens the chosen song from the list of songs a typed name turned up. */
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */

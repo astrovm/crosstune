@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only while listening for a song playing nearby, see SongListener. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Android's Visualizer needs it to share what the phone plays, which MilkDrop visuals move to. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Lyrics floating over other apps, see-through, kept up by a notification, still listening along. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

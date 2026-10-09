@@ -194,6 +194,8 @@
     <string name="lyrics_jump">Lompat ke sini</string>
     <string name="lyrics_listen_along">Dengarkan bersama</string>
     <string name="lyrics_stop_listening">Berhenti mendengarkan</string>
+    <string name="visuals_show">Tampilkan visual</string>
+    <string name="visuals_hide">Sembunyikan visual</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Terang</string>
     <string name="theme_dark">Gelap</string>

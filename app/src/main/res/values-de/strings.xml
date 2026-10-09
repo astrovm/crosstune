@@ -194,6 +194,8 @@
     <string name="lyrics_jump">Hierhin springen</string>
     <string name="lyrics_listen_along">Mithören</string>
     <string name="lyrics_stop_listening">Nicht mehr zuhören</string>
+    <string name="visuals_show">Visuals anzeigen</string>
+    <string name="visuals_hide">Visuals ausblenden</string>
     <string name="setting_theme">Design</string>
     <string name="theme_light">Hell</string>
     <string name="theme_dark">Dunkel</string>

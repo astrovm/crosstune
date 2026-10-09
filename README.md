@@ -46,6 +46,7 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
 - **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
 - **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there.
+- **MilkDrop visuals.** Tap the sparkles on the lyrics to see [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the words, moving to what your phone plays.
 - **Floating lyrics.** Float them over any app. Drag them, resize them, pinch the text, and pick how see-through they are.
 - **Learn the words.** Kana, pinyin, romaji and translations under each line. Tap a word for its meaning, repeat a line in your music app, or save it for later.
 - **Not on your app?** Crosstune says so and opens the song where it's from, or searches anyway, as you choose in **Settings**.
@@ -94,6 +95,7 @@ Check that **Open the exact match** is on. If it is, Crosstune found no confiden
 - With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack and Qobuz website search).
 - Lyrics come from [LRCLIB](https://lrclib.net) by title and artist. Translations go to [MyMemory](https://mymemory.translated.net) or your own LibreTranslate server, and English words to [Wiktionary](https://en.wiktionary.org). Readings are worked out on your phone.
 - Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
+- MilkDrop visuals read what your phone plays through Android, which asks for the microphone permission for it. Nothing is recorded or sent anywhere.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 
@@ -110,6 +112,8 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 
 <details>
 <summary><b>Building from source</b></summary>
+
+Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` in a clone: the MilkDrop visuals build [projectM](https://github.com/projectM-visualizer/projectm) (LGPL 2.1) from `third_party/projectm`. Its presets in `app/src/main/assets/milkdrop/` come from projectM's [Cream of the Crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop) pack, by their authors in each file name. Gradle downloads the pinned NDK and CMake if they're missing.
 
 You need the Android SDK and JDK 17 or newer. When building from the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
 

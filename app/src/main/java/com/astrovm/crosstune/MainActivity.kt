@@ -186,6 +186,14 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         internal var microphoneFactory: () -> Microphone = { AudioRecordMicrophone() }
+
+        @VisibleForTesting
+        /** What draws the visuals behind the words; replaced in tests, which have no GPU or native library. */
+        internal var milkdropFactory: () -> Milkdrop = ::NativeMilkdrop
+
+        @VisibleForTesting
+        /** What the visuals hear the phone play through. */
+        internal var soundTapFactory: () -> SoundTap? = { OutputMixTap.open() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -303,6 +311,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onPureBlackChange = viewModel::setPureBlack,
                         onFloat = ::float,
+                        onVisualsChange = { on -> if (on) withMicrophone { viewModel.setVisuals(true) } else viewModel.setVisuals(false) },
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,

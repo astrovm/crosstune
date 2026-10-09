@@ -194,6 +194,8 @@
     <string name="lyrics_jump">Buraya atla</string>
     <string name="lyrics_listen_along">Birlikte dinle</string>
     <string name="lyrics_stop_listening">Dinlemeyi durdur</string>
+    <string name="visuals_show">Görselleri göster</string>
+    <string name="visuals_hide">Görselleri gizle</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Açık</string>
     <string name="theme_dark">Koyu</string>

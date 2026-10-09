@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -126,12 +127,12 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
-    val surface = MaterialTheme.colorScheme.surface
-    Surface(color = surface, modifier = Modifier.fillMaxSize()) {
+    WithVisuals(state) { ground ->
+    Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to surface))
+            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
     ) {
         Column(
             modifier = Modifier
@@ -169,6 +170,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         }
     }
     }
+    }
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -176,6 +178,24 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         }
     }
 }
+
+/**
+ * The words over MilkDrop visuals when they're on, always in the dark so they read over them, on
+ * a ground that lets the visuals through; otherwise on the usual one.
+ */
+@Composable
+private fun WithVisuals(state: UiState, content: @Composable (ground: Color) -> Unit) {
+    if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
+    CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            MilkdropVisuals(Modifier.fillMaxSize())
+            content(Color.Black.copy(alpha = VISUALS_SHADE))
+        }
+    }
+}
+
+/** How much the ground dims the visuals behind the words. */
+private const val VISUALS_SHADE = 0.45f
 
 private enum class LyricsShown { LOADING, FAILED, NONE, TIMED, PLAIN }
 
@@ -215,6 +235,7 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
+        VisualsButton(state.visuals, actions)
         if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
         // Floating shows the line being sung, which only timed words have.
         if (state.lyricLines.isNotEmpty()) {
@@ -341,6 +362,23 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
             Icon(
                 painterResource(R.drawable.ic_recognize),
                 contentDescription = stringResource(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** MilkDrop visuals behind the words, on or off; lit while on. */
+@Composable
+private fun VisualsButton(on: Boolean, actions: ScreenActions) {
+    val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
+    val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
+    IconButton(onClick = { actions.onVisualsChange(!on) }) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
+            Icon(
+                painterResource(R.drawable.ic_visuals),
+                contentDescription = stringResource(if (on) R.string.visuals_hide else R.string.visuals_show),
                 tint = tint,
                 modifier = Modifier.size(22.dp)
             )

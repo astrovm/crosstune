@@ -1,2 +1,3 @@
+MilkDrop visuals: tap the sparkles on the lyrics to see them move behind the words, to what your phone plays.
 A song playing on your phone is named right away, from the app playing it, without listening. It works with headphones too. Crosstune needs to see what's playing for this, as it does to keep lyrics in time.
 Lyrics without timing no longer offer Float, since there's no line to follow. Floating lyrics no longer crash when the next song has no timed lyrics.

@@ -195,6 +195,8 @@
     <string name="lyrics_jump">ここへ移動</string>
     <string name="lyrics_listen_along">一緒に聞く</string>
     <string name="lyrics_stop_listening">聞くのをやめる</string>
+    <string name="visuals_show">ビジュアルを表示</string>
+    <string name="visuals_hide">ビジュアルを非表示</string>
     <string name="setting_theme">テーマ</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>

@@ -96,6 +96,8 @@ internal data class UiState(
     val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
+    /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
+    val visuals: Boolean = false,
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
     /** Lines kept to study later, newest first. */
@@ -328,6 +330,7 @@ internal class MainViewModel(
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
+            visuals = preferences.getBoolean(KEY_VISUALS, false),
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, false),
@@ -1187,6 +1190,11 @@ internal class MainViewModel(
         uiState = uiState.copy(pureBlack = on)
     }
 
+    fun setVisuals(on: Boolean) {
+        preferences.edit { putBoolean(KEY_VISUALS, on) }
+        uiState = uiState.copy(visuals = on)
+    }
+
     /**
      * How the floating words look and where they are, as changed on them; kept once a change is done,
      * e.g. at the end of a drag, rather than at every step of it.
@@ -1786,6 +1794,7 @@ internal class MainViewModel(
         const val KEY_PALETTE = "palette"
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
+        private const val KEY_VISUALS = "visuals"
         private const val KEY_READINGS = "lyrics_readings"
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
