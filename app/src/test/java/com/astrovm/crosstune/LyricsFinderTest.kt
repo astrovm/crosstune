@@ -157,7 +157,7 @@ class LyricsFinderTest {
         fake.handler = { throw IOException("offline") }
         assertEquals(Lyrics.Unavailable, found(MusicMetadata("Song", "Band")))
         // Asked again a few times, since LRCLIB turns away many lookups in a row when it's busy.
-        assertEquals(5, fake.requestedUrls.size)
+        assertEquals(5, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
 
         // Busy for a few tries, then answering: the words still come.
         var busy = 3
@@ -225,4 +225,83 @@ class LyricsFinderTest {
         assertEquals(Lyrics.Found("Words"), found(MusicMetadata("Song", "Band")))
         assertEquals(2, calls)
     }
+
+    /**
+     * A Japanese song a music app names in Latin letters: LRCLIB and NetEase answer as given for each,
+     * and iTunes knows it as 初恋 by 三田 寛子 when [ownNames].
+     */
+    private fun japaneseSong(lrclib: (String) -> String = { "[]" }, ownNames: Boolean = true, netEase: (String) -> String = { """{"result":{}}""" }, lyric: String = "") {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, lrclib(url.queryParameter("track_name").orEmpty()))
+                url.encodedPath == "/search" -> FakeSpotify.html(
+                    request,
+                    if (ownNames) """{"results":[{"trackId":7,"trackName":"Another Song","artistName":"Someone"},{"trackId":42,"trackName":"Hatsukoi","artistName":"三田 寛子"}]}""" else """{"results":[]}"""
+                )
+                url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"初恋","artistName":"三田 寛子"}]}""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, netEase(url.queryParameter("s").orEmpty()))
+                else -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(lyric)}}}""")
+            }
+        }
+    }
+
+    private val hatsukoi = MusicMetadata("Hatsukoi", "Hiroko Mita")
+
+    @Test
+    fun aSongLrclibHasUnderItsOwnNamesIsFoundUnderThem() {
+        japaneseSong(lrclib = { title -> if (title == "初恋") """[${answer("初恋", "三田 寛子", "五月雨は緑色")}]""" else "[]" })
+        assertEquals(Lyrics.Found("五月雨は緑色"), found(hatsukoi))
+        // The store that names it as music apps do, then the one in its own country, for that same recording.
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") && "country=us" in it })
+        assertEquals(true, fake.requestedUrls.any { it == "https://itunes.apple.com/lookup?id=42&country=jp" })
+    }
+
+    @Test
+    fun aSongLrclibHasntComesFromNetEaseWithoutItsCredits() {
+        val lrc = "[00:00.000] 作词 : 村下孝蔵\n[00:01.000] 作曲 : 村下孝蔵\n[00:16.000]五月雨は緑色\n[00:23.080]悲しくさせたよ"
+        japaneseSong(
+            netEase = { query -> if (query == "初恋 三田 寛子") """{"result":{"songs":[{"id":1,"name":"初恋","artists":[{"name":"村下孝蔵"}]},{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}""" else """{"result":{}}""" },
+            lyric = lrc
+        )
+        assertEquals(
+            Lyrics.Found("五月雨は緑色\n悲しくさせたよ", listOf(LyricLine(16_000, "五月雨は緑色"), LyricLine(23_080, "悲しくさせたよ"))),
+            found(hatsukoi)
+        )
+        // The words of its own singer's recording, not the namesake's.
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") })
+        assertEquals("https://music.163.com/", fake.requestHeaders.last { it.first == "Referer" }.second)
+    }
+
+    @Test
+    fun withoutOwnNamesNetEaseIsAskedUnderTheGivenOnes() {
+        japaneseSong(
+            ownNames = false,
+            netEase = { query -> if (query == "Hatsukoi Hiroko Mita") """{"result":{"songs":[{"id":3,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{}}""" },
+            lyric = "Plain words, no timings"
+        )
+        assertEquals(Lyrics.Found("Plain words, no timings"), found(hatsukoi))
+    }
+
+    @Test
+    fun anInstrumentalOrAnotherSongOnNetEaseIsNone() {
+        val ownSong = """{"result":{"songs":[{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}"""
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 纯音乐，请欣赏")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 作词 : Someone")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        japaneseSong(netEase = { """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"三田寛子"}]}]}}""" })
+        assertEquals(Lyrics.None, found(hatsukoi))
+    }
+
+    @Test
+    fun noneAnywhereIsBelievedOverAPlaceThatWouldntAnswer() {
+        // LRCLIB says none, NetEase is down: none.
+        japaneseSong(netEase = { "not json" })
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Nothing answers at all: worth saying so.
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertEquals(Lyrics.Unavailable, found(hatsukoi))
+    }
+
 }

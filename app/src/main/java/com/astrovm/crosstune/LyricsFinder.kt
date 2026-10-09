@@ -213,9 +213,11 @@ internal class LyricsFinder(
 
     /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
     private fun netEaseWords(lrc: String): Lyrics.Found? {
-        val timed = SyncedLyrics.parse(lrc).filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val stamped = SyncedLyrics.parse(lrc)
+        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }
         val lines = SyncedLyrics.withPauses(timed)
-        val words = if (timed.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
+        // Words with timings are only those; plain words, only when there are no timings at all.
+        val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
         else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.joinToString("\n").trim()
         if (words.isEmpty() || words.contains(NETEASE_INSTRUMENTAL)) return null
         return Lyrics.Found(words, lines)
