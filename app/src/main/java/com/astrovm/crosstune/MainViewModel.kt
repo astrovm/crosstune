@@ -547,12 +547,17 @@ internal class MainViewModel(
         if (link.service == null) LinkInput.RecognizedSong(link.url, metadata).text else link.url
 
     /**
-     * A recognized song needs the text shared with its search link, but Recent and the widget
-     * reopen it from the link alone.
+     * A recognized song shows only its name in the field, so the name reads back as the song just
+     * looked up, or one in Recent. Recent and the widget also reopen it from its link alone.
      */
-    private fun parse(text: String): LinkInput? = MusicLinks.parse(text)
-        ?: uiState.history.firstOrNull { it.link.service == null && it.link.url == text.trim() }
-            ?.let { LinkInput.RecognizedSong(it.link.url, it.metadata) }
+    private fun parse(text: String): LinkInput? {
+        MusicLinks.parse(text)?.let { return it }
+        val typed = text.trim()
+        (lastRequest?.first as? LinkInput.RecognizedSong)?.takeIf { it.text == typed }?.let { return it }
+        return uiState.history.asSequence().filter { it.link.service == null }
+            .map { LinkInput.RecognizedSong(it.link.url, it.metadata) }
+            .firstOrNull { it.url == typed || it.text == typed }
+    }
 
     fun settingsLeft() {
         uiState = uiState.copy(leaveSettings = false)
@@ -604,6 +609,11 @@ internal class MainViewModel(
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
         val recognized = MusicLinks.parse(text) as? LinkInput.RecognizedSong
         uiState = uiState.copy(linkText = recognized?.text ?: MusicLinks.extractFirstUrl(text) ?: text.trim(), error = null)
+        // The box shows only the song's name, so the song itself is looked up, not the name.
+        if (recognized != null) {
+            uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
+            return resolve(recognized, openWhenReady = false)
+        }
         resolveTypedInput()
     }
 

@@ -62,8 +62,8 @@ class MusicLinksTest {
             MusicMetadata("A Song", "Example Band")
         )
         assertEquals(expected, MusicLinks.parse(nowPlaying("A Song by Example Band")))
-        // The link box shows it on one line, which reads back as the same song.
-        assertEquals(expected, MusicLinks.parse(expected.text))
+        // The link box shows just its name, no search link after it.
+        assertEquals("A Song by Example Band", expected.text)
         assertEquals(MusicMetadata("Walk by Night", "Band"), recognized(nowPlaying("Walk by Night by Band")))
         // The search isn't encoded, so "&" and "+" stay as they are.
         assertEquals(MusicMetadata("Mrs. Robinson", "Simon & Garfunkel"), recognized(nowPlaying("Mrs. Robinson by Simon & Garfunkel")))
