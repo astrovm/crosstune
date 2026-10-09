@@ -85,13 +85,20 @@ class TranslatorTest {
                     request,
                     """{"en":[{"partOfSpeech":"Contraction","definitions":[{"definition":""},{"definition":"<span><a href=\"/wiki/Appendix:Glossary\">Contraction</a> of <i>we</i> + <i>are</i></span>"}]}]}"""
                 )
+                // Some definitions come with the page's styling inside.
+                "word" -> FakeSpotify.html(
+                    request,
+                    """{"en":[{"definitions":[{"definition":"<style data-mw-deduplicate=\"x\">.mw-parser-output .defdate{font-size:smaller}</style> a word, a term"}]}]}"""
+                )
                 "nothing" -> FakeSpotify.html(request, """{"en":[{"definitions":[]},{}]}""")
                 "empty" -> FakeSpotify.html(request, "{}")
                 "broken" -> FakeSpotify.html(request, "not json")
                 else -> FakeSpotify.html(request, "{}", code = 404)
             }
         }
-        assertEquals("Contraction of we + are", runBlocking { translator().define("We're", "en") })
+        assertEquals(Definition("contraction", "Contraction of we + are"), runBlocking { translator().define("We're", "en") })
+        // No type said, none shown.
+        assertEquals(Definition(null, "a word, a term"), runBlocking { translator().define("word", "en") })
         // Wikimedia is told who's asking.
         assertTrue("User-Agent" to "Crosstune (https://github.com/astrovm/crosstune)" in fake.requestHeaders)
         listOf("nothing", "empty", "broken", "unknown").forEach { assertNull(it, runBlocking { translator().define(it, "en") }) }

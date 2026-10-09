@@ -1,5 +1,23 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Slider
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import kotlinx.coroutines.delay
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.runtime.mutableLongStateOf
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
@@ -19,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,6 +45,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.toggleableState
@@ -65,7 +85,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -128,6 +147,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         return
     }
     BackHandler(onBack = actions.onDismissLyrics)
+    // Where the timed words are scrolled to, kept out here so they're right where they were when they
+    // come back, e.g. once the visuals come or go, with nothing to glide back to.
+    val timedList = rememberSaveable(song, saver = LazyListState.Saver) { LazyListState() }
     // Only the visuals, full screen, until a tap or Back brings the words back.
     var visualsOnly by rememberSaveable { mutableStateOf(false) }
     val onlyVisuals = visualsOnly && state.visuals
@@ -137,11 +159,29 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
+    // The bar makes way while the words are scrolled, and comes back once they rest.
+    var scrolledAt by remember { mutableLongStateOf(0L) }
+    var barShown by remember { mutableStateOf(true) }
+    LaunchedEffect(scrolledAt) {
+        if (scrolledAt == 0L) return@LaunchedEffect
+        barShown = false
+        delay(BAR_BACK_MS)
+        barShown = true
+    }
+    val scrolling = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
+                return Offset.Zero
+            }
+        }
+    }
     WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .nestedScroll(scrolling)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
@@ -156,7 +196,16 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
+            Box(
+                modifier = if (state.visuals) {
+                    // A little darker behind the song, so it reads over whatever the visuals do.
+                    Modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = state.visualsShade), 1f to Color.Transparent))
+                } else {
+                    Modifier
+                }
+            ) {
+                LyricsHeader(song, actions)
+            }
             TranslationStatus(state.learning, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -179,7 +228,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     } else if (shown == LyricsShown.NONE) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
-                        TimedLyrics(state, actions, onStudy = { studying = it })
+                        TimedLyrics(state, actions, timedList, onStudy = { studying = it })
                     } else if (state.learning.shows) {
                         // Read line by line, each with what helps read it.
                         LyricLines(state, onStudy = { studying = it })
@@ -188,6 +237,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
+        }
+        AnimatedVisibility(
+            visible = barShown,
+            enter = slideInVertically { it * 2 } + fadeIn(),
+            exit = slideOutVertically { it * 2 } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+        ) {
+            LyricsActions(state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
         }
     }
     }
@@ -211,7 +268,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            MilkdropVisuals(Modifier.fillMaxSize())
+            MilkdropVisuals(state.visualsSkips, Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
@@ -220,7 +277,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {
-                content(Color.Black.copy(alpha = VISUALS_SHADE))
+                content(Color.Black.copy(alpha = state.visualsShade))
             }
         }
     }
@@ -239,8 +296,6 @@ private fun HiddenSystemBars() {
     }
 }
 
-/** How much the ground dims the visuals behind the words. */
-private const val VISUALS_SHADE = 0.45f
 
 private enum class LyricsShown { LOADING, FAILED, NONE, TIMED, PLAIN }
 
@@ -254,7 +309,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
 
 /** The song the words are of, the way back, and where their timing comes from. */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -280,15 +335,66 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
-        VisualsButton(state.visuals, actions, onOnlyVisuals)
-        if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
-        // Floating shows the line being sung, which only timed words have.
-        if (state.lyricLines.isNotEmpty()) {
-            IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
-        }
-        SyncSource(state, actions)
     }
 }
+
+/**
+ * What can be done with the words, in a bar at the bottom, where a thumb reaches: what helps read
+ * them, the visuals, floating them, and what they follow.
+ */
+@Composable
+private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit, modifier: Modifier = Modifier) {
+    var menu by remember { mutableStateOf<BarMenu?>(null) }
+    Box(modifier = modifier) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            shape = CircleShape,
+            shadowElevation = 6.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+                if (state.lyrics.isNotEmpty()) {
+                    IconButton(onClick = { menu = BarMenu.LEARN }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
+                }
+                VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
+                // Floating shows the line being sung, which only timed words have.
+                if (state.lyricLines.isNotEmpty()) {
+                    IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+                }
+                SyncSource(state, actions)
+            }
+        }
+        // The menus open from the bar rather than from their button, so they line up with it and
+        // keep off the screen's edge.
+        val close = { menu = null }
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved, close)
+        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
+    }
+}
+
+private enum class BarMenu { LEARN, VISUALS }
+
+/**
+ * The words fade out at the top and bottom, rather than being cut off mid-line under the song or
+ * the bar. At the bottom they're gone by the time they reach the bar, so they never clash with it.
+ */
+private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+    drawContent()
+    val top = 32.dp.toPx() / size.height
+    val bottom = (BAR_FADE.toPx() / size.height).coerceAtMost(1f - top)
+    drawRect(Brush.verticalGradient(0f to Color.Transparent, top to Color.Black, 1f - bottom to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+}
+
+/** From just over the bar, 16dp up from the bottom and about 56dp tall, down to the bottom. */
+private val BAR_FADE = 88.dp
+
+/** The darkest the ground over the visuals goes, so they never vanish altogether. */
+private const val MAX_VISUALS_SHADE = 0.9f
+
+/** How long after the words stop being scrolled the bar comes back. */
+private const val BAR_BACK_MS = 1_200L
+
+/** Room under the words, so the last of them can be scrolled clear of the bar. */
+private val BAR_ROOM = 112.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
 private val Learning.shows get() = translation || (script != null && (readings || romanized))
@@ -299,27 +405,23 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * and a translation, for any.
  */
 @Composable
-private fun LearnButton(learning: Learning, anySaved: Boolean, actions: ScreenActions, onOpenSaved: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
-                LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-            }
-            if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
-            LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-            if (anySaved) {
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.lyrics_saved_lines)) },
-                    leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onOpenSaved()
-                    }
-                )
-            }
+private fun LearnMenu(open: Boolean, learning: Learning, anySaved: Boolean, actions: ScreenActions, onOpenSaved: () -> Unit, onClose: () -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
+            LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+        }
+        if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+        LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        if (anySaved) {
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.lyrics_saved_lines)) },
+                leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
+                onClick = {
+                    onClose()
+                    onOpenSaved()
+                }
+            )
         }
     }
 }
@@ -416,39 +518,66 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
 
 /** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
 @Composable
-private fun VisualsButton(on: Boolean, actions: ScreenActions, onOnlyVisuals: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
+private fun VisualsButton(on: Boolean, onClick: () -> Unit) {
     val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
-    Box {
-        IconButton(onClick = { if (on) open = true else actions.onVisualsChange(true) }) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
-                Icon(
-                    painterResource(R.drawable.ic_visuals),
-                    contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
-                    tint = tint,
-                    modifier = Modifier.size(22.dp)
-                )
+    IconButton(onClick = onClick) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
+            Icon(
+                painterResource(R.drawable.ic_visuals),
+                contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** What can be done with the visuals while they're on: how dark the ground over them is, the next, them alone, or off. */
+@Composable
+private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        // How dark the ground over them is, from none to nearly black.
+        val darken = stringResource(R.string.visuals_shade)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
+            AppIcon(R.drawable.ic_shade, contentDescription = null)
+            // Where it was let go is kept, even before the menu has caught up with it.
+            var latest by remember { mutableFloatStateOf(shade) }
+            Slider(
+                value = shade,
+                onValueChange = {
+                    latest = it
+                    actions.onVisualsShadeChange(it, false)
+                },
+                onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
+                valueRange = 0f..MAX_VISUALS_SHADE,
+                modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
+            )
+        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_next)) },
+            leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onNextVisual()
             }
-        }
-        DropdownMenu(expanded = open && on, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.visuals_only)) },
-                leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
-                onClick = {
-                    open = false
-                    onOnlyVisuals()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.visuals_hide)) },
-                leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
-                onClick = {
-                    open = false
-                    actions.onVisualsChange(false)
-                }
-            )
-        }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_only)) },
+            leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
+            onClick = {
+                onClose()
+                onOnlyVisuals()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_hide)) },
+            leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onVisualsChange(false)
+            }
+        )
     }
 }
 
@@ -501,8 +630,9 @@ private fun PlainLyrics(words: String) {
         style = MaterialTheme.typography.titleLarge.copy(lineHeight = 34.sp),
         modifier = Modifier
             .fillMaxSize()
+            .fadedEdges()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM)
             // The words are the point, so they read as one block rather than by line.
             .semantics(mergeDescendants = true) {}
     )
@@ -529,11 +659,10 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): In
  * the music app there when it can.
  */
 @Composable
-private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -> Unit) {
+private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListState, onStudy: (Int) -> Unit) {
     val lines = state.lyricLines
     val following = state.following
     val active = rememberSungLine(lines, following)
-    val list = rememberLazyListState()
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     LaunchedEffect(active) {
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
@@ -542,7 +671,7 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 240.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(lines) { index, line ->
             LyricLineText(
@@ -563,9 +692,9 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
 @Composable
 private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(state.lyrics.lines()) { index, line ->
             LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
@@ -683,8 +812,12 @@ private fun RubyLine(parts: List<Ruby>, style: TextStyle) {
     }
 }
 
-/** A word and the space after it, or a run of space alone. */
-private val WORDS = Regex("""\S+\s*|\s+""")
+/**
+ * What a line can wrap between: a word in Latin letters with the space after it, or, since
+ * Japanese and Chinese wrap anywhere, a single character (Korean, spaced, wraps by word), keeping the marks that can't start a
+ * line, like 。 or ー or small kana, with the one before.
+ */
+private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
 
 /**
  * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an
@@ -712,17 +845,18 @@ internal fun FollowSteps(restricted: Boolean, actions: ScreenActions, modifier: 
     val access = stringResource(R.string.follow_help_access_button)
     Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = modifier) {
         if (restricted) {
-            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
-            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
-            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
+            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess, R.drawable.guide_access_restricted, R.drawable.guide_restricted_close)
+            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo, R.drawable.guide_allow_restricted)
+            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
         } else {
-            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess)
+            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
         }
     }
 }
 
+/** What to do, the button to the page it's done on, and a screenshot of that page with what to tap circled. */
 @Composable
-private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit) {
+private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit, @DrawableRes vararg images: Int) {
     Row {
         // A step on its own needs no number.
         if (number != null) {
@@ -735,6 +869,11 @@ private fun FollowStep(number: Int?, text: String, button: String, onClick: () -
         Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
+            // Phones vary, which is said once, under the first step's screenshots.
+            images.forEachIndexed { index, image ->
+                val first = number == null || number == 1
+                GuideShot(image, Modifier.padding(top = 12.dp), caption = if (first && index == images.lastIndex) stringResource(R.string.guide_may_differ) else null)
+            }
         }
     }
 }
@@ -755,9 +894,14 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     // Open all the way, so one back closes it rather than lowering it halfway first.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
-            reading?.reading?.takeIf { it != text }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            // The line, once: each of its words underlined, to tap for its meaning.
-            TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+            // The line, once: each of its words underlined, to tap for its meaning, with its readings
+            // over the kanji, as in the lyrics.
+            val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
+            if (parts != null) {
+                TappableRubyLine(parts, words, state.word?.word, actions.onLookUpWord)
+            } else {
+                TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+            }
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
@@ -767,9 +911,15 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                 // Only a music app the words follow, and that can be moved, can play a line again.
                 if (state.following?.canSeek == true && index < state.lyricLines.size) {
                     val repeating = state.repeating == index
-                    FilledTonalButton(onClick = { if (repeating) actions.onStopRepeating() else actions.onRepeatLine(index) }) {
+                    val content: @Composable RowScope.() -> Unit = {
                         AppIcon(R.drawable.ic_repeat_one, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text(stringResource(if (repeating) R.string.lyrics_stop_repeating else R.string.lyrics_repeat_line), modifier = Modifier.padding(start = 8.dp))
+                    }
+                    // Filled only while it repeats, like the Save button once saved looks done.
+                    if (repeating) {
+                        FilledTonalButton(onClick = actions.onStopRepeating, content = content)
+                    } else {
+                        OutlinedButton(onClick = { actions.onRepeatLine(index) }, content = content)
                     }
                 }
                 OutlinedButton(onClick = { actions.onToggleSavedLine(index) }) {
@@ -802,6 +952,50 @@ private fun TappableLine(text: String, words: List<Word>, picked: Word?, onPick:
     Text(line, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
 }
 
+/**
+ * [parts] of a line with their readings over them, wrapping as the lyrics do, each piece of one of
+ * [words] a link to it. The word looked up stands out.
+ */
+@Composable
+private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?, onPick: (Word) -> Unit) {
+    val text = parts.joinToString("") { it.text }
+    // Where in the line each word is.
+    val spans = buildList {
+        var from = 0
+        words.forEach { word ->
+            val at = text.indexOf(word.text, from).takeIf { it >= 0 } ?: return@forEach
+            add(at until at + word.text.length to word)
+            from = at + word.text.length
+        }
+    }
+    val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+    val over = style.copy(fontSize = style.fontSize * 0.45f, lineHeight = style.fontSize * 0.5f, fontWeight = FontWeight.Medium)
+    val highlight = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
+    FlowRow(modifier = Modifier.testTag(STUDY_LINE_TAG)) {
+        var at = 0
+        parts.forEach { part ->
+            // A part with a reading stays whole; one without wraps as the lyrics do.
+            val pieces = if (part.reading == null) WORDS.findAll(part.text).map { it.value }.toList() else listOf(part.text)
+            pieces.forEach { piece ->
+                val start = at
+                at += piece.length
+                val word = spans.firstOrNull { start in it.first }?.second
+                val shown = buildAnnotatedString {
+                    append(piece)
+                    if (word != null) {
+                        val linkStyle = if (word == picked) highlight else SpanStyle(textDecoration = TextDecoration.Underline)
+                        addLink(LinkAnnotation.Clickable(word.text, TextLinkStyles(linkStyle)) { onPick(word) }, 0, piece.trimEnd().length)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Bottom)) {
+                    if (part.reading != null) Text(part.reading, style = over, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(shown, style = style)
+                }
+            }
+        }
+    }
+}
+
 /** A word tapped: how it reads, and what it means once found. */
 @Composable
 private fun WordCard(meaning: WordMeaning) {
@@ -819,6 +1013,7 @@ private fun WordCard(meaning: WordMeaning) {
             } else if (meaning.failed) {
                 Text(stringResource(R.string.lyrics_word_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } else if (meaning.meaning != null) {
+                meaning.type?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text(meaning.meaning, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

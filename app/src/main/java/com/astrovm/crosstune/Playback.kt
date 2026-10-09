@@ -76,6 +76,7 @@ internal class MediaSessionPlayback(
 
     override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
+        var watched: List<MediaController> = emptyList()
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 trySend(followed?.let(::following))
@@ -91,15 +92,26 @@ internal class MediaSessionPlayback(
             }
             trySend(playing?.let(::following))
         }
-        val changed = MediaSessionManager.OnActiveSessionsChangedListener { pick(it.orEmpty()) }
+        // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
+        val renamed = object : MediaController.Callback() {
+            override fun onMetadataChanged(metadata: MediaMetadata?) = pick(watched)
+        }
+        fun watch(controllers: List<MediaController>) {
+            watched.forEach { it.unregisterCallback(renamed) }
+            watched = controllers
+            controllers.forEach { it.registerCallback(renamed, handler) }
+            pick(controllers)
+        }
+        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
         // Without the user's say-so, e.g. taken back meanwhile, Android shows none, and says so by throwing.
         val watching = runCatching {
             sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
-            pick(sessions.getActiveSessions(listener))
+            watch(sessions.getActiveSessions(listener))
         }.isSuccess
         if (!watching) trySend(null)
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
+            watched.forEach { it.unregisterCallback(renamed) }
             followed?.unregisterCallback(callback)
         }
     }.distinctUntilChanged()
@@ -158,7 +170,10 @@ internal class MediaSessionPlayback(
         val playing = metadata ?: return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        if (title.isBlank() || !(SongNames.same(title, song.title) || SongNames.wordsMatch(title, song.title))) return false
+        if (title.isBlank()) return false
+        // A video's title, read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
+        val named = MetadataParsers.youtubeVideo(title, artist)?.title
+        if (!(SongNames.same(title, song.title) || SongNames.wordsMatch(title, song.title) || named?.let { SongNames.same(it, song.title) } == true)) return false
         // A video's channel may be named "Artist - Topic", or not be the artist at all, when the title names them.
         return artist.isBlank() || SongNames.artistInside(artist, song.artist) || SongNames.sameArtist(song.artist, artist) ||
             SongNames.artistNames(song.artist).map(SongNames::words).any { it.isNotEmpty() && SongNames.words(title).containsAll(it) }

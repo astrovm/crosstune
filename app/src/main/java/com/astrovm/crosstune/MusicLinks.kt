@@ -31,8 +31,8 @@ internal sealed interface LinkInput {
      * song in words then a Google search for it, or Google's own song result, by its title only.
      */
     data class RecognizedSong(val url: String, val metadata: MusicMetadata) : LinkInput {
-        /** Shared text that parses back to this song, for the link field. */
-        val text get() = if (metadata.artist.isBlank()) url else MusicLinks.nowPlayingShare(metadata)
+        /** What the link field shows: the song's name, or its link when it has no artist. */
+        val text get() = if (metadata.artist.isBlank()) url else "${metadata.title} by ${metadata.artist}"
     }
 }
 
@@ -115,12 +115,6 @@ internal object MusicLinks {
 
     private val nowPlayingPatterns by lazy {
         NowPlayingShares.patterns.map { (shared, searched) -> SongPattern(shared) to SongPattern(searched) }
-    }
-
-    /** What Now Playing shares for a song with the English wording, which every phone reads. */
-    fun nowPlayingShare(metadata: MusicMetadata): String {
-        val song = "${metadata.title} by ${metadata.artist}"
-        return "$song ${nowPlayingSearch(song)}"
     }
 
     private fun nowPlayingSearch(query: String) = NOW_PLAYING_SEARCH + query.replace(' ', '+')

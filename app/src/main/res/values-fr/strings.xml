@@ -196,6 +196,8 @@
     <string name="lyrics_stop_listening">Arrêter d\'écouter</string>
     <string name="visuals_show">Afficher les visuels</string>
     <string name="visuals_hide">Masquer les visuels</string>
+    <string name="visuals_next">Visuel suivant</string>
+    <string name="visuals_shade">Assombrissement des visuels</string>
     <string name="visuals_only">Visuels seuls</string>
     <string name="visuals_options">Options des visuels</string>
     <string name="visuals_show_words">Afficher les paroles</string>
@@ -212,12 +214,12 @@
     <string name="setting_pure_black">Noir pur</string>
     <string name="setting_pure_black_description">Du vrai noir en mode sombre. Mieux pour les écrans OLED et leur batterie.</string>
     <string name="follow_help_title">Faire suivre votre musique aux paroles</string>
-    <string name="follow_help_try">Ouvrez Accès aux notifications et essayez d\'activer Crosstune. Si Android indique qu\'il s\'agit d\'un paramètre restreint, fermez ce message.</string>
-    <string name="follow_help_restricted">Ouvrez ensuite Infos sur l\'appli, touchez ⋮ en haut à droite et choisissez Autoriser les paramètres restreints. Android ne le propose qu\'après ce premier essai.</string>
-    <string name="follow_help_access">De retour dans Accès aux notifications, activez Crosstune. Il ne voit que ce que lisent vos apps de musique.</string>
-    <string name="setup_follow_body">Les paroles suivent la chanson dans votre appli de musique, et Crosstune reconnaît tout de suite la chanson que joue votre téléphone. Il faut l\'accès aux notifications, mais vos notifications ne sont jamais lues.</string>
+    <string name="follow_help_try">Touchez l\'interrupteur, puis Fermer.</string>
+    <string name="follow_help_restricted">Touchez ⋮, puis Autoriser les paramètres restreints.</string>
+    <string name="follow_help_access">Activez-le maintenant et touchez Autoriser.</string>
+    <string name="setup_follow_body">Les paroles suivent votre appli de musique. Crosstune voit seulement ce qui joue, jamais vos notifications.</string>
     <string name="follow_turn_on">Activer</string>
-    <string name="follow_help_simple">Ouvrez Accès aux notifications et activez Crosstune. Il voit seulement ce que jouent vos applis de musique.</string>
+    <string name="follow_help_simple">Activez-le et touchez Autoriser.</string>
     <string name="setting_lyrics_follow">Les paroles suivent votre app de musique</string>
     <string name="setting_lyrics_follow_description">Nécessite l\'accès aux notifications. Vos notifications ne sont jamais lues.</string>
     <string name="follow_help_app_info">Infos sur l\'appli</string>
@@ -234,6 +236,7 @@
     <string name="floating_customize">Personnaliser</string>
     <string name="floating_previous_line">Ligne précédente</string>
     <string name="floating_next_line">Ligne suivante</string>
+    <string name="floating_visuals">Visuels</string>
     <string name="floating_open">Ouvrir Crosstune</string>
     <string name="floating_lock">Laisser passer les touchers</string>
     <string name="floating_unlock">Déverrouiller</string>

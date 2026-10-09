@@ -1832,11 +1832,24 @@ class MainActivityTest {
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
         click(string(R.string.paste_button))
         waitForText("A Song")
-        val shown = "A Song by Example Band https://www.google.com/search?q=A+Song+by+Example+Band"
-        composeRule.onNode(hasSetTextAction()).assert(hasText(shown, substring = false)).performImeAction()
+        // Just its name, no search link cut off after it.
+        composeRule.onNode(hasSetTextAction()).assert(hasText("A Song by Example Band", substring = false)).performImeAction()
         waitForText("A Song")
         assertTextAbsent(string(R.string.error_invalid_url))
         assertOnlyCoverSearches()
+    }
+
+    @Test
+    fun aRecognizedSongInRecentIsFoundAgainByTheNameTheBoxShows() {
+        val url = "https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+        fake.handler = { throw IOException("offline") }
+        launch()
+        typeUrl("A Song by Example Band")
+        click(string(R.string.resolve_button))
+        assertResultShown()
+        // Read back as the saved song: searched for by name while offline, nothing would show.
+        assertTextShown("A Song")
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 
 import androidx.compose.ui.test.hasClickAction
@@ -7,6 +9,10 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.longClick
 
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 import androidx.compose.ui.test.performSemanticsAction
 
@@ -546,6 +552,52 @@ class ListeningTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsShowThroughTheirFadedEdges() {
+        demoWords(FakeHearing())
+        val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        // A row through the first line, which sits clear of the edges, has its letters on it.
+        val line = composeRule.onNodeWithText("Demo one").getBoundsInRoot()
+        val density = composeRule.density.density
+        val y = ((line.top.value + line.bottom.value) / 2 * density).toInt()
+        val row = ((line.left.value * density).toInt() until (line.right.value * density).toInt()).map { image.getPixel(it, y) }
+        val background = image.getPixel(1, y)
+        assertTrue(row.count { kotlin.math.abs(android.graphics.Color.luminance(it) - android.graphics.Color.luminance(background)) > 0.3f } > 10)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theVisualsCanBeDarkenedOrSkippedAndTheBarMakesWayWhileScrolling() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        // How dark they're shaded, kept once let go.
+        click(string(R.string.visuals_options))
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.waitForIdle()
+        assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
+        // On to the next, with the menu closing.
+        click(string(R.string.visuals_next))
+        assertFalse(shown(string(R.string.visuals_next)))
+        assertTrue(visualsShown().isNotEmpty())
+
+        // Scrolling the words, the bar makes way, and comes back once they rest.
+        composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))
+            .performTouchInput { swipeUp() }
+        composeRule.waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
+    }
+
+    @Test
+    fun floatingLyricsCanFloatOverTheVisuals() {
+        prefs().edit().putBoolean("floating_visuals", true).commit()
+        val floating = floatOverApps(FakeHearing())
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(floating.get().let { service -> windowViews(service).any { root -> root.allViews().any { it is MilkdropView } } })
+        floating.destroy()
+    }
+
+    @Test
     fun visualsAskForTheMicrophoneFirstWhichAndroidNeedsToShareWhatPlays() {
         demoWords(FakeHearing())
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
@@ -574,7 +626,7 @@ class ListeningTest {
     private object NoMilkdrop : Milkdrop {
         override fun open(width: Int, height: Int) = false
         override fun size(width: Int, height: Int) = Unit
-        override fun show(preset: String, smooth: Boolean) = Unit
+        override fun show(preset: String, smooth: Boolean) = false
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
         override fun close() = Unit
@@ -632,6 +684,9 @@ class ListeningTest {
         demoWords(hearing)
         return floatNow()
     }
+
+    private fun View.allViews(): List<View> =
+        listOf(this) + ((this as? android.view.ViewGroup)?.let { group -> (0 until group.childCount).flatMap { group.getChildAt(it).allViews() } } ?: emptyList())
 
     private fun windowViews(service: FloatingLyricsService): List<View> =
         Shadow.extract<ShadowWindowManagerImpl>(service.getSystemService(WindowManager::class.java)).views
@@ -995,13 +1050,31 @@ class ListeningTest {
     private fun learnMenu() = click(string(R.string.lyrics_learn))
 
     @Test
+    fun theLineSheetShowsJapaneseWithItsReadingsOverItAndItsWordsToTap() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
+        composeRule.onAllNodes(hasText("夜空")).onFirst().performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
+        val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty() }
+        // Each of its words still taps for its meaning.
+        composeRule.onAllNodes(hasText("夜空") and inSheet).onFirst().performFirstLinkClick()
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("夜空") and !inSheet).fetchSemanticsNodes().size > 1 }
+    }
+
+    @Test
     fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
         composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        assertTrue(shown("べる"))
+        // The kana after it shows as written, each character free to wrap.
+        assertTrue(shown("べ") && shown("る"))
         assertTrue(prefs().getBoolean("lyrics_readings", false))
         click(string(R.string.lyrics_romanized))
         composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }

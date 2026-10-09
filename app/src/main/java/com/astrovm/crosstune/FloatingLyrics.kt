@@ -68,7 +68,9 @@ internal data class FloatingOptions(
     val locked: Boolean = false,
     val left: Int = -1,
     val top: Int = -1,
-    val width: Int = -1
+    val width: Int = -1,
+    /** MilkDrop visuals behind the words, with [background] as how dark they're shaded. */
+    val visuals: Boolean = false
 ) {
     companion object {
         const val MIN_SCALE = 0.7f
@@ -86,7 +88,7 @@ internal data class FloatingOptions(
 internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val song = state.lyricsFor
     val options = state.floating
-    val ground = Modifier.clip(MaterialTheme.shapes.large).background(Color.Black.copy(alpha = options.background))
+    val shade = Color.Black.copy(alpha = options.background)
     // White, outlined while there's little band behind them to read on.
     val ink = Color.White
     val outline = if (options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
@@ -96,32 +98,39 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
         contentAlignment = Alignment.Center,
         modifier = modifier
             .testTag(FLOATING_LYRICS_TAG)
-            .then(ground)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .clip(MaterialTheme.shapes.large)
+            .then(if (options.visuals) Modifier else Modifier.background(shade))
     ) {
-        // Each line rises in as it's sung.
-        AnimatedContent(targetState = sung, transitionSpec = { rise(up = true) }, label = "floating line") { line ->
-            // A line going out may be from the song before, whose words are gone.
-            val current = lines.getOrNull(line)
-            val (first, second) = if (current != null) {
-                current.text.ifBlank { "♪" } to lines.getOrNull(line + 1)?.text?.ifBlank { "♪" }
-            } else {
-                song?.title.orEmpty() to song?.artist
-            }
-            val before = lines.getOrNull(line - 1)?.text?.ifBlank { "♪" }?.takeIf { options.previousLine }
-            // What helps read the line being sung, as switched on for the words: its reading, and its translation.
-            val help = state.learning.helpFor(line).takeIf { line >= 0 }
-            val reading = help?.reading
-            val helps = listOfNotNull(
-                reading?.reading?.takeIf { help.readings && it != first },
-                reading?.romanized?.takeIf { help.romanized && it.isNotBlank() },
-                help?.translation
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                before?.let { Line(it, lit = false, options.scale, ink, outline) }
-                Line(first, lit = true, options.scale, ink, outline)
-                helps.forEach { Line(it, lit = false, options.scale, ink, outline) }
-                if (options.nextLine) second?.let { Line(it, lit = false, options.scale, ink, outline) }
+        // The visuals behind the words, shaded as dark as the background is set.
+        if (options.visuals) {
+            MilkdropVisuals(state.visualsSkips, Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().background(shade))
+        }
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            // Each line rises in as it's sung.
+            AnimatedContent(targetState = sung, transitionSpec = { rise(up = true) }, label = "floating line") { line ->
+                // A line going out may be from the song before, whose words are gone.
+                val current = lines.getOrNull(line)
+                val (first, second) = if (current != null) {
+                    current.text.ifBlank { "♪" } to lines.getOrNull(line + 1)?.text?.ifBlank { "♪" }
+                } else {
+                    song?.title.orEmpty() to song?.artist
+                }
+                val before = lines.getOrNull(line - 1)?.text?.ifBlank { "♪" }?.takeIf { options.previousLine }
+                // What helps read the line being sung, as switched on for the words: its reading, and its translation.
+                val help = state.learning.helpFor(line).takeIf { line >= 0 }
+                val reading = help?.reading
+                val helps = listOfNotNull(
+                    reading?.reading?.takeIf { help.readings && it != first },
+                    reading?.romanized?.takeIf { help.romanized && it.isNotBlank() },
+                    help?.translation
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    before?.let { Line(it, lit = false, options.scale, ink, outline) }
+                    Line(first, lit = true, options.scale, ink, outline)
+                    helps.forEach { Line(it, lit = false, options.scale, ink, outline) }
+                    if (options.nextLine) second?.let { Line(it, lit = false, options.scale, ink, outline) }
+                }
             }
         }
     }
@@ -261,6 +270,11 @@ private fun Customize(options: FloatingOptions, actions: FloatingActions) {
                     selected = options.nextLine,
                     onClick = { actions.onChange(options.copy(nextLine = !options.nextLine), true) },
                     label = { Text(stringResource(R.string.floating_next_line)) }
+                )
+                FilterChip(
+                    selected = options.visuals,
+                    onClick = { actions.onChange(options.copy(visuals = !options.visuals), true) },
+                    label = { Text(stringResource(R.string.floating_visuals)) }
                 )
             }
         }

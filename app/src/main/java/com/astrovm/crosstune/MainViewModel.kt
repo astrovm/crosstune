@@ -100,6 +100,10 @@ internal data class UiState(
     val pureBlack: Boolean = false,
     /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
     val visuals: Boolean = false,
+    /** How dark the ground over the visuals is, from 0, none, to 1, black. */
+    val visualsShade: Float = DEFAULT_VISUALS_SHADE,
+    /** How many times the next visual was asked for, so each ask moves on once. */
+    val visualsSkips: Int = 0,
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
     /** Lines kept to study later, newest first. */
@@ -240,7 +244,11 @@ internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
  * Then what's been worked out for the words shown, line by line.
  */
 /** A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none. */
-internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false)
+/** How dark the ground over the visuals is to start with: enough for the words to read. */
+internal const val DEFAULT_VISUALS_SHADE = 0.45f
+
+/** [type] is what kind of word it is, e.g. "noun", when the dictionary says. */
+internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false, val type: String? = null)
 
 internal data class Learning(
     val readings: Boolean = false,
@@ -333,6 +341,7 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             visuals = preferences.getBoolean(KEY_VISUALS, false),
+            visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             canFollowApps = playback?.hasAccess() == true,
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
@@ -350,7 +359,8 @@ internal class MainViewModel(
                 locked = preferences.getBoolean(KEY_FLOATING_LOCKED, false),
                 left = preferences.getInt(KEY_FLOATING_LEFT, -1),
                 top = preferences.getInt(KEY_FLOATING_TOP, -1),
-                width = preferences.getInt(KEY_FLOATING_WIDTH, -1)
+                width = preferences.getInt(KEY_FLOATING_WIDTH, -1),
+                visuals = preferences.getBoolean(KEY_FLOATING_VISUALS, false)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
@@ -537,12 +547,17 @@ internal class MainViewModel(
         if (link.service == null) LinkInput.RecognizedSong(link.url, metadata).text else link.url
 
     /**
-     * A recognized song needs the text shared with its search link, but Recent and the widget
-     * reopen it from the link alone.
+     * A recognized song shows only its name in the field, so the name reads back as the song just
+     * looked up, or one in Recent. Recent and the widget also reopen it from its link alone.
      */
-    private fun parse(text: String): LinkInput? = MusicLinks.parse(text)
-        ?: uiState.history.firstOrNull { it.link.service == null && it.link.url == text.trim() }
-            ?.let { LinkInput.RecognizedSong(it.link.url, it.metadata) }
+    private fun parse(text: String): LinkInput? {
+        MusicLinks.parse(text)?.let { return it }
+        val typed = text.trim()
+        (lastRequest?.first as? LinkInput.RecognizedSong)?.takeIf { it.text == typed }?.let { return it }
+        return uiState.history.asSequence().filter { it.link.service == null }
+            .map { LinkInput.RecognizedSong(it.link.url, it.metadata) }
+            .firstOrNull { it.url == typed || it.text == typed }
+    }
 
     fun settingsLeft() {
         uiState = uiState.copy(leaveSettings = false)
@@ -594,6 +609,11 @@ internal class MainViewModel(
         if (text.isNullOrBlank()) return showError(AppError.CLIPBOARD_EMPTY)
         val recognized = MusicLinks.parse(text) as? LinkInput.RecognizedSong
         uiState = uiState.copy(linkText = recognized?.text ?: MusicLinks.extractFirstUrl(text) ?: text.trim(), error = null)
+        // The box shows only the song's name, so the song itself is looked up, not the name.
+        if (recognized != null) {
+            uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
+            return resolve(recognized, openWhenReady = false)
+        }
         resolveTypedInput()
     }
 
@@ -1194,6 +1214,16 @@ internal class MainViewModel(
         uiState = uiState.copy(pureBlack = on)
     }
 
+    /** Kept only once let go, [save], rather than at every step of the slider. */
+    fun setVisualsShade(shade: Float, save: Boolean) {
+        if (save) preferences.edit { putFloat(KEY_VISUALS_SHADE, shade) }
+        uiState = uiState.copy(visualsShade = shade)
+    }
+
+    fun nextVisual() {
+        uiState = uiState.copy(visualsSkips = uiState.visualsSkips + 1)
+    }
+
     fun setVisuals(on: Boolean) {
         preferences.edit { putBoolean(KEY_VISUALS, on) }
         uiState = uiState.copy(visuals = on)
@@ -1214,6 +1244,7 @@ internal class MainViewModel(
             putInt(KEY_FLOATING_LEFT, options.left)
             putInt(KEY_FLOATING_TOP, options.top)
             putInt(KEY_FLOATING_WIDTH, options.width)
+            putBoolean(KEY_FLOATING_VISUALS, options.visuals)
         }
     }
 
@@ -1291,8 +1322,9 @@ internal class MainViewModel(
             val language = translationLanguage()
             val translated = translator.translate(listOf(word.lookup), language, uiState.learning.server)
             // Already in the app's language, a word means what the dictionary says.
-            val meaning = translated?.firstOrNull() ?: translated?.let { translator.define(word.lookup, language) }
-            uiState = uiState.copy(word = WordMeaning(word, meaning, failed = translated == null))
+            val definition = if (translated != null && translated.firstOrNull() == null) translator.define(word.lookup, language) else null
+            val meaning = translated?.firstOrNull() ?: definition?.meaning
+            uiState = uiState.copy(word = WordMeaning(word, meaning, failed = translated == null, type = definition?.type))
         }
     }
 
@@ -1799,6 +1831,7 @@ internal class MainViewModel(
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
         private const val KEY_VISUALS = "visuals"
+        private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
@@ -1809,6 +1842,7 @@ internal class MainViewModel(
         private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"
         private const val KEY_FLOATING_LEFT = "floating_left"
         private const val KEY_FLOATING_WIDTH = "floating_width"
+        private const val KEY_FLOATING_VISUALS = "floating_visuals"
         private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"
         private const val KEY_FLOATING_LOCKED = "floating_locked"
         private const val KEY_FLOATING_TOP = "floating_top"

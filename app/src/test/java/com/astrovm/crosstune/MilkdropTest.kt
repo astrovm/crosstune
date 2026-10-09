@@ -30,8 +30,12 @@ class MilkdropTest {
         override fun size(width: Int, height: Int) {
             calls += "size ${width}x$height"
         }
-        override fun show(preset: String, smooth: Boolean) {
+        /** Presets this phone can't load. */
+        var broken = emptySet<String>()
+
+        override fun show(preset: String, smooth: Boolean): Boolean {
             calls += "show $preset${if (smooth) " smoothly" else ""}"
+            return preset !in broken
         }
         override fun hear(samples: ByteArray, count: Int) {
             heard += samples.take(count)
@@ -233,4 +237,35 @@ class MilkdropTest {
 
     private fun visualizerOf(tap: OutputMixTap): Visualizer =
         OutputMixTap::class.java.getDeclaredField("visualizer").apply { isAccessible = true }.get(tap) as Visualizer
+
+    @Test
+    fun aPresetThatWontLoadIsPassedOverForTheNext() {
+        val milkdrop = FakeMilkdrop()
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        milkdrop.broken = setOf(order[0])
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        assertEquals(listOf("show ${order[0]}", "show ${order[1]}"), milkdrop.calls.filter { it.startsWith("show") })
+        // None loading at all, each is tried once, and it still draws.
+        val none = FakeMilkdrop().apply { broken = setOf("a", "b", "c") }
+        renderer(none).apply { created(); frame() }
+        assertEquals(3, none.calls.count { it.startsWith("show") })
+        assertEquals("draw", none.calls.last())
+    }
+
+    @Test
+    fun nextMovesOnAtTheNextFrameOncePerAsk() {
+        val milkdrop = FakeMilkdrop()
+        val renderer = MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = {}, presetMs = 10_000, skips = 2)
+        renderer.created()
+        // Asks from before it started aren't made.
+        renderer.frame()
+        assertEquals(1, milkdrop.calls.count { it.startsWith("show") })
+        renderer.skipTo(3)
+        renderer.frame()
+        renderer.frame()
+        assertEquals(2, milkdrop.calls.count { it.startsWith("show") })
+        assertTrue(milkdrop.calls.last { it.startsWith("show") }.endsWith("smoothly"))
+    }
+
 }

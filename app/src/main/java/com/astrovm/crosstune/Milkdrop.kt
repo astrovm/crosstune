@@ -20,7 +20,8 @@ internal interface Milkdrop {
     fun open(width: Int, height: Int): Boolean
     fun size(width: Int, height: Int)
     /** Moves on to [preset], the text of a .milk file, blending into it when [smooth]. */
-    fun show(preset: String, smooth: Boolean)
+    /** Whether it loaded: a phone may not manage some presets' shaders. */
+    fun show(preset: String, smooth: Boolean): Boolean
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
     fun draw()
@@ -49,7 +50,7 @@ internal class NativeMilkdrop : Milkdrop {
 
     private external fun nativeCreate(width: Int, height: Int): Long
     private external fun nativeResize(instance: Long, width: Int, height: Int)
-    private external fun nativeLoad(instance: Long, preset: String, smooth: Boolean)
+    private external fun nativeLoad(instance: Long, preset: String, smooth: Boolean): Boolean
     private external fun nativeHear(instance: Long, samples: ByteArray, count: Int)
     private external fun nativeDraw(instance: Long)
     private external fun nativeDestroy(instance: Long)
@@ -120,7 +121,9 @@ internal class MilkdropRenderer(
     private val random: Random = Random.Default,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val sleep: (Long) -> Unit = Thread::sleep,
-    private val presetMs: Long = PRESET_MS
+    private val presetMs: Long = PRESET_MS,
+    /** Skips asked for before it started, which it doesn't make. */
+    skips: Int = 0
 ) {
     private var open = false
     private var sound: SoundTap? = null
@@ -158,17 +161,32 @@ internal class MilkdropRenderer(
         val wait = drawnAt + FRAME_MS - now()
         if (wait > 0) sleep(wait)
         drawnAt = now()
-        if (drawnAt - shownAt >= presetMs) showNext(smooth = true)
+        if (skipsDone != skipsAsked || drawnAt - shownAt >= presetMs) {
+            skipsDone = skipsAsked
+            showNext(smooth = true)
+        }
         val heard = sound?.read(samples) ?: 0
         if (heard > 0) milkdrop.hear(samples, heard)
         milkdrop.draw()
     }
 
+    /** The next preset that loads, trying each at most once. */
     private fun showNext(smooth: Boolean) {
         shownAt = now()
-        if (shown.isEmpty()) return
-        milkdrop.show(shown[next], smooth)
-        next = (next + 1) % shown.size
+        repeat(shown.size) {
+            val loaded = milkdrop.show(shown[next], smooth)
+            next = (next + 1) % shown.size
+            if (loaded) return
+        }
+    }
+
+    @Volatile
+    private var skipsAsked = skips
+    private var skipsDone = skips
+
+    /** Moves on to the next preset at the next frame, once for each time [skips] has gone up. */
+    fun skipTo(skips: Int) {
+        skipsAsked = skips
     }
 
     /** Stops drawing and listening; on the GL thread, while its context is still there. */
@@ -190,7 +208,7 @@ internal class MilkdropRenderer(
  * Shows what [renderer] draws, in the views like any other, so the words can go over it; a
  * SurfaceView would sit behind the window, out of sight. Drawing stops while it's out of sight.
  */
-internal class MilkdropView(context: Context, private val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
+internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
     private var thread: GlThread? = null
 
     init {
@@ -315,13 +333,15 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
     }
 }
 
-/** MilkDrop visuals, moving to what the phone plays. */
+/** MilkDrop visuals, moving to what the phone plays; each time [skips] goes up, on to the next. */
 @Composable
-internal fun MilkdropVisuals(modifier: Modifier = Modifier) {
+internal fun MilkdropVisuals(skips: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { context ->
-            MilkdropView(context, MilkdropRenderer(MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory))
+            val renderer = MilkdropRenderer(MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory, skips = skips)
+            MilkdropView(context, renderer)
         },
+        update = { it.renderer.skipTo(skips) },
         modifier = modifier
     )
 }

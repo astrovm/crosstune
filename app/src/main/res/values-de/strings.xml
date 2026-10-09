@@ -196,6 +196,8 @@
     <string name="lyrics_stop_listening">Nicht mehr zuhören</string>
     <string name="visuals_show">Visuals anzeigen</string>
     <string name="visuals_hide">Visuals ausblenden</string>
+    <string name="visuals_next">Nächstes Visual</string>
+    <string name="visuals_shade">Abdunklung der Visuals</string>
     <string name="visuals_only">Nur Visuals</string>
     <string name="visuals_options">Visuals-Optionen</string>
     <string name="visuals_show_words">Text anzeigen</string>
@@ -212,12 +214,12 @@
     <string name="setting_pure_black">Reines Schwarz</string>
     <string name="setting_pure_black_description">Echtes Schwarz im dunklen Modus. Schonender für OLED-Displays und ihren Akku.</string>
     <string name="follow_help_title">Lass den Text deiner Musik folgen</string>
-    <string name="follow_help_try">Öffne den Benachrichtigungszugriff und versuche, Crosstune einzuschalten. Wenn Android meldet, dass es eine eingeschränkte Einstellung ist, schließe die Meldung.</string>
-    <string name="follow_help_restricted">Öffne dann die App-Info, tippe oben rechts auf ⋮ und wähle Eingeschränkte Einstellungen zulassen. Android bietet das erst nach diesem ersten Versuch an.</string>
-    <string name="follow_help_access">Zurück im Benachrichtigungszugriff schaltest du Crosstune ein. Es sieht nur, was deine Musik-Apps abspielen.</string>
-    <string name="setup_follow_body">Der Songtext läuft synchron zum Song in deiner Musik-App, und Crosstune erkennt sofort, was dein Handy abspielt. Dafür braucht es Benachrichtigungszugriff, deine Benachrichtigungen werden aber nie gelesen.</string>
+    <string name="follow_help_try">Tippe auf den Schalter, dann auf Schließen.</string>
+    <string name="follow_help_restricted">Tippe auf ⋮, dann auf Eingeschränkte Einstellungen zulassen.</string>
+    <string name="follow_help_access">Schalte ihn jetzt ein und tippe auf Zulassen.</string>
+    <string name="setup_follow_body">Der Songtext läuft synchron zu deiner Musik-App. Crosstune sieht nur, was läuft, nie deine Benachrichtigungen.</string>
     <string name="follow_turn_on">Aktivieren</string>
-    <string name="follow_help_simple">Öffne den Benachrichtigungszugriff und aktiviere Crosstune. Es sieht nur, was deine Musik-Apps abspielen.</string>
+    <string name="follow_help_simple">Schalte ihn ein und tippe auf Zulassen.</string>
     <string name="setting_lyrics_follow">Liedtext folgt deiner Musik-App</string>
     <string name="setting_lyrics_follow_description">Braucht Benachrichtigungszugriff. Deine Benachrichtigungen werden nie gelesen.</string>
     <string name="follow_help_app_info">App-Info</string>
@@ -234,6 +236,7 @@
     <string name="floating_customize">Anpassen</string>
     <string name="floating_previous_line">Vorherige Zeile</string>
     <string name="floating_next_line">Nächste Zeile</string>
+    <string name="floating_visuals">Visuals</string>
     <string name="floating_open">Crosstune öffnen</string>
     <string name="floating_lock">Berührungen durchlassen</string>
     <string name="floating_unlock">Entsperren</string>

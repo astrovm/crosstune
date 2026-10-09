@@ -67,7 +67,10 @@ internal object Readings {
         }
 
     /** A word as the dictionary splits a line, with how it reads and what part of speech it is. */
-    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface)
+    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface) {
+        /** How it's said, for romaji: the particles は and へ are said wa and e. */
+        val said get() = if (kind == "助詞") when (surface) { "は" -> "わ"; "へ" -> "え"; else -> kana } else kana
+    }
 
     /**
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん.
@@ -90,7 +93,7 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>): List<String> = grouped(pieces).map { word -> word.joinToString("") { it.kana } }
+    private fun romajiWords(pieces: List<Piece>): List<String> = grouped(pieces).map { word -> word.joinToString("") { it.said } }
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
@@ -127,7 +130,8 @@ internal object Readings {
             if (text.none(Char::isLetter)) return@mapNotNull null
             val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
             // Kana reads as written; the reading's only worth showing for kanji.
-            Word(text, kana.takeIf { it != text }, romaji(kana), lookup = word.first { it.kind != "記号" }.base)
+            val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
+            Word(text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base)
         }
         else -> segments(line).map { text ->
             when (script) {

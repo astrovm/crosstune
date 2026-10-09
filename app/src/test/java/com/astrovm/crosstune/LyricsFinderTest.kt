@@ -36,10 +36,11 @@ class LyricsFinderTest {
     fun aSongGetsItsOwnWords() {
         respond("""[${answer("Dakare Ni Kita Onna", "Kingo Hamada", "夜が灯りを\n投げるBedで")}]""")
         assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで"), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
-        val asked = fake.requestedUrls.single()
+        // LRCLIB first; the words have no timings, so other places are asked after.
+        val asked = fake.requestedUrls.first()
         assertEquals("https://lrclib.net/api/search?track_name=Dakare%20Ni%20Kita%20Onna&artist_name=Kingo%20Hamada", asked)
         // LRCLIB turns away a request that doesn't name itself, so it must say who and which version.
-        val agent = fake.requestHeaders.single { it.first == "User-Agent" }.second
+        val agent = fake.requestHeaders.first { it.first == "User-Agent" }.second
         assertEquals("Crosstune/2.3.3 (https://github.com/astrovm/crosstune)", agent)
     }
 
@@ -218,7 +219,8 @@ class LyricsFinderTest {
     fun aSecondTrySucceedsWhereTheFirstWasBusy() {
         var calls = 0
         fake.handler = { request ->
-            calls++
+            // Only LRCLIB's tries count: words with no timings are looked for elsewhere too.
+            if (request.url.host == "lrclib.net") calls++
             if (calls == 1) throw IOException("offline")
             FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
         }
@@ -339,6 +341,16 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun underItsOwnNamesNetEaseMayStillCreditTheArtistAsTheMusicAppDoes() {
+        // 初恋 by "Hiroko Mita" there, not by 三田 寛子 as the Japanese store has it.
+        japaneseSong(
+            netEase = { query -> if (query == "初恋 三田 寛子") """{"result":{"songs":[{"id":5,"name":"初恋","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{"songs":[]}}""" },
+            lyric = "[00:01.00]五月雨は緑色"
+        )
+        assertEquals("五月雨は緑色", words(hatsukoi))
+    }
+
+    @Test
     fun anArtistOnlyWrittenInJapaneseOnNetEaseCountsForARecordingAsLong() {
         val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
         piperSong(lengthMs = 187_000 + SAME_RECORDING_LENGTH_MS)
@@ -382,6 +394,57 @@ class LyricsFinderTest {
         fake.requestedUrls.clear()
         assertEquals(Lyrics.None, found(MusicMetadata("A - B - C", "Band")))
         assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
+    }
+
+
+    @Test
+    fun romajiIsJapaneseInLatinLettersNotEnglish() {
+        // Lines made up for the test.
+        assertEquals(true, isRomaji("ashita no sora wa aoi kara\nkimi to aruku michi de\nboku wa zutto matte iru yo"))
+        // Mixed with English, as many songs are, it's still romaji.
+        assertEquals(true, isRomaji("Just summer night we drive\nkimi no koe ga kikoeru\nTake me far away\nmachi no akari ni yume wo miru"))
+        assertEquals(false, isRomaji("I walked along the river tonight\nthinking about the things you said\nthe city lights were shining bright"))
+        // Japanese syllables without its little words, or in Japanese already, isn't.
+        assertEquals(false, isRomaji("sakura sakura yayoi no sora"))
+        assertEquals(false, isRomaji("空は青い から 君と 歩く ni wa ga wo"))
+        assertEquals(false, isRomaji(""))
+    }
+
+    /** A song LRCLIB has only [lrclib], and NetEase has with [netEase] words. */
+    private fun betterElsewhere(lrclib: String, netEase: String) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[$lrclib]")
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}]}]}}""")
+                else -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(netEase)}}}""")
+            }
+        }
+    }
+
+    @Test
+    fun romajiGivesWayToTheWordsInJapanese() {
+        val romaji = "kimi no koe ga kikoeru\nboku wa zutto matte iru yo\nyume wo miru"
+        betterElsewhere(answer("Song", "Band", romaji, "[00:01.00] kimi no koe ga kikoeru"), "[00:01.00]君の声が聞こえる")
+        assertEquals("君の声が聞こえる", words(MusicMetadata("Song", "Band")))
+        // Romaji elsewhere too isn't better: LRCLIB's stays.
+        betterElsewhere(answer("Song", "Band", romaji, "[00:01.00] kimi no koe ga kikoeru"), "[00:01.00]kimi no koe")
+        assertEquals(romaji, words(MusicMetadata("Song", "Band")))
+    }
+
+    @Test
+    fun untimedWordsGiveWayToTimedOnes() {
+        betterElsewhere(answer("Song", "Band", "First line"), "[00:02.00]First line")
+        assertEquals(Lyrics.Found("First line", listOf(LyricLine(2_000, "First line"))), found(MusicMetadata("Song", "Band")))
+        // Untimed elsewhere too: LRCLIB's stays.
+        betterElsewhere(answer("Song", "Band", "First line"), "Other words")
+        assertEquals(Lyrics.Found("First line"), found(MusicMetadata("Song", "Band")))
+        // Timed words that aren't romaji are taken straight away, with nothing else asked.
+        fake.requestedUrls.clear()
+        betterElsewhere(answer("Song", "Band", "First line", "[00:01.00] First line"), "[00:02.00]Other")
+        assertEquals("First line", words(MusicMetadata("Song", "Band")))
+        assertEquals(1, fake.requestedUrls.size)
     }
 
 }

@@ -320,6 +320,8 @@ class MainActivity : ComponentActivity() {
                         },
                         onPureBlackChange = viewModel::setPureBlack,
                         onFloat = ::float,
+                        onVisualsShadeChange = viewModel::setVisualsShade,
+                        onNextVisual = viewModel::nextVisual,
                         onVisualsChange = { on -> if (on) withMicrophone { viewModel.setVisuals(true) } else viewModel.setVisuals(false) },
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,

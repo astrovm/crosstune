@@ -112,16 +112,30 @@ internal class LyricsFinder(
         return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
     }
 
+    /**
+     * LRCLIB's words first. Words only there in romaji, Japanese written in Latin letters, give way
+     * to the song's own, in Japanese, from wherever else has them; words with no timings give way to
+     * timed ones, which can follow the song.
+     */
     private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
-        val answers = mutableListOf<Lyrics>()
-        suspend fun tried(answer: Lyrics) = answer.also { answers += it } is Lyrics.Found
-        if (tried(fromLrclib(metadata, timeoutMs))) return answers.last()
+        val first = fromLrclib(metadata, timeoutMs)
+        val romaji = first is Lyrics.Found && isRomaji(first.words)
+        val untimed = first is Lyrics.Found && first.lines.isEmpty()
+        if (first is Lyrics.Found && !romaji && !untimed) return first
+        val answers = mutableListOf(first)
+        // Romaji is only bettered by words in Japanese, and untimed words by timed ones.
+        suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
+            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || it.lines.isNotEmpty())
+        }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
         if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
         val lengthMs = recording?.lengthMs
-        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs))) return answers.last()
+        // Under its own names the artist may still be credited as the music app names them, as
+        // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
+        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
         if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
+        if (first is Lyrics.Found) return first
         return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
     }
 
@@ -221,7 +235,7 @@ internal class LyricsFinder(
      * LRCLIB hasn't. Only a song of the same name by the same artist is taken, and the credits it
      * opens its words with are left off.
      */
-    private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+    private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long, alsoBy: String = metadata.artist): Lyrics = withTimeoutOrNull(timeoutMs) {
         try {
             val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("s", "${metadata.title} ${metadata.artist}")
@@ -237,7 +251,9 @@ internal class LyricsFinder(
                 // the recording lasts as long as the store's.
                 val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_RECORDING_LENGTH_MS
                 SongNames.same(song.optString("name"), metadata.title) &&
-                    artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) || (sameLength && !it.hasLatin()) }
+                    artists.any { name ->
+                        listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
+                    }
             }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
@@ -348,4 +364,26 @@ internal class LyricsFinder(
 
 /** Whether any of it is written in Latin letters. */
 private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
+
+}
+
+/** Whether any of it is written in Japanese: kana, or the kanji Japanese shares with Chinese. */
+private fun String.hasJapanese() = any { it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' }
+
+/** A word that could be Japanese in Latin letters: syllables like "ka", "shi", "tsu", "n", and doubled consonants. */
+private val romajiWord = Regex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
+
+/** Little words Japanese can't do without, which English rarely uses. */
+private val romajiParticles = setOf("ni", "wa", "ga", "wo", "de", "mo", "kara", "made", "yo", "ne", "dake", "kimi", "boku", "watashi", "anata")
+
+/**
+ * Whether [words] are Japanese written in Latin letters: most words read as Japanese syllables, and
+ * its little words show up again and again. English has a few such words, never that many.
+ */
+internal fun isRomaji(words: String): Boolean {
+    if (words.hasJapanese()) return false
+    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    if (all.isEmpty()) return false
+    val japanese = all.count { romajiWord.matches(it) }
+    return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
 }

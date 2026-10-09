@@ -61,6 +61,11 @@ class ReadingsTest {
         assertEquals("tokete yuku", romanized("溶けてゆく"))
         assertEquals("「sayonara」 dake datta", romanized("「さよなら」だけだった"))
         assertEquals("kasanatte ita", romanized("重なっていた"))
+        // The particles は and へ are said wa and e, as written they're ha and he.
+        assertEquals("kimi wa", romanized("君は"))
+        assertEquals("umi e", romanized("海へ"))
+        assertEquals("hana", romanized("花"))
+        assertEquals("wa", Readings.words("君は", Script.JAPANESE).last().romanized)
     }
 
     @Test

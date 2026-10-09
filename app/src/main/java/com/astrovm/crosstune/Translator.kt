@@ -96,7 +96,7 @@ internal class Translator(
      * What [word] means, from Wiktionary's dictionary, for when translating it gives it back as it
      * was: a word already in [language]. Only English has one to ask; null without an entry.
      */
-    suspend fun define(word: String, language: String): String? {
+    suspend fun define(word: String, language: String): Definition? {
         if (language != "en") return null
         val url = WIKTIONARY_URL.toHttpUrl().newBuilder().addPathSegment(word.lowercase(Locale.ROOT)).build()
         val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build()
@@ -105,9 +105,14 @@ internal class Translator(
             // The word's own language comes first; its first sense is the one most meant.
             val senses = entries.optJSONArray(entries.keys().asSequence().firstOrNull() ?: return null) ?: return null
             (0 until senses.length()).asSequence()
-                .flatMap { index -> senses.getJSONObject(index).optJSONArray("definitions")?.let { list -> (0 until list.length()).map { list.getJSONObject(it).optString("definition") } }.orEmpty() }
-                .map { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim() }
-                .firstOrNull { it.isNotEmpty() }
+                .map(senses::getJSONObject)
+                .flatMap { sense ->
+                    val type = sense.optString("partOfSpeech").lowercase(Locale.ROOT).ifBlank { null }
+                    sense.optJSONArray("definitions")?.let { list -> (0 until list.length()).map { Definition(type, list.getJSONObject(it).optString("definition")) } }.orEmpty()
+                }
+                // Wiktionary sends its page styling along with some definitions, which isn't text to show.
+                .map { it.copy(meaning = HtmlCompat.fromHtml(it.meaning.replace(styleSheet, ""), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
+                .firstOrNull { it.meaning.isNotEmpty() }
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {
@@ -153,4 +158,11 @@ internal class Translator(
             else -> locale.language
         }
     }
+
 }
+
+/** What a word means, and what [type] of word it is, e.g. "noun", when the dictionary says. */
+internal data class Definition(val type: String?, val meaning: String)
+
+/** A page's styling, as Wiktionary leaves in some definitions. */
+private val styleSheet = Regex("""<style[^>]*>.*?</style>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
