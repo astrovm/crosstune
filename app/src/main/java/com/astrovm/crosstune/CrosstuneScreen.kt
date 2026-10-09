@@ -516,8 +516,6 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                             text = shown.title,
                             style = MaterialTheme.typography.titleLarge,
                             textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 24.dp)
                         )
                         if (shown.artist.isNotBlank()) {
@@ -525,9 +523,7 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
                                 text = shown.artist,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                textAlign = TextAlign.Center
                             )
                         }
                     } else {
@@ -815,14 +811,9 @@ private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> Ima
                         ) {
                             CoverArt(song.artworkUrl, loadArtwork, size = 48.dp)
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    song.artist,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                // Whole: versions like "(12 Mix)" are what tell songs of one name apart.
+                                Text(song.title, style = MaterialTheme.typography.bodyLarge)
+                                Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1711,7 +1702,7 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
     AlertDialog(
         onDismissRequest = actions.onDismissNotFoundOffer,
         icon = { DestinationIcon(offer.destination, state.installed) },
-        title = { Text(offer.song.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        title = { Text(offer.song.title) },
         text = { Text(stringResource(R.string.not_found_on, app)) },
         confirmButton = {
             offer.original?.service?.let { service ->
