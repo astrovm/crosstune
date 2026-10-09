@@ -216,6 +216,9 @@
     <string name="follow_help_try">[通知へのアクセス] を開き、Crosstune をオンにしてみてください。制限付き設定だと表示されたら、そのメッセージを閉じます。</string>
     <string name="follow_help_restricted">次に [アプリ情報] を開き、右上の ⋮ をタップして [制限付き設定を許可] を選びます。この項目は最初に試したあとにだけ表示されます。</string>
     <string name="follow_help_access">[通知へのアクセス] に戻り、Crosstune をオンにします。音楽アプリが再生しているものだけを確認します。</string>
+    <string name="setup_follow_body">歌詞が音楽アプリの曲に合わせて流れ、スマホで再生中の曲もすぐにわかります。通知へのアクセスが必要ですが、通知の内容は読み取りません。</string>
+    <string name="follow_turn_on">オンにする</string>
+    <string name="follow_help_simple">「通知へのアクセス」を開いて Crosstune をオンにしてください。見るのは音楽アプリで再生中の曲だけです。</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>
     <string name="setting_lyrics_follow_description">通知へのアクセスが必要です。通知の内容を読むことはありません。</string>
     <string name="follow_help_app_info">アプリ情報</string>

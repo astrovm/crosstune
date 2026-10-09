@@ -215,6 +215,9 @@
     <string name="follow_help_try">Open Toegang tot meldingen en probeer Crosstune aan te zetten. Zegt Android dat het een beperkte instelling is, sluit dan die melding.</string>
     <string name="follow_help_restricted">Open daarna App-info, tik rechtsboven op ⋮ en kies Beperkte instellingen toestaan. Android biedt dat pas aan na die eerste poging.</string>
     <string name="follow_help_access">Terug in Toegang tot meldingen zet je Crosstune aan. Het ziet alleen wat je muziek-apps afspelen.</string>
+    <string name="setup_follow_body">De songtekst loopt gelijk met het nummer in je muziek-app, en Crosstune herkent meteen wat je telefoon afspeelt. Hiervoor is meldingstoegang nodig, maar je meldingen worden nooit gelezen.</string>
+    <string name="follow_turn_on">Aanzetten</string>
+    <string name="follow_help_simple">Open Meldingstoegang en zet Crosstune aan. Het ziet alleen wat je muziek-apps afspelen.</string>
     <string name="setting_lyrics_follow">Songtekst volgt je muziek-app</string>
     <string name="setting_lyrics_follow_description">Heeft toegang tot meldingen nodig. Je meldingen worden nooit gelezen.</string>
     <string name="follow_help_app_info">App-info</string>

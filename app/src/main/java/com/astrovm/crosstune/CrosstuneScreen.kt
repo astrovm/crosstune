@@ -288,7 +288,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         }
     }
     // Asked for from the words or from settings, so it shows over either.
-    if (state.followHelp) FollowHelp(actions)
+    if (state.followHelp) FollowHelp(state, actions)
     state.notFoundOffer?.let { NotFoundDialog(it, state, actions) }
 }
 

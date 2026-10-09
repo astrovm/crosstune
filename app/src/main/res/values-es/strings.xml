@@ -215,6 +215,9 @@
     <string name="follow_help_try">Abrí Acceso a notificaciones e intentá activar Crosstune. Si Android dice que es una configuración restringida, cerrá ese mensaje.</string>
     <string name="follow_help_restricted">Después abrí Info. de la app, tocá ⋮ arriba a la derecha y elegí Permitir configuración restringida. Android solo lo ofrece después de ese primer intento.</string>
     <string name="follow_help_access">De vuelta en Acceso a notificaciones, activá Crosstune. Solo ve qué están reproduciendo tus apps de música.</string>
+    <string name="setup_follow_body">La letra sigue el ritmo de la canción en tu app de música, y Crosstune reconoce al instante la canción que suena en tu teléfono. Necesita acceso a notificaciones, pero nunca lee tus notificaciones.</string>
+    <string name="follow_turn_on">Activar</string>
+    <string name="follow_help_simple">Abre Acceso a notificaciones y activa Crosstune. Solo ve lo que reproducen tus apps de música.</string>
     <string name="setting_lyrics_follow">La letra sigue a tu app de música</string>
     <string name="setting_lyrics_follow_description">Necesita acceso a notificaciones. Nunca lee tus notificaciones.</string>
     <string name="follow_help_app_info">Info. de la app</string>

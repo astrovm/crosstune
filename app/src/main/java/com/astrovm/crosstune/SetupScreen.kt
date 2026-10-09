@@ -63,11 +63,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 
-private enum class SetupStep { DESTINATION, SOURCES, APPS, ALLOW }
+private enum class SetupStep { DESTINATION, SOURCES, APPS, ALLOW, FOLLOW }
 
 /**
  * First-run setup: where the user listens, which other services' links to open, stopping the
- * services' own installed apps from taking them, and allowing the links in Android. Stopping the
+ * services' own installed apps from taking them, allowing the links in Android, and letting lyrics
+ * follow the music apps. Stopping the
  * apps comes first because Android won't let Crosstune take links another app has verified.
  * Choices apply as they're made, so leaving halfway keeps them; setup shows again until finished.
  */
@@ -124,6 +125,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                 val skipping = when (step) {
                     SetupStep.APPS -> !appsGuideDone(appsToFix, state.blockingApps)
                     SetupStep.ALLOW -> state.someLinksNotAllowed || state.blockingApps.orEmpty().isNotEmpty()
+                    SetupStep.FOLLOW -> !state.canFollowApps
                     else -> false
                 }
                 if (skipping) {
@@ -162,6 +164,7 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     SetupStep.SOURCES -> SourcesStep(state, actions)
                     SetupStep.APPS -> AppsStep(appsToFix, state, actions)
                     SetupStep.ALLOW -> AllowStep(state, actions)
+                    SetupStep.FOLLOW -> FollowSetupStep(state, actions)
                 }
             }
         }
@@ -450,6 +453,19 @@ private fun AllowStep(state: UiState, actions: ScreenActions) {
         modifier = Modifier.padding(top = 28.dp, bottom = 16.dp)
     )
     AllowLinksGuide(state, actions)
+}
+
+/** Letting Crosstune see what music apps play, with the steps to it until it's allowed. */
+@Composable
+private fun FollowSetupStep(state: UiState, actions: ScreenActions) {
+    StepHeader(R.string.follow_help_title, R.string.setup_follow_body)
+    AnimatedContent(targetState = state.canFollowApps, transitionSpec = { fade() }, label = "follow allowed") { allowed ->
+        if (allowed) {
+            Tag(stringResource(R.string.setup_done), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
+        } else {
+            FollowSteps(state.followRestricted, actions)
+        }
+    }
 }
 
 /**

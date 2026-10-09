@@ -215,6 +215,9 @@
     <string name="follow_help_try">सूचना ऐक्सेस खोलें और Crosstune को चालू करके देखें। अगर Android कहे कि यह प्रतिबंधित सेटिंग है, तो वह संदेश बंद करें।</string>
     <string name="follow_help_restricted">फिर ऐप की जानकारी खोलें, ऊपर दाईं ओर ⋮ पर टैप करें, और प्रतिबंधित सेटिंग की अनुमति दें चुनें। Android यह विकल्प उस पहली कोशिश के बाद ही दिखाता है।</string>
     <string name="follow_help_access">सूचना ऐक्सेस में वापस जाकर Crosstune चालू करें। यह सिर्फ़ देखता है कि आपके म्यूज़िक ऐप क्या चला रहे हैं।</string>
+    <string name="setup_follow_body">बोल आपके म्यूज़िक ऐप के गाने के साथ चलते हैं, और Crosstune फ़ोन पर बज रहा गाना तुरंत पहचान लेता है। इसके लिए सूचना ऐक्सेस चाहिए, पर आपकी सूचनाएँ कभी नहीं पढ़ी जातीं।</string>
+    <string name="follow_turn_on">चालू करें</string>
+    <string name="follow_help_simple">सूचना ऐक्सेस खोलें और Crosstune चालू करें। यह सिर्फ़ देखता है कि आपके म्यूज़िक ऐप क्या चला रहे हैं।</string>
     <string name="setting_lyrics_follow">बोल आपके म्यूज़िक ऐप के साथ चलें</string>
     <string name="setting_lyrics_follow_description">सूचना ऐक्सेस चाहिए। आपकी सूचनाएँ कभी नहीं पढ़ी जातीं।</string>
     <string name="follow_help_app_info">ऐप की जानकारी</string>

@@ -215,6 +215,9 @@
     <string name="follow_help_try">打开“通知使用权”，试着开启 Crosstune。如果 Android 提示这是受限制的设置，关闭该提示。</string>
     <string name="follow_help_restricted">然后打开“应用信息”，点按右上角的 ⋮，选择“允许受限制的设置”。Android 只会在第一次尝试之后才提供这个选项。</string>
     <string name="follow_help_access">回到“通知使用权”，开启 Crosstune。它只会看到你的音乐应用正在播放什么。</string>
+    <string name="setup_follow_body">歌词会跟随音乐应用中的歌曲同步，Crosstune 也能立即识别手机正在播放的歌曲。需要通知使用权，但绝不会读取你的通知。</string>
+    <string name="follow_turn_on">开启</string>
+    <string name="follow_help_simple">打开“通知使用权”并开启 Crosstune。它只会看到你的音乐应用正在播放什么。</string>
     <string name="setting_lyrics_follow">歌词跟随音乐应用</string>
     <string name="setting_lyrics_follow_description">需要通知使用权。从不读取你的通知。</string>
     <string name="follow_help_app_info">应用信息</string>

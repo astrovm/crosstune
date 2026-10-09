@@ -158,6 +158,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         ) {
             LyricsHeader(song, state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
             TranslationStatus(state.learning, actions)
+            // Timed words with nothing saying where the song is: on top, how they can follow a music app.
+            var followOffered by rememberSaveable { mutableStateOf(true) }
+            AnimatedVisibility(
+                visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps && state.following == null && !state.listeningAlong
+            ) {
+                FollowOffer(actions, onDismiss = { followOffered = false })
+            }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -549,10 +556,6 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
                 help = state.learning.helpFor(index)
             )
         }
-        // Nothing says where the song is: after the words, how they can follow a music app.
-        if (following == null && !state.listeningAlong && !state.canFollowApps) {
-            item { FollowOffer(actions) }
-        }
     }
 }
 
@@ -578,17 +581,20 @@ internal fun Learning.helpFor(index: Int): LineHelp? {
     return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation })
 }
 
-/** A quiet line after the words, not over them: they can follow the music app playing the song. */
+/** A strip over the words: they can follow the music app playing the song, once it's allowed. */
 @Composable
-private fun FollowOffer(actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
-        Text(
-            stringResource(R.string.lyrics_follow_allow),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.allow_button)) }
+private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.follow_turn_on)) }
+            IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+        }
     }
 }
 
@@ -686,33 +692,47 @@ private val WORDS = Regex("""\S+\s*|\s+""")
  * to allow restricted settings, after which the access turns on.
  */
 @Composable
-internal fun FollowHelp(actions: ScreenActions) {
-    val access = stringResource(R.string.follow_help_access_button)
+internal fun FollowHelp(state: UiState, actions: ScreenActions) {
     AlertDialog(
         onDismissRequest = actions.onDismissFollowHelp,
         title = { Text(stringResource(R.string.follow_help_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
-                FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
-                FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
-            }
-        },
+        text = { FollowSteps(state.followRestricted, actions, Modifier.verticalScroll(rememberScrollState())) },
         confirmButton = {
             TextButton(onClick = actions.onDismissFollowHelp) { Text(stringResource(R.string.dismiss_button)) }
         }
     )
 }
 
+/**
+ * The steps to the access, each with the button to the page it's done on: one, to turn it on, for
+ * an app from a store; three where Android holds it back, as for an app installed from a file.
+ */
 @Composable
-private fun FollowStep(number: Int, text: String, button: String, onClick: () -> Unit) {
+internal fun FollowSteps(restricted: Boolean, actions: ScreenActions, modifier: Modifier = Modifier) {
+    val access = stringResource(R.string.follow_help_access_button)
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = modifier) {
+        if (restricted) {
+            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
+            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
+            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
+        } else {
+            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess)
+        }
+    }
+}
+
+@Composable
+private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit) {
     Row {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        // A step on its own needs no number.
+        if (number != null) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
         }
-        Column(modifier = Modifier.padding(start = 14.dp)) {
+        Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
         }

@@ -215,6 +215,9 @@
     <string name="follow_help_try">Откройте «Доступ к уведомлениям» и попробуйте включить Crosstune. Если Android скажет, что это настройка с ограниченным доступом, закройте сообщение.</string>
     <string name="follow_help_restricted">Затем откройте «О приложении», нажмите ⋮ вверху справа и выберите «Разрешить доступ к настройкам с ограниченным доступом». Android предлагает это только после первой попытки.</string>
     <string name="follow_help_access">Вернитесь в «Доступ к уведомлениям» и включите Crosstune. Он видит только то, что играют ваши музыкальные приложения.</string>
+    <string name="setup_follow_body">Текст идёт в такт с песней в музыкальном приложении, а Crosstune сразу узнаёт, что играет на телефоне. Нужен доступ к уведомлениям, но ваши уведомления никогда не читаются.</string>
+    <string name="follow_turn_on">Включить</string>
+    <string name="follow_help_simple">Откройте «Доступ к уведомлениям» и включите Crosstune. Он видит только то, что играют музыкальные приложения.</string>
     <string name="setting_lyrics_follow">Текст следует за музыкальным приложением</string>
     <string name="setting_lyrics_follow_description">Нужен доступ к уведомлениям. Ваши уведомления никогда не читаются.</string>
     <string name="follow_help_app_info">О приложении</string>

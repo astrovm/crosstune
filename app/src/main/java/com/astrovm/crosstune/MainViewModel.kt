@@ -83,6 +83,8 @@ internal data class UiState(
     val following: Following? = null,
     /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
     val canFollowApps: Boolean = false,
+    /** Whether Android holds that access back first, for an app installed from a file, so it takes more steps. */
+    val followRestricted: Boolean = false,
     /**
      * Set while the microphone keeps listening along with the words, to follow the song, or the next
      * one; it stays set while that's paused with Crosstune out of sight.
@@ -331,6 +333,8 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             visuals = preferences.getBoolean(KEY_VISUALS, false),
+            canFollowApps = playback?.hasAccess() == true,
+            followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, false),
