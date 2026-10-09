@@ -12,8 +12,8 @@
   "lede": "¿Te pasaron un link de un servicio pero escuchás en otro? Tocalo y la misma canción se abre donde escuchás.",
   "download": "Descargar para Android",
   "note": "Gratis, de código abierto y sin publicidad.",
-  "alt_home": "Una canción de Apple Music lista para abrir en YouTube Music",
-  "alt_list": "Una playlist de Deezer lista para reproducir toda en YouTube Music",
+  "alt_home": "Un enlace listo para abrir en YouTube Music y luego las canciones de una playlist",
+  "alt_lyrics": "Letra que sigue a la canción, con letras latinas y traducción, y luego flotando sobre la pantalla de inicio",
   "how_h2": "Cómo funciona",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Playlists enteras",
       "Mirá todas las canciones y reproducilas de una."
+    ],
+    [
+      "Letras a tiempo",
+      "Siguen a tu app de música, o escuchan con vos, canción tras canción."
+    ],
+    [
+      "Letras flotantes",
+      "Sobre cualquier app, transparentes, del tamaño que quieras."
+    ],
+    [
+      "Aprendé la letra",
+      "Kana, pinyin, romaji y traducciones, palabra por palabra."
     ],
     [
       "¿Qué canción es?",
@@ -57,7 +69,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 8 de octubre de 2026",
+  "updated": "Última actualización: 9 de octubre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra de una canción, la app envía el título y el artista a LRCLIB, un servicio de letras que no necesita cuenta ni clave. Cuando activás la traducción en la letra, la app envía sus líneas a MyMemory, un servicio de traducción que no pide cuenta, o al servidor de LibreTranslate que configures en Ajustes. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Las líneas que guardás quedan en tu teléfono."
+      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra de una canción, la app envía el título y el artista a LRCLIB, un servicio de letras que no necesita cuenta ni clave. Cuando activás la traducción en la letra, la app envía sus líneas a MyMemory, un servicio de traducción que no pide cuenta, o al servidor de LibreTranslate que configures en Ajustes. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Si la app está en inglés, una palabra en inglés se busca en el diccionario de Wiktionary. Las líneas que guardás quedan en tu teléfono."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. Pide el permiso del micrófono la primera vez que reconocés una canción y usa el micrófono solo mientras escucha. Si elegís un fondo transparente para la letra flotante, pide permiso para mostrarse sobre otras apps y para mostrar una notificación, que la mantiene visible y te deja desbloquearla o cerrarla. No solicita permisos de ubicación, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si agregás un destino personalizado, elegí una dirección HTTPS de confianza."
+      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. Pide el permiso del micrófono la primera vez que reconocés una canción y usa el micrófono solo mientras escucha. Si hacés flotar la letra sobre otras apps, pide permiso para mostrarse sobre otras apps y, una vez, para mostrar una notificación, que la mantiene visible y te deja desbloquearla o cerrarla. No solicita permisos de ubicación, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si agregás un destino personalizado, elegí una dirección HTTPS de confianza."
     ],
     [
       "h2",

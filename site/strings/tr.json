@@ -12,8 +12,8 @@
   "lede": "Bir servisten bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Dokunun, aynı şarkı dinlediğiniz yerde açılsın.",
   "download": "Android için indir",
   "note": "Ücretsiz, açık kaynak ve reklamsız.",
-  "alt_home": "YouTube Music'te açılmaya hazır bir Apple Music şarkısı",
-  "alt_list": "YouTube Music'te çalmaya hazır bir Deezer çalma listesi",
+  "alt_home": "YouTube Music'te açılmaya hazır bir bağlantı, ardından bir çalma listesinin şarkıları",
+  "alt_lyrics": "Şarkıyı takip eden sözler, Latin harfleri ve çeviriyle, ardından ana ekranın üzerinde",
   "how_h2": "Nasıl çalışır",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Çalma listelerinin tamamı",
       "Tüm şarkıları görün, hepsini birden çalın."
+    ],
+    [
+      "Zamanında sözler",
+      "Müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı."
+    ],
+    [
+      "Yüzen sözler",
+      "Her uygulamanın üzerinde, saydam, istediğin boyutta."
+    ],
+    [
+      "Sözleri öğren",
+      "Kana, pinyin, romaji ve çeviriler, kelime kelime."
     ],
     [
       "Bu şarkı ne?",
@@ -57,7 +69,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 8 Ekim 2026",
+  "updated": "Son güncelleme: 9 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye ya da Ayarlar'da belirlediğin LibreTranslate sunucusuna gönderir. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Kaydettiğin satırlar telefonunda kalır."
+      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye ya da Ayarlar'da belirlediğin LibreTranslate sunucusuna gönderir. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Uygulama İngilizceyse, İngilizce bir kelime Wiktionary sözlüğünde aranır. Kaydettiğin satırlar telefonunda kalır."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune, müzik bilgilerini ve kapakları almak için Android'in internet iznini kullanır. Mikrofon iznini ilk kez şarkı tanıdığınızda ister ve mikrofonu yalnızca dinlerken kullanır. Yüzen sözler için yarı saydam bir arka plan seçersen, diğer uygulamaların üzerinde gösterme ve bildirim gösterme izni ister. Bildirim sözleri ekranda tutar ve kilidini açmanı ya da kapatmanı sağlar. Konum, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Özel bir hedef eklerseniz güvenilir bir HTTPS adresi seçin."
+      "Crosstune, müzik bilgilerini ve kapakları almak için Android'in internet iznini kullanır. Mikrofon iznini ilk kez şarkı tanıdığınızda ister ve mikrofonu yalnızca dinlerken kullanır. Sözleri diğer uygulamaların üzerinde gösterirsen, diğer uygulamaların üzerinde görünmek ve bir kez de bildirim göstermek için izin ister; bildirim sözleri açık tutar ve kilidini açmanı ya da kapatmanı sağlar. Bildirim sözleri ekranda tutar ve kilidini açmanı ya da kapatmanı sağlar. Konum, kamera, kişiler veya reklam kimliği izni istemez. Yerleşik müzik servisi istekleri HTTPS kullanır. Özel bir hedef eklerseniz güvenilir bir HTTPS adresi seçin."
     ],
     [
       "h2",

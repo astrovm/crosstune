@@ -12,8 +12,8 @@
   "lede": "Een link van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent waar je luistert.",
   "download": "Downloaden voor Android",
   "note": "Gratis, open source en zonder advertenties.",
-  "alt_home": "Een nummer uit Apple Music, klaar om te openen in YouTube Music",
-  "alt_list": "Een Deezer-playlist, klaar om af te spelen in YouTube Music",
+  "alt_home": "Een link klaar om te openen in YouTube Music, daarna de nummers van een playlist",
+  "alt_lyrics": "Songtekst die een nummer volgt, met Latijnse letters en vertaling, daarna zwevend boven het startscherm",
   "how_h2": "Zo werkt het",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Hele playlists",
       "Zie alle nummers en speel ze allemaal af."
+    ],
+    [
+      "Songteksten op tijd",
+      "Ze volgen je muziekapp, of luisteren mee, nummer na nummer."
+    ],
+    [
+      "Zwevende songteksten",
+      "Boven elke app, doorzichtig, in elk formaat."
+    ],
+    [
+      "Leer de tekst",
+      "Kana, pinyin, romaji en vertalingen, woord voor woord."
     ],
     [
       "Welk nummer is dit?",
@@ -57,7 +69,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 8 oktober 2026",
+  "updated": "Laatst bijgewerkt: 9 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Als je de naam van een nummer typt in plaats van een link, stuurt Crosstune die naam naar de openbare nummerzoekopdrachten van Deezer en Apple en toont de gevonden nummers, zodat je het nummer dat je bedoelde zonder link kunt openen. Als je de tekst van een nummer opvraagt, stuurt de app de titel en artiest naar LRCLIB, een tekstservice die geen account of sleutel nodig heeft. Als je in de tekst Vertaling aanzet, stuurt de app de regels naar MyMemory, een vertaaldienst zonder account, of naar de LibreTranslate-server die je in Instellingen opgeeft. Uitspraak, zoals kana boven kanji, wordt op je telefoon bepaald en nergens heen gestuurd. Een woord waarop je tikt voor de betekenis wordt op dezelfde manier verstuurd. Bewaarde regels blijven op je telefoon."
+      "Als je de naam van een nummer typt in plaats van een link, stuurt Crosstune die naam naar de openbare nummerzoekopdrachten van Deezer en Apple en toont de gevonden nummers, zodat je het nummer dat je bedoelde zonder link kunt openen. Als je de tekst van een nummer opvraagt, stuurt de app de titel en artiest naar LRCLIB, een tekstservice die geen account of sleutel nodig heeft. Als je in de tekst Vertaling aanzet, stuurt de app de regels naar MyMemory, een vertaaldienst zonder account, of naar de LibreTranslate-server die je in Instellingen opgeeft. Uitspraak, zoals kana boven kanji, wordt op je telefoon bepaald en nergens heen gestuurd. Een woord waarop je tikt voor de betekenis wordt op dezelfde manier verstuurd. Staat de app in het Engels, dan wordt een Engels woord opgezocht in het woordenboek van Wiktionary. Bewaarde regels blijven op je telefoon."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent, en gebruikt de microfoon alleen tijdens het luisteren. Kies je een doorzichtige achtergrond voor zwevende tekst, dan vraagt hij om weergave over andere apps en om een melding, die de tekst zichtbaar houdt en waarmee je hem ontgrendelt of sluit. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres."
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent, en gebruikt de microfoon alleen tijdens het luisteren. Laat je songteksten boven andere apps zweven, dan vraagt het om boven andere apps te mogen verschijnen en, één keer, om een melding te tonen, die ze zichtbaar houdt en waarmee je ze ontgrendelt of sluit. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres."
     ],
     [
       "h2",

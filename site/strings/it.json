@@ -12,8 +12,8 @@
   "lede": "Hai un link di un servizio ma ascolti su un altro? Toccalo e lo stesso brano si apre dove ascolti.",
   "download": "Scarica per Android",
   "note": "Gratis, open source e senza pubblicità.",
-  "alt_home": "Un brano di Apple Music pronto da aprire in YouTube Music",
-  "alt_list": "Una playlist di Deezer pronta da riprodurre in YouTube Music",
+  "alt_home": "Un link pronto da aprire in YouTube Music, poi i brani di una playlist",
+  "alt_lyrics": "Testo che segue il brano, con lettere latine e traduzione, poi fluttuante sulla schermata Home",
   "how_h2": "Come funziona",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Playlist intere",
       "Vedi tutti i brani e riproducili tutti insieme."
+    ],
+    [
+      "Testi a tempo",
+      "Seguono la tua app musicale, o ascoltano con te, brano dopo brano."
+    ],
+    [
+      "Testi fluttuanti",
+      "Sopra qualsiasi app, trasparenti, della dimensione che vuoi."
+    ],
+    [
+      "Impara il testo",
+      "Kana, pinyin, romaji e traduzioni, parola per parola."
     ],
     [
       "Che brano è?",
@@ -57,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 8 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 9 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave. Quando attivi la traduzione nel testo, l'app invia le sue righe a MyMemory, un servizio di traduzione senza account, o al server LibreTranslate che imposti nelle Impostazioni. Le letture, come i kana sopra i kanji, vengono calcolate sul telefono e non vengono inviate da nessuna parte. Una parola che tocchi per il suo significato viene inviata allo stesso modo. Le righe che salvi restano sul telefono."
+      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave. Quando attivi la traduzione nel testo, l'app invia le sue righe a MyMemory, un servizio di traduzione senza account, o al server LibreTranslate che imposti nelle Impostazioni. Le letture, come i kana sopra i kanji, vengono calcolate sul telefono e non vengono inviate da nessuna parte. Una parola che tocchi per il suo significato viene inviata allo stesso modo. Se l'app è in inglese, una parola inglese viene cercata nel dizionario di Wiktionary. Le righe che salvi restano sul telefono."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune usa l'autorizzazione Internet di Android per ottenere informazioni musicali e copertine. Chiede l'autorizzazione del microfono la prima volta che riconosci un brano e usa il microfono solo mentre ascolta. Se scegli uno sfondo trasparente per il testo fluttuante, chiede di mostrarsi sopra le altre app e di mostrare una notifica, che lo tiene visibile e ti permette di sbloccarlo o chiuderlo. Non richiede autorizzazioni per posizione, fotocamera, contatti o ID pubblicità. Le richieste integrate ai servizi musicali usano HTTPS. Se aggiungi una destinazione personalizzata, scegli un indirizzo HTTPS affidabile."
+      "Crosstune usa l'autorizzazione Internet di Android per ottenere informazioni musicali e copertine. Chiede l'autorizzazione del microfono la prima volta che riconosci un brano e usa il microfono solo mentre ascolta. Se fai fluttuare il testo sopra altre app, chiede di mostrarsi sopra le altre app e, una volta, di mostrare una notifica, che lo tiene visibile e ti permette di sbloccarlo o chiuderlo. Non richiede autorizzazioni per posizione, fotocamera, contatti o ID pubblicità. Le richieste integrate ai servizi musicali usano HTTPS. Se aggiungi una destinazione personalizzata, scegli un indirizzo HTTPS affidabile."
     ],
     [
       "h2",

@@ -12,8 +12,8 @@
   "lede": "Dapat link dari satu layanan, tapi kamu dengar di layanan lain? Ketuk linknya, dan lagu yang sama terbuka di tempat kamu mendengarkan.",
   "download": "Download untuk Android",
   "note": "Gratis, open source, dan tanpa iklan.",
-  "alt_home": "Lagu dari Apple Music yang siap dibuka di YouTube Music",
-  "alt_list": "Playlist Deezer yang siap diputar di YouTube Music",
+  "alt_home": "Tautan siap dibuka di YouTube Music, lalu lagu-lagu dalam playlist",
+  "alt_lyrics": "Lirik yang mengikuti lagu, dengan huruf Latin dan terjemahan, lalu melayang di atas layar utama",
   "how_h2": "Cara kerjanya",
   "how_steps": [
     [
@@ -34,6 +34,18 @@
     [
       "Satu playlist penuh",
       "Lihat semua lagu dan putar semuanya sekaligus."
+    ],
+    [
+      "Lirik sesuai lagu",
+      "Mengikuti aplikasi musikmu, atau ikut mendengarkan, lagu demi lagu."
+    ],
+    [
+      "Lirik melayang",
+      "Di atas aplikasi apa pun, tembus pandang, seukuran yang kamu mau."
+    ],
+    [
+      "Pelajari liriknya",
+      "Kana, pinyin, romaji, dan terjemahan, kata demi kata."
     ],
     [
       "Lagu apa ini?",
@@ -57,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 8 Oktober 2026",
+  "updated": "Terakhir diperbarui: 9 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -106,7 +118,7 @@
     ],
     [
       "p",
-      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik lagu, aplikasi mengirim judul dan artis lagu ke LRCLIB, layanan lirik yang tidak butuh akun atau kunci. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke MyMemory, layanan terjemahan tanpa akun, atau ke server LibreTranslate yang kamu atur di Setelan. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Baris yang kamu simpan tetap di ponselmu."
+      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik lagu, aplikasi mengirim judul dan artis lagu ke LRCLIB, layanan lirik yang tidak butuh akun atau kunci. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke MyMemory, layanan terjemahan tanpa akun, atau ke server LibreTranslate yang kamu atur di Setelan. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu."
     ],
     [
       "p",
@@ -134,7 +146,7 @@
     ],
     [
       "p",
-      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu, dan memakai mikrofon hanya selama mendengarkan. Jika kamu memilih latar tembus pandang untuk lirik melayang, aplikasi meminta izin tampil di atas aplikasi lain dan menampilkan notifikasi, yang menjaganya tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya."
+      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu, dan memakai mikrofon hanya selama mendengarkan. Jika kamu mengambangkan lirik di atas aplikasi lain, aplikasi meminta izin untuk tampil di atas aplikasi lain dan, sekali saja, untuk menampilkan notifikasi, yang membuat lirik tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya."
     ],
     [
       "h2",
