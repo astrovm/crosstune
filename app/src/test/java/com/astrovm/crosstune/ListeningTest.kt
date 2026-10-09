@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 
 import androidx.compose.ui.test.hasClickAction
@@ -546,6 +548,38 @@ class ListeningTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theVisualsCanBeDarkenedOrSkippedAndTheBarMakesWayWhileScrolling() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        // How dark they're shaded, kept once let go.
+        click(string(R.string.visuals_options))
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.waitForIdle()
+        assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
+        // On to the next, with the menu closing.
+        click(string(R.string.visuals_next))
+        assertFalse(shown(string(R.string.visuals_next)))
+        assertTrue(visualsShown().isNotEmpty())
+
+        // Scrolling the words, the bar makes way, and comes back once they rest.
+        composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))
+            .performTouchInput { swipeUp() }
+        composeRule.waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
+    }
+
+    @Test
+    fun floatingLyricsCanFloatOverTheVisuals() {
+        prefs().edit().putBoolean("floating_visuals", true).commit()
+        val floating = floatOverApps(FakeHearing())
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(floating.get().let { service -> windowViews(service).any { root -> root.findViews<MilkdropView>().isNotEmpty() } })
+        floating.destroy()
+    }
+
+    @Test
     fun visualsAskForTheMicrophoneFirstWhichAndroidNeedsToShareWhatPlays() {
         demoWords(FakeHearing())
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
@@ -631,6 +665,12 @@ class ListeningTest {
         prefs().edit().putFloat("floating_background", background).commit()
         demoWords(hearing)
         return floatNow()
+    }
+
+    private inline fun <reified T : View> View.findViews(): List<T> = when (this) {
+        is T -> listOf(this)
+        is android.view.ViewGroup -> (0 until childCount).flatMap { getChildAt(it).findViews<T>() }
+        else -> emptyList()
     }
 
     private fun windowViews(service: FloatingLyricsService): List<View> =
@@ -993,6 +1033,23 @@ class ListeningTest {
     }
 
     private fun learnMenu() = click(string(R.string.lyrics_learn))
+
+    @Test
+    fun theLineSheetShowsJapaneseWithItsReadingsOverItAndItsWordsToTap() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
+        composeRule.onAllNodes(hasText("夜空")).onFirst().performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
+        val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty() }
+        // Each of its words still taps for its meaning.
+        composeRule.onAllNodes(hasText("夜空") and inSheet).onFirst().performFirstLinkClick()
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("夜空") and !inSheet).fetchSemanticsNodes().size > 1 }
+    }
 
     @Test
     fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
