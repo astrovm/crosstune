@@ -658,6 +658,7 @@ internal class MainViewModel(
                     retryListens = false
                     heardSong = heard.metadata
                     heardClock = heard.clock
+                    heardAtMs = now()
                     val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
                         ?: MusicLinks.recognizedSong(heard.metadata)
                     uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
@@ -987,6 +988,15 @@ internal class MainViewModel(
     /** A place heard far from where the words are, held until a second hearing agrees with it. */
     private var unconfirmed: PlaybackClock? = null
 
+    /** When the song was last heard, so a hearing long ago isn't held against an app's say. */
+    private var heardAtMs = 0L
+
+    /** Where the app playing the song says it is, before taking off how far its video is ahead. */
+    private var appFollowing: Following? = null
+
+    /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
+    private var videoLeadMs: Long? = null
+
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
      * rather than showing nothing, so it isn't read as a lookup that hasn't answered. Timed words
@@ -1080,6 +1090,7 @@ internal class MainViewModel(
     private fun heardAlong(heard: Heard.Song) {
         val song = heard.metadata
         val shown = uiState.lyricsFor
+        if (heard.clock != null) heardAtMs = now()
         if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
             heardSong = song
             heardClock = heard.clock
@@ -1120,11 +1131,37 @@ internal class MainViewModel(
         return current
     }
 
-    /** The words shown keep to where the song was heard, unless a music app playing it says, more exactly. */
+    /**
+     * The words shown keep to where the song was heard, unless a music app playing it says, more
+     * exactly. A video the app plays may open with more than the song, so how far it's ahead is
+     * taken from where the song was just heard, and taken off.
+     */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        if (uiState.following?.app == null) uiState = uiState.copy(following = heardFollowing(shown))
+        appFollowing?.takeIf { it.video }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
+        uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown))
     }
+
+    /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
+    private fun leadOf(app: Following, song: MusicMetadata): Long? {
+        val heard = heardClock?.takeIf { it.playing && app.clock.playing && now() - heardAtMs <= HEARD_LATELY_MS } ?: return null
+        if (heardSong?.let { sameSong(it, song) } != true) return null
+        val at = now()
+        return app.clock.positionAt(at) - heard.positionAt(at)
+    }
+
+    /**
+     * Where the song is in what [app] plays: a video's place less how far it's ahead of the song.
+     * One not yet heard, so not lined up, gives way to where the song was heard, if it was.
+     */
+    private fun inSong(app: Following?): Following? {
+        if (app == null || !app.video) return app
+        val lead = videoLeadMs ?: return uiState.lyricsFor?.let(::heardFollowing) ?: app
+        return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
+    }
+
+    /** [positionMs] in the song, where the app playing it has it: later, in a video ahead of it. */
+    private fun inApp(positionMs: Long) = positionMs + (videoLeadMs?.takeIf { appFollowing?.video == true } ?: 0L)
 
     fun stopListeningAlong() {
         pauseListeningAlong()
@@ -1151,13 +1188,19 @@ internal class MainViewModel(
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {
-            source.follow(song).collect { playing -> uiState = uiState.copy(following = playing ?: heardFollowing(song)) }
+            source.follow(song).collect { playing ->
+                appFollowing = playing
+                if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
+                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
+            }
         }
     }
 
     private fun stopFollowing() {
         followJob?.cancel()
         followJob = null
+        appFollowing = null
+        videoLeadMs = null
         uiState = uiState.copy(following = null)
     }
 
@@ -1261,7 +1304,7 @@ internal class MainViewModel(
     fun seekLyrics(positionMs: Long) {
         val song = uiState.lyricsFor ?: return
         if (uiState.following?.canSeek != true) return
-        playback?.seekTo(song, positionMs)
+        playback?.seekTo(song, inApp(positionMs))
     }
 
     /** Closes the words. The next song starts without them, rather than showing the last one's. */
@@ -1348,7 +1391,7 @@ internal class MainViewModel(
         val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)
-        playback?.seekTo(song, start)
+        playback?.seekTo(song, inApp(start))
         var sought = now()
         repeatJob = viewModelScope.launch {
             while (isActive) {
@@ -1356,7 +1399,7 @@ internal class MainViewModel(
                 val position = uiState.following?.clock?.positionAt(now()) ?: continue
                 // The app takes a moment to say where it went, so it isn't sent back again meanwhile.
                 if (position >= end && now() - sought >= SEEK_SETTLE_MS) {
-                    playback?.seekTo(song, start)
+                    playback?.seekTo(song, inApp(start))
                     sought = now()
                 }
             }
@@ -1849,6 +1892,8 @@ internal class MainViewModel(
 
         /** How far apart two hearings of a song can be and still be the same place in it. */
         const val STEADY_MS = 2_000L
+        /** How long ago the song can have been heard and still line up a video with it. */
+        const val HEARD_LATELY_MS = 60_000L
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L

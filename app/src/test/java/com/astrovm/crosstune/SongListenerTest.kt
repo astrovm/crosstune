@@ -283,6 +283,18 @@ class SongListenerTest {
         assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { PlayingFirst(phone, ears).listen() })
     }
 
+    @Test
+    fun aVideoPlayingOnThePhoneIsTimedByEarAndNamedByItsAppWhenNothingsHeard() {
+        // Its app names it, but can't say where in the song it is.
+        val video = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null)
+        val phone = FakePlayback().apply { onThePhone = video }
+        val heard = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 12_000, 400_000)
+        assertEquals(heard, runBlocking { PlayingFirst(phone, SongHearing { heard }).listen() })
+        // Nothing heard, as through headphones, the app's name still does.
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { Heard.Nothing }).listen() })
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { Heard.Failed(AppError.NETWORK) }).listen() })
+    }
+
     private companion object {
         const val NO_MATCH = """{"matches":[],"timestamp":5,"tagid":"x"}"""
         const val MATCH = """{"matches":[{"id":"238534"}],"track":{"key":"238534","title":"Iris","subtitle":"The Goo Goo Dolls",""" +
