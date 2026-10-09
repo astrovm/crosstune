@@ -103,8 +103,7 @@ internal class LyricsFinder(
      * gives "ミステリー・ガール - Mystery Girl", under each of them.
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
-        val titles = listOf(metadata.title) + metadata.title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
-        val answers = titles.map { title ->
+        val answers = SongNames.titleNames(metadata.title).map { title ->
             underName(metadata.copy(title = title), timeoutMs).also { if (it is Lyrics.Found) return it }
         }
         return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
