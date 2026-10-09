@@ -50,7 +50,7 @@ class PlaybackTest {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
     }
 
-    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO): MediaController {
+    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap()): MediaController {
         shadowOf(app.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
@@ -61,7 +61,8 @@ class PlaybackTest {
         shadowOf(controller).setPackageName(packageName)
         shadowOf(controller).setMetadata(
             MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
-                .apply { if (artist != null) putString(MediaMetadata.METADATA_KEY_ARTIST, artist) }.build()
+                .apply { if (artist != null) putString(MediaMetadata.METADATA_KEY_ARTIST, artist) }
+                .apply { art.forEach { (key, uri) -> putString(key, uri) } }.build()
         )
         shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, 42_000, 1f, PLAYED_AT).setActions(actions).build())
         return controller
@@ -159,6 +160,42 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.paused", "Paused", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
         shadowOf(sessions).addController(player("com.playing", "Playing", "Blinding Lights", "The Weeknd"))
         assertEquals("Playing", followed().last()?.app)
+    }
+
+    @Test
+    fun theSongPlayingOnThePhoneIsNamedWithWhereItIs() {
+        // Not allowed yet, Android shows nothing. Empty rather than unset, which would keep what another test allowed.
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        assertNull(playback.nowPlaying())
+        allow()
+        assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT), playback.nowPlaying())
+    }
+
+    @Test
+    fun onlyAnAppPlayingASongWithItsArtistNamesIt() {
+        allow()
+        // Paused, with no artist, with no title, with no song at all, or Crosstune itself: none are a song playing.
+        shadowOf(sessions).addController(player("com.paused", "Paused", "Something Else", "Someone", state = PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(player("com.noartist", "No Artist", "A Voice Memo", null))
+        shadowOf(sessions).addController(player("com.notitle", "No Title", "", "Someone"))
+        shadowOf(sessions).addController(MediaController(app, MediaSession(app, "com.nothing").sessionToken).also { shadowOf(it).setPackageName("com.nothing") })
+        shadowOf(sessions).addController(player(app.packageName, "Crosstune", "Its Own Preview", "Someone"))
+        assertNull(playback.nowPlaying())
+
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun itsCoverComesAlongWhenItsOnTheWeb() {
+        allow()
+        val cover = "https://i.scdn.co/image/cover"
+        // A cover only the app itself can open is left out; the album's is used when the song has none.
+        shadowOf(sessions).addController(
+            player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to "content://com.spotify/cover", MediaMetadata.METADATA_KEY_ALBUM_ART_URI to cover))
+        )
+        assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
     }
 
     @Test

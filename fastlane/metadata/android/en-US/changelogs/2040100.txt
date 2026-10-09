@@ -1,0 +1,1 @@
+A song playing on your phone is named right away, from the app playing it, without listening. It works with headphones too. Crosstune needs to see what's playing for this, as it does to keep lyrics in time.

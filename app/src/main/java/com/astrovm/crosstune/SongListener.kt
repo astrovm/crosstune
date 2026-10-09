@@ -175,6 +175,15 @@ internal fun interface SongHearing {
 }
 
 /**
+ * Names the song an app on the phone is playing straight from that app, which is instant and exact,
+ * and only listens with [hearing] when none is: the microphone hears the phone's own speaker
+ * poorly, and nothing at all through headphones.
+ */
+internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing) : SongHearing {
+    override suspend fun listen(): Heard = playback.nowPlaying() ?: hearing.listen()
+}
+
+/**
  * Listens for up to [ShazamSignature.SAMPLES], asking Shazam every [STEP] samples with all there
  * is so far, and stops at the first answer that names the song.
  */

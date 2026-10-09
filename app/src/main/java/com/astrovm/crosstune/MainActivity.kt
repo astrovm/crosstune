@@ -66,17 +66,18 @@ class MainActivity : ComponentActivity() {
                 val client = httpClientFactory()
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
+                val playback = playbackFactory(applicationContext)
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     // What was found for songs is kept, so a playlist played again needs no lookups.
                     ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis),
                     LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
                     SongSearcher(client),
-                    playbackFactory(applicationContext),
+                    playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
-                    hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client)),
+                    PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
                     systemDispatcher,
                     listenAlongPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.

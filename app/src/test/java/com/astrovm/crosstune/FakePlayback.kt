@@ -12,12 +12,15 @@ internal class FakePlayback : PlaybackSource {
     var restricted = false
     val playing = MutableStateFlow<Following?>(null)
     val seeks = mutableListOf<Long>()
+    var onThePhone: Heard.Song? = null
 
     override fun hasAccess() = access
 
     override fun restricted() = restricted
 
     override fun follow(song: MusicMetadata): Flow<Following?> = playing
+
+    override fun nowPlaying() = onThePhone
 
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
         seeks += positionMs

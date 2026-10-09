@@ -272,6 +272,17 @@ class SongListenerTest {
         assertEquals(AudioRecord.STATE_UNINITIALIZED, made!!.state)
     }
 
+    @Test
+    fun aSongPlayingOnThePhoneIsNamedWithoutListening() {
+        val playing = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, 400_000)
+        val phone = FakePlayback().apply { onThePhone = playing }
+        val ears = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        assertEquals(playing, runBlocking { PlayingFirst(phone, ears).listen() })
+        // Nothing playing on the phone, it listens.
+        phone.onThePhone = null
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { PlayingFirst(phone, ears).listen() })
+    }
+
     private companion object {
         const val NO_MATCH = """{"matches":[],"timestamp":5,"tagid":"x"}"""
         const val MATCH = """{"matches":[{"id":"238534"}],"track":{"key":"238534","title":"Iris","subtitle":"The Goo Goo Dolls",""" +

@@ -99,6 +99,7 @@ class ListeningTest {
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
+        MainActivity.playbackFactory = ::MediaSessionPlayback
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
     }
@@ -137,6 +138,20 @@ class ListeningTest {
     private fun waitForText(text: String) = composeRule.waitUntil(TIMEOUT_MS) { shown(text) }
 
     private fun recognize() = click(string(R.string.recognize_button))
+
+    @Test
+    fun aSongPlayingOnThePhoneIsNamedByItsAppWithoutListening() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Iris")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertEquals(0, microphone.opened)
+        assertEquals(0, shazamRequests())
+        assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
 
     @Test
     fun itListensThenShowsTheSongLikeAShazamLink() {

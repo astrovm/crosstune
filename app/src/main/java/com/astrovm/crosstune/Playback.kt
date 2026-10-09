@@ -43,6 +43,9 @@ internal interface PlaybackSource {
     /** Moves the app playing [song] to [positionMs]. */
     fun seekTo(song: MusicMetadata, positionMs: Long)
 
+    /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
+    fun nowPlaying(): Heard.Song? = null
+
     /**
      * Whether Android holds this access back until "Allow restricted settings" is turned on for
      * Crosstune, as it does from Android 13 for an app installed from a downloaded file.
@@ -103,6 +106,22 @@ internal class MediaSessionPlayback(
         // Taken back meanwhile, the words just stay where they are.
         runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.seekTo(positionMs) }
     }
+
+    // Without the user's say-so Android shows none, and says so by throwing.
+    override fun nowPlaying(): Heard.Song? = (if (hasAccess()) runCatching { sessions.getActiveSessions(listener) }.getOrNull() else null).orEmpty()
+        // Android lists the app played last first.
+        .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING }
+        .firstNotNullOfOrNull { controller ->
+            val metadata = controller.metadata ?: return@firstNotNullOfOrNull null
+            val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+            val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+            // Without both there's no song to look up by name.
+            if (title.isBlank() || artist.isBlank()) return@firstNotNullOfOrNull null
+            val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+                .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
+            val clock = following(controller)?.clock
+            Heard.Song(MusicMetadata(title, artist, artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+        }
 
     private fun following(controller: MediaController): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
