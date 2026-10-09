@@ -287,6 +287,27 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
             return true
         }
 
+        /**
+         * Grown, e.g. with its buttons and their options out, it's moved up as far as it takes to stay
+         * on screen; shrunk back, it goes back to where it was left. Android only gives it the room
+         * below where it is, so it's measured with the whole screen's to know how tall it would be.
+         */
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val screen = resources.displayMetrics.heightPixels
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(screen, MeasureSpec.AT_MOST))
+            if (gesture != Gesture.NONE) return
+            val left = host.state.floating.top.takeIf { it >= 0 } ?: params.y
+            val top = left.coerceAtMost(maxOf(0, screen - measuredHeight))
+            if (top == params.y) return
+            params.y = top
+            unlockParams.y = top
+            // Not in the middle of measuring: once it's done.
+            post {
+                if (isAttachedToWindow) windows.updateViewLayout(this, params)
+                unlock?.let { windows.updateViewLayout(it, unlockParams) }
+            }
+        }
+
         private fun spread(event: MotionEvent) =
             if (event.pointerCount < 2) 0f else hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1))
 

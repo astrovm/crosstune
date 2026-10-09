@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -176,6 +178,7 @@ internal class FloatingActions(
  * they're being changed. Moving, resizing and pinching them are up to their window, which shows the
  * sides to drag while the buttons are out. Locked, touches go through to the app below, so none reach here.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, actions: FloatingActions) {
     var controls by remember { mutableStateOf(false) }
@@ -210,7 +213,8 @@ internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> I
         }
         AnimatedVisibility(controls) {
             Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.padding(top = 6.dp)) {
-                Row {
+                // Narrowed, the buttons go on two rows rather than squeezing each other.
+                FlowRow(horizontalArrangement = Arrangement.Center, modifier = Modifier.padding(horizontal = 4.dp)) {
                     Control(R.drawable.ic_open_in_new, stringResource(R.string.floating_open), actions.onOpen)
                     Control(
                         R.drawable.ic_recognize,
@@ -235,6 +239,7 @@ internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> I
 }
 
 /** How they look, changed on them: the band behind, the size, and the lines either side. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Customize(options: FloatingOptions, actions: FloatingActions) {
     Surface(
@@ -264,7 +269,7 @@ private fun Customize(options: FloatingOptions, actions: FloatingActions) {
                     valueRange = FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = options.previousLine,
                     onClick = { actions.onChange(options.copy(previousLine = !options.previousLine), true) },

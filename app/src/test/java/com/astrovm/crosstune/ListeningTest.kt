@@ -579,6 +579,18 @@ class ListeningTest {
     private fun unlockButton(service: FloatingLyricsService): ImageView? = overlays(service).filterIsInstance<ImageView>().singleOrNull()
 
     @Test
+    fun wordsLeftAtTheBottomMoveUpToFitAndBackWithoutForgettingWhereTheyWere() {
+        // Left lower than they fit, e.g. on a smaller screen, or once their buttons are out.
+        prefs().edit().putInt("floating_top", 100_000).commit()
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        shadowOf(Looper.getMainLooper()).idle()
+        val window = view.layoutParams as WindowManager.LayoutParams
+        assertEquals(app.resources.displayMetrics.heightPixels - view.measuredHeight, window.y)
+        assertEquals(100_000, prefs().getInt("floating_top", -1))
+    }
+
+    @Test
     fun lockedWordsAlwaysHaveAWayOutEvenFloatingLockedFromLastTime() {
         // Locked when they last floated, and with no notification to unlock them from.
         prefs().edit().putBoolean("floating_locked", true).commit()
