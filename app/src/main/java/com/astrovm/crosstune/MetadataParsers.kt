@@ -97,7 +97,7 @@ internal object MetadataParsers {
     }
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
-    private fun youtubeVideo(title: String, channel: String): MusicMetadata? {
+    fun youtubeVideo(title: String, channel: String): MusicMetadata? {
         val rawTitle = title.replace(videoNoiseRegex, "").trim().ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011".

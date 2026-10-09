@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -46,11 +47,14 @@ class PlaybackTest {
         ShadowMediaSessionManager.reset()
     }
 
+    /** Something on the phone is making sound, as Android tells it. */
+    private fun sounding(on: Boolean = true) = shadowOf(app.getSystemService(AudioManager::class.java)).setIsMusicActive(on)
+
     private fun allow() {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
     }
 
-    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap()): MediaController {
+    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null): MediaController {
         shadowOf(app.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
@@ -62,9 +66,10 @@ class PlaybackTest {
         shadowOf(controller).setMetadata(
             MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .apply { if (artist != null) putString(MediaMetadata.METADATA_KEY_ARTIST, artist) }
-                .apply { art.forEach { (key, uri) -> putString(key, uri) } }.build()
+                .apply { art.forEach { (key, uri) -> putString(key, uri) } }
+                .apply { if (album != null) putString(MediaMetadata.METADATA_KEY_ALBUM, album) }.build()
         )
-        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, 42_000, 1f, PLAYED_AT).setActions(actions).build())
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, 42_000, 1f, at).setActions(actions).build())
         return controller
     }
 
@@ -169,12 +174,14 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
         assertNull(playback.nowPlaying())
         allow()
+        sounding()
         assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT), playback.nowPlaying())
     }
 
     @Test
     fun onlyAnAppPlayingASongWithItsArtistNamesIt() {
         allow()
+        sounding()
         // Paused, with no artist, with no title, with no song at all, or Crosstune itself: none are a song playing.
         shadowOf(sessions).addController(player("com.paused", "Paused", "Something Else", "Someone", state = PlaybackState.STATE_PAUSED))
         shadowOf(sessions).addController(player("com.noartist", "No Artist", "A Voice Memo", null))
@@ -188,8 +195,57 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAppThatStillSaysItPlaysLongAfterItStoppedIsNotBelieved() {
+        allow()
+        // A browser tab left saying it plays, and the app really playing, which said where it is since.
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Cuando Perriabas", "Bad Bunny", at = PLAYED_AT - 10_000_000))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        // Nothing sounding: neither is, really.
+        sounding(false)
+        assertNull(playback.nowPlaying())
+        sounding()
+        assertEquals(song, playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun aVideoIsNamedAsTheSongItsTitleNames() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        // A title that's only what a video adds names nothing.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "(Official Video)", "Someone"))
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
+    fun aMusicAppsSongIsTakenAsItsNamed() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Here Comes The Sun - Remastered 2019", "The Beatles", album = "Abbey Road"))
+        assertEquals(MusicMetadata("Here Comes The Sun - Remastered 2019", "The Beatles"), playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun aFilePlayingInABrowserIsNoSong() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "example.com/music/song.mp3", "example.com"))
+        assertNull(playback.nowPlaying())
+        // A song named with dots, by an artist named with one, is one.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "will.i.am/remix", "will.i.am band", at = PLAYED_AT - 1))
+        shadowOf(sessions).addController(player("com.other.player", "Other", "Mr. Brightside", "The Killers", at = PLAYED_AT - 2))
+        assertEquals("will.i.am/remix", playback.nowPlaying()?.metadata?.title)
+        // Nor is one whose title starts with an artist that's no site.
+        shadowOf(sessions).addController(player("com.deezer.android.app", "Deezer", "Band/Remix", "Band", at = PLAYED_AT + 1))
+        assertEquals("Band/Remix", playback.nowPlaying()?.metadata?.title)
+    }
+
+    @Test
     fun itsCoverComesAlongWhenItsOnTheWeb() {
         allow()
+        sounding()
         val cover = "https://i.scdn.co/image/cover"
         // A cover only the app itself can open is left out; the album's is used when the song has none.
         shadowOf(sessions).addController(
