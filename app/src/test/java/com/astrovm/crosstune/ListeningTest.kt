@@ -575,7 +575,7 @@ class ListeningTest {
         prefs().edit().putBoolean("floating_visuals", true).commit()
         val floating = floatOverApps(FakeHearing())
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
-        assertTrue(floating.get().let { service -> windowViews(service).any { root -> root.findViews<MilkdropView>().isNotEmpty() } })
+        assertTrue(floating.get().let { service -> windowViews(service).any { root -> root.allViews().any { it is MilkdropView } } })
         floating.destroy()
     }
 
@@ -667,11 +667,8 @@ class ListeningTest {
         return floatNow()
     }
 
-    private inline fun <reified T : View> View.findViews(): List<T> = when (this) {
-        is T -> listOf(this)
-        is android.view.ViewGroup -> (0 until childCount).flatMap { getChildAt(it).findViews<T>() }
-        else -> emptyList()
-    }
+    private fun View.allViews(): List<View> =
+        listOf(this) + ((this as? android.view.ViewGroup)?.let { group -> (0 until group.childCount).flatMap { group.getChildAt(it).allViews() } } ?: emptyList())
 
     private fun windowViews(service: FloatingLyricsService): List<View> =
         Shadow.extract<ShadowWindowManagerImpl>(service.getSystemService(WindowManager::class.java)).views
