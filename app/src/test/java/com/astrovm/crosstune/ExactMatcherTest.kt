@@ -777,6 +777,7 @@ class ExactMatcherTest {
             val body = when (request.url.queryParameter("show")) {
                 "songs" -> """[
                     {"title":"Song","artist":"Band","url_slug":"song-hd","uploader":{"name":"Reuploads","url_slug":"reuploads","verified":"no"}},
+                    {"title":"Song","artist":"Band","url_slug":"blocked","geo_restricted":true,"uploader":{"name":"Band","url_slug":"band"}},
                     {"title":"Song","artist":"Band","url_slug":"song","uploader":{"name":"Label","url_slug":"label","verified":"yes"}}
                 ]"""
                 "albums" -> """[
@@ -787,6 +788,7 @@ class ExactMatcherTest {
             }
             FakeSpotify.html(request, """{"results":$body}""")
         }
+        // The band's own upload can't be played in this country, so the label's is the one.
         assertEquals("https://audiomack.com/label/song/song", find(MusicService.AUDIOMACK, MusicMetadata("Song", "Band")))
         assertEquals("https://audiomack.com/band/album/record", find(MusicService.AUDIOMACK, MusicMetadata("Record", "Band", ItemType.ALBUM)))
         assertEquals("https://audiomack.com/band", find(MusicService.AUDIOMACK, MusicMetadata("Band", "", ItemType.ARTIST)))
@@ -817,9 +819,9 @@ class ExactMatcherTest {
         val page = "<ul class=\"ListContainer\">" + item("Song (Live)", "Band • Live Record", "11", "live1") +
             item("Song", "Band\n •\n Studio &amp; Co", "12", "studio2") + item("Broken", "", "", "") + "</ul>"
         fake.handler = { request -> FakeSpotify.html(request, page) }
-        assertEquals("https://open.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
+        assertEquals("https://play.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
         assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
-        assertEquals("https://open.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
+        assertEquals("https://play.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
         // Qobuz's artists aren't told apart, so there's nothing to look up, and the search stands in.
         val asked = fake.requestedUrls.size
         assertNull(find(MusicService.QOBUZ, MusicMetadata("Band", "", ItemType.ARTIST)))
