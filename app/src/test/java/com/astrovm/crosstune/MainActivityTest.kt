@@ -2692,25 +2692,6 @@ class MainActivityTest {
     }
 
     @Test
-    fun wordsFloatByThemselvesOnlyWhileTheirMusicAppPlays() {
-        ShadowSettings.setCanDrawOverlays(true)
-        val playback = timedSong()
-        playback.access = true
-        controller!!.pause().resume()
-        // Paused, there's nothing for them to keep up with.
-        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
-        controller!!.userLeaving()
-        assertNull(shadowOf(app).nextStartedService)
-        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
-        composeRule.waitForIdle()
-        controller!!.userLeaving()
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
-        FloatingLyricsService.host = null
-        ShadowSettings.setCanDrawOverlays(false)
-    }
-
-    @Test
     fun aLineOpensToStudyRepeatsInTheMusicAppAndIsKept() {
         val playback = timedSong()
         playback.access = true

@@ -58,6 +58,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.io.IOException
 
@@ -471,100 +472,56 @@ class ListeningTest {
     }
 
     @Test
-    fun theWordsFloatOverOtherAppsWithTheMicrophoneThere() {
-        val hearing = FakeHearing()
-        demoWords(hearing)
-        val activity = controller!!.get()
-
-        // Floating, only the line being sung and the next one show.
-        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
-        assertTrue(lit("Demo one") || shown("Demo one"))
-        assertTrue(shown("Demo two"))
-
-        // The window's microphone stops listening along, and starts it again.
-        FloatingListenReceiver().onReceive(app, Intent())
-        shadowOf(Looper.getMainLooper()).idle()
-        composeRule.waitForIdle()
-        activity.onPictureInPictureModeChanged(false, activity.resources.configuration)
-        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
-        FloatingListenReceiver().onReceive(app, Intent())
-        shadowOf(Looper.getMainLooper()).idle()
-        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
+    fun leavingCrosstuneNeverFloatsTheWordsByThemselves() {
+        ShadowSettings.setCanDrawOverlays(true)
+        demoWords(FakeHearing())
+        // Even with the song playing and listened along to: only Float does.
+        controller!!.userLeaving()
+        controller!!.pause().stop()
+        assertEquals(null, shadowOf(app).nextStartedService)
     }
 
     @Test
-    fun floatingWithoutTimedWordsShowsTheSong() {
-        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
-        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Just words"}]""") }
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun floatingWithoutTimedWordsShowsTheSongWhole() {
+        val title = "A Song With A Name Long Enough To Need Several Lines Of The Floating Window To Be Read Whole"
+        // Made narrow, as far as it goes.
+        prefs().edit().putInt("floating_width", 420).commit()
+        MainActivity.hearingFactory = { FakeHearing().apply { song(title, 2.0) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
         allowMicrophone()
         launch()
         recognize()
-        waitForText("Demo")
+        waitForText(title)
         click(string(R.string.lyrics_button))
         waitForText("Just words")
-        val activity = controller!!.get()
-        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
-        composeRule.waitForIdle()
+        floatNow()
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
         assertTrue(shown("Band"))
+        // Never cut short: every line it takes is shown.
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        composeRule.onNode(hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG)))
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.single().lineCount > 2)
+        assertFalse(layouts.single().hasVisualOverflow)
     }
 
-    @Test
-    @Config(sdk = [30])
-    fun beforeAndroid12LeavingWithTheWordsOnScreenFloatsThem() {
-        val hearing = FakeHearing()
-        demoWords(hearing)
-        val activity = controller!!.get()
-        controller!!.userLeaving()
-        assertTrue(activity.isInPictureInPictureMode)
-    }
-
-    @Test
-    fun leavingWithNothingPlayingDoesntFloatTheWords() {
+    /** Floats the words on screen with Float, Android letting them over other apps, and Crosstune goes out of sight. */
+    private fun floatNow(): ServiceController<FloatingLyricsService> {
         ShadowSettings.setCanDrawOverlays(true)
-        demoWords(FakeHearing())
-        // Listening along stopped, nothing says the song is playing: they'd only be in the way.
-        click(string(R.string.lyrics_stop_listening))
-        controller!!.userLeaving()
-        assertEquals(null, shadowOf(app).nextStartedService)
-        // Listening along again, they float.
-        click(string(R.string.lyrics_listen_along))
-        controller!!.userLeaving()
-        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
-    }
-
-    @Test
-    @Config(sdk = [30])
-    fun beforeAndroid12LeavingWithNothingPlayingDoesntFloatEither() {
-        demoWords(FakeHearing())
-        click(string(R.string.lyrics_stop_listening))
-        val activity = controller!!.get()
-        controller!!.userLeaving()
-        assertFalse(activity.isInPictureInPictureMode)
-    }
-
-    @Test
-    @Config(sdk = [30])
-    fun beforeAndroid12LeavingWithoutWordsDoesntFloat() {
-        allowMicrophone()
-        launch()
-        val activity = controller!!.get()
-        controller!!.userLeaving()
-        assertFalse(activity.isInPictureInPictureMode)
-    }
-
-    /** Leaves Crosstune with Demo's words on screen on [background], with Android letting them over other apps, and floats them there. */
-    private fun floatOverApps(hearing: FakeHearing, background: Float = 0f): ServiceController<FloatingLyricsService> {
-        prefs().edit().putFloat("floating_background", background).commit()
-        ShadowSettings.setCanDrawOverlays(true)
-        demoWords(hearing)
-        controller!!.userLeaving()
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        click(string(R.string.floating_float))
         val started = shadowOf(app).nextStartedService
         assertEquals(FloatingLyricsService::class.java.name, started.component!!.className)
         controller!!.pause().stop()
         return Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1).also { composeRule.waitForIdle() }
+    }
+
+    /** Floats Demo's words on [background], with Android letting them over other apps. */
+    private fun floatOverApps(hearing: FakeHearing, background: Float = 0f): ServiceController<FloatingLyricsService> {
+        prefs().edit().putFloat("floating_background", background).commit()
+        demoWords(hearing)
+        return floatNow()
     }
 
     private fun windowViews(service: FloatingLyricsService): List<View> =
@@ -630,8 +587,6 @@ class ListeningTest {
         val hearing = FakeHearing()
         val floating = floatOverApps(hearing)
         val service = floating.get()
-        // Not Android's own window: the words float over the app below, which shows through.
-        assertFalse(controller!!.get().isInPictureInPictureMode)
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
         assertTrue(shown("Demo two"))
         // Out of sight, it still listens along.
@@ -880,27 +835,13 @@ class ListeningTest {
 
         // Taken back in Android's settings since Crosstune was left.
         ShadowSettings.setCanDrawOverlays(true)
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         demoWords(FakeHearing())
-        controller!!.userLeaving()
+        click(string(R.string.floating_float))
         ShadowSettings.setCanDrawOverlays(false)
         val service = Robolectric.buildService(FloatingLyricsService::class.java, shadowOf(app).nextStartedService).create().startCommand(0, 1).get()
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(windowViews(service).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
-    }
-
-    @Test
-    fun wordsNotAllowedOverOtherAppsFloatInAndroidsWindow() {
-        prefs().edit().putBoolean("floating_next_line", false).commit()
-        ShadowSettings.setCanDrawOverlays(false)
-        demoWords(FakeHearing())
-        controller!!.userLeaving()
-        assertEquals(null, shadowOf(app).nextStartedService)
-        val activity = controller!!.get()
-        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
-        // Only the line being sung, as set.
-        assertFalse(shown("Demo two"))
     }
 
     @Test
@@ -960,14 +901,13 @@ class ListeningTest {
         assertTrue(shown("[食べる]"))
 
         // Floating, the line being sung brings its reading, romaji and translation along.
-        val activity = controller!!.get()
-        activity.onPictureInPictureModeChanged(true, activity.resources.configuration)
-        composeRule.waitForIdle()
+        val floating = floatNow()
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
         assertTrue(shown("よぞらにほしが"))
         assertTrue(shown("yozora ni hoshi ga"))
         assertTrue(shown("[夜空に星が]"))
-        activity.onPictureInPictureModeChanged(false, activity.resources.configuration)
+        floating.destroy()
+        controller!!.start().resume()
         composeRule.waitForIdle()
 
         // Switched off, each goes; kept off for the next song.

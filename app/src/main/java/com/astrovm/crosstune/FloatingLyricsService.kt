@@ -46,7 +46,6 @@ import kotlin.math.hypot
 internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
-    val artwork: ArtworkLoader
     fun toggleListening()
     /** How the words look and where they are, kept when [save]d, e.g. once a drag is done. */
     fun update(options: FloatingOptions, save: Boolean = true)
@@ -160,7 +159,6 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) {
                     FloatingOverApps(
                         state,
-                        host.artwork::load,
                         FloatingActions(
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,

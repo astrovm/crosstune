@@ -78,34 +78,18 @@ internal data class FloatingOptions(
 }
 
 /**
- * The floating words: only what fits a glance, the line being sung and, as set, the ones either side.
- * With nothing saying where the song is, or no timed words, the song itself. In Android's own floating
- * window, which shows nothing of what's below, they sit on the cover's color; over other apps, on as
- * much of a dark band as set.
+ * The floating words: only what fits a glance, the line being sung and, as set, the ones either side,
+ * each whole. With nothing saying where the song is, or no timed words, the song itself. They float
+ * over other apps, on as much of a dark band as set.
  */
 @Composable
-internal fun FloatingLyrics(
-    state: UiState,
-    loadArtwork: suspend (String) -> ImageBitmap?,
-    overApps: Boolean = false,
-    modifier: Modifier = Modifier.fillMaxSize()
-) {
+internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val song = state.lyricsFor
     val options = state.floating
-    val ground = if (overApps) {
-        Modifier.clip(MaterialTheme.shapes.large).background(Color.Black.copy(alpha = options.background))
-    } else {
-        val surface = MaterialTheme.colorScheme.surface
-        val tint by animateColorAsState(
-            coverColor(song?.artworkUrl, loadArtwork) ?: MaterialTheme.colorScheme.primary,
-            tween(durationMillis = 700),
-            label = "floating tint"
-        )
-        Modifier.background(surface).background(Brush.verticalGradient(0f to tint.copy(alpha = 0.55f), 1f to surface))
-    }
-    // Over another app the words are white, outlined while there's little band behind them to read on.
-    val ink = if (overApps) Color.White else MaterialTheme.colorScheme.onSurface
-    val outline = if (overApps && options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
+    val ground = Modifier.clip(MaterialTheme.shapes.large).background(Color.Black.copy(alpha = options.background))
+    // White, outlined while there's little band behind them to read on.
+    val ink = Color.White
+    val outline = if (options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
     val lines = state.lyricLines
     val sung = rememberSungLine(lines, state.following)
     Box(
@@ -153,8 +137,6 @@ private fun Line(text: String, lit: Boolean, scale: Float, ink: Color, outline: 
         ),
         color = ink.copy(alpha = if (lit) 1f else 0.7f),
         textAlign = TextAlign.Center,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -180,7 +162,7 @@ internal class FloatingActions(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, actions: FloatingActions) {
+internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
     var controls by remember { mutableStateOf(false) }
     var customizing by remember { mutableStateOf(false) }
     LaunchedEffect(controls, customizing) {
@@ -194,8 +176,6 @@ internal fun FloatingOverApps(state: UiState, loadArtwork: suspend (String) -> I
         Box(contentAlignment = Alignment.Center) {
             FloatingLyrics(
                 state,
-                loadArtwork,
-                overApps = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .pointerInput(Unit) {

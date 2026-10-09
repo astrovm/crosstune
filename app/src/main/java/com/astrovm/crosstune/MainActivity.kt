@@ -87,9 +87,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Set while the words float over other apps, in picture-in-picture. */
-    private var floating by mutableStateOf(false)
-
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
     private var floatingOverApps = false
 
@@ -101,7 +98,6 @@ class MainActivity : ComponentActivity() {
             ThemeMode.LIGHT -> false
             ThemeMode.SYSTEM -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         }
-        override val artwork get() = viewModel.artwork
         override fun toggleListening() = when {
             viewModel.uiState.listeningAlong -> viewModel.stopListeningAlong()
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> viewModel.listenAlong()
@@ -194,12 +190,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // The floating window's microphone: listens along, or stops.
-        lifecycleScope.launch {
-            FloatingListenReceiver.taps.collect {
-                if (viewModel.uiState.listeningAlong) viewModel.stopListeningAlong() else withMicrophone(viewModel::listenAlong)
-            }
-        }
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
         val incomingLink = savedInstanceState?.getString(STATE_INCOMING_LINK)
         when {
@@ -254,16 +244,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark }
                 )
             }
-            // Words on screen float over other apps when Crosstune is left, with the microphone as it is now,
-            // while the song is playing. Words that show what's below float in a window of their own instead; see onUserLeaveHint.
-            val lyricsShown = viewModel.uiState.floatsByThemselves && !viewModel.uiState.canFloatOverApps
-            val listening = viewModel.uiState.listeningAlong
-            LaunchedEffect(lyricsShown, listening) { setPictureInPictureParams(floatingParams(lyricsShown, listening)) }
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
-                if (floating) {
-                    FloatingLyrics(viewModel.uiState, viewModel.artwork::load)
-                    return@CrosstuneTheme
-                }
                 CrosstuneScreen(
                     state = viewModel.uiState,
                     actions = ScreenActions(
@@ -422,46 +403,6 @@ class MainActivity : ComponentActivity() {
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost)
         moveTaskToBack(true)
-    }
-
-    /**
-     * The floating window: wide enough for a line, with the microphone to listen along or stop. From
-     * Android 12 it opens by itself when Crosstune is left with words on screen; before, see onUserLeaveHint.
-     */
-    private fun floatingParams(lyricsShown: Boolean, listening: Boolean): PictureInPictureParams {
-        val toggle = PendingIntent.getBroadcast(this, 0, Intent(this, FloatingListenReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val label = getString(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along)
-        val action = RemoteAction(Icon.createWithResource(this, R.drawable.ic_recognize), label, label, toggle)
-        return PictureInPictureParams.Builder()
-            .setAspectRatio(Rational(16, 9))
-            .setActions(listOf(action))
-            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(lyricsShown) }
-            .build()
-    }
-
-    /**
-     * Leaving Crosstune with words on screen floats them, while the song plays: in a music app, or
-     * nearby, listening along. With nothing playing there's nothing for them to keep up with, so
-     * they don't get in the way; the Float button still floats them. They float in a window of their
-     * own over other apps, started while Crosstune is still in sight so it may keep listening along,
-     * or, before Android 12, in picture-in-picture.
-     */
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (!viewModel.uiState.floatsByThemselves) return
-        if (viewModel.uiState.canFloatOverApps && !floatingOverApps) {
-            floatingOverApps = true
-            FloatingLyricsService.start(this, floatingHost)
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
-        // A phone, or a user, that turned picture-in-picture off just leaves.
-        runCatching { enterPictureInPictureMode(floatingParams(lyricsShown = true, listening = viewModel.uiState.listeningAlong)) }
-    }
-
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        floating = isInPictureInPictureMode
     }
 
     /** Back in sight, the words stop floating, and listening along with them picks up again. */
