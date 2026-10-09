@@ -13,6 +13,7 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Looper
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,10 @@ class PlaybackTest {
     fun tearDown() {
         collecting.forEach(Job::cancel)
         ShadowMediaSessionManager.reset()
+        // AndroidX keeps the allowed listeners until the setting changes, which a cleared one doesn't
+        // count as, so the access would carry over into the tests after.
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        NotificationManagerCompat.getEnabledListenerPackages(app)
     }
 
     /** Something on the phone is making sound, as Android tells it. */
