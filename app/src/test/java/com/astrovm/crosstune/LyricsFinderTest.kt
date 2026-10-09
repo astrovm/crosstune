@@ -302,6 +302,9 @@ class LyricsFinderTest {
         val piper = fake.handler
         fake.handler = { request -> if (request.url.encodedPath == "/lookup") FakeSpotify.html(request, "{") else piper(request) }
         assertEquals("Sunroofを開けて", words(sunshine))
+        // Nor is one it won't give at all.
+        fake.handler = { request -> if (request.url.encodedPath == "/lookup") FakeSpotify.html(request, "busy", code = 503) else piper(request) }
+        assertEquals("Sunroofを開けて", words(sunshine))
         // LRCLIB says none, NetEase is down: none.
         japaneseSong(netEase = { "not json" })
         assertEquals(Lyrics.None, found(hatsukoi))
@@ -321,7 +324,7 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
         respond("""[${answer("Quiet", "Band", "Words at last")}]""")
         // Still believed a little before the days are up, asked again once they are.
-        clock += LyricsFinder.NONE_KEPT_MS - 1
+        clock += LYRICS_NONE_KEPT_MS - 1
         assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
         clock += 1
         assertEquals("Words at last", (runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) } as Lyrics.Found).words)
@@ -349,13 +352,47 @@ class LyricsFinderTest {
     @Test
     fun anArtistOnlyWrittenInJapaneseOnNetEaseCountsForARecordingAsLong() {
         val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
-        piperSong(lengthMs = 187_000 + LyricsFinder.SAME_LENGTH_MS)
+        piperSong(lengthMs = 187_000 + SAME_RECORDING_LENGTH_MS)
         assertEquals("Sunroofを開けて", words(sunshine))
         // A recording of another length is another song of that name.
-        piperSong(lengthMs = 187_000 + LyricsFinder.SAME_LENGTH_MS + 1)
+        piperSong(lengthMs = 187_000 + SAME_RECORDING_LENGTH_MS + 1)
         assertEquals(Lyrics.None, found(sunshine))
-        piperSong(lengthMs = 187_000 - LyricsFinder.SAME_LENGTH_MS - 1)
+        piperSong(lengthMs = 187_000 - SAME_RECORDING_LENGTH_MS - 1)
         assertEquals(Lyrics.None, found(sunshine))
+    }
+
+
+    @Test
+    fun aTitleThatsTwoNamesIsLookedUpUnderEach() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(
+                    request,
+                    if (url.queryParameter("s") == "ミステリー・ガール I Re'in For Re'in") """{"result":{"songs":[{"id":4,"name":"ミステリー・ガール","artists":[{"name":"I Re'in For Re'in"}]}]}}""" else """{"result":{"songs":[]}}"""
+                )
+                else -> FakeSpotify.html(request, """{"lrc":{"lyric":"[00:21.360]焼けつく アスファルト"}}""")
+            }
+        }
+        assertEquals("焼けつく アスファルト", words(MusicMetadata("ミステリー・ガール - Mystery Girl", "I Re'in For Re'in")))
+        // The whole title first, as it's usually right.
+        val asked = fake.requestedUrls.filter { it.startsWith("https://lrclib.net/") }
+        assertEquals(true, asked.first().contains("track_name=%E3%83%9F%E3%82%B9%E3%83%86%E3%83%AA%E3%83%BC%E3%83%BB%E3%82%AC%E3%83%BC%E3%83%AB%20-%20Mystery%20Girl"))
+        // Found under neither name, it's none.
+        fake.handler = { request ->
+            when (request.url.host) {
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        assertEquals(Lyrics.None, found(MusicMetadata("A - B", "Band")))
+        // A title with more than one dash is one name.
+        fake.requestedUrls.clear()
+        assertEquals(Lyrics.None, found(MusicMetadata("A - B - C", "Band")))
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
     }
 
 }

@@ -24,13 +24,22 @@ import java.io.IOException
  * Timed words come with when each line is sung, so they can follow the song as it plays; the plain
  * words are what's shown when nothing says where in the song it is.
  */
+/** What LRCLIB's Retry-After asks for when it's busy. */
+internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
+
+/** How long a song found without words is believed, before asking again: the places with words keep getting more. */
+internal const val LYRICS_NONE_KEPT_MS = 3 * 24 * 60 * 60 * 1000L
+
+/** How far apart two recordings' lengths can be and still be the same one. */
+internal const val SAME_RECORDING_LENGTH_MS = 3_000L
+
 internal class LyricsFinder(
     private val client: OkHttpClient,
     /** The app's own version, which LRCLIB asks a caller to give so a problem can be traced back. */
     private val versionName: String,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** How long to wait before asking again after a failed lookup; tests pass 0, so they don't wait. */
-    private val busyPauseMs: Long = BUSY_PAUSE_MS,
+    private val busyPauseMs: Long = LYRICS_BUSY_PAUSE_MS,
     /** What songs' words were, so a song shown again needs no lookup; a failed lookup isn't kept. */
     private val cache: LookupCache? = null,
     private val now: () -> Long = System::currentTimeMillis
@@ -81,11 +90,11 @@ internal class LyricsFinder(
     }
 
     private fun fromCache(kept: String): Lyrics? {
-        // A song without words is believed for [NONE_KEPT_MS]; one kept with no time is from before
+        // A song without words is believed for [LYRICS_NONE_KEPT_MS]; one kept with no time is from before
         // there were other places to look, and is asked again.
         if (kept.startsWith(NONE)) {
             val at = kept.removePrefix(NONE).toLongOrNull() ?: return null
-            return Lyrics.None.takeIf { now() - at < NONE_KEPT_MS }
+            return Lyrics.None.takeIf { now() - at < LYRICS_NONE_KEPT_MS }
         }
         return try {
             val json = JSONObject(kept)
@@ -98,7 +107,19 @@ internal class LyricsFinder(
         }
     }
 
+    /**
+     * Under the title as given, then, for one that's two names joined by a dash, as YouTube Music
+     * gives "ミステリー・ガール - Mystery Girl", under each of them.
+     */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+        val titles = listOf(metadata.title) + metadata.title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
+        val answers = titles.map { title ->
+            underName(metadata.copy(title = title), timeoutMs).also { if (it is Lyrics.Found) return it }
+        }
+        return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
+    }
+
+    private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         val answers = mutableListOf<Lyrics>()
         suspend fun tried(answer: Lyrics) = answer.also { answers += it } is Lyrics.Found
         if (tried(fromLrclib(metadata, timeoutMs))) return answers.last()
@@ -221,7 +242,7 @@ internal class LyricsFinder(
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
                 // An artist only written in another script there, say パイパー for Piper, counts when
                 // the recording lasts as long as the store's.
-                val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_LENGTH_MS
+                val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_RECORDING_LENGTH_MS
                 SongNames.same(song.optString("name"), metadata.title) &&
                     artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) || (sameLength && !it.hasLatin()) }
             }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
@@ -313,17 +334,13 @@ internal class LyricsFinder(
         }
     }
 
-    internal companion object {
+    private companion object {
         const val TIMEOUT_MS = 5_000L
         const val TOTAL_TIMEOUT_MS = 30_000L
         const val LRCLIB_TIMEOUT_MS = 12_000L
         const val TRIES = 5
 
-        /** What LRCLIB's Retry-After asks for when it's busy. */
-        const val BUSY_PAUSE_MS = 1_000L
-
         const val NONE = "none"
-        const val NONE_KEPT_MS = 3 * 24 * 60 * 60 * 1000L
         const val SEARCH_URL = "https://lrclib.net/api/search"
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
@@ -331,8 +348,6 @@ internal class LyricsFinder(
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
 
-        /** How far apart two recordings' lengths can be and still be the same one. */
-        const val SAME_LENGTH_MS = 3_000L
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
         const val NETEASE_INSTRUMENTAL = "纯音乐，请欣赏"

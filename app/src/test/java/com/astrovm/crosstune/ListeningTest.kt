@@ -105,7 +105,7 @@ class ListeningTest {
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
-        MainActivity.lyricsBusyPauseMs = LyricsFinder.BUSY_PAUSE_MS
+        MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = { OutputMixTap.open() }
         FloatingLyricsService.host = null

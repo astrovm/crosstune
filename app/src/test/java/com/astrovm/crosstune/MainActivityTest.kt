@@ -125,7 +125,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
-        MainActivity.lyricsBusyPauseMs = LyricsFinder.BUSY_PAUSE_MS
+        MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
     }
 
     // region helpers

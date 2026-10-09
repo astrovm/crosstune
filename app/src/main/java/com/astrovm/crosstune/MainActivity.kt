@@ -183,7 +183,7 @@ class MainActivity : ComponentActivity() {
 
         /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
         @VisibleForTesting
-        internal var lyricsBusyPauseMs: Long = LyricsFinder.BUSY_PAUSE_MS
+        internal var lyricsBusyPauseMs: Long = LYRICS_BUSY_PAUSE_MS
 
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting
