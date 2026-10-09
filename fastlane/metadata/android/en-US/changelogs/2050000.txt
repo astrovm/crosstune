@@ -1,2 +1,3 @@
-MilkDrop visuals: tap the sparkles on the lyrics to see them move behind the words, to what your phone plays.
+MilkDrop visuals: tap the sparkles on the lyrics to see them move behind the words, to what your phone plays. Floating lyrics can float over them too.
 The lyrics buttons sit in a bar at the bottom, out of the way while you scroll. Lyrics are found in more places, in Japanese rather than romaji, and timed when they can be.
+Lyrics follow music videos too, even after an ad. Naming the song playing on your phone skips apps that only say they're playing.
