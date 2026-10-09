@@ -14,19 +14,19 @@ import okio.ForwardingSource
 import okio.buffer
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.util.Collections
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * In-memory stand-in for Spotify's web endpoints so tests never touch the network.
  */
 class FakeSpotify : Interceptor {
-    val requestedUrls: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    val requestedUrls: MutableList<String> = CopyOnWriteArrayList()
 
     /** What each request sent, empty for a GET. */
-    val requestBodies: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    val requestBodies: MutableList<String> = CopyOnWriteArrayList()
 
     /** The headers of each request, for a test of what a request says about itself. */
-    val requestHeaders: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
+    val requestHeaders: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
 
     @Volatile
     var handler: (Request) -> Response = { request -> html(request, "") }
