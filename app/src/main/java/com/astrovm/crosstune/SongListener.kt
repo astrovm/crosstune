@@ -177,10 +177,16 @@ internal fun interface SongHearing {
 /**
  * Names the song an app on the phone is playing straight from that app, which is instant and exact,
  * and only listens with [hearing] when none is: the microphone hears the phone's own speaker
- * poorly, and nothing at all through headphones.
+ * poorly, and nothing at all through headphones. An app that can't say where in the song it is, as
+ * for a video, is still listened to for that, and named as the app does when nothing's heard.
  */
 internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing) : SongHearing {
-    override suspend fun listen(): Heard = playback.nowPlaying() ?: hearing.listen()
+    override suspend fun listen(): Heard {
+        val playing = playback.nowPlaying() ?: return hearing.listen()
+        if (playing.clock != null) return playing
+        val heard = hearing.listen()
+        return heard as? Heard.Song ?: playing
+    }
 }
 
 /**

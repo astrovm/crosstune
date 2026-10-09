@@ -29,9 +29,10 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 
 /**
  * A song followed as it plays: where it is, the app playing it if one is, by name and package, and
- * whether a line can be jumped to.
+ * whether a line can be jumped to. In a [video] the app says where the video is, which may have
+ * more before the song starts.
  */
-internal data class Following(val clock: PlaybackClock, val app: String?, val canSeek: Boolean, val appPackage: String? = null)
+internal data class Following(val clock: PlaybackClock, val app: String?, val canSeek: Boolean, val appPackage: String? = null, val video: Boolean = false)
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
@@ -127,7 +128,7 @@ internal class MediaSessionPlayback(
         // it's only believed while the phone is playing something.
         if (!hasAccess() || !audio.isMusicActive) return null
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() }
             // The one that last said where it is, over one that said so long ago.
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             .firstNotNullOfOrNull(::playing)
@@ -149,20 +150,33 @@ internal class MediaSessionPlayback(
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
-        val clock = following(controller)?.clock
+        // Where a video is isn't where its song is, as it may open with more, so it isn't given.
+        val clock = following(controller)?.takeIf { !it.video }?.clock
         return Heard.Song(named.copy(artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
     }
 
     private fun following(controller: MediaController): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
+        // An app that doesn't say where it is gives nothing to keep the words in time with.
+        if (state.position < 0) return null
         val app = runCatching {
             context.packageManager.run { getApplicationLabel(getApplicationInfo(controller.packageName, 0)).toString() }
         }.getOrNull()
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val clock = PlaybackClock(state.position, at, state.playbackSpeed.takeIf { it > 0f } ?: 1f, state.state == PlaybackState.STATE_PLAYING)
-        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName)
+        val video = controller.metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()
+        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, video)
+    }
+
+    /**
+     * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,
+     * and hasn't said anything for long.
+     */
+    private fun MediaController.leftBehind(): Boolean {
+        val state = playbackState ?: return false
+        return state.position < 0 && now() - state.lastPositionUpdateTime > LEFT_BEHIND_MS
     }
 
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
@@ -182,6 +196,9 @@ internal class MediaSessionPlayback(
 
 /** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */
 private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
+
+/** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
+internal const val LEFT_BEHIND_MS = 10 * 60_000L
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
