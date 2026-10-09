@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     LyricsFinder(
                         client,
                         packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                        busyPauseMs = lyricsBusyPauseMs,
                         cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300)
                     ),
                     SongSearcher(client),
@@ -179,6 +180,10 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
+        @VisibleForTesting
+        internal var lyricsBusyPauseMs: Long = LyricsFinder.BUSY_PAUSE_MS
 
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting

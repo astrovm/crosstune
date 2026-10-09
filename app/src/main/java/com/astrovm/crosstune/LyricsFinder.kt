@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -31,7 +32,8 @@ internal class LyricsFinder(
     /** How long to wait before asking again after a failed lookup; tests pass 0, so they don't wait. */
     private val busyPauseMs: Long = BUSY_PAUSE_MS,
     /** What songs' words were, so a song shown again needs no lookup; a failed lookup isn't kept. */
-    private val cache: LookupCache? = null
+    private val cache: LookupCache? = null,
+    private val now: () -> Long = System::currentTimeMillis
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
@@ -73,12 +75,18 @@ internal class LyricsFinder(
             .put("words", answer.words)
             .put("lines", JSONArray().apply { answer.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
             .toString()
-        Lyrics.None -> NONE
+        // When, so it's asked again in a while: the places that have words keep getting more.
+        Lyrics.None -> "$NONE${now()}"
         Lyrics.Unavailable -> null
     }
 
     private fun fromCache(kept: String): Lyrics? {
-        if (kept == NONE) return Lyrics.None
+        // A song without words is believed for [NONE_KEPT_MS]; one kept with no time is from before
+        // there were other places to look, and is asked again.
+        if (kept.startsWith(NONE)) {
+            val at = kept.removePrefix(NONE).toLongOrNull() ?: return null
+            return Lyrics.None.takeIf { now() - at < NONE_KEPT_MS }
+        }
         return try {
             val json = JSONObject(kept)
             val lines = json.getJSONArray("lines").let { list ->
@@ -94,10 +102,12 @@ internal class LyricsFinder(
         val answers = mutableListOf<Lyrics>()
         suspend fun tried(answer: Lyrics) = answer.also { answers += it } is Lyrics.Found
         if (tried(fromLrclib(metadata, timeoutMs))) return answers.last()
-        val own = withTimeoutOrNull(timeoutMs) { ownNames(metadata) }
+        val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
+        val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
         if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
-        if (tried(fromNetEase(own ?: metadata, timeoutMs))) return answers.last()
-        if (own != null && tried(fromNetEase(metadata, timeoutMs))) return answers.last()
+        val lengthMs = recording?.lengthMs
+        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs))) return answers.last()
+        if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
         return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
     }
 
@@ -139,12 +149,14 @@ internal class LyricsFinder(
         return Lyrics.Found(words, lines)
     }
 
+    /** A recording in the iTunes Store: its [id], and how long it lasts, when that's given. */
+    private data class Recording(val id: Long, val lengthMs: Long?)
+
     /**
-     * The song's names as written where it comes from, say in Japanese, when they're not the ones
-     * given: the US iTunes Store names it as music apps do, in Latin letters, and the Japanese one
-     * names that same recording in its own. Null when it's not found, or has no other names.
+     * The song in the US iTunes Store, which names it as music apps do, in Latin letters: by the
+     * artist given, or by one it only writes in another script. Null when it's not there.
      */
-    private suspend fun ownNames(metadata: MusicMetadata): MusicMetadata? = try {
+    private suspend fun inStore(metadata: MusicMetadata): Recording? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", "${metadata.title} ${metadata.artist}")
             .addQueryParameter("country", "us")
@@ -152,25 +164,36 @@ internal class LyricsFinder(
             .addQueryParameter("limit", "10")
             .build()
         val found = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")
-        // The title as given, by the artist given, or by one only written in another script there.
-        val id = found?.let { list ->
+        found?.let { list ->
             (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { song ->
                 val artist = song.optString("artistName")
                 SongNames.same(song.optString("trackName"), metadata.title) &&
-                    (SongNames.sameArtist(artist, metadata.artist) || artist.none { it in 'a'..'z' || it in 'A'..'Z' })
-            }?.optLong("trackId")
+                    (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin())
+            }
+        }?.let { song ->
+            Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }).takeIf { it.id > 0 }
         }
-        id?.takeIf { it > 0 }?.let { trackId ->
-            val lookup = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder()
-                .addQueryParameter("id", trackId.toString())
-                .addQueryParameter("country", "jp")
-                .build()
-            (parse(lookup.toString()) as? JSONObject)?.optJSONArray("results")?.optJSONObject(0)?.let { song ->
-                val title = song.optString("trackName").trim()
-                val artist = song.optString("artistName").trim()
-                metadata.copy(title = title, artist = artist).takeIf {
-                    title.isNotEmpty() && artist.isNotEmpty() && !(SongNames.same(title, metadata.title) && SongNames.same(artist, metadata.artist))
-                }
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
+    }
+
+    /**
+     * The song's names as written where it comes from, say in Japanese, when they're not the ones
+     * given: the Japanese iTunes Store names recording [id] in its own. Null when it's not there, or
+     * has no other names.
+     */
+    private suspend fun ownNames(metadata: MusicMetadata, id: Long): MusicMetadata? = try {
+        val lookup = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("id", id.toString())
+            .addQueryParameter("country", "jp")
+            .build()
+        (parse(lookup.toString()) as? JSONObject)?.optJSONArray("results")?.optJSONObject(0)?.let { song ->
+            val title = song.optString("trackName").trim()
+            val artist = song.optString("artistName").trim()
+            metadata.copy(title = title, artist = artist).takeIf {
+                title.isNotEmpty() && artist.isNotEmpty() && !(SongNames.same(title, metadata.title) && SongNames.same(artist, metadata.artist))
             }
         }
     } catch (_: IOException) {
@@ -184,7 +207,7 @@ internal class LyricsFinder(
      * LRCLIB hasn't. Only a song of the same name by the same artist is taken, and the credits it
      * opens its words with are left off.
      */
-    private suspend fun fromNetEase(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+    private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
         try {
             val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("s", "${metadata.title} ${metadata.artist}")
@@ -196,7 +219,11 @@ internal class LyricsFinder(
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
             val id = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.firstOrNull { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
-                SongNames.same(song.optString("name"), metadata.title) && artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) }
+                // An artist only written in another script there, say パイパー for Piper, counts when
+                // the recording lasts as long as the store's.
+                val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_LENGTH_MS
+                SongNames.same(song.optString("name"), metadata.title) &&
+                    artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) || (sameLength && !it.hasLatin()) }
             }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
@@ -286,7 +313,7 @@ internal class LyricsFinder(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val TIMEOUT_MS = 5_000L
         const val TOTAL_TIMEOUT_MS = 30_000L
         const val LRCLIB_TIMEOUT_MS = 12_000L
@@ -296,6 +323,7 @@ internal class LyricsFinder(
         const val BUSY_PAUSE_MS = 1_000L
 
         const val NONE = "none"
+        const val NONE_KEPT_MS = 3 * 24 * 60 * 60 * 1000L
         const val SEARCH_URL = "https://lrclib.net/api/search"
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
@@ -303,10 +331,16 @@ internal class LyricsFinder(
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
 
+        /** How far apart two recordings' lengths can be and still be the same one. */
+        const val SAME_LENGTH_MS = 3_000L
+
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
         const val NETEASE_INSTRUMENTAL = "纯音乐，请欣赏"
 
         /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
         val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
     }
+
+/** Whether any of it is written in Latin letters. */
+private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 }

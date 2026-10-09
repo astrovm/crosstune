@@ -88,6 +88,8 @@ class ListeningTest {
         prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        MainActivity.lyricsBusyPauseMs = 0
         shazamAnswers(MATCH)
     }
 
@@ -103,6 +105,7 @@ class ListeningTest {
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.lyricsBusyPauseMs = LyricsFinder.BUSY_PAUSE_MS
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = { OutputMixTap.open() }
         FloatingLyricsService.host = null

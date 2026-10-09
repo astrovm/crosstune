@@ -114,6 +114,8 @@ class MainActivityTest {
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
+        File(app.cacheDir, "lyrics.json").delete()
+        MainActivity.lyricsBusyPauseMs = 0
     }
 
     @After
@@ -123,6 +125,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.lyricsBusyPauseMs = LyricsFinder.BUSY_PAUSE_MS
     }
 
     // region helpers
@@ -2600,9 +2603,13 @@ class MainActivityTest {
         composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText("夜が灯りを投げるBedで").fetchSemanticsNodes().isEmpty() }
         waitForResult()
 
-        // A song with no words of its own says so, rather than sitting empty.
+        // A song with no words of its own says so, rather than sitting empty. Each song is another,
+        // since the words found for one are kept.
         click(string(R.string.clear_button))
-        lyrics("[]")
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, "[]")
+            else FakeSpotify.html(request, """{"title":"Wordless","author_name":"Kingo Hamada"}""")
+        }
         resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
         waitForResult()
         click(string(R.string.lyrics_button))
@@ -2615,7 +2622,7 @@ class MainActivityTest {
             if (request.url.host == "lrclib.net") {
                 FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
             } else {
-                FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+                FakeSpotify.html(request, """{"title":"Busy Song","author_name":"Kingo Hamada"}""")
             }
         }
         resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
@@ -2652,7 +2659,7 @@ class MainActivityTest {
         val playback = timedSong()
         // Not allowed yet, the words say how, and Allow opens Android's page for Crosstune.
         waitForText(string(R.string.lyrics_follow_allow))
-        click(string(R.string.allow_button))
+        click(string(R.string.follow_turn_on))
         val opened = nextStartedActivity()!!
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, opened.action)
         assertEquals(
@@ -2791,7 +2798,7 @@ class MainActivityTest {
         val playback = timedSong()
         playback.restricted = true
         waitForText(string(R.string.lyrics_follow_allow))
-        click(string(R.string.allow_button))
+        click(string(R.string.follow_turn_on))
         // Installed from a file, Android turns the first try down, then offers restricted settings in App info.
         waitForText(string(R.string.follow_help_title))
         assertNull(nextStartedActivity())
@@ -2817,7 +2824,7 @@ class MainActivityTest {
     fun backWithoutTheAccessTheStepsShowAndCanBePutAway() {
         timedSong()
         waitForText(string(R.string.lyrics_follow_allow))
-        click(string(R.string.allow_button))
+        click(string(R.string.follow_turn_on))
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
         // Android may have kept the switch from turning on, so coming back without it shows how.
         controller!!.pause().resume()
@@ -2973,7 +2980,7 @@ class MainActivityTest {
     fun beforeAndroid11AllowOpensTheListOfAppsThatMaySeeWhatPlays() {
         timedSong()
         waitForText(string(R.string.lyrics_follow_allow))
-        click(string(R.string.allow_button))
+        click(string(R.string.follow_turn_on))
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, nextStartedActivity()!!.action)
     }
 
@@ -3938,6 +3945,7 @@ class MainActivityTest {
         click(string(R.string.next_button))
         assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
         click(string(R.string.setup_skip_for_now))
+        click(string(R.string.setup_skip_for_now))
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.settings_button))
@@ -4193,6 +4201,8 @@ class MainActivityTest {
 
         // Links are still to allow, so leaving now is skipping that.
         assertTextAbsent(string(R.string.setup_finish))
+        click(string(R.string.setup_skip_for_now))
+        // Following music apps can wait too.
         click(string(R.string.setup_skip_for_now))
         assertTextShown(string(R.string.spotify_link_label))
         assertTextAbsent(string(R.string.link_settings_helper_title))
@@ -4518,12 +4528,12 @@ class MainActivityTest {
         val setAppAllowsLinks = setupWithSpotifyAppInTheWay()
         launch()
         click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_step, 1, 4))
+        assertTextShown(string(R.string.setup_step, 1, 5))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
 
         // Android won't let Crosstune take links the app verified, so stopping it comes before allowing them.
-        assertTextShown(string(R.string.setup_step, 3, 4))
+        assertTextShown(string(R.string.setup_step, 3, 5))
         assertTextShown(string(R.string.setup_apps_title))
         assertTextShown(string(R.string.setup_still_opens))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
@@ -4545,9 +4555,13 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.setup_still_opens))
 
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_step, 4, 4))
+        assertTextShown(string(R.string.setup_step, 4, 5))
         assertTextShown(string(R.string.setup_allow_all_done))
-        click(string(R.string.setup_finish))
+        // Last, letting lyrics follow music apps, which can wait.
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_step, 5, 5))
+        assertTextShown(string(R.string.follow_help_title))
+        click(string(R.string.setup_skip_for_now))
         assertTrue(prefs().getBoolean("setup_complete", false))
     }
 
@@ -4560,14 +4574,13 @@ class MainActivityTest {
         launch()
         click(string(R.string.setup_get_started))
         // Still counted, so the total doesn't change as sources are picked.
-        assertTextShown(string(R.string.setup_step, 1, 4))
+        assertTextShown(string(R.string.setup_step, 1, 5))
         click(string(R.string.next_button))
         click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_step, 4, 4))
-        assertTextShown(string(R.string.setup_finish))
+        assertTextShown(string(R.string.setup_step, 4, 5))
         // Back skips it too.
         click(string(R.string.back_button))
-        assertTextShown(string(R.string.setup_step, 2, 4))
+        assertTextShown(string(R.string.setup_step, 2, 5))
     }
 
     @Test
@@ -4583,7 +4596,7 @@ class MainActivityTest {
         click(string(R.string.next_button))
         click(string(R.string.next_button))
 
-        assertTextShown(string(R.string.setup_step, 3, 4))
+        assertTextShown(string(R.string.setup_step, 3, 5))
         assertTextShown(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         // Android can't say whether the app still takes the links, so there is nothing to mark.
         assertTextAbsent(string(R.string.setup_still_opens))
@@ -4678,13 +4691,12 @@ class MainActivityTest {
         click(string(R.string.next_button))
 
         toggleRow(string(R.string.target_youtube_music))
-        assertTextShown(string(R.string.setup_step, 2, 4))
+        assertTextShown(string(R.string.setup_step, 2, 5))
         // Unticked again: the app no longer gets in the way, so there's nothing to stop.
         toggleRow(string(R.string.target_youtube_music))
-        assertTextShown(string(R.string.setup_step, 2, 4))
+        assertTextShown(string(R.string.setup_step, 2, 5))
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_allow_title))
-        assertTextShown(string(R.string.setup_finish))
     }
 
     @Test
