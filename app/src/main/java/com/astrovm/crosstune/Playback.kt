@@ -44,7 +44,7 @@ internal interface PlaybackSource {
     fun seekTo(song: MusicMetadata, positionMs: Long)
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
-    fun nowPlaying(): Heard.Song? = null
+    fun nowPlaying(): Heard.Song?
 
     /**
      * Whether Android holds this access back until "Allow restricted settings" is turned on for
