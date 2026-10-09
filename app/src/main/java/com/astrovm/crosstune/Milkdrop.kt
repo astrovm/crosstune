@@ -134,6 +134,9 @@ internal class MilkdropRenderer(
 
     /** Its GL context is ready. */
     fun created() {
+        // A new one, as when the screen comes back, starts at no size, so the size is given again.
+        drawnWidth = 0
+        drawnHeight = 0
         open = milkdrop.open(1, 1)
         if (!open) return
         shown = presets().shuffled(random)

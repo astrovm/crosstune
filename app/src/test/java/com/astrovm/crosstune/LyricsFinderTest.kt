@@ -1,12 +1,14 @@
 package com.astrovm.crosstune
 
 import com.astrovm.crosstune.LyricsFinder.Lyrics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.File
 import java.io.IOException
 
 /** Runs under Robolectric for the real org.json implementation. */
@@ -24,7 +26,9 @@ class LyricsFinderTest {
 
     private fun quote(text: String) = "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 
-    private fun found(song: MusicMetadata) = runBlocking { LyricsFinder(fake.client(), "2.3.3").lyricsOf(song) }
+    private fun finder() = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0)
+
+    private fun found(song: MusicMetadata) = runBlocking { finder().lyricsOf(song) }
 
     private fun words(song: MusicMetadata) = (found(song) as? Lyrics.Found)?.words
 
@@ -152,12 +156,20 @@ class LyricsFinderTest {
         // LRCLIB is often busy, and a lookup that failed is not a song without words.
         fake.handler = { throw IOException("offline") }
         assertEquals(Lyrics.Unavailable, found(MusicMetadata("Song", "Band")))
-        // Asked once more, since one song's words are worth the second try.
-        assertEquals(2, fake.requestedUrls.size)
+        // Asked again a few times, since LRCLIB turns away many lookups in a row when it's busy.
+        assertEquals(5, fake.requestedUrls.size)
+
+        // Busy for a few tries, then answering: the words still come.
+        var busy = 3
+        fake.handler = { request: Request ->
+            if (busy-- > 0) FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
+            else FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
+        }
+        assertEquals("Words", words(MusicMetadata("Song", "Band")))
 
         respond("""[${answer("Song", "Band", "Words")}]""")
         fake.delayMillis = 300
-        assertEquals(Lyrics.Unavailable, runBlocking { LyricsFinder(fake.client(), "2.3.3").lyricsOf(MusicMetadata("Song", "Band"), timeoutMs = 20L) })
+        assertEquals(Lyrics.Unavailable, runBlocking { finder().lyricsOf(MusicMetadata("Song", "Band"), timeoutMs = 20L) })
         fake.delayMillis = 0
 
         // Its own error page isn't an answer either.
@@ -166,6 +178,28 @@ class LyricsFinderTest {
 
         respond("not json at all")
         assertEquals(Lyrics.Unavailable, found(MusicMetadata("Song", "Band")))
+    }
+
+    @Test
+    fun wordsFoundAreKeptSoASongShownAgainNeedsNoLookup() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        val timed = "[00:01.00] First\n[00:03.00] Second"
+        respond("""[${answer("Song", "Band", "First\nSecond", timed)}]""")
+        val first = runBlocking { kept.lyricsOf(MusicMetadata("Song", "Band")) }
+        // Asked again, in another case, it comes from what was kept, timings and all.
+        fake.handler = { throw IOException("offline") }
+        assertEquals(first, runBlocking { kept.lyricsOf(MusicMetadata("song", "BAND")) })
+        assertEquals(1, fake.requestedUrls.size)
+
+        // A song without words is kept as such; one that couldn't be looked up isn't kept at all.
+        respond("[]")
+        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
+        fake.handler = { throw IOException("offline") }
+        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
+        assertEquals(Lyrics.Unavailable, runBlocking { kept.lyricsOf(MusicMetadata("Other", "Band")) })
+        respond("""[${answer("Other", "Band", "Words")}]""")
+        assertEquals("Words", (runBlocking { kept.lyricsOf(MusicMetadata("Other", "Band")) } as Lyrics.Found).words)
     }
 
     @Test

@@ -196,6 +196,9 @@
     <string name="lyrics_stop_listening">Arrêter d\'écouter</string>
     <string name="visuals_show">Afficher les visuels</string>
     <string name="visuals_hide">Masquer les visuels</string>
+    <string name="visuals_only">Visuels seuls</string>
+    <string name="visuals_options">Options des visuels</string>
+    <string name="visuals_show_words">Afficher les paroles</string>
     <string name="setting_theme">Thème</string>
     <string name="theme_light">Clair</string>
     <string name="theme_dark">Sombre</string>

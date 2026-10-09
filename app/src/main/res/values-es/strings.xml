@@ -196,6 +196,9 @@
     <string name="lyrics_stop_listening">Dejar de escuchar</string>
     <string name="visuals_show">Mostrar visuales</string>
     <string name="visuals_hide">Ocultar visuales</string>
+    <string name="visuals_only">Solo visuales</string>
+    <string name="visuals_options">Opciones de visuales</string>
+    <string name="visuals_show_words">Mostrar la letra</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Oscuro</string>

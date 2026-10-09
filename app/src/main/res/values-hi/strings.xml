@@ -196,6 +196,9 @@
     <string name="lyrics_stop_listening">सुनना बंद करें</string>
     <string name="visuals_show">विज़ुअल दिखाएँ</string>
     <string name="visuals_hide">विज़ुअल छिपाएँ</string>
+    <string name="visuals_only">सिर्फ़ विज़ुअल</string>
+    <string name="visuals_options">विज़ुअल विकल्प</string>
+    <string name="visuals_show_words">बोल दिखाएँ</string>
     <string name="setting_theme">थीम</string>
     <string name="theme_light">लाइट</string>
     <string name="theme_dark">डार्क</string>

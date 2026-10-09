@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -26,7 +27,11 @@ internal class LyricsFinder(
     private val client: OkHttpClient,
     /** The app's own version, which LRCLIB asks a caller to give so a problem can be traced back. */
     private val versionName: String,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** How long to wait before asking again after a failed lookup; tests pass 0, so they don't wait. */
+    private val busyPauseMs: Long = BUSY_PAUSE_MS,
+    /** What songs' words were, so a song shown again needs no lookup; a failed lookup isn't kept. */
+    private val cache: LookupCache? = null
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
@@ -41,14 +46,53 @@ internal class LyricsFinder(
     }
 
     /**
-     * What there is to show for [metadata]'s song. A lookup that failed or timed out is asked once
-     * more, since LRCLIB is often busy and a song's words are worth the second try; an answer of
-     * "none" is final.
+     * What there is to show for [metadata]'s song. A lookup that failed or timed out is asked again,
+     * a moment later, as LRCLIB asks when it's busy, which it often is, turning away many lookups in a
+     * row; an answer of "none" is final. All the tries together get [TOTAL_TIMEOUT_MS], so a
+     * service that's down still says so soon.
      */
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
-        repeat(2) {
+        val key = cacheKey(metadata)
+        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
+        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { lookUp(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        cache?.let { cache ->
+            toCache(answer)?.let { cache.put(key, it) }
+            cache.save()
+        }
+        return answer
+    }
+
+    /** The song, whatever the case or spacing of its name. */
+    private fun cacheKey(metadata: MusicMetadata) = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+
+    /** Words as kept: the plain words and each timed line, or "none" for a song without any. */
+    private fun toCache(answer: Lyrics): String? = when (answer) {
+        is Lyrics.Found -> JSONObject()
+            .put("words", answer.words)
+            .put("lines", JSONArray().apply { answer.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+            .toString()
+        Lyrics.None -> NONE
+        Lyrics.Unavailable -> null
+    }
+
+    private fun fromCache(kept: String): Lyrics? {
+        if (kept == NONE) return Lyrics.None
+        return try {
+            val json = JSONObject(kept)
+            val lines = json.getJSONArray("lines").let { list ->
+                (0 until list.length()).map { index -> list.getJSONArray(index).let { LyricLine(it.getLong(0), it.getString(1)) } }
+            }
+            Lyrics.Found(json.getString("words"), lines)
+        } catch (_: JSONException) {
+            null
+        }
+    }
+
+    private suspend fun lookUp(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+        repeat(TRIES) { tried ->
+            if (tried > 0) delay(busyPauseMs)
             val answer = withTimeoutOrNull(timeoutMs) {
                 try {
                     // No list at all means it wouldn't answer, which is not a song without words.
@@ -139,6 +183,13 @@ internal class LyricsFinder(
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+        const val TOTAL_TIMEOUT_MS = 15_000L
+        const val TRIES = 5
+
+        /** What LRCLIB's Retry-After asks for when it's busy. */
+        const val BUSY_PAUSE_MS = 1_000L
+
+        const val NONE = "none"
         const val SEARCH_URL = "https://lrclib.net/api/search"
     }
 }

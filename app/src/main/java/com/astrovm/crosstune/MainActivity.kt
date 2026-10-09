@@ -71,7 +71,11 @@ class MainActivity : ComponentActivity() {
                     LinkResolver(client, apis = apis),
                     // What was found for songs is kept, so a playlist played again needs no lookups.
                     ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis),
-                    LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
+                    LyricsFinder(
+                        client,
+                        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                        cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300)
+                    ),
                     SongSearcher(client),
                     playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),

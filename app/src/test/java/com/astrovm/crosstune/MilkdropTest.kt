@@ -126,6 +126,19 @@ class MilkdropTest {
     }
 
     @Test
+    fun comingBackItsGivenItsSizeAgainThoughItsTheSame() {
+        // Back from another app, a new projectM starts at no size, so the same size is set again.
+        val milkdrop = FakeMilkdrop()
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        renderer.sized(360, 772)
+        renderer.stop()
+        renderer.created()
+        renderer.sized(360, 772)
+        assertEquals(listOf("size 360x772", "size 360x772"), milkdrop.calls.filter { it.startsWith("size") })
+    }
+
+    @Test
     fun stoppedItLetsGoOfTheSoundAndOfProjectM() {
         val milkdrop = FakeMilkdrop()
         val tap = FakeTap()
