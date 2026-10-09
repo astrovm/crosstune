@@ -9,6 +9,10 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.longClick
 
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 import androidx.compose.ui.test.performSemanticsAction
 
@@ -545,6 +549,20 @@ class ListeningTest {
         }).performClick()
         composeRule.waitUntil(TIMEOUT_MS) { shown("Demo one") }
         assertTrue(visualsShown().isNotEmpty())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsShowThroughTheirFadedEdges() {
+        demoWords(FakeHearing())
+        val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        // A row through the first line, which sits clear of the edges, has its letters on it.
+        val line = composeRule.onNodeWithText("Demo one").getBoundsInRoot()
+        val density = composeRule.density.density
+        val y = ((line.top.value + line.bottom.value) / 2 * density).toInt()
+        val row = ((line.left.value * density).toInt() until (line.right.value * density).toInt()).map { image.getPixel(it, y) }
+        val background = image.getPixel(1, y)
+        assertTrue(row.count { kotlin.math.abs(android.graphics.Color.luminance(it) - android.graphics.Color.luminance(background)) > 0.3f } > 10)
     }
 
     @Test
