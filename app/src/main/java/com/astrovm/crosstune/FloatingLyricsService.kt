@@ -21,6 +21,9 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
@@ -66,6 +69,19 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private var view: FrameLayout? = null
     private val params = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.TOP or Gravity.START }
+
+    /**
+     * Locked, the words let every touch through, so a small button of their own, beside them, still
+     * takes one: the way out that's always there, notification or not.
+     */
+    private var unlock: ImageView? = null
+    private val unlockParams = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -173,9 +189,39 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 else params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
                 params.alpha = if (locked) LOCKED_ALPHA else 1f
                 windows.updateViewLayout(view, params)
+                if (locked) showUnlock(host) else hideUnlock()
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(locked))
             }
         }
+    }
+
+    private fun showUnlock(host: FloatingHost) {
+        if (unlock != null) return
+        val size = (UNLOCK_DP * resources.displayMetrics.density).toInt()
+        val button = ImageView(this).apply {
+            setImageResource(R.drawable.ic_lock)
+            setColorFilter(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(UNLOCK_BACKGROUND)
+            }
+            val inset = size / 4
+            setPadding(inset, inset, inset, inset)
+            contentDescription = getString(R.string.floating_unlock)
+            setOnClickListener { host.update(host.state.floating.copy(locked = false)) }
+        }
+        // At the words' top right corner, over them, where it's found without covering a line.
+        unlockParams.width = size
+        unlockParams.height = size
+        unlockParams.x = (params.x + params.width - size).coerceAtLeast(0)
+        unlockParams.y = params.y
+        unlock = button
+        windows.addView(button, unlockParams)
+    }
+
+    private fun hideUnlock() {
+        unlock?.let(windows::removeView)
+        unlock = null
     }
 
     /**
@@ -273,6 +319,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private enum class Gesture { NONE, MOVE, LEFT, RIGHT, PINCH, SLIDER }
 
     override fun onDestroy() {
+        hideUnlock()
         view?.let(windows::removeView)
         view = null
         registry.currentState = Lifecycle.State.DESTROYED
@@ -287,6 +334,9 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"
         private const val CHANNEL = "floating_lyrics"
         private const val NOTIFICATION_ID = 1
+
+        private const val UNLOCK_DP = 40
+        private const val UNLOCK_BACKGROUND = 0xCC000000.toInt()
 
         /** How far in from either side a drag makes the words wider or narrower rather than moving them. */
         private const val EDGE_DP = 24

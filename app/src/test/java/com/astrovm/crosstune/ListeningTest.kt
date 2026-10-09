@@ -23,6 +23,7 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.android.controller.ServiceController
 import android.view.WindowManager
 import android.view.View
+import android.widget.ImageView
 import android.view.MotionEvent
 import android.app.NotificationManager
 import android.app.Application
@@ -545,8 +546,43 @@ class ListeningTest {
     private fun windowViews(service: FloatingLyricsService): List<View> =
         Shadow.extract<ShadowWindowManagerImpl>(service.getSystemService(WindowManager::class.java)).views
 
-    private fun overlay(service: FloatingLyricsService): View =
-        windowViews(service).single { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY }
+    private fun overlays(service: FloatingLyricsService): List<View> =
+        windowViews(service).filter { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY }
+
+    private fun overlay(service: FloatingLyricsService): View = overlays(service).single { it !is ImageView }
+
+    /** The button beside locked words, which still takes a touch. */
+    private fun unlockButton(service: FloatingLyricsService): ImageView? = overlays(service).filterIsInstance<ImageView>().singleOrNull()
+
+    @Test
+    fun lockedWordsAlwaysHaveAWayOutEvenFloatingLockedFromLastTime() {
+        // Locked when they last floated, and with no notification to unlock them from.
+        prefs().edit().putBoolean("floating_locked", true).commit()
+        val floating = floatOverApps(FakeHearing())
+        val service = floating.get()
+        assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
+        val unlock = unlockButton(service)!!
+        assertEquals(string(R.string.floating_unlock), unlock.contentDescription)
+        // It takes touches, at the words' top right corner.
+        val button = unlock.layoutParams as WindowManager.LayoutParams
+        assertTrue(button.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE == 0)
+        val words = overlay(service).layoutParams as WindowManager.LayoutParams
+        assertEquals(words.y, button.y)
+        assertEquals(words.x + words.width - button.width, button.x)
+
+        unlock.performClick()
+        composeRule.waitForIdle()
+        assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE == 0)
+        assertFalse(prefs().getBoolean("floating_locked", true))
+        assertEquals(null, unlockButton(service))
+        // Locked again, it's back; closed, it goes with the words.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.floating_lock))
+        assertTrue(unlockButton(service) != null)
+        floating.destroy()
+        assertTrue(overlays(service).isEmpty())
+    }
 
     private fun ServiceController<FloatingLyricsService>.command(action: String) {
         withIntent(Intent(app, FloatingLyricsService::class.java).setAction(action)).startCommand(0, 2)
