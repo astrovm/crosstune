@@ -46,17 +46,17 @@ internal class LyricsFinder(
     }
 
     /**
-     * What there is to show for [metadata]'s song. A lookup that failed or timed out is asked again,
-     * a moment later, as LRCLIB asks when it's busy, which it often is, turning away many lookups in a
-     * row; an answer of "none" is final. All the tries together get [TOTAL_TIMEOUT_MS], so a
-     * service that's down still says so soon.
+     * What there is to show for [metadata]'s song: LRCLIB's words first. A song from Japan, say, is
+     * often there under its own names, not the ones in Latin letters a music app shows, so those are
+     * asked for too, and NetEase, which has many more such songs, last. Words found anywhere win;
+     * otherwise "none" from any of them is believed over one that wouldn't answer.
      */
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
         val key = cacheKey(metadata)
         cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
-        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { lookUp(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { anywhere(metadata, timeoutMs) } ?: Lyrics.Unavailable
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(key, it) }
             cache.save()
@@ -90,7 +90,26 @@ internal class LyricsFinder(
         }
     }
 
-    private suspend fun lookUp(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+    private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+        val answers = mutableListOf<Lyrics>()
+        suspend fun tried(answer: Lyrics) = answer.also { answers += it } is Lyrics.Found
+        if (tried(fromLrclib(metadata, timeoutMs))) return answers.last()
+        val own = withTimeoutOrNull(timeoutMs) { ownNames(metadata) }
+        if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
+        if (tried(fromNetEase(own ?: metadata, timeoutMs))) return answers.last()
+        if (own != null && tried(fromNetEase(metadata, timeoutMs))) return answers.last()
+        return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
+    }
+
+    /**
+     * A song LRCLIB is busy for is asked about again, a moment later, as it asks, since it often turns
+     * away many lookups in a row; an answer of "none" is final. All the tries together get
+     * [LRCLIB_TIMEOUT_MS], so the other places still get their turn.
+     */
+    private suspend fun fromLrclib(metadata: MusicMetadata, timeoutMs: Long): Lyrics =
+        withTimeoutOrNull(LRCLIB_TIMEOUT_MS) { lrclib(metadata, timeoutMs) } ?: Lyrics.Unavailable
+
+    private suspend fun lrclib(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         repeat(TRIES) { tried ->
             if (tried > 0) delay(busyPauseMs)
             val answer = withTimeoutOrNull(timeoutMs) {
@@ -120,6 +139,88 @@ internal class LyricsFinder(
         return Lyrics.Found(words, lines)
     }
 
+    /**
+     * The song's names as written where it comes from, say in Japanese, when they're not the ones
+     * given: the US iTunes Store names it as music apps do, in Latin letters, and the Japanese one
+     * names that same recording in its own. Null when it's not found, or has no other names.
+     */
+    private suspend fun ownNames(metadata: MusicMetadata): MusicMetadata? = try {
+        val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("term", "${metadata.title} ${metadata.artist}")
+            .addQueryParameter("country", "us")
+            .addQueryParameter("entity", "song")
+            .addQueryParameter("limit", "10")
+            .build()
+        val found = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")
+        // The title as given, by the artist given, or by one only written in another script there.
+        val id = found?.let { list ->
+            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { song ->
+                val artist = song.optString("artistName")
+                SongNames.same(song.optString("trackName"), metadata.title) &&
+                    (SongNames.sameArtist(artist, metadata.artist) || artist.none { it in 'a'..'z' || it in 'A'..'Z' })
+            }?.optLong("trackId")
+        }
+        id?.takeIf { it > 0 }?.let { trackId ->
+            val lookup = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("id", trackId.toString())
+                .addQueryParameter("country", "jp")
+                .build()
+            (parse(lookup.toString()) as? JSONObject)?.optJSONArray("results")?.optJSONObject(0)?.let { song ->
+                val title = song.optString("trackName").trim()
+                val artist = song.optString("artistName").trim()
+                metadata.copy(title = title, artist = artist).takeIf {
+                    title.isNotEmpty() && artist.isNotEmpty() && !(SongNames.same(title, metadata.title) && SongNames.same(artist, metadata.artist))
+                }
+            }
+        }
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
+    }
+
+    /**
+     * NetEase Cloud Music's words for the song, which has many from Japan, Korea and China that
+     * LRCLIB hasn't. Only a song of the same name by the same artist is taken, and the credits it
+     * opens its words with are left off.
+     */
+    private suspend fun fromNetEase(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+        try {
+            val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("s", "${metadata.title} ${metadata.artist}")
+                .addQueryParameter("type", "1")
+                .addQueryParameter("limit", "10")
+                .build()
+            val result = (parse(search.toString(), NETEASE_REFERER) as? JSONObject)?.optJSONObject("result")
+                ?: return@withTimeoutOrNull Lyrics.Unavailable
+            val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
+            val id = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.firstOrNull { song ->
+                val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
+                SongNames.same(song.optString("name"), metadata.title) && artists.any { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) }
+            }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
+            val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("id", id.toString())
+                .addQueryParameter("lv", "1")
+                .build()
+            val lrc = (parse(lyric.toString(), NETEASE_REFERER) as? JSONObject)?.optJSONObject("lrc")?.optString("lyric").orEmpty()
+            netEaseWords(lrc) ?: Lyrics.None
+        } catch (_: IOException) {
+            Lyrics.Unavailable
+        } catch (_: JSONException) {
+            Lyrics.Unavailable
+        }
+    } ?: Lyrics.Unavailable
+
+    /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
+    private fun netEaseWords(lrc: String): Lyrics.Found? {
+        val timed = SyncedLyrics.parse(lrc).filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val lines = SyncedLyrics.withPauses(timed)
+        val words = if (timed.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
+        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.joinToString("\n").trim()
+        if (words.isEmpty() || words.contains(NETEASE_INSTRUMENTAL)) return null
+        return Lyrics.Found(words, lines)
+    }
+
     /** What the service said, or null when it said something that isn't a list of answers. */
     private suspend fun answersFor(metadata: MusicMetadata): List<Answer>? {
         val url = SEARCH_URL.toHttpUrl().newBuilder()
@@ -133,8 +234,10 @@ internal class LyricsFinder(
         return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
     }
 
-    private suspend fun parse(url: String): Any {
+    private suspend fun parse(url: String, referer: String? = null): Any {
         val request = Request.Builder().url(url)
+            // NetEase only answers a request that seems to come from its own site.
+            .apply { referer?.let { header("Referer", it) } }
             // LRCLIB turns away a request that doesn't say who it is, answering with an error page
             // rather than lyrics, so it names the app and leaves a way to be told about a problem.
             .header("User-Agent", "Crosstune/$versionName (https://github.com/astrovm/crosstune)")
@@ -183,7 +286,8 @@ internal class LyricsFinder(
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
-        const val TOTAL_TIMEOUT_MS = 15_000L
+        const val TOTAL_TIMEOUT_MS = 30_000L
+        const val LRCLIB_TIMEOUT_MS = 12_000L
         const val TRIES = 5
 
         /** What LRCLIB's Retry-After asks for when it's busy. */
@@ -191,5 +295,16 @@ internal class LyricsFinder(
 
         const val NONE = "none"
         const val SEARCH_URL = "https://lrclib.net/api/search"
+        const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
+        const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
+        const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
+        const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
+        const val NETEASE_REFERER = "https://music.163.com/"
+
+        /** What NetEase writes for a song without words: "pure music, please enjoy". */
+        const val NETEASE_INSTRUMENTAL = "纯音乐，请欣赏"
+
+        /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
+        val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
     }
 }
