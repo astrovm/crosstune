@@ -6,6 +6,11 @@ set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" ABSOLUTE)
 add_compile_options("-ffile-prefix-map=${PROJECT_ROOT}=." "-fdebug-prefix-map=${PROJECT_ROOT}=.")
 
+# projectM's expression parser comes with its generated sources; flex or bison on the machine would
+# make them again, differently from one machine to the next.
+set(CMAKE_DISABLE_FIND_PACKAGE_FLEX TRUE)
+set(CMAKE_DISABLE_FIND_PACKAGE_BISON TRUE)
+
 # projectM as one static library inside ours, with only what drawing presets needs.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ENABLE_PLAYLIST OFF CACHE BOOL "" FORCE)
