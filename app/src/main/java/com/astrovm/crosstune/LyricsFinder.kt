@@ -30,6 +30,9 @@ internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
 /** How far apart two recordings' lengths can be and still be the same one. */
 internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 
+/** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
+private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
+
 internal class LyricsFinder(
     private val client: OkHttpClient,
     /** The app's own version, which LRCLIB asks a caller to give so a problem can be traced back. */
@@ -341,8 +344,6 @@ internal class LyricsFinder(
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
         const val NETEASE_INSTRUMENTAL = "纯音乐，请欣赏"
 
-        /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
-        val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
     }
 
 /** Whether any of it is written in Latin letters. */
