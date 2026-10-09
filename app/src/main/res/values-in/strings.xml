@@ -214,12 +214,12 @@
     <string name="setting_pure_black">Hitam pekat</string>
     <string name="setting_pure_black_description">Hitam sungguhan di mode gelap. Lebih hemat untuk layar OLED dan baterainya.</string>
     <string name="follow_help_title">Biarkan lirik mengikuti musikmu</string>
-    <string name="follow_help_try">Buka Akses notifikasi dan coba aktifkan Crosstune. Jika Android bilang itu setelan terbatas, tutup pesan itu.</string>
-    <string name="follow_help_restricted">Lalu buka Info aplikasi, ketuk ⋮ di kanan atas, dan pilih Izinkan setelan terbatas. Android baru menawarkannya setelah percobaan pertama itu.</string>
-    <string name="follow_help_access">Kembali ke Akses notifikasi, aktifkan Crosstune. Crosstune hanya melihat apa yang diputar aplikasi musikmu.</string>
-    <string name="setup_follow_body">Lirik mengikuti lagu di aplikasi musikmu, dan Crosstune langsung mengenali lagu yang diputar ponselmu. Perlu akses notifikasi, tapi notifikasimu tidak pernah dibaca.</string>
+    <string name="follow_help_try">Ketuk tombolnya, lalu Tutup.</string>
+    <string name="follow_help_restricted">Ketuk ⋮, lalu Izinkan setelan terbatas.</string>
+    <string name="follow_help_access">Sekarang aktifkan dan ketuk Izinkan.</string>
+    <string name="setup_follow_body">Lirik mengikuti aplikasi musikmu. Crosstune hanya melihat apa yang diputar, tidak pernah notifikasimu.</string>
     <string name="follow_turn_on">Aktifkan</string>
-    <string name="follow_help_simple">Buka Akses notifikasi dan aktifkan Crosstune. Ia hanya melihat apa yang diputar aplikasi musikmu.</string>
+    <string name="follow_help_simple">Aktifkan dan ketuk Izinkan.</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>
     <string name="setting_lyrics_follow_description">Perlu akses notifikasi. Notifikasimu tidak pernah dibaca.</string>
     <string name="follow_help_app_info">Info aplikasi</string>

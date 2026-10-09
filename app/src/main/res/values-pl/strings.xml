@@ -214,12 +214,12 @@
     <string name="setting_pure_black">Czysta czerń</string>
     <string name="setting_pure_black_description">Prawdziwa czerń w trybie ciemnym. Lepsza dla ekranów OLED i ich baterii.</string>
     <string name="follow_help_title">Niech tekst podąża za Twoją muzyką</string>
-    <string name="follow_help_try">Otwórz Dostęp do powiadomień i spróbuj włączyć Crosstune. Jeśli Android powie, że to ustawienie z ograniczonym dostępem, zamknij ten komunikat.</string>
-    <string name="follow_help_restricted">Potem otwórz Informacje o aplikacji, kliknij ⋮ w prawym górnym rogu i wybierz Zezwól na ustawienia z ograniczonym dostępem. Android pokazuje tę opcję dopiero po pierwszej próbie.</string>
-    <string name="follow_help_access">Wróć do Dostępu do powiadomień i włącz Crosstune. Widzi tylko, co odtwarzają Twoje aplikacje muzyczne.</string>
-    <string name="setup_follow_body">Tekst nadąża za utworem w aplikacji muzycznej, a Crosstune od razu rozpoznaje, co gra telefon. Wymaga dostępu do powiadomień, ale Twoje powiadomienia nigdy nie są czytane.</string>
+    <string name="follow_help_try">Kliknij przełącznik, a potem Zamknij.</string>
+    <string name="follow_help_restricted">Kliknij ⋮, a potem Zezwól na ustawienia z ograniczonym dostępem.</string>
+    <string name="follow_help_access">Teraz go włącz i kliknij Zezwól.</string>
+    <string name="setup_follow_body">Tekst nadąża za aplikacją muzyczną. Crosstune widzi tylko to, co gra, nigdy Twoich powiadomień.</string>
     <string name="follow_turn_on">Włącz</string>
-    <string name="follow_help_simple">Otwórz Dostęp do powiadomień i włącz Crosstune. Widzi tylko to, co grają Twoje aplikacje muzyczne.</string>
+    <string name="follow_help_simple">Włącz go i kliknij Zezwól.</string>
     <string name="setting_lyrics_follow">Tekst podąża za aplikacją muzyczną</string>
     <string name="setting_lyrics_follow_description">Wymaga dostępu do powiadomień. Twoje powiadomienia nigdy nie są czytane.</string>
     <string name="follow_help_app_info">Informacje o aplikacji</string>

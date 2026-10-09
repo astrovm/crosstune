@@ -214,12 +214,12 @@
     <string name="setting_pure_black">Saf siyah</string>
     <string name="setting_pure_black_description">Koyu modda gerçek siyah. OLED ekranlar ve pilleri için daha iyi.</string>
     <string name="follow_help_title">Sözler müziğini takip etsin</string>
-    <string name="follow_help_try">Bildirim erişimi\'ni aç ve Crosstune\'u açmayı dene. Android bunun kısıtlanmış bir ayar olduğunu söylerse o mesajı kapat.</string>
-    <string name="follow_help_restricted">Sonra Uygulama bilgileri\'ni aç, sağ üstteki ⋮ simgesine dokun ve Kısıtlanmış ayarlara izin ver\'i seç. Android bunu ancak o ilk denemeden sonra sunar.</string>
-    <string name="follow_help_access">Bildirim erişimi\'ne dönüp Crosstune\'u aç. Yalnızca müzik uygulamalarının ne çaldığını görür.</string>
-    <string name="setup_follow_body">Şarkı sözleri müzik uygulamandaki şarkıyla senkron ilerler ve Crosstune telefonunda çalan şarkıyı hemen tanır. Bildirim erişimi gerekir, ancak bildirimlerin asla okunmaz.</string>
+    <string name="follow_help_try">Düğmeye, sonra Kapat\'a dokun.</string>
+    <string name="follow_help_restricted">⋮ simgesine, sonra Kısıtlanmış ayarlara izin ver\'e dokun.</string>
+    <string name="follow_help_access">Şimdi aç ve İzin ver\'e dokun.</string>
+    <string name="setup_follow_body">Şarkı sözleri müzik uygulamanla senkron ilerler. Crosstune yalnızca çalanı görür, bildirimlerini asla.</string>
     <string name="follow_turn_on">Aç</string>
-    <string name="follow_help_simple">Bildirim erişimini aç ve Crosstune\'u etkinleştir. Yalnızca müzik uygulamalarının ne çaldığını görür.</string>
+    <string name="follow_help_simple">Aç ve İzin ver\'e dokun.</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>
     <string name="setting_lyrics_follow_description">Bildirim erişimi gerekir. Bildirimlerin asla okunmaz.</string>
     <string name="follow_help_app_info">Uygulama bilgileri</string>

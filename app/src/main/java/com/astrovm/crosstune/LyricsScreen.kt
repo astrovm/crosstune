@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -844,17 +845,18 @@ internal fun FollowSteps(restricted: Boolean, actions: ScreenActions, modifier: 
     val access = stringResource(R.string.follow_help_access_button)
     Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = modifier) {
         if (restricted) {
-            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess)
-            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo)
-            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess)
+            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess, R.drawable.guide_access_restricted, R.drawable.guide_restricted_close)
+            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo, R.drawable.guide_allow_restricted)
+            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
         } else {
-            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess)
+            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
         }
     }
 }
 
+/** What to do, the button to the page it's done on, and a screenshot of that page with what to tap circled. */
 @Composable
-private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit) {
+private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit, @DrawableRes vararg images: Int) {
     Row {
         // A step on its own needs no number.
         if (number != null) {
@@ -867,6 +869,11 @@ private fun FollowStep(number: Int?, text: String, button: String, onClick: () -
         Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
+            // Phones vary, which is said once, under the first step's screenshots.
+            images.forEachIndexed { index, image ->
+                val first = number == null || number == 1
+                GuideShot(image, Modifier.padding(top = 12.dp), caption = if (first && index == images.lastIndex) stringResource(R.string.guide_may_differ) else null)
+            }
         }
     }
 }
