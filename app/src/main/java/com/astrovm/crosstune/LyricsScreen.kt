@@ -42,6 +42,9 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -188,6 +191,17 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 else Modifier.background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
             )
     ) {
+        if (state.visuals) {
+            // A little darker behind the phone's bar and the song, so they read over whatever the
+            // visuals do; from the very top and edge to edge, so it has no edge of its own.
+            val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(top + HEADER_SHADE)
+                    .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = state.visualsShade), 1f to Color.Transparent))
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -196,16 +210,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            Box(
-                modifier = if (state.visuals) {
-                    // A little darker behind the song, so it reads over whatever the visuals do.
-                    Modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = state.visualsShade), 1f to Color.Transparent))
-                } else {
-                    Modifier
-                }
-            ) {
-                LyricsHeader(song, actions)
-            }
+            LyricsHeader(song, actions)
             TranslationStatus(state.learning, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -383,6 +388,9 @@ private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrateg
     val bottom = (BAR_FADE.toPx() / size.height).coerceAtMost(1f - top)
     drawRect(Brush.verticalGradient(0f to Color.Transparent, top to Color.Black, 1f - bottom to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
 }
+
+/** How far down the darker shade behind the song reaches, below the phone's bar: just past the song. */
+private val HEADER_SHADE = 72.dp
 
 /** From just over the bar, 16dp up from the bottom and about 56dp tall, down to the bottom. */
 private val BAR_FADE = 88.dp
