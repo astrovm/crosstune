@@ -8,7 +8,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 <li>Playlist dan album menampilkan lagu-lagunya: buka lagu mana pun di aplikasimu, salin atau bagikan daftarnya, atau putar semuanya di YouTube Music atau YouTube.</li>
 <li>Arahkan tiap layanan ke tujuan berbeda, misalnya link YouTube ke YouTube Music dan sisanya ke Apple Music.</li>
 <li>Tanya aplikasi yang dipakai: pilih aplikasi setiap kali kamu mengetuk atau membagikan link.</li>
-<li>Buka yang persis sama: Apple Music, Deezer, dan YouTube Music bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp membuka lagu atau albumnya, dan YouTube membuka lagunya.</li>
+<li>Buka yang persis sama: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud, dan Audiomack bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp dan Qobuz membuka lagu atau albumnya, dan YouTube membuka lagunya.</li>
 <li>Tambahkan aplikasi dan situs lain yang punya halaman pencarian.</li>
 <li>Tempel dengan satu ketukan, cari dan buka ulang link terbaru, atau buka link yang disalin dari widget layar utama, kartu Setelan Cepat, atau dengan menekan lama ikon aplikasi.</li>
 <li>Mengenali lagu yang diputar di dekatmu: Crosstune mendengarkan sendiri, atau membuka Shazam atau pencarian lagu Google. Juga membuka link Shazam dan lagu yang dibagikan dari Now Playing di Pixel.</li>

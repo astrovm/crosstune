@@ -102,7 +102,7 @@
     ],
     [
       "p",
-      "Quand « Ouvrir le résultat exact » est activé, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube ou Bandcamp. Vous pouvez désactiver cette option dans les Paramètres. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Quand vous utilisez « Tout lire » sur une playlist ou un album, l'application envoie le titre et l'artiste de chaque morceau à la recherche de YouTube Music, puis envoie la liste des vidéos trouvées à YouTube, qui renvoie une playlist temporaire. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
+      "Quand « Ouvrir le résultat exact » est activé, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Vous pouvez désactiver cette option dans les Paramètres. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Quand vous utilisez « Tout lire » sur une playlist ou un album, l'application envoie le titre et l'artiste de chaque morceau à la recherche de YouTube Music, puis envoie la liste des vidéos trouvées à YouTube, qui renvoie une playlist temporaire. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
     ],
     [
       "p",

@@ -102,7 +102,7 @@
     ],
     [
       "p",
-      "Wenn „Genauen Treffer öffnen“ aktiviert ist, sendet die App Titel und Künstler des Eintrags an den Suchdienst des Ziels: Apple Music, Deezer, YouTube Music, YouTube oder Bandcamp. Du kannst diese Option in den Einstellungen deaktivieren. Wenn du ein Ziel öffnest, erhält die gewählte App oder Website den Ziel-Link oder die Suchbegriffe. Wenn du „Alle abspielen“ bei einer Playlist oder einem Album nutzt, sendet die App Titel und Künstler jedes Songs an die Suche von YouTube Music und danach die Liste der gefundenen Videos an YouTube, das eine temporäre Playlist zurückgibt. Eigene Ziele erhalten die Suchbegriffe in der URL-Vorlage, die du einrichtest. Wenn du ein Ergebnis teilst, geht es an die App oder Person, die du auswählst."
+      "Wenn „Genauen Treffer öffnen“ aktiviert ist, sendet die App Titel und Künstler des Eintrags an den Suchdienst des Ziels: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack oder Qobuz. Du kannst diese Option in den Einstellungen deaktivieren. Wenn du ein Ziel öffnest, erhält die gewählte App oder Website den Ziel-Link oder die Suchbegriffe. Wenn du „Alle abspielen“ bei einer Playlist oder einem Album nutzt, sendet die App Titel und Künstler jedes Songs an die Suche von YouTube Music und danach die Liste der gefundenen Videos an YouTube, das eine temporäre Playlist zurückgibt. Eigene Ziele erhalten die Suchbegriffe in der URL-Vorlage, die du einrichtest. Wenn du ein Ergebnis teilst, geht es an die App oder Person, die du auswählst."
     ],
     [
       "p",

@@ -8,7 +8,7 @@
 <li>플레이리스트와 앨범은 노래 목록을 보여줘요. 원하는 노래를 내 앱에서 열거나, 목록을 복사하거나 공유하거나, YouTube Music 또는 YouTube에서 모두 재생할 수 있어요.</li>
 <li>서비스마다 여는 앱을 다르게 지정할 수 있어요. 예를 들어 YouTube 링크는 YouTube Music, 나머지는 모두 Apple Music에서 열 수 있어요.</li>
 <li>사용할 앱 매번 묻기: 링크를 탭하거나 공유할 때마다 앱을 선택해요.</li>
-<li>정확한 항목 열기: Apple Music, Deezer, YouTube Music에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있고, Bandcamp에서는 노래와 앨범을, YouTube에서는 노래를 바로 열 수 있어요.</li>
+<li>정확한 항목 열기: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud, Audiomack에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있고, Bandcamp와 Qobuz에서는 노래와 앨범을, YouTube에서는 노래를 열 수 있어요.</li>
 <li>검색 페이지가 있는 다른 앱과 사이트를 추가할 수 있어요.</li>
 <li>한 번의 탭으로 붙여넣고, 최근 링크를 검색해 다시 열거나, 홈 화면 위젯, 빠른 설정 타일, 앱 아이콘 길게 누르기로 복사한 링크를 열 수 있어요.</li>
 <li>근처에서 나오는 노래를 인식해요. Crosstune이 직접 듣거나, Shazam이나 Google 노래 검색을 열어요. Shazam 링크와 Pixel의 Now Playing에서 공유한 노래도 열 수 있어요.</li>

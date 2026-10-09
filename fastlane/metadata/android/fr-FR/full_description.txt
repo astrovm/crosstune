@@ -8,7 +8,7 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 <li>Les playlists et les albums affichent leurs titres : ouvrez-en un dans votre application, copiez ou partagez la liste, ou lisez-la en entier dans YouTube Music ou YouTube.</li>
 <li>Envoyez chaque service vers une destination différente, par exemple les liens YouTube vers YouTube Music et tout le reste vers Apple Music.</li>
 <li>Demander quelle application utiliser : choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</li>
-<li>Ouvrir le résultat exact : Apple Music, Deezer et YouTube Music peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp le titre ou l'album, et YouTube le titre.</li>
+<li>Ouvrir le résultat exact : Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud et Audiomack peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp et Qobuz le titre ou l'album, et YouTube le titre.</li>
 <li>Ajoutez d'autres applications et sites dotés d'une page de recherche.</li>
 <li>Collez d'un seul geste, recherchez et rouvrez vos liens récents, ou ouvrez un lien copié depuis le widget de l'écran d'accueil, la tuile des réglages rapides ou en appuyant longuement sur l'icône de l'application.</li>
 <li>Reconnaît un titre qui passe autour de vous : Crosstune écoute lui-même, ou ouvre Shazam ou la recherche de titres de Google. Ouvre aussi les liens Shazam et les titres partagés depuis Now Playing sur Pixel.</li>

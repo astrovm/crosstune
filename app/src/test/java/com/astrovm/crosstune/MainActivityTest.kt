@@ -1126,6 +1126,20 @@ class MainActivityTest {
         assertTrue(fake.requestedUrls.isEmpty())
     }
 
+    @Test
+    fun aListKeptWithoutItsSongsIsLookedUpAgainForThem() {
+        val url = "https://www.deezer.com/playlist/9"
+        // Kept by an older version, which couldn't read its songs.
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.PLAYLIST, "9", url), MusicMetadata("Mix", "", ItemType.PLAYLIST)))
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Tune","artist":{"name":"Band"}}]}}""")
+        }
+        launch()
+        resolveTyped(url)
+        assertTrue(fake.requestedUrls.contains("https://api.deezer.com/playlist/9"))
+        assertTextShown("First Tune")
+    }
+
     private fun notOnDeezer() {
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") FakeSpotify.html(request, """{"data":[]}""")
@@ -4946,10 +4960,11 @@ class MainActivityTest {
         assertEquals("https://open.spotify.com/track/$TRACK_ID", nextStartedActivity()!!.dataString)
         assertEquals("", model.uiState.linkText)
 
-        model.selectDefault(Destination.Service(MusicService.TIDAL))
+        // An app with no exact match, only a search.
+        model.selectDefault(Destination.Service(MusicService.AMAZON_MUSIC))
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
-        assertEquals("https://listen.tidal.com/search?q=Remember%20Artist", nextStartedActivity()!!.dataString)
+        assertEquals("https://music.amazon.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
         assertNull(model.uiState.result)
     }
 

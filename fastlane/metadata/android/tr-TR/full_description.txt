@@ -8,7 +8,7 @@ Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde d
 <li>Çalma listeleri ve albümler şarkılarını gösterir: istediğiniz şarkıyı uygulamanızda açın, listeyi kopyalayın veya paylaşın ya da hepsini YouTube Music veya YouTube'da çalın.</li>
 <li>Her servisi farklı bir yere yönlendirin; örneğin YouTube bağlantılarını YouTube Music'e, diğer hepsini Apple Music'e.</li>
 <li>Hangi uygulamanın kullanılacağını sor: bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı her seferinde siz seçin.</li>
-<li>Tam eşleşmeyi aç: Apple Music, Deezer ve YouTube Music, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; Bandcamp şarkıyı veya albümü, YouTube ise şarkıyı açabilir.</li>
+<li>Tam eşleşmeyi aç: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud ve Audiomack, arama yerine doğrudan şarkıyı, albümü veya sanatçıyı açabilir; Bandcamp ve Qobuz şarkıyı veya albümü, YouTube ise şarkıyı açabilir.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
 <li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>
 <li>Yakında çalan bir şarkıyı tanır: Crosstune kendisi dinler ya da Shazam'ı veya Google'ın şarkı aramasını açar. Shazam bağlantılarını ve Pixel'deki Now Playing'den paylaşılan şarkıları da açar.</li>

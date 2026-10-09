@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -63,10 +64,12 @@ class MainActivity : ComponentActivity() {
         viewModelFactory {
             initializer {
                 val client = httpClientFactory()
+                // One of each, so SoundCloud's key is read once for both.
+                val apis = ServiceApis(client, Locale.getDefault().country)
                 MainViewModel(
-                    LinkResolver(client),
+                    LinkResolver(client, apis = apis),
                     // What was found for songs is kept, so a playlist played again needs no lookups.
-                    ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher)),
+                    ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis),
                     LyricsFinder(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()),
                     SongSearcher(client),
                     playbackFactory(applicationContext),

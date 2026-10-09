@@ -144,7 +144,7 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
 
         fake.requestedUrls.clear()
-        assertNull(runBlocking { matcher().find(MusicService.SOUNDCLOUD, song) })
+        assertNull(runBlocking { matcher().find(MusicService.SPOTIFY, song) })
         // A playlist with its songs known is matched song by song, never as itself.
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST, tracks = listOf(song))) })
         assertTrue(fake.requestedUrls.isEmpty())
@@ -697,5 +697,136 @@ class ExactMatcherTest {
     private companion object {
         /** YouTube Music's videos tab, as its search encodes it. */
         const val VIDEOS_TAB = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
+    }
+    private fun find(target: MusicService, item: MusicMetadata) = runBlocking { matcher().find(target, item) }
+
+    @Test
+    fun tidalFindsSongsAlbumsAndArtistsInItsCatalogue() {
+        fake.handler = { request ->
+            val body = when (request.url.encodedPath) {
+                "/v1/search/tracks" -> """{"items":[
+                    {"id":1,"title":"Song","version":"Remix","artists":[{"name":"Band"}]},
+                    {"id":2,"title":"Song","artists":[{"name":"Band"},{"name":"Guest"}]}
+                ]}"""
+                "/v1/search/albums" -> """{"items":[{"id":3,"title":"Record","artists":[{"name":"Band"}]}]}"""
+                else -> """{"items":[{"id":4,"name":"Other"},{"id":5,"name":"Band"}]}"""
+            }
+            FakeSpotify.html(request, body)
+        }
+        // The remix is another recording.
+        assertEquals("https://tidal.com/browse/track/2", find(MusicService.TIDAL, MusicMetadata("Song", "Band")))
+        assertEquals("https://tidal.com/browse/album/3", find(MusicService.TIDAL, MusicMetadata("Record", "Band", ItemType.ALBUM)))
+        assertEquals("https://tidal.com/browse/artist/5", find(MusicService.TIDAL, MusicMetadata("Band", "", ItemType.ARTIST)))
+        assertNull(find(MusicService.TIDAL, MusicMetadata("Record", "Someone Else", ItemType.ALBUM)))
+        // Offline, or answered with something else, e.g. an error page, nothing's found, and a search stands in.
+        fake.handler = { throw IOException("offline") }
+        assertNull(find(MusicService.TIDAL, MusicMetadata("Other Song", "Band")))
+        respond("<html>Busy</html>")
+        assertNull(find(MusicService.TIDAL, MusicMetadata("Third Song", "Band")))
+    }
+
+    /** SoundCloud with its key already read, answering searches with [results]. */
+    private fun soundCloud(results: (String) -> String) {
+        fake.handler = { request ->
+            when {
+                request.url.toString() == ServiceApis.SOUNDCLOUD_URL ->
+                    FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                else -> FakeSpotify.html(request, """{"collection":${results(request.url.encodedPath.substringAfterLast('/'))}}""")
+            }
+        }
+    }
+
+    @Test
+    fun soundCloudOnlyCountsTheArtistsOwnOrAVerifiedUpload() {
+        soundCloud { kind ->
+            when (kind) {
+                "tracks" -> """[
+                    {"title":"Song","user":{"username":"A Fan"},"publisher_metadata":{"artist":"Band"},"permalink_url":"https://soundcloud.com/fan/song"},
+                    {"title":"Song","user":{"username":"Band"},"permalink_url":"https://soundcloud.com/band/song"}
+                ]"""
+                "albums" -> """[{"title":"Record","user":{"username":"Label","verified":true},"permalink_url":"https://soundcloud.com/label/sets/record"}]"""
+                else -> """[
+                    {"username":"Band","verified":false,"permalink_url":"https://soundcloud.com/band-impostor"},
+                    {"username":"Band","verified":true,"permalink_url":"https://soundcloud.com/band"}
+                ]"""
+            }
+        }
+        // A fan's upload credited to the band isn't the band's.
+        assertEquals("https://soundcloud.com/band/song", find(MusicService.SOUNDCLOUD, MusicMetadata("Song", "Band")))
+        // A verified label's album, credited to it, needs the album's artist to be the label's name.
+        assertNull(find(MusicService.SOUNDCLOUD, MusicMetadata("Record", "Band", ItemType.ALBUM)))
+        assertEquals("https://soundcloud.com/label/sets/record", find(MusicService.SOUNDCLOUD, MusicMetadata("Record", "Label", ItemType.ALBUM)))
+        assertEquals("https://soundcloud.com/band", find(MusicService.SOUNDCLOUD, MusicMetadata("Band", "", ItemType.ARTIST)))
+        soundCloud { "[]" }
+        assertNull(find(MusicService.SOUNDCLOUD, MusicMetadata("Missing", "Band")))
+        // Not the answer a search gives.
+        fake.handler = { request ->
+            when {
+                request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                else -> FakeSpotify.html(request, "[1]")
+            }
+        }
+        assertNull(find(MusicService.SOUNDCLOUD, MusicMetadata("Other", "Band")))
+    }
+
+    @Test
+    fun audiomackOnlyCountsTheArtistsOwnOrAVerifiedUpload() {
+        fake.handler = { request ->
+            val body = when (request.url.queryParameter("show")) {
+                "songs" -> """[
+                    {"title":"Song","artist":"Band","url_slug":"song-hd","uploader":{"name":"Reuploads","url_slug":"reuploads","verified":"no"}},
+                    {"title":"Song","artist":"Band","url_slug":"song","uploader":{"name":"Label","url_slug":"label","verified":"yes"}}
+                ]"""
+                "albums" -> """[
+                    {"title":"Record","artist":"Band","url_slug":"record","uploader":{"name":"Band","url_slug":"band"}},
+                    {"title":"Record","artist":"Band","url_slug":"nobody"}
+                ]"""
+                else -> """[{"name":"Band","url_slug":"band-fake","verified":"authenticated"},{"name":"Band","url_slug":"band","verified":"yes"}]"""
+            }
+            FakeSpotify.html(request, """{"results":$body}""")
+        }
+        assertEquals("https://audiomack.com/label/song/song", find(MusicService.AUDIOMACK, MusicMetadata("Song", "Band")))
+        assertEquals("https://audiomack.com/band/album/record", find(MusicService.AUDIOMACK, MusicMetadata("Record", "Band", ItemType.ALBUM)))
+        assertEquals("https://audiomack.com/band", find(MusicService.AUDIOMACK, MusicMetadata("Band", "", ItemType.ARTIST)))
+        // Found with nothing to link to, or not at all.
+        fake.handler = { request -> FakeSpotify.html(request, """{"results":[{"title":"Song","artist":"Band","url_slug":"","uploader":{"name":"Band"}},{"title":"Two","artist":"Band","url_slug":"two","uploader":{"name":"Band"}}]}""") }
+        assertNull(find(MusicService.AUDIOMACK, MusicMetadata("Song", "Band")))
+        assertNull(find(MusicService.AUDIOMACK, MusicMetadata("Two", "Band")))
+        assertNull(find(MusicService.AUDIOMACK, MusicMetadata("Not There", "Band")))
+        fake.handler = { request -> FakeSpotify.html(request, """{"results":[{"name":"Band","verified":"yes","url_slug":""}]}""") }
+        assertNull(find(MusicService.AUDIOMACK, MusicMetadata("Band", "", ItemType.ARTIST)))
+    }
+
+    @Test
+    fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
+        fun item(title: String, credit: String, track: String, album: String) = """
+            <li><div class="ListItem">
+                <a href="/us-en/album/some-slug/$album" title="More details"><img/></a>
+                <div class="ListItem__titleWithArtists">
+                    <a href="/us-en/album/some-slug/$album" class="ListItem__title" title="$title">
+                        $title
+                    </a>
+                    <p class="ListItem__artists">
+                        $credit
+                    </p>
+                </div>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+            </div></li>"""
+        val page = "<ul class=\"ListContainer\">" + item("Song (Live)", "Band • Live Record", "11", "live1") +
+            item("Song", "Band\n •\n Studio &amp; Co", "12", "studio2") + item("Broken", "", "", "") + "</ul>"
+        fake.handler = { request -> FakeSpotify.html(request, page) }
+        assertEquals("https://open.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
+        assertEquals("https://open.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
+        // Qobuz's artists aren't told apart, so there's nothing to look up, and the search stands in.
+        val asked = fake.requestedUrls.size
+        assertNull(find(MusicService.QOBUZ, MusicMetadata("Band", "", ItemType.ARTIST)))
+        assertEquals(asked, fake.requestedUrls.size)
+        assertEquals(false, canMatchExactly(MusicService.QOBUZ, ItemType.ARTIST))
+        assertEquals(true, canMatchExactly(MusicService.QOBUZ, ItemType.ALBUM))
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertNull(find(MusicService.QOBUZ, MusicMetadata("Other", "Band")))
     }
 }

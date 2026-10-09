@@ -8,7 +8,7 @@ Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem an
 <li>Playlists und Alben zeigen ihre Songs: Öffne jeden davon in deiner App, kopiere oder teile die Liste oder spiele alles in YouTube Music oder YouTube ab.</li>
 <li>Schicke jeden Dienst woandershin, z. B. YouTube-Links an YouTube Music und alles andere an Apple Music.</li>
 <li>Nach der App fragen: Wähle bei jedem angetippten oder geteilten Link eine App.</li>
-<li>Genauen Treffer öffnen: Apple Music, Deezer und YouTube Music können den Song, das Album oder den Künstler selbst öffnen statt einer Suche, Bandcamp den Song oder das Album, YouTube den Song.</li>
+<li>Genauen Treffer öffnen: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud und Audiomack können den Song, das Album oder den Künstler selbst öffnen statt einer Suche, Bandcamp und Qobuz den Song oder das Album, YouTube den Song.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
 <li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
 <li>Erkennt einen Song in der Nähe: Crosstune hört selbst zu oder öffnet Shazam oder die Songsuche von Google. Öffnet auch Shazam-Links und Songs, die aus Now Playing auf dem Pixel geteilt werden.</li>

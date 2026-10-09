@@ -230,4 +230,40 @@ class LinkResolverTest {
             MusicMetadata("Last Last", "Burna Boy")
         )
     }
+    @Test
+    fun tidalSoundCloudAndAudiomackListsComeWithTheirSongs() {
+        fake.handler = { request ->
+            val body = when {
+                request.url.host == "tidal.com" -> "<title>Mix by DJ on TIDAL</title>"
+                request.url.host == "api.tidal.com" -> """{"items":[{"id":1,"title":"Song","artists":[{"name":"Band"}]}],"totalNumberOfItems":1}"""
+                request.url.encodedPath == "/oembed" -> """{"title":"Party by Friend","author_name":"Friend"}"""
+                request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>"""
+                request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}""""
+                request.url.host == "api-v2.soundcloud.com" -> """{"tracks":[{"id":5,"title":"Tune","user":{"username":"Friend"}}]}"""
+                else -> """{"results":{"tracks":[{"title":"Track","artist":"Rapper","url_slug":"track"}],"uploader":{"url_slug":"rapper"}}}"""
+            }
+            FakeSpotify.html(request, body)
+        }
+        val tidal = resolve("https://tidal.com/browse/playlist/36ea71a8-445e-41a4-82ab-6628c581535d") as Resolution.Resolved
+        assertEquals(listOf(MusicMetadata("Song", "Band", url = "https://tidal.com/browse/track/1")), tidal.metadata.tracks)
+        val set = resolve("https://soundcloud.com/friend/sets/party") as Resolution.Resolved
+        assertEquals(listOf("Tune"), set.metadata.tracks.map { it.title })
+        val album = resolve("https://audiomack.com/rapper/album/record") as Resolution.Resolved
+        assertEquals(listOf(MusicMetadata("Track", "Rapper", url = "https://audiomack.com/rapper/song/track")), album.metadata.tracks)
+
+        // A list whose songs can't be read still shows, without them: offline, or another answer than expected.
+        fake.handler = { request ->
+            when (request.url.host) {
+                "tidal.com" -> FakeSpotify.html(request, "<title>Record by Band on TIDAL</title>")
+                "api.tidal.com" -> FakeSpotify.html(request, "[]")
+                else -> throw java.io.IOException("offline")
+            }
+        }
+        val record = resolve("https://tidal.com/browse/album/42") as Resolution.Resolved
+        assertEquals(MusicMetadata("Record", "Band", ItemType.ALBUM), record.metadata)
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/oembed") FakeSpotify.html(request, """{"title":"Party by Friend","author_name":"Friend"}""") else throw java.io.IOException("offline")
+        }
+        assertEquals(emptyList<MusicMetadata>(), (resolve("https://soundcloud.com/friend/sets/party") as Resolution.Resolved).metadata.tracks)
+    }
 }

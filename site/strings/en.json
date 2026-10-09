@@ -102,7 +102,7 @@
     ],
     [
       "p",
-      "When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, or Bandcamp. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. When you use Play all on a playlist or album, the app sends each song’s title and artist to YouTube Music’s search, then sends the list of videos found to YouTube, which returns a temporary playlist. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select."
+      "When “Open the exact match” is enabled, the app sends the item's title and artist to the destination's search service: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack, or Qobuz. You can disable this option in Settings. When you open a destination, the selected app or website receives the destination link or search terms. When you use Play all on a playlist or album, the app sends each song’s title and artist to YouTube Music’s search, then sends the list of videos found to YouTube, which returns a temporary playlist. Custom destinations receive the search terms in the URL template you configure. Sharing a result sends it to the app or recipient you select."
     ],
     [
       "p",

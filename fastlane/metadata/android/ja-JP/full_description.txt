@@ -8,7 +8,7 @@
 <li>プレイリストやアルバムは曲の一覧を表示します。好きな曲をアプリで開いたり、リストをコピー・共有したり、YouTube Music や YouTube ですべて再生したりできます。</li>
 <li>サービスごとに開くアプリを変更できます。たとえば YouTube のリンクは YouTube Music、それ以外は Apple Music で開くこともできます。</li>
 <li>使うアプリを毎回選べます。リンクをタップまたは共有するたびに、アプリを選びます。</li>
-<li>一致する項目を直接開けます。Apple Music、Deezer、YouTube Music なら、検索結果ではなく曲、アルバム、アーティストそのものを開きます。Bandcamp では曲とアルバム、YouTube では曲を開きます。</li>
+<li>一致する項目を直接開けます。Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud、Audiomack なら、検索結果ではなく曲、アルバム、アーティストそのものを開きます。Bandcamp と Qobuz では曲とアルバム、YouTube では曲を開きます。</li>
 <li>検索ページのあるアプリやサイトを追加できます。</li>
 <li>ワンタップで貼り付け、最近のリンクの検索と再表示、ホーム画面のウィジェット、クイック設定タイル、アプリのアイコンの長押しでコピーしたリンクを開く、といった使い方ができます。</li>
 <li>近くで流れている曲を認識できます。Crosstune が自分で聞き取るか、Shazam または Google の曲検索を開きます。Shazam のリンクや Pixel の「この曲なに？」から共有した曲も開けます。</li>

@@ -8,7 +8,7 @@
 <li>播放列表和专辑会显示其中的歌曲：可在你的应用中打开任意一首，复制或分享列表，或在 YouTube Music 或 YouTube 中全部播放。</li>
 <li>为每个服务指定不同的去向，例如 YouTube 链接用 YouTube Music 打开，其余都用 Apple Music 打开。</li>
 <li>询问使用哪个应用：每次点按或分享链接时选择应用。</li>
-<li>打开精确匹配：Apple Music、Deezer 和 YouTube Music 可直接打开歌曲、专辑或艺人本身，而不是搜索结果，Bandcamp 可直接打开歌曲或专辑，YouTube 可直接打开歌曲。</li>
+<li>打开精确匹配：Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud 和 Audiomack 可直接打开歌曲、专辑或艺人本身，而不是搜索结果，Bandcamp 和 Qobuz 可直接打开歌曲或专辑，YouTube 可直接打开歌曲。</li>
 <li>添加其他带搜索页面的应用和网站。</li>
 <li>一键粘贴，搜索并重新打开最近的链接，或通过主屏幕微件、快捷设置图块或长按应用图标来打开已复制的链接。</li>
 <li>识别附近正在播放的歌曲：Crosstune 可以自己聆听，也可以打开 Shazam 或 Google 歌曲搜索。还可打开 Shazam 链接和从 Pixel 的 Now Playing 分享的歌曲。</li>

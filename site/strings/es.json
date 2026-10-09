@@ -102,7 +102,7 @@
     ],
     [
       "p",
-      "Cuando “Abrir la coincidencia exacta” está activado, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube o Bandcamp. Podés desactivar esta opción en Configuración. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Cuando usás “Reproducir todo” en una playlist o un álbum, la app envía el título y el artista de cada canción a la búsqueda de YouTube Music, y después envía la lista de videos encontrados a YouTube, que devuelve una playlist temporal. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
+      "Cuando “Abrir la coincidencia exacta” está activado, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack o Qobuz. Podés desactivar esta opción en Configuración. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Cuando usás “Reproducir todo” en una playlist o un álbum, la app envía el título y el artista de cada canción a la búsqueda de YouTube Music, y después envía la lista de videos encontrados a YouTube, que devuelve una playlist temporal. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
     ],
     [
       "p",
