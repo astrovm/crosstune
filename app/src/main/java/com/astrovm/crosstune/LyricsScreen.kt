@@ -216,7 +216,10 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
             }
         }
         if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
-        IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+        // Floating shows the line being sung, which only timed words have.
+        if (state.lyricLines.isNotEmpty()) {
+            IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+        }
         SyncSource(state, actions)
     }
 }

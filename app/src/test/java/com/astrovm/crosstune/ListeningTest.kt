@@ -498,26 +498,36 @@ class ListeningTest {
     }
 
     @Test
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun floatingWithoutTimedWordsShowsTheSongWhole() {
-        val title = "A Song With A Name Long Enough To Need Several Lines Of The Floating Window To Be Read Whole"
-        // Made narrow, as far as it goes.
-        prefs().edit().putInt("floating_width", 420).commit()
-        MainActivity.hearingFactory = { FakeHearing().apply { song(title, 2.0) } }
-        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
+    fun wordsThatArentTimedHaveNothingToFloat() {
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Plain", 2.0) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Plain","artistName":"Band","plainLyrics":"Just words"}]""") }
         allowMicrophone()
         launch()
         recognize()
-        waitForText(title)
+        waitForText("Plain")
         click(string(R.string.lyrics_button))
         waitForText("Just words")
+        assertFalse(described(string(R.string.floating_float)))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun floatingOnToASongWithoutTimedWordsShowsTheSongWhole() {
+        val title = "A Song With A Name Long Enough To Need Several Lines Of The Floating Window To Be Read Whole"
+        // Made narrow, as far as it goes.
+        prefs().edit().putInt("floating_width", 420).commit()
+        val hearing = FakeHearing()
+        demoWords(hearing)
         floatNow()
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        // The next song heard has only plain words.
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
+        hearing.song(title, 2.0)
+        val floating = hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG))
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(shown("Band"))
         // Never cut short: every line it takes is shown.
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        composeRule.onNode(hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG)))
-            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        composeRule.onNode(floating).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.single().lineCount > 2)
         assertFalse(layouts.single().hasVisualOverflow)
     }
