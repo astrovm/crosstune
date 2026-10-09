@@ -952,13 +952,16 @@ private fun TappableLine(text: String, words: List<Word>, picked: Word?, onPick:
         var from = 0
         words.forEach { word ->
             val at = text.indexOf(word.text, from).takeIf { it >= 0 } ?: return@forEach
-            val style = if (word == picked) SpanStyle(background = highlight, color = onHighlight) else SpanStyle(textDecoration = TextDecoration.Underline)
-            addLink(LinkAnnotation.Clickable(word.text, TextLinkStyles(style)) { onPick(word) }, at, at + word.text.length)
+            addLink(wordLink(word, word == picked, SpanStyle(background = highlight, color = onHighlight), onPick), at, at + word.text.length)
             from = at + word.text.length
         }
     }
     Text(line, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
 }
+
+/** [word] as a link to its meaning: underlined, or standing out in [highlight] once [picked]. */
+private fun wordLink(word: Word, picked: Boolean, highlight: SpanStyle, onPick: (Word) -> Unit) =
+    LinkAnnotation.Clickable(word.text, TextLinkStyles(if (picked) highlight else SpanStyle(textDecoration = TextDecoration.Underline))) { onPick(word) }
 
 /**
  * [parts] of a line with their readings over them, wrapping as the lyrics do, each piece of one of
@@ -990,10 +993,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
                 val word = spans.firstOrNull { start in it.first }?.second
                 val shown = buildAnnotatedString {
                     append(piece)
-                    if (word != null) {
-                        val linkStyle = if (word == picked) highlight else SpanStyle(textDecoration = TextDecoration.Underline)
-                        addLink(LinkAnnotation.Clickable(word.text, TextLinkStyles(linkStyle)) { onPick(word) }, 0, piece.trimEnd().length)
-                    }
+                    if (word != null) addLink(wordLink(word, word == picked, highlight, onPick), 0, piece.trimEnd().length)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Bottom)) {
                     if (part.reading != null) Text(part.reading, style = over, color = MaterialTheme.colorScheme.onSurfaceVariant)
