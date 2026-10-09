@@ -2610,7 +2610,7 @@ class MainActivityTest {
             if (request.url.host == "lrclib.net") FakeSpotify.html(request, "[]")
             else FakeSpotify.html(request, """{"title":"Wordless","author_name":"Kingo Hamada"}""")
         }
-        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        resolveTyped("https://music.youtube.com/watch?v=Wordless123")
         waitForResult()
         click(string(R.string.lyrics_button))
         waitForText(string(R.string.lyrics_none))
@@ -2625,7 +2625,7 @@ class MainActivityTest {
                 FakeSpotify.html(request, """{"title":"Busy Song","author_name":"Kingo Hamada"}""")
             }
         }
-        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        resolveTyped("https://music.youtube.com/watch?v=BusySong123")
         waitForResult()
         click(string(R.string.lyrics_button))
         waitForText(string(R.string.lyrics_failed))
@@ -2636,8 +2636,8 @@ class MainActivityTest {
     }
 
     /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays. */
-    private fun timedSong(): FakePlayback {
-        val playback = FakePlayback()
+    private fun timedSong(restricted: Boolean = false): FakePlayback {
+        val playback = FakePlayback().apply { this.restricted = restricted }
         MainActivity.playbackFactory = { playback }
         val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
             """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
@@ -2795,8 +2795,8 @@ class MainActivityTest {
 
     @Test
     fun whereAndroidHoldsTheAccessBackTheStepsShowWithThePageForEach() {
-        val playback = timedSong()
-        playback.restricted = true
+        // Installed from a file, which Android knows from the start.
+        val playback = timedSong(restricted = true)
         waitForText(string(R.string.lyrics_follow_allow))
         click(string(R.string.follow_turn_on))
         // Installed from a file, Android turns the first try down, then offers restricted settings in App info.

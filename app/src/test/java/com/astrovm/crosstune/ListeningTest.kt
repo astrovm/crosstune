@@ -511,12 +511,14 @@ class ListeningTest {
         assertTrue(visualsShown().isEmpty())
         click(string(R.string.visuals_show))
         composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
-        assertTrue(described(string(R.string.visuals_hide)))
+        // On, the button opens what else they can do.
+        assertTrue(described(string(R.string.visuals_options)))
         // The words are still there, over them.
         assertTrue(lit("Demo one"))
         // Kept for next time.
         assertTrue(prefs().getBoolean("visuals", false))
 
+        click(string(R.string.visuals_options))
         click(string(R.string.visuals_hide))
         composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
         assertTrue(described(string(R.string.visuals_show)))

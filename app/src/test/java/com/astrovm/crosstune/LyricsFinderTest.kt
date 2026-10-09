@@ -304,4 +304,52 @@ class LyricsFinderTest {
         assertEquals(Lyrics.Unavailable, found(hatsukoi))
     }
 
+
+    @Test
+    fun noWordsIsAskedAgainAfterAFewDaysAndOnceFromBeforeOtherPlacesWereAsked() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        var clock = 1_000_000L
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache, now = { clock })
+        respond("[]")
+        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
+        respond("""[${answer("Quiet", "Band", "Words at last")}]""")
+        // Still believed a little before the days are up, asked again once they are.
+        clock += LyricsFinder.NONE_KEPT_MS - 1
+        assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
+        clock += 1
+        assertEquals("Words at last", (runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) } as Lyrics.Found).words)
+
+        // "None" kept with no time, before other places were asked, is asked again.
+        runBlocking { cache.put("${SongNames.normalize("Old")}\u0000${SongNames.normalize("Band")}", "none") }
+        respond("""[${answer("Old", "Band", "Found now")}]""")
+        assertEquals("Found now", (runBlocking { kept.lyricsOf(MusicMetadata("Old", "Band")) } as Lyrics.Found).words)
+    }
+
+    /** Sunshine Kiz, 3:07 long in the US store, which the Japanese one doesn't have; NetEase has it by パイパー, [lengthMs] long. */
+    private fun piperSong(lengthMs: Long) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[{"trackId":5,"trackName":"Sunshine Kiz","artistName":"Piper","trackTimeMillis":187000}]}""")
+                url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[]}""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":8,"name":"Sunshine Kiz","artists":[{"name":"パイパー"}],"duration":$lengthMs}]}}""")
+                else -> FakeSpotify.html(request, """{"lrc":{"lyric":"[00:01.531]Sunroofを開けて"}}""")
+            }
+        }
+    }
+
+    @Test
+    fun anArtistOnlyWrittenInJapaneseOnNetEaseCountsForARecordingAsLong() {
+        val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
+        piperSong(lengthMs = 187_000 + LyricsFinder.SAME_LENGTH_MS)
+        assertEquals("Sunroofを開けて", words(sunshine))
+        // A recording of another length is another song of that name.
+        piperSong(lengthMs = 187_000 + LyricsFinder.SAME_LENGTH_MS + 1)
+        assertEquals(Lyrics.None, found(sunshine))
+        piperSong(lengthMs = 187_000 - LyricsFinder.SAME_LENGTH_MS - 1)
+        assertEquals(Lyrics.None, found(sunshine))
+    }
+
 }
