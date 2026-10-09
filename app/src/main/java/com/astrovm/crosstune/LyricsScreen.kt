@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.toggleableState
@@ -342,30 +343,48 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions) {
  */
 @Composable
 private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-        shape = CircleShape,
-        shadowElevation = 6.dp,
-        modifier = modifier
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
-            if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
-            VisualsButton(state.visuals, state.visualsShade, actions, onOnlyVisuals)
-            // Floating shows the line being sung, which only timed words have.
-            if (state.lyricLines.isNotEmpty()) {
-                IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+    var menu by remember { mutableStateOf<BarMenu?>(null) }
+    Box(modifier = modifier) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            shape = CircleShape,
+            shadowElevation = 6.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+                if (state.lyrics.isNotEmpty()) {
+                    IconButton(onClick = { menu = BarMenu.LEARN }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
+                }
+                VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
+                // Floating shows the line being sung, which only timed words have.
+                if (state.lyricLines.isNotEmpty()) {
+                    IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+                }
+                SyncSource(state, actions)
             }
-            SyncSource(state, actions)
         }
+        // The menus open from the bar rather than from their button, so they line up with it and
+        // keep off the screen's edge.
+        val close = { menu = null }
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved, close)
+        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
 
-/** The words fade out at the top and bottom, rather than being cut off mid-line under the song or the bar. */
+private enum class BarMenu { LEARN, VISUALS }
+
+/**
+ * The words fade out at the top and bottom, rather than being cut off mid-line under the song or
+ * the bar. At the bottom they're gone by the time they reach the bar, so they never clash with it.
+ */
 private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
     drawContent()
-    val edge = 32.dp.toPx() / size.height
-    drawRect(Brush.verticalGradient(0f to Color.Transparent, edge to Color.Black, 1f - edge to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+    val top = 32.dp.toPx() / size.height
+    val bottom = (BAR_FADE.toPx() / size.height).coerceAtMost(1f - top)
+    drawRect(Brush.verticalGradient(0f to Color.Transparent, top to Color.Black, 1f - bottom to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
 }
+
+/** From just over the bar, 16dp up from the bottom and about 56dp tall, down to the bottom. */
+private val BAR_FADE = 88.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 private const val MAX_VISUALS_SHADE = 0.9f
@@ -385,27 +404,23 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * and a translation, for any.
  */
 @Composable
-private fun LearnButton(learning: Learning, anySaved: Boolean, actions: ScreenActions, onOpenSaved: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
-                LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-            }
-            if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
-            LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-            if (anySaved) {
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.lyrics_saved_lines)) },
-                    leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onOpenSaved()
-                    }
-                )
-            }
+private fun LearnMenu(open: Boolean, learning: Learning, anySaved: Boolean, actions: ScreenActions, onOpenSaved: () -> Unit, onClose: () -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
+            LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+        }
+        if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+        LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        if (anySaved) {
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.lyrics_saved_lines)) },
+                leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
+                onClick = {
+                    onClose()
+                    onOpenSaved()
+                }
+            )
         }
     }
 }
@@ -502,59 +517,66 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
 
 /** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
 @Composable
-private fun VisualsButton(on: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
+private fun VisualsButton(on: Boolean, onClick: () -> Unit) {
     val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
-    Box {
-        IconButton(onClick = { if (on) open = true else actions.onVisualsChange(true) }) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
-                Icon(
-                    painterResource(R.drawable.ic_visuals),
-                    contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
-                    tint = tint,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        DropdownMenu(expanded = open && on, onDismissRequest = { open = false }) {
-            // How dark the ground over them is, from none to nearly black.
-            val darken = stringResource(R.string.visuals_shade)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
-                AppIcon(R.drawable.ic_shade, contentDescription = null)
-                Slider(
-                    value = shade,
-                    onValueChange = { actions.onVisualsShadeChange(it, false) },
-                    onValueChangeFinished = { actions.onVisualsShadeChange(shade, true) },
-                    valueRange = 0f..MAX_VISUALS_SHADE,
-                    modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
-                )
-            }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.visuals_next)) },
-                leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
-                onClick = {
-                    open = false
-                    actions.onNextVisual()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.visuals_only)) },
-                leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
-                onClick = {
-                    open = false
-                    onOnlyVisuals()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.visuals_hide)) },
-                leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
-                onClick = {
-                    open = false
-                    actions.onVisualsChange(false)
-                }
+    IconButton(onClick = onClick) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
+            Icon(
+                painterResource(R.drawable.ic_visuals),
+                contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
+                tint = tint,
+                modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+/** What can be done with the visuals while they're on: how dark the ground over them is, the next, them alone, or off. */
+@Composable
+private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        // How dark the ground over them is, from none to nearly black.
+        val darken = stringResource(R.string.visuals_shade)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
+            AppIcon(R.drawable.ic_shade, contentDescription = null)
+            // Where it was let go is kept, even before the menu has caught up with it.
+            var latest by remember { mutableFloatStateOf(shade) }
+            Slider(
+                value = shade,
+                onValueChange = {
+                    latest = it
+                    actions.onVisualsShadeChange(it, false)
+                },
+                onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
+                valueRange = 0f..MAX_VISUALS_SHADE,
+                modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
+            )
+        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_next)) },
+            leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onNextVisual()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_only)) },
+            leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
+            onClick = {
+                onClose()
+                onOnlyVisuals()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_hide)) },
+            leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onVisualsChange(false)
+            }
+        )
     }
 }
 
