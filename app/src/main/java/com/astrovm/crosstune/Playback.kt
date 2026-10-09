@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageInstaller
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -64,6 +65,7 @@ internal class MediaSessionPlayback(
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
+    private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
@@ -108,20 +110,36 @@ internal class MediaSessionPlayback(
     }
 
     // Without the user's say-so Android shows none, and says so by throwing.
-    override fun nowPlaying(): Heard.Song? = (if (hasAccess()) runCatching { sessions.getActiveSessions(listener) }.getOrNull() else null).orEmpty()
-        // Android lists the app played last first.
-        .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING }
-        .firstNotNullOfOrNull { controller ->
-            val metadata = controller.metadata ?: return@firstNotNullOfOrNull null
-            val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-            val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-            // Without both there's no song to look up by name.
-            if (title.isBlank() || artist.isBlank()) return@firstNotNullOfOrNull null
-            val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-                .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
-            val clock = following(controller)?.clock
-            Heard.Song(MusicMetadata(title, artist, artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+    override fun nowPlaying(): Heard.Song? {
+        // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so
+        // it's only believed while the phone is playing something.
+        if (!hasAccess() || !audio.isMusicActive) return null
+        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            // The one that last said where it is, over one that said so long ago.
+            .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            .firstNotNullOfOrNull(::playing)
+    }
+
+    private fun playing(controller: MediaController): Heard.Song? {
+        val metadata = controller.metadata ?: return null
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        // Without both there's no song to look up by name. A browser playing a bare file names it
+        // by its address, under its site, e.g. "example.com/song.mp3" by "example.com": no song either.
+        if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
+        // With no album it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
+        // named as a song the way a YouTube link is. A music app's "Song - Remastered" stays whole.
+        val named = if (metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()) {
+            MetadataParsers.youtubeVideo(title, artist) ?: return null
+        } else {
+            MusicMetadata(title, artist)
         }
+        val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
+        val clock = following(controller)?.clock
+        return Heard.Song(named.copy(artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+    }
 
     private fun following(controller: MediaController): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
