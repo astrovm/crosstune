@@ -1,5 +1,9 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.alpha
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -964,12 +968,30 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 .height(296.dp)
                 .background(Brush.radialGradient(listOf(glow.copy(alpha = 0.5f), Color.Transparent)))
         ) {
-            CoverArt(
-                result.artworkUrl,
-                actions.loadArtwork,
-                size = 208.dp,
-                modifier = Modifier.shadow(28.dp, MaterialTheme.shapes.medium, ambientColor = glow, spotColor = glow)
-            )
+            Box {
+                CoverArt(
+                    result.artworkUrl,
+                    actions.loadArtwork,
+                    size = 208.dp,
+                    modifier = Modifier.shadow(28.dp, MaterialTheme.shapes.medium, ambientColor = glow, spotColor = glow)
+                )
+                // Where it's from, by its icon on the cover's corner rather than in words.
+                link?.service?.let { service ->
+                    val from = stringResource(R.string.from_service, stringResource(service.labelRes))
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 10.dp, y = 10.dp)
+                            .shadow(6.dp, CircleShape)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(4.dp)
+                            .semantics { contentDescription = from }
+                    ) {
+                        DestinationIcon(Destination.Service(service), state.installed, size = 32.dp)
+                    }
+                }
+            }
         }
         // Tapping the song copies its search text, e.g. to paste into an app Crosstune can't open.
         Column(
@@ -982,22 +1004,21 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 // Inset inside the clip so the rounded corner doesn't cut into the first glyph.
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Text(
-                text = listOfNotNull(
-                    stringResource(result.type.labelRes),
-                    link?.service?.let { stringResource(R.string.from_service, stringResource(it.labelRes)) }
-                ).joinToString(" "),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center
-            )
+            // A song needs no saying; an album, playlist or artist does.
+            if (result.type != ItemType.TRACK) {
+                Text(
+                    text = stringResource(result.type.labelRes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            // Whole, however long: the edit or version at the end is often what tells it apart.
             Text(
                 text = result.title,
                 style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp)
+                textAlign = TextAlign.Center
             )
             if (result.artist.isNotBlank()) {
                 Text(
@@ -1005,8 +1026,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -1014,14 +1033,34 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         val main = mainAction(result, state, actions)
         val missing = state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH
         // It was looked for where it's going and isn't there, which is worth saying before the button.
+        // Its app's icon, crossed out, says so at a glance, with a search there still a tap away, e.g. for another name.
         AnimatedVisibility(visible = missing, enter = Motion.appear, exit = Motion.disappear) {
-            Text(
-                stringResource(R.string.not_found_on, destination.label()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(28.dp)) {
+                    Box(Modifier.alpha(0.45f)) { DestinationIcon(destination, state.installed, size = 24.dp) }
+                    Box(
+                        Modifier
+                            .size(width = 34.dp, height = 2.5.dp)
+                            .rotate(-45f)
+                            .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                    )
+                }
+                Text(
+                    stringResource(R.string.not_found_on, destination.label()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+                if (state.link?.service != null) {
+                    IconButton(onClick = actions.onSearchAnyway, modifier = Modifier.padding(start = 4.dp)) {
+                        AppIcon(R.drawable.ic_search, contentDescription = stringResource(R.string.search_anyway, destination.label()))
+                    }
+                }
+            }
         }
         // One split button: the main part opens it, the arrow picks another app for just this result.
         Row(
@@ -1059,12 +1098,6 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
             DestinationMenuButton(state, actions)
-        }
-        // Playing it where it is leads; a search there is still a tap away, e.g. for another name.
-        AnimatedVisibility(visible = missing && state.link?.service != null, enter = Motion.appear, exit = Motion.disappear) {
-            TextButton(onClick = actions.onSearchAnyway, modifier = Modifier.padding(top = 4.dp)) {
-                Text(stringResource(R.string.search_anyway, destination.label()))
-            }
         }
         // A later part shows its own, down by its button.
         QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
