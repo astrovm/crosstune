@@ -59,7 +59,7 @@ class PlaybackTest {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
     }
 
-    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null): MediaController {
+    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null, position: Long = 42_000): MediaController {
         shadowOf(app.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
@@ -74,7 +74,7 @@ class PlaybackTest {
                 .apply { art.forEach { (key, uri) -> putString(key, uri) } }
                 .apply { if (album != null) putString(MediaMetadata.METADATA_KEY_ALBUM, album) }.build()
         )
-        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, 42_000, 1f, at).setActions(actions).build())
+        shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, at).setActions(actions).build())
         return controller
     }
 
@@ -119,7 +119,7 @@ class PlaybackTest {
         // Another song in one app, and this one, as a video, in another.
         shadowOf(sessions).addController(player("com.other.player", "Other", "Something Else", "Someone"))
         shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))
-        assertEquals(Following(PlaybackClock(42_000, PLAYED_AT, 1f, true), "YouTube", canSeek = true, appPackage = "com.google.android.youtube"), followed().last())
+        assertEquals(Following(PlaybackClock(42_000, PLAYED_AT, 1f, true), "YouTube", canSeek = true, appPackage = "com.google.android.youtube", video = true), followed().last())
     }
 
     @Test
@@ -217,6 +217,36 @@ class PlaybackTest {
     }
 
     @Test
+    fun aTabLeftBehindWithoutAPlaceIsNoSong() {
+        allow()
+        sounding()
+        // Says it plays "YouTube Music", but not where, and hasn't said anything for long.
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "YouTube Music", "music.youtube.com", at = NOW - LEFT_BEHIND_MS - 1, position = -1))
+        assertNull(playback.nowPlaying())
+        // Said just now, it's still named, but with no place to follow.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.radio", "Radio", "Blinding Lights", "The Weeknd", album = "Live", at = NOW, position = -1))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNull(playback.nowPlaying()?.clock)
+        assertNull(followed().last())
+    }
+
+    @Test
+    fun aVideosPlaceIsntGivenAsItsSongsButIsFollowedAsAVideo() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNull(playback.nowPlaying()?.clock)
+        assertEquals(true, followed().last()?.video)
+        // A music app's place is the song's.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
+        assertEquals(42_000L, playback.nowPlaying()?.clock?.positionMs)
+        assertEquals(false, followed().last()?.video)
+    }
+
+    @Test
     fun theOnePlayingWinsOverOnePausedOnTheSameSong() {
         allow()
         shadowOf(sessions).addController(player("com.paused", "Paused", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
@@ -232,6 +262,8 @@ class PlaybackTest {
         assertNull(playback.nowPlaying())
         allow()
         sounding()
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
         assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT), playback.nowPlaying())
     }
 

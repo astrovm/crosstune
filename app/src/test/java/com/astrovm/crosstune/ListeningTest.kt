@@ -413,6 +413,31 @@ class ListeningTest {
     }
 
     @Test
+    fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
+        // YouTube plays the song's video, which opens with 45 seconds before the song.
+        val phone = FakePlayback().apply {
+            access = true
+            playing.value = Following(PlaybackClock(47_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, appPackage = "com.google.android.youtube", video = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // Heard 2 seconds into the song, so its first line, not where the video is.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        assertFalse(lit("Demo three"))
+        // A line tapped moves the video to it, 45 seconds on.
+        composeRule.onNodeWithText("Demo two").performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
+        assertTrue(phone.seeks.toString(), phone.seeks.last() in 54_000..56_000)
+    }
+
+    @Test
     fun wordsListeningAlongKeepSteadyFollowSkipsAndTheNextSong() {
         val hearing = FakeHearing()
         demoWords(hearing)
