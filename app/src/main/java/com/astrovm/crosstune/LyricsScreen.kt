@@ -1,5 +1,15 @@
 package com.astrovm.crosstune
 
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import kotlinx.coroutines.delay
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.runtime.mutableLongStateOf
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
@@ -137,11 +147,29 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
+    // The bar makes way while the words are scrolled, and comes back once they rest.
+    var scrolledAt by remember { mutableLongStateOf(0L) }
+    var barShown by remember { mutableStateOf(true) }
+    LaunchedEffect(scrolledAt) {
+        if (scrolledAt == 0L) return@LaunchedEffect
+        barShown = false
+        delay(BAR_BACK_MS)
+        barShown = true
+    }
+    val scrolling = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
+                return Offset.Zero
+            }
+        }
+    }
     WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .nestedScroll(scrolling)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
@@ -156,7 +184,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
+            LyricsHeader(song, actions)
             TranslationStatus(state.learning, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -188,6 +216,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
+        }
+        AnimatedVisibility(
+            visible = barShown,
+            enter = slideInVertically { it * 2 } + fadeIn(),
+            exit = slideOutVertically { it * 2 } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+        ) {
+            LyricsActions(state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
         }
     }
     }
@@ -254,7 +290,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
 
 /** The song the words are of, the way back, and where their timing comes from. */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -280,15 +316,38 @@ private fun LyricsHeader(song: MusicMetadata, state: UiState, actions: ScreenAct
                 }
             }
         }
-        VisualsButton(state.visuals, actions, onOnlyVisuals)
-        if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
-        // Floating shows the line being sung, which only timed words have.
-        if (state.lyricLines.isNotEmpty()) {
-            IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
-        }
-        SyncSource(state, actions)
     }
 }
+
+/**
+ * What can be done with the words, in a bar at the bottom, where a thumb reaches: what helps read
+ * them, the visuals, floating them, and what they follow.
+ */
+@Composable
+private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        shape = CircleShape,
+        shadowElevation = 6.dp,
+        modifier = modifier
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+            if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
+            VisualsButton(state.visuals, actions, onOnlyVisuals)
+            // Floating shows the line being sung, which only timed words have.
+            if (state.lyricLines.isNotEmpty()) {
+                IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+            }
+            SyncSource(state, actions)
+        }
+    }
+}
+
+/** How long after the words stop being scrolled the bar comes back. */
+private const val BAR_BACK_MS = 1_200L
+
+/** Room under the words, so the last of them can be scrolled clear of the bar. */
+private val BAR_ROOM = 112.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
 private val Learning.shows get() = translation || (script != null && (readings || romanized))
@@ -502,7 +561,7 @@ private fun PlainLyrics(words: String) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM)
             // The words are the point, so they read as one block rather than by line.
             .semantics(mergeDescendants = true) {}
     )
@@ -563,7 +622,7 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
 @Composable
 private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxSize()
     ) {
