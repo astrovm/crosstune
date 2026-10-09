@@ -58,6 +58,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -2691,6 +2692,38 @@ class MainActivityTest {
         assertResultShown()
     }
 
+    /** The line open to study, written once, its words to tap: not the line among the words behind it. */
+    private fun sheetLine(text: String) = composeRule.onNode(hasText(text) and hasTestTag(STUDY_LINE_TAG))
+
+    @Test
+    fun aGapInTheWordsMovesTheAppThereButHasNothingToStudy() {
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo",""" +
+            """"syncedLyrics":"[00:01.00] One\n[00:05.00] \n[00:20.00] Two"}]"""
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.lyrics_button))
+        waitForText("♪")
+        // Nothing to follow yet: a gap does nothing, held or tapped.
+        composeRule.onNodeWithText("♪").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.lyrics_save_line))
+        composeRule.onNodeWithText("♪").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        // Followed in an app that can be moved, tapping it goes there; held, it still opens nothing.
+        playback.playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithText("♪").performClick()
+        assertEquals(listOf(5_000L), playback.seeks)
+        composeRule.onNodeWithText("♪").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.lyrics_save_line))
+    }
+
     @Test
     fun aLineOpensToStudyRepeatsInTheMusicAppAndIsKept() {
         val playback = timedSong()
@@ -2725,10 +2758,10 @@ class MainActivityTest {
         assertEquals(2, playback.seeks.size)
 
         // A word tapped is looked up; with nothing to say what it means, that says so, and it's asked again.
-        composeRule.onNode(hasText("Two") and hasClickAction() and !hasTestTag(LYRIC_LINE_TAG)).performClick()
+        sheetLine("Two").performFirstLinkClick()
         waitForText(string(R.string.lyrics_word_failed))
         fake.handler = { request -> FakeSpotify.html(request, """{"responseData":{"translatedText":"Dos"},"responseStatus":200}""") }
-        composeRule.onNode(hasText("Two") and hasClickAction() and !hasTestTag(LYRIC_LINE_TAG)).performClick()
+        sheetLine("Two").performFirstLinkClick()
         waitForText("Dos")
 
         // Kept, with the song it's from.

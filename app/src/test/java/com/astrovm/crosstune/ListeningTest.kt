@@ -42,6 +42,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -943,9 +944,10 @@ class ListeningTest {
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
         composeRule.waitForIdle()
-        composeRule.onNode(hasText("Night") and hasClickAction()).performClick()
+        val line = composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
+        composeRule.waitUntil(TIMEOUT_MS) { runCatching { line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "Night" } }.isSuccess }
         waitForText("The time between sunset and sunrise.")
-        composeRule.onNode(hasText("sky") and hasClickAction()).performClick()
+        line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "sky" }
         waitForText(string(R.string.lyrics_word_unknown))
     }
 
@@ -981,9 +983,13 @@ class ListeningTest {
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_repeat_line)))
-        val chip = hasText("사랑해") and androidx.compose.ui.test.hasClickAction() and !androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(chip).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onNode(chip).performClick()
+        // The line, once, with its words to tap in it.
+        val line = hasText("사랑해") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(line).fetchSemanticsNodes().isNotEmpty() }
+        // Written once in the sheet: no list of its words besides.
+        assertEquals(1, composeRule.onAllNodes(hasText("사랑해") and !androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)) and !androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)).fetchSemanticsNodes().size)
+        // Its words are found as Readings splits them, a moment after it opens, then tapped.
+        composeRule.waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
         composeRule.waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
     }
 
