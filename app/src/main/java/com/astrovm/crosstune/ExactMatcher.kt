@@ -323,7 +323,9 @@ internal class ExactMatcher(
             if (metadata.type == ItemType.ARTIST) {
                 result.optString("verified") == "yes" && matches(metadata, result.optString("name"), "")
             } else {
-                matches(metadata, result.optString("title"), result.optString("artist")) && owned(result.optJSONObject("uploader"))
+                // One that can't be played here is no use, e.g. kept from this country by its rights holder.
+                matches(metadata, result.optString("title"), result.optString("artist")) && owned(result.optJSONObject("uploader")) &&
+                    !result.optBoolean("geo_restricted")
             }
         } ?: return null
         val slug = found.optString("url_slug").ifBlank { return null }
@@ -350,9 +352,9 @@ internal class ExactMatcher(
             QobuzSong(title, artist, album, qobuzTrackRegex.find(html)?.groupValues?.get(1), qobuzAlbumRegex.find(html)?.groupValues?.get(1))
         }
         return if (metadata.type == ItemType.TRACK) {
-            songs.firstOrNull { it.track != null && matches(metadata, it.title, it.artist) }?.let { "https://open.qobuz.com/track/${it.track}" }
+            songs.firstOrNull { it.track != null && matches(metadata, it.title, it.artist) }?.let { "https://play.qobuz.com/track/${it.track}" }
         } else {
-            songs.firstOrNull { it.album != null && matches(metadata, it.albumTitle, it.artist) }?.let { "https://open.qobuz.com/album/${it.album}" }
+            songs.firstOrNull { it.album != null && matches(metadata, it.albumTitle, it.artist) }?.let { "https://play.qobuz.com/album/${it.album}" }
         }
     }
 
