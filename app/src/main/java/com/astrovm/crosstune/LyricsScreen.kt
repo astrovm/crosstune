@@ -1,5 +1,10 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.buildAnnotatedString
 import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.items
@@ -98,6 +103,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
 internal const val LYRIC_LINE_TAG = "lyric-line"
+internal const val STUDY_LINE_TAG = "study-line"
 
 /**
  * A song's words, filling the screen in the color of its cover. Timed words follow the song while
@@ -516,11 +522,18 @@ private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, onSt
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
             // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
-            .combinedClickable(
-                onClickLabel = stringResource(if (onSeek != null) R.string.lyrics_jump else R.string.lyrics_study_line),
-                onClick = onSeek ?: onStudy,
-                onLongClickLabel = stringResource(R.string.lyrics_study_line),
-                onLongClick = onStudy
+            // A gap, e.g. a solo, has no words to study, so it only moves the app there.
+            .then(
+                if (text.isNotBlank()) {
+                    Modifier.combinedClickable(
+                        onClickLabel = stringResource(if (onSeek != null) R.string.lyrics_jump else R.string.lyrics_study_line),
+                        onClick = onSeek ?: onStudy,
+                        onLongClickLabel = stringResource(R.string.lyrics_study_line),
+                        onLongClick = onStudy
+                    )
+                } else {
+                    onSeek?.let { Modifier.clickable(onClickLabel = stringResource(R.string.lyrics_jump), onClick = it) } ?: Modifier
+                }
             )
             .padding(vertical = 6.dp)
     ) {
@@ -623,14 +636,10 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
             reading?.reading?.takeIf { it != text }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Text(text.ifBlank { "♪" }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            // The line, once: each of its words underlined, to tap for its meaning.
+            TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                words.forEach { word ->
-                    FilterChip(selected = state.word?.word == word, onClick = { actions.onLookUpWord(word) }, label = { Text(word.text) })
-                }
-            }
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) WordCard(meaning)
             }
@@ -650,6 +659,27 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             }
         }
     }
+}
+
+/**
+ * [text] with each of [words] a link, found in it in order, so it reads as written, marks and all,
+ * and wraps as text does. The word looked up stands out.
+ */
+@Composable
+private fun TappableLine(text: String, words: List<Word>, picked: Word?, onPick: (Word) -> Unit) {
+    val highlight = MaterialTheme.colorScheme.primaryContainer
+    val onHighlight = MaterialTheme.colorScheme.onPrimaryContainer
+    val line = buildAnnotatedString {
+        append(text)
+        var from = 0
+        words.forEach { word ->
+            val at = text.indexOf(word.text, from).takeIf { it >= 0 } ?: return@forEach
+            val style = if (word == picked) SpanStyle(background = highlight, color = onHighlight) else SpanStyle(textDecoration = TextDecoration.Underline)
+            addLink(LinkAnnotation.Clickable(word.text, TextLinkStyles(style)) { onPick(word) }, at, at + word.text.length)
+            from = at + word.text.length
+        }
+    }
+    Text(line, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
 }
 
 /** A word tapped: how it reads, and what it means once found. */
