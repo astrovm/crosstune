@@ -1001,7 +1001,8 @@ class ListeningTest {
         learnMenu()
         click(string(R.string.lyrics_readings))
         composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        assertTrue(shown("べる"))
+        // The kana after it shows as written, each character free to wrap.
+        assertTrue(shown("べ") && shown("る"))
         assertTrue(prefs().getBoolean("lyrics_readings", false))
         click(string(R.string.lyrics_romanized))
         composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
