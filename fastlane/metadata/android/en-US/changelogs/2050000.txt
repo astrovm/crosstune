@@ -1,1 +1,2 @@
 MilkDrop visuals: tap the sparkles on the lyrics to see them move behind the words, to what your phone plays.
+The lyrics buttons sit in a bar at the bottom, out of the way while you scroll. Lyrics are found in more places, in Japanese rather than romaji, and timed when they can be.
