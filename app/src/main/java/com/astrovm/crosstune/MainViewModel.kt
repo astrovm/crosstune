@@ -359,7 +359,8 @@ internal class MainViewModel(
                 locked = preferences.getBoolean(KEY_FLOATING_LOCKED, false),
                 left = preferences.getInt(KEY_FLOATING_LEFT, -1),
                 top = preferences.getInt(KEY_FLOATING_TOP, -1),
-                width = preferences.getInt(KEY_FLOATING_WIDTH, -1)
+                width = preferences.getInt(KEY_FLOATING_WIDTH, -1),
+                visuals = preferences.getBoolean(KEY_FLOATING_VISUALS, false)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
@@ -1233,6 +1234,7 @@ internal class MainViewModel(
             putInt(KEY_FLOATING_LEFT, options.left)
             putInt(KEY_FLOATING_TOP, options.top)
             putInt(KEY_FLOATING_WIDTH, options.width)
+            putBoolean(KEY_FLOATING_VISUALS, options.visuals)
         }
     }
 
@@ -1830,6 +1832,7 @@ internal class MainViewModel(
         private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"
         private const val KEY_FLOATING_LEFT = "floating_left"
         private const val KEY_FLOATING_WIDTH = "floating_width"
+        private const val KEY_FLOATING_VISUALS = "floating_visuals"
         private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"
         private const val KEY_FLOATING_LOCKED = "floating_locked"
         private const val KEY_FLOATING_TOP = "floating_top"

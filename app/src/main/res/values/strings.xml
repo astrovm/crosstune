@@ -254,6 +254,7 @@
     <string name="floating_customize">Customize</string>
     <string name="floating_previous_line">Previous line</string>
     <string name="floating_next_line">Next line</string>
+    <string name="floating_visuals">Visuals</string>
     <string name="floating_open">Open Crosstune</string>
     <string name="floating_lock">Let touches through</string>
     <string name="floating_unlock">Unlock</string>

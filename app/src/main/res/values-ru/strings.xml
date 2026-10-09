@@ -236,6 +236,7 @@
     <string name="floating_customize">Настроить</string>
     <string name="floating_previous_line">Предыдущая строка</string>
     <string name="floating_next_line">Следующая строка</string>
+    <string name="floating_visuals">Визуализация</string>
     <string name="floating_open">Открыть Crosstune</string>
     <string name="floating_lock">Пропускать касания</string>
     <string name="floating_unlock">Разблокировать</string>

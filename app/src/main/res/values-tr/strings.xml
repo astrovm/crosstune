@@ -236,6 +236,7 @@
     <string name="floating_customize">Özelleştir</string>
     <string name="floating_previous_line">Önceki satır</string>
     <string name="floating_next_line">Sonraki satır</string>
+    <string name="floating_visuals">Görseller</string>
     <string name="floating_open">Crosstune\'u aç</string>
     <string name="floating_lock">Dokunuşları geçir</string>
     <string name="floating_unlock">Kilidi aç</string>

@@ -236,6 +236,7 @@
     <string name="floating_customize">Sesuaikan</string>
     <string name="floating_previous_line">Baris sebelumnya</string>
     <string name="floating_next_line">Baris berikutnya</string>
+    <string name="floating_visuals">Visual</string>
     <string name="floating_open">Buka Crosstune</string>
     <string name="floating_lock">Teruskan sentuhan</string>
     <string name="floating_unlock">Buka kunci</string>

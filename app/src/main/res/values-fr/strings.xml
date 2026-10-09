@@ -236,6 +236,7 @@
     <string name="floating_customize">Personnaliser</string>
     <string name="floating_previous_line">Ligne précédente</string>
     <string name="floating_next_line">Ligne suivante</string>
+    <string name="floating_visuals">Visuels</string>
     <string name="floating_open">Ouvrir Crosstune</string>
     <string name="floating_lock">Laisser passer les touchers</string>
     <string name="floating_unlock">Déverrouiller</string>

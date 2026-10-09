@@ -236,6 +236,7 @@
     <string name="floating_customize">自定义</string>
     <string name="floating_previous_line">上一行</string>
     <string name="floating_next_line">下一行</string>
+    <string name="floating_visuals">视觉效果</string>
     <string name="floating_open">打开 Crosstune</string>
     <string name="floating_lock">让触摸穿透</string>
     <string name="floating_unlock">解锁</string>

@@ -236,6 +236,7 @@
     <string name="floating_customize">बदलें</string>
     <string name="floating_previous_line">पिछली पंक्ति</string>
     <string name="floating_next_line">अगली पंक्ति</string>
+    <string name="floating_visuals">विज़ुअल</string>
     <string name="floating_open">Crosstune खोलें</string>
     <string name="floating_lock">टच को आर-पार जाने दें</string>
     <string name="floating_unlock">अनलॉक करें</string>

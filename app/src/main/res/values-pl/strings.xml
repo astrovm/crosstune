@@ -236,6 +236,7 @@
     <string name="floating_customize">Dostosuj</string>
     <string name="floating_previous_line">Poprzedni wiersz</string>
     <string name="floating_next_line">Następny wiersz</string>
+    <string name="floating_visuals">Wizualizacje</string>
     <string name="floating_open">Otwórz Crosstune</string>
     <string name="floating_lock">Przepuszczaj dotyk</string>
     <string name="floating_unlock">Odblokuj</string>

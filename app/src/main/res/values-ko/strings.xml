@@ -236,6 +236,7 @@
     <string name="floating_customize">맞춤 설정</string>
     <string name="floating_previous_line">이전 줄</string>
     <string name="floating_next_line">다음 줄</string>
+    <string name="floating_visuals">비주얼</string>
     <string name="floating_open">Crosstune 열기</string>
     <string name="floating_lock">터치 통과</string>
     <string name="floating_unlock">잠금 해제</string>

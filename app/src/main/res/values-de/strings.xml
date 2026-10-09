@@ -236,6 +236,7 @@
     <string name="floating_customize">Anpassen</string>
     <string name="floating_previous_line">Vorherige Zeile</string>
     <string name="floating_next_line">Nächste Zeile</string>
+    <string name="floating_visuals">Visuals</string>
     <string name="floating_open">Crosstune öffnen</string>
     <string name="floating_lock">Berührungen durchlassen</string>
     <string name="floating_unlock">Entsperren</string>
