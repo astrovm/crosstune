@@ -229,6 +229,8 @@ internal class MilkdropView(context: Context, private val renderer: MilkdropRend
 
     override fun onVisibilityAggregated(isVisible: Boolean) {
         super.onVisibilityAggregated(isVisible)
+        // Back in sight, the smaller size is asked for again, as Android may have put it back to the view's.
+        if (isVisible) surfaceTexture?.let { resize(it, width, height) }
         thread?.pause(!isVisible)
     }
 }
@@ -295,7 +297,12 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
                     while (!done && (paused || !sized)) lock.wait()
                     if (done) null else Pair(width, height)
                 } ?: break
-                renderer.sized(size.first, size.second)
+                // The surface's own size, which Android may change back behind the view's back, as when
+                // the app comes back from another one; what was asked for is only the fallback.
+                val drawn = IntArray(2)
+                val known = EGL14.eglQuerySurface(display, window, EGL14.EGL_WIDTH, drawn, 0) &&
+                    EGL14.eglQuerySurface(display, window, EGL14.EGL_HEIGHT, drawn, 1) && drawn[0] > 0 && drawn[1] > 0
+                if (known) renderer.sized(drawn[0], drawn[1]) else renderer.sized(size.first, size.second)
                 renderer.frame()
                 EGL14.eglSwapBuffers(display, window)
             }
