@@ -1,5 +1,19 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.performTouchInput
+
+import androidx.compose.ui.test.hasClickAction
+
+import androidx.compose.ui.test.longClick
+
+import androidx.compose.ui.test.onNodeWithText
+
+import androidx.compose.ui.test.performSemanticsAction
+
+import androidx.compose.ui.semantics.SemanticsActions
+
+import androidx.lifecycle.ViewModelProvider
+
 import org.junit.Assert.assertFalse
 import android.os.Looper
 import android.Manifest
@@ -516,9 +530,9 @@ class ListeningTest {
         assertFalse(activity.isInPictureInPictureMode)
     }
 
-    /** Leaves Crosstune with Demo's words on screen in [look], with Android letting them over other apps, and floats them there. */
-    private fun floatOverApps(hearing: FakeHearing, look: FloatingLook = FloatingLook.NONE): ServiceController<FloatingLyricsService> {
-        prefs().edit().putString("floating_look", look.name).commit()
+    /** Leaves Crosstune with Demo's words on screen on [background], with Android letting them over other apps, and floats them there. */
+    private fun floatOverApps(hearing: FakeHearing, background: Float = 0f): ServiceController<FloatingLyricsService> {
+        prefs().edit().putFloat("floating_background", background).commit()
         ShadowSettings.setCanDrawOverlays(true)
         demoWords(hearing)
         controller!!.userLeaving()
@@ -559,7 +573,7 @@ class ListeningTest {
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
         composeRule.waitForIdle()
         assertTrue(described(string(R.string.floating_close)))
-        composeRule.mainClock.advanceTimeBy(5_000)
+        composeRule.mainClock.advanceTimeBy(7_000)
         composeRule.waitForIdle()
         assertFalse(described(string(R.string.floating_close)))
         // Stop listening along, and start it again.
@@ -619,9 +633,156 @@ class ListeningTest {
     }
 
     @Test
+    fun floatingWordsAreMadeWiderNarrowerOrBiggerWhereTheyAre() {
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        val window = view.layoutParams as WindowManager.LayoutParams
+        val screen = app.resources.displayMetrics.widthPixels
+        val (left, width) = window.x to window.width
+        fun touch(action: Int, x: Float, y: Float = 20f) = MotionEvent.obtain(0, 0, action, x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        // Dragged from the right side, they're narrower, as far as they can be.
+        touch(MotionEvent.ACTION_DOWN, view.width - 2f)
+        touch(MotionEvent.ACTION_MOVE, view.width - 100f)
+        touch(MotionEvent.ACTION_UP, view.width - 100f)
+        assertEquals(width - 98, window.width)
+        assertEquals(width - 98, prefs().getInt("floating_width", -1))
+        // From the left, the left side moves.
+        touch(MotionEvent.ACTION_DOWN, 2f)
+        touch(MotionEvent.ACTION_MOVE, 52f)
+        touch(MotionEvent.ACTION_UP, 52f)
+        assertEquals(left + 50, window.x)
+        assertEquals(width - 148, window.width)
+        assertEquals(left + 50, prefs().getInt("floating_left", -1))
+        // From the middle, sideways, they move, kept on screen.
+        touch(MotionEvent.ACTION_DOWN, 100f)
+        touch(MotionEvent.ACTION_MOVE, 100_000f)
+        touch(MotionEvent.ACTION_UP, 100_000f)
+        assertEquals(screen - window.width, window.x)
+
+        // Two fingers spread apart make the words bigger, as big as they go.
+        fun pinch(action: Int, spread: Float) {
+            val ids = arrayOf(MotionEvent.PointerProperties().apply { id = 0 }, MotionEvent.PointerProperties().apply { id = 1 })
+            val at = arrayOf(MotionEvent.PointerCoords().apply { x = 100f; y = 20f }, MotionEvent.PointerCoords().apply { x = 100f + spread; y = 20f })
+            MotionEvent.obtain(0, 0, action, 2, ids, at, 0, 0, 1f, 1f, 0, 0, 0, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        }
+        touch(MotionEvent.ACTION_DOWN, 100f)
+        pinch(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 100f)
+        pinch(MotionEvent.ACTION_MOVE, 150f)
+        composeRule.waitForIdle()
+        assertEquals(1.5f, controllerModel().uiState.floating.scale, 0.01f)
+        pinch(MotionEvent.ACTION_MOVE, 10_000f)
+        pinch(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 0f)
+        pinch(MotionEvent.ACTION_MOVE, 0f)
+        touch(MotionEvent.ACTION_UP, 100f)
+        assertEquals(FloatingOptions.MAX_SCALE, prefs().getFloat("floating_scale", 1f))
+        floating.destroy()
+        assertTrue(windowViews(floating.get()).none { (it.layoutParams as WindowManager.LayoutParams).type == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY })
+    }
+
+    private fun controllerModel() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+
+    private val sliders = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
+
+    @Test
+    fun floatingWordsAreChangedOnThemselves() {
+        val hearing = FakeHearing()
+        val floating = floatOverApps(hearing)
+        val view = overlay(floating.get())
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.floating_customize))
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertExists()
+        // Being changed, the buttons stay out.
+        composeRule.mainClock.advanceTimeBy(7_000)
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.floating_close)))
+
+        // The band behind them, and their size, slid, are kept once let go.
+        composeRule.onAllNodes(sliders)[0].performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        composeRule.onAllNodes(sliders)[1].performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        composeRule.waitForIdle()
+        assertEquals(0.5f, controllerModel().uiState.floating.background, 0.01f)
+        assertEquals(0.5f, prefs().getFloat("floating_background", 0f), 0.01f)
+        assertEquals(1.4f, prefs().getFloat("floating_scale", 1f), 0.01f)
+        // A drag on a slider is the slider's, and doesn't move them.
+        val top = (view.layoutParams as WindowManager.LayoutParams).y
+        val slider = composeRule.onAllNodes(sliders)[0].fetchSemanticsNode().boundsInWindow
+        fun touch(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, slider.center.x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        touch(MotionEvent.ACTION_DOWN, slider.center.y)
+        touch(MotionEvent.ACTION_MOVE, slider.center.y + 200f)
+        touch(MotionEvent.ACTION_UP, slider.center.y + 200f)
+        assertEquals(top, (view.layoutParams as WindowManager.LayoutParams).y)
+
+        // The line before the one sung shows too, once there is one; the next one, no longer.
+        click(string(R.string.floating_previous_line))
+        click(string(R.string.floating_next_line))
+        assertTrue(prefs().getBoolean("floating_previous_line", false))
+        assertFalse(prefs().getBoolean("floating_next_line", true))
+        hearing.song("Demo", 12.5)
+        hearing.song("Demo", 12.6)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Demo two") && shown("Demo one") && !shown("Demo three") }
+
+        // Tapped again, all of it goes, and next time only the buttons come out.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun theFloatButtonFloatsTheWordsAtOnceOnceAndroidAllowsIt() {
+        ShadowSettings.setCanDrawOverlays(true)
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        demoWords(FakeHearing())
+        click(string(R.string.floating_float))
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        // Crosstune goes behind the app the words float over.
+        assertTrue(shadowOf(controller!!.get()).isTaskMovedToBack)
+    }
+
+    @Test
+    fun theFloatButtonSaysWhyAndroidAsksAndFloatsOnceAllowed() {
+        ShadowSettings.setCanDrawOverlays(false)
+        demoWords(FakeHearing())
+        // Said why first, which can be put off.
+        click(string(R.string.floating_float))
+        waitForText(string(R.string.floating_permission_title))
+        click(string(R.string.cancel_button))
+        assertFalse(shown(string(R.string.floating_permission_title)))
+        assertEquals(null, shadowOf(app).nextStartedActivity)
+
+        click(string(R.string.floating_float))
+        click(string(R.string.floating_permission_continue))
+        assertEquals(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, shadowOf(app).nextStartedActivity.action)
+        // Back, allowed: Android 13 asks about their notification once, and they float either way.
+        ShadowSettings.setCanDrawOverlays(true)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTrue(prefs().getBoolean("asked_floating_notifications", false))
+        shadowOf(controller!!.get()).getLastRequestedPermission()?.let { request ->
+            shadowOf(controller!!.get()).grantPermissions(*request.requestedPermissions)
+            controller!!.get().onRequestPermissionsResult(request.requestCode, request.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        }
+        composeRule.waitForIdle()
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+    }
+
+    @Test
+    fun theFloatButtonLeftUnallowedFloatsNothing() {
+        ShadowSettings.setCanDrawOverlays(false)
+        demoWords(FakeHearing())
+        click(string(R.string.floating_float))
+        click(string(R.string.floating_permission_continue))
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertEquals(null, shadowOf(app).nextStartedService)
+    }
+
+    @Test
     fun floatingWordsCloseFromThemselvesTheNotificationOrCrosstuneClosing() {
         prefs().edit().putString("theme", "LIGHT").commit()
-        val floating = floatOverApps(FakeHearing(), FloatingLook.SEE_THROUGH)
+        val floating = floatOverApps(FakeHearing(), background = 0.6f)
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
         composeRule.waitForIdle()
         click(string(R.string.floating_close))
@@ -646,7 +807,6 @@ class ListeningTest {
         alone.command(FloatingLyricsService.ACTION_UNLOCK)
 
         // Taken back in Android's settings since Crosstune was left.
-        prefs().edit().putString("floating_look", FloatingLook.NONE.name).commit()
         ShadowSettings.setCanDrawOverlays(true)
         demoWords(FakeHearing())
         controller!!.userLeaving()
@@ -657,8 +817,8 @@ class ListeningTest {
     }
 
     @Test
-    fun seeThroughWordsNotAllowedOverOtherAppsFloatPlainInAndroidsWindow() {
-        prefs().edit().putString("floating_look", FloatingLook.NONE.name).putBoolean("floating_next_line", false).commit()
+    fun wordsNotAllowedOverOtherAppsFloatInAndroidsWindow() {
+        prefs().edit().putBoolean("floating_next_line", false).commit()
         ShadowSettings.setCanDrawOverlays(false)
         demoWords(FakeHearing())
         controller!!.userLeaving()
@@ -747,6 +907,34 @@ class ListeningTest {
         assertFalse(shown("よぞら"))
         assertFalse(shown("[食べる]"))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
+    }
+
+    @Test
+    fun wordsAlreadyInTheAppsLanguageSaySoAndTheirWordsMeanWhatTheDictionarySays() {
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        fake.handler = { request ->
+            when {
+                request.url.host == "api.mymemory.translated.net" -> FakeSpotify.html(
+                    request,
+                    """{"responseData":{"translatedText":"PLEASE SELECT TWO DISTINCT LANGUAGES"},"responseDetails":"PLEASE SELECT TWO DISTINCT LANGUAGES","responseStatus":"403"}"""
+                )
+                request.url.encodedPath.endsWith("/night") -> FakeSpotify.html(request, """{"en":[{"definitions":[{"definition":"The time between sunset and sunrise."}]}]}""")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+        waitForText("Stars")
+        learnMenu()
+        click(string(R.string.lyrics_translation))
+        // Not an error: there's just nothing to translate them into.
+        waitForText(string(R.string.lyrics_already_translated))
+        assertFalse(shown(string(R.string.lyrics_translation_failed)))
+
+        composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText("Night") and hasClickAction()).performClick()
+        waitForText("The time between sunset and sunrise.")
+        composeRule.onNode(hasText("sky") and hasClickAction()).performClick()
+        waitForText(string(R.string.lyrics_word_unknown))
     }
 
     @Test

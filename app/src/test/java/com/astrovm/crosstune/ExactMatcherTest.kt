@@ -145,7 +145,8 @@ class ExactMatcherTest {
 
         fake.requestedUrls.clear()
         assertNull(runBlocking { matcher().find(MusicService.SOUNDCLOUD, song) })
-        assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST)) })
+        // A playlist with its songs known is matched song by song, never as itself.
+        assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST, tracks = listOf(song))) })
         assertTrue(fake.requestedUrls.isEmpty())
     }
 

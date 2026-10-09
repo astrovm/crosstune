@@ -62,9 +62,12 @@ internal class ExactMatcher(
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? = match(target, metadata).also { cache?.save() }
 
     private suspend fun match(target: MusicService, metadata: MusicMetadata): String? {
+        // A playlist whose songs aren't known may be an album put up as one, e.g. a SoundCloud set,
+        // so it's found as that album, by the same artist, or not at all.
+        val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
-        if (!canMatchExactly(target, metadata.type)) return null
-        return remembered("find", target.name, metadata) { lookUp(target, metadata) }
+        if (!canMatchExactly(target, item.type)) return null
+        return remembered("find", target.name, item) { lookUp(target, item) }
     }
 
     /**
@@ -463,3 +466,11 @@ private val matchable = setOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, Mus
  * there, rather than that it couldn't look. A playlist is someone's own, and is never anywhere else.
  */
 internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean = type != ItemType.PLAYLIST && target in matchable
+
+/**
+ * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
+ * that could have been matched, or a playlist whose songs aren't known, which is someone's own and
+ * so on no other service.
+ */
+internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
+    canMatchExactly(target, item.type) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())

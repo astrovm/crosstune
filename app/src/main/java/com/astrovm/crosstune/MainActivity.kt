@@ -105,12 +105,20 @@ class MainActivity : ComponentActivity() {
             // The microphone is asked for here, in sight.
             else -> startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
         }
-        override fun setLocked(locked: Boolean) = viewModel.setFloatingLocked(locked)
-        override fun moveTo(top: Int) = viewModel.moveFloating(top)
+        override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
     }
 
-    /** Words over other apps that are locked can only be unlocked from their notification, which Android 13 asks about. */
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    /** Set while saying why Android's about to be asked to let the words float over other apps. */
+    private var askingToFloat by mutableStateOf(false)
+
+    /** Set while away in Android's settings to allow it, so the words float once back, if it was. */
+    private var floatOnceAllowed = false
+
+    /**
+     * Words over other apps that are locked are unlocked from their notification, which Android 13
+     * asks about first; asked or not, they float after.
+     */
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { floatNow() }
 
     /** What asked for the microphone: listening for a song, or listening along with the words. */
     private var afterMicrophone: () -> Unit = { viewModel.listen() }
@@ -144,6 +152,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SHOW_SONG = "com.astrovm.crosstune.extra.SHOW_SONG"
 
 
+        /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
+        private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
 
@@ -243,7 +253,7 @@ class MainActivity : ComponentActivity() {
             }
             // Words on screen float over other apps when Crosstune is left, with the microphone as it is now.
             // Words that show what's below float in a window of their own instead; see onUserLeaveHint.
-            val lyricsShown = viewModel.uiState.lyricsFor != null && !floatsOverApps()
+            val lyricsShown = viewModel.uiState.lyricsFor != null && !viewModel.uiState.canFloatOverApps
             val listening = viewModel.uiState.listeningAlong
             LaunchedEffect(lyricsShown, listening) { setPictureInPictureParams(floatingParams(lyricsShown, listening)) }
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
@@ -307,11 +317,7 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
                         },
                         onPureBlackChange = viewModel::setPureBlack,
-                        onFloatingLookChange = ::selectFloatingLook,
-                        onFloatingSizeChange = viewModel::selectFloatingSize,
-                        onFloatingNextLineChange = viewModel::setFloatingNextLine,
-                        onFloatingLockedChange = viewModel::setFloatingLocked,
-                        onAllowFloatOverApps = { tryStartActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())) },
+                        onFloat = ::float,
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,
@@ -354,6 +360,16 @@ class MainActivity : ComponentActivity() {
                         loadArtwork = viewModel.artwork::load
                     )
                 )
+                if (askingToFloat) {
+                    FloatPermissionDialog(
+                        onAllow = {
+                            askingToFloat = false
+                            floatOnceAllowed = true
+                            tryStartActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()))
+                        },
+                        onDismiss = { askingToFloat = false }
+                    )
+                }
             }
         }
     }
@@ -370,18 +386,39 @@ class MainActivity : ComponentActivity() {
         viewModel.refreshFollowing()
         recognizers = SongRecognizers.available(this)
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
-        // Or let it show over other apps.
-        viewModel.setCanFloatOverApps(Settings.canDrawOverlays(this))
+        // Or let it show over other apps, as just asked to, so the words float now.
+        val canFloat = Settings.canDrawOverlays(this)
+        viewModel.setCanFloatOverApps(canFloat)
+        if (floatOnceAllowed && canFloat) float()
+        floatOnceAllowed = false
     }
 
-    /** Whether the words, once Crosstune is left, float in a window that shows what's below. */
-    private fun floatsOverApps() = viewModel.uiState.floating.look.overApps && viewModel.uiState.canFloatOverApps
-
-    private fun selectFloatingLook(look: FloatingLook) {
-        viewModel.selectFloatingLook(look)
-        if (look.overApps && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+    /**
+     * The words float over other apps now, Crosstune going behind, once Android allows it; until
+     * then, it's said why it's about to be asked. On Android 13 their notification, which unlocks
+     * them, is asked about once first.
+     */
+    private fun float() {
+        if (!Settings.canDrawOverlays(this)) {
+            askingToFloat = true
+            return
+        }
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !prefs.getBoolean(KEY_ASKED_NOTIFICATIONS, false) &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            prefs.edit().putBoolean(KEY_ASKED_NOTIFICATIONS, true).apply()
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        floatNow()
+    }
+
+    private fun floatNow() {
+        if (viewModel.uiState.lyricsFor == null) return
+        floatingOverApps = true
+        FloatingLyricsService.start(this, floatingHost)
+        moveTaskToBack(true)
     }
 
     /**
@@ -407,7 +444,7 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (viewModel.uiState.lyricsFor == null) return
-        if (floatsOverApps()) {
+        if (viewModel.uiState.canFloatOverApps && !floatingOverApps) {
             floatingOverApps = true
             FloatingLyricsService.start(this, floatingHost)
             return

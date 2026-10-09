@@ -1194,6 +1194,29 @@ class MainActivityTest {
     }
 
     @Test
+    fun someonesOwnPlaylistWithoutItsSongsIsNotSearchedForElsewhere() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        var askedForAlbum = false
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                askedForAlbum = askedForAlbum || "/search/album" in request.url.encodedPath
+                FakeSpotify.html(request, """{"data":[]}""")
+            } else {
+                FakeSpotify.html(request, """{"title":"#cumple by Rebeca","author_name":"Rebeca"}""")
+            }
+        }
+        val url = "https://soundcloud.com/bequibequita/sets/cumple"
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+
+        // Its songs unknown, it might have been an album, but isn't one, so it opens where it's from.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = nextStartedActivity()!!
+        assertEquals(url, opened.dataString)
+        assertEquals(MusicService.SOUNDCLOUD.packageName, opened.`package`)
+        assertTrue(askedForAlbum)
+    }
+
+    @Test
     fun aTappedLinkNotThereOpensWhereItsFromWhenSetSo() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
         notOnDeezer()
@@ -1302,11 +1325,13 @@ class MainActivityTest {
     }
 
     @Test
-    fun theWidgetsPlayOnAPlaylistWithoutSongsSearchesItsName() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+    fun theWidgetsPlayOnAPlaylistWithoutSongsSearchesItsNameWhenSetTo() {
+        // Not found as an album, which it might have been, it's searched for, as set.
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
         savePlaylist(emptyList())
         fake.handler = { request -> FakeSpotify.html(request, """{"contents":{}}""") }
         assertEquals("https://music.youtube.com/search?q=Road%20Trip", widgetPlays(savedPlaylistUrl))
+        assertTrue(fake.requestBodies.any { "Road Trip" in it })
     }
 
     @Test
@@ -2846,57 +2871,6 @@ class MainActivityTest {
         click("MyMemory")
         click(string(R.string.cancel_button))
         assertTextShown("MyMemory")
-    }
-
-    @Test
-    fun floatingLyricsArePickedInSettingsAndSeeThroughOnesAskAndroidFirst() {
-        ShadowSettings.setCanDrawOverlays(false)
-        val activity = launch()
-        click(string(R.string.settings_button))
-        // Over other apps, see-through, Android has to allow it, and its notification unlocks them.
-        composeRule.onNodeWithText(string(R.string.setting_floating_look)).performScrollTo().performClick()
-        composeRule.onNodeWithText(string(R.string.floating_look_see_through)).performClick()
-        composeRule.waitForIdle()
-        assertEquals("SEE_THROUGH", prefs().getString("floating_look", null))
-        assertEquals(Manifest.permission.POST_NOTIFICATIONS, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
-        composeRule.onNodeWithText(string(R.string.floating_allow_over_apps)).performScrollTo().performClick()
-        val allow = nextStartedActivity()!!
-        assertEquals(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, allow.action)
-        assertEquals("package:${app.packageName}", allow.dataString)
-        // Allowed, and back.
-        ShadowSettings.setCanDrawOverlays(true)
-        controller!!.pause().resume()
-        composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.floating_allow_over_apps))
-
-        val locked = composeRule.onNodeWithText(string(R.string.setting_floating_locked)).performScrollTo()
-        locked.assertIsOff()
-        locked.performClick()
-        locked.assertIsOn()
-        assertTrue(prefs().getBoolean("floating_locked", false))
-
-        composeRule.onNodeWithText(string(R.string.setting_floating_size)).performScrollTo().performClick()
-        composeRule.onNodeWithText(string(R.string.floating_size_large)).performClick()
-        assertEquals("LARGE", prefs().getString("floating_size", null))
-        val next = composeRule.onNodeWithText(string(R.string.setting_floating_next_line)).performScrollTo()
-        next.assertIsOn()
-        next.performClick()
-        assertFalse(prefs().getBoolean("floating_next_line", true))
-
-        // In Android's own window, which always has a ground, touches can't go through.
-        composeRule.onNodeWithText(string(R.string.setting_floating_look)).performScrollTo().performClick()
-        composeRule.onNodeWithText(string(R.string.floating_look_plain)).performClick()
-        composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.setting_floating_locked))
-
-        // Kept for the next launch.
-        controller!!.pause().stop().destroy()
-        launch()
-        click(string(R.string.settings_button))
-        composeRule.onNodeWithText(string(R.string.floating_size_large)).performScrollTo().assertExists()
-        composeRule.onNodeWithText(string(R.string.floating_look_plain)).assertExists()
-        composeRule.onNodeWithText(string(R.string.setting_floating_next_line)).assertIsOff()
-        ShadowSettings.setCanDrawOverlays(false)
     }
 
     @Test

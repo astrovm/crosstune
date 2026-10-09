@@ -84,10 +84,35 @@ internal class Translator(
             .addQueryParameter("langpair", "Autodetect|$target")
             .build()
         val json = JSONObject(call(Request.Builder().url(url).get().build()))
+        // Words already in [target] are refused rather than given back, so they're given back here.
+        if (json.optString("responseDetails").contains(SAME_LANGUAGE, ignoreCase = true)) return text.split("\n")
         // Out of the day's translations, it says so with a status other than 200, and "translates" into that notice.
         if (json.optInt("responseStatus") != 200 || json.optBoolean("quotaFinished")) return null
         val translated = json.getJSONObject("responseData").getString("translatedText")
         return translated.split("\n").map { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim() }
+    }
+
+    /**
+     * What [word] means, from Wiktionary's dictionary, for when translating it gives it back as it
+     * was: a word already in [language]. Only English has one to ask; null without an entry.
+     */
+    suspend fun define(word: String, language: String): String? {
+        if (language != "en") return null
+        val url = WIKTIONARY_URL.toHttpUrl().newBuilder().addPathSegment(word.lowercase(Locale.ROOT)).build()
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build()
+        return try {
+            val entries = JSONObject(call(request))
+            // The word's own language comes first; its first sense is the one most meant.
+            val senses = entries.optJSONArray(entries.keys().asSequence().firstOrNull() ?: return null) ?: return null
+            (0 until senses.length()).asSequence()
+                .flatMap { index -> senses.getJSONObject(index).optJSONArray("definitions")?.let { list -> (0 until list.length()).map { list.getJSONObject(it).optString("definition") } }.orEmpty() }
+                .map { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim() }
+                .firstOrNull { it.isNotEmpty() }
+        } catch (_: IOException) {
+            null
+        } catch (_: JSONException) {
+            null
+        }
     }
 
     /** LibreTranslate takes every line at once, with an API key when the server wants one. */
@@ -112,6 +137,11 @@ internal class Translator(
 
     companion object {
         const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
+        const val WIKTIONARY_URL = "https://en.wiktionary.org/api/rest_v1/page/definition"
+        /** What MyMemory says, as a 403, for words already in the language asked for. */
+        private const val SAME_LANGUAGE = "DISTINCT LANGUAGES"
+        /** Wikimedia asks to be told who's calling. */
+        private const val USER_AGENT = "Crosstune (https://github.com/astrovm/crosstune)"
         /** MyMemory's limit on what's sent at once is 500 bytes; a little under, to be safe. */
         const val MYMEMORY_BYTES = 450
 

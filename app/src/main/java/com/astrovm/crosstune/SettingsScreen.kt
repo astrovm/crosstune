@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -237,79 +238,6 @@ private fun SettingsList(
             )
         }
 
-        SectionHeader(
-            title = stringResource(R.string.settings_floating_title),
-            description = stringResource(R.string.settings_floating_description)
-        )
-        Group {
-            val floating = state.floating
-            ChoiceRow(
-                stringResource(R.string.setting_floating_look),
-                listOf(
-                    FloatingLook.COVER to stringResource(R.string.floating_look_cover),
-                    FloatingLook.PLAIN to stringResource(R.string.floating_look_plain),
-                    FloatingLook.SEE_THROUGH to stringResource(R.string.floating_look_see_through),
-                    FloatingLook.NONE to stringResource(R.string.floating_look_none)
-                ),
-                floating.look,
-                actions.onFloatingLookChange
-            )
-            // What shows through floats over other apps, which Android has to allow first.
-            AnimatedVisibility(visible = floating.look.overApps && !state.canFloatOverApps, enter = Motion.appear, exit = Motion.disappear) {
-                Column {
-                    GroupDivider()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = actions.onAllowFloatOverApps)
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.floating_allow_over_apps), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-                            Text(
-                                stringResource(R.string.floating_allow_over_apps_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
-                        }
-                        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-            GroupDivider()
-            ChoiceRow(
-                stringResource(R.string.setting_floating_size),
-                listOf(
-                    FloatingSize.SMALL to stringResource(R.string.floating_size_small),
-                    FloatingSize.MEDIUM to stringResource(R.string.floating_size_medium),
-                    FloatingSize.LARGE to stringResource(R.string.floating_size_large)
-                ),
-                floating.size,
-                actions.onFloatingSizeChange
-            )
-            GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_floating_next_line),
-                description = null,
-                checked = floating.nextLine,
-                onCheckedChange = actions.onFloatingNextLineChange
-            )
-            // Only words over other apps can let touches through to them.
-            AnimatedVisibility(visible = floating.look.overApps, enter = Motion.appear, exit = Motion.disappear) {
-                Column {
-                    GroupDivider()
-                    SettingSwitch(
-                        label = stringResource(R.string.setting_floating_locked),
-                        description = stringResource(R.string.setting_floating_locked_description),
-                        checked = floating.locked,
-                        onCheckedChange = actions.onFloatingLockedChange
-                    )
-                }
-            }
-        }
-
         SectionHeader(stringResource(R.string.settings_appearance_title))
         Group {
             ThemeRow(state.theme, actions.onThemeChange)
@@ -470,9 +398,10 @@ private fun TranslationServerRow(server: TranslationServer?, onChange: (String, 
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 16.dp).weight(1f, fill = false)
+                // Against the right edge, like the picked choice in the rows around it.
+                modifier = Modifier.padding(start = 16.dp).widthIn(max = 200.dp)
             )
-            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(16.dp))
         }
         return
     }

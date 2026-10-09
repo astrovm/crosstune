@@ -202,7 +202,7 @@ internal data class UiState(
      */
     val resultMissing: Boolean
         get() = result != null && destinationUrls[resultDestination]?.let { !it.exact && it.matchingEnabled } == true &&
-            resultDestination.matchService?.let { canMatchExactly(it, result.type) } == true
+            resultDestination.matchService?.let { canBeMissing(it, result) } == true
 
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
@@ -251,7 +251,9 @@ internal data class Learning(
     /** Each line translated, or null where it needs none, once done. */
     val translations: List<String?> = emptyList(),
     val translating: Boolean = false,
-    val translationFailed: Boolean = false
+    val translationFailed: Boolean = false,
+    /** Every line came back as it was: the words are already in the app's language. */
+    val alreadyTranslated: Boolean = false
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) = Learning(readings, romanized, translation, server, script)
@@ -334,11 +336,14 @@ internal class MainViewModel(
                 server = preferences.getString(KEY_TRANSLATION_SERVER, null)?.let { TranslationServer(it, preferences.getString(KEY_TRANSLATION_KEY, null).orEmpty()) }
             ),
             floating = FloatingOptions(
-                look = FloatingLook.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_LOOK, null) } ?: FloatingLook.COVER,
-                size = FloatingSize.entries.firstOrNull { it.name == preferences.getString(KEY_FLOATING_SIZE, null) } ?: FloatingSize.MEDIUM,
+                background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
+                scale = preferences.getFloat(KEY_FLOATING_SCALE, 1f),
+                previousLine = preferences.getBoolean(KEY_FLOATING_PREVIOUS_LINE, false),
                 nextLine = preferences.getBoolean(KEY_FLOATING_NEXT_LINE, true),
                 locked = preferences.getBoolean(KEY_FLOATING_LOCKED, false),
-                top = preferences.getInt(KEY_FLOATING_TOP, -1)
+                left = preferences.getInt(KEY_FLOATING_LEFT, -1),
+                top = preferences.getInt(KEY_FLOATING_TOP, -1),
+                width = preferences.getInt(KEY_FLOATING_WIDTH, -1)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
@@ -883,7 +888,8 @@ internal class MainViewModel(
                 // It stays here, saying it isn't there, with both ways on.
                 NotFoundAction.ASK -> {
                     pendingOpen = false
-                    uiState = uiState.copy(handingOff = false, handlingIncomingLink = false, selectedDestination = destination)
+                    // Still the link that came in, so it shows over first-run setup.
+                    uiState = uiState.copy(handingOff = false, selectedDestination = destination)
                     return
                 }
                 NotFoundAction.ORIGINAL -> if (original != null) {
@@ -915,7 +921,7 @@ internal class MainViewModel(
             uiState.notFoundAction == NotFoundAction.ORIGINAL ->
                 effectChannel.send(Effect.Open(opensWhere!!.url, opensWhere.service?.packageName, finishAfterOpen))
             else -> uiState = uiState.copy(
-                notFoundOffer = NotFoundOffer(song, destination, opensWhere, searchUrl), handingOff = false, handlingIncomingLink = false
+                notFoundOffer = NotFoundOffer(song, destination, opensWhere, searchUrl), handingOff = false
             )
         }
     }
@@ -1179,31 +1185,22 @@ internal class MainViewModel(
         uiState = uiState.copy(pureBlack = on)
     }
 
-    fun selectFloatingLook(look: FloatingLook) {
-        preferences.edit { putString(KEY_FLOATING_LOOK, look.name) }
-        uiState = uiState.copy(floating = uiState.floating.copy(look = look))
-    }
-
-    fun selectFloatingSize(size: FloatingSize) {
-        preferences.edit { putString(KEY_FLOATING_SIZE, size.name) }
-        uiState = uiState.copy(floating = uiState.floating.copy(size = size))
-    }
-
-    fun setFloatingNextLine(on: Boolean) {
-        preferences.edit { putBoolean(KEY_FLOATING_NEXT_LINE, on) }
-        uiState = uiState.copy(floating = uiState.floating.copy(nextLine = on))
-    }
-
-    /** Locked, the words over other apps let touches through to the app below. */
-    fun setFloatingLocked(locked: Boolean) {
-        preferences.edit { putBoolean(KEY_FLOATING_LOCKED, locked) }
-        uiState = uiState.copy(floating = uiState.floating.copy(locked = locked))
-    }
-
-    /** Where the words over other apps were left, in pixels from the top. */
-    fun moveFloating(top: Int) {
-        preferences.edit { putInt(KEY_FLOATING_TOP, top) }
-        uiState = uiState.copy(floating = uiState.floating.copy(top = top))
+    /**
+     * How the floating words look and where they are, as changed on them; kept once a change is done,
+     * e.g. at the end of a drag, rather than at every step of it.
+     */
+    fun setFloating(options: FloatingOptions, save: Boolean) {
+        uiState = uiState.copy(floating = options)
+        if (save) preferences.edit {
+            putFloat(KEY_FLOATING_BACKGROUND, options.background)
+            putFloat(KEY_FLOATING_SCALE, options.scale)
+            putBoolean(KEY_FLOATING_PREVIOUS_LINE, options.previousLine)
+            putBoolean(KEY_FLOATING_NEXT_LINE, options.nextLine)
+            putBoolean(KEY_FLOATING_LOCKED, options.locked)
+            putInt(KEY_FLOATING_LEFT, options.left)
+            putInt(KEY_FLOATING_TOP, options.top)
+            putInt(KEY_FLOATING_WIDTH, options.width)
+        }
     }
 
     fun setCanFloatOverApps(can: Boolean) {
@@ -1277,8 +1274,11 @@ internal class MainViewModel(
         wordJob?.cancel()
         uiState = uiState.copy(word = WordMeaning(word, looking = true))
         wordJob = viewModelScope.launch {
-            val meaning = translator.translate(listOf(word.lookup), translationLanguage(), uiState.learning.server)
-            uiState = uiState.copy(word = WordMeaning(word, meaning?.firstOrNull(), failed = meaning == null))
+            val language = translationLanguage()
+            val translated = translator.translate(listOf(word.lookup), language, uiState.learning.server)
+            // Already in the app's language, a word means what the dictionary says.
+            val meaning = translated?.firstOrNull() ?: translated?.let { translator.define(word.lookup, language) }
+            uiState = uiState.copy(word = WordMeaning(word, meaning, failed = translated == null))
         }
     }
 
@@ -1344,7 +1344,10 @@ internal class MainViewModel(
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
                 val translated = translator.translate(lines, translationLanguage(), learning.server)
                 uiState = uiState.copy(
-                    learning = uiState.learning.copy(translations = translated.orEmpty(), translating = false, translationFailed = translated == null)
+                    learning = uiState.learning.copy(
+                        translations = translated.orEmpty(), translating = false, translationFailed = translated == null,
+                        alreadyTranslated = translated != null && translated.all { it == null }
+                    )
                 )
             }
         }
@@ -1485,7 +1488,7 @@ internal class MainViewModel(
             val prepared = uiState.history.firstOrNull { it.link.url == entry.link.url }?.destinationLinks?.get(destination.key)
             val service = destination.matchService
             if (prepared != null && prepared.url.forSharing() == url && !prepared.exact && prepared.matchingEnabled && service != null &&
-                canMatchExactly(service, entry.metadata.type)
+                canBeMissing(service, entry.metadata)
             ) {
                 return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
             }
@@ -1786,8 +1789,11 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_SERVER = "translation_server"
         private const val KEY_TRANSLATION_KEY = "translation_key"
-        private const val KEY_FLOATING_LOOK = "floating_look"
-        private const val KEY_FLOATING_SIZE = "floating_size"
+        private const val KEY_FLOATING_BACKGROUND = "floating_background"
+        private const val KEY_FLOATING_SCALE = "floating_scale"
+        private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"
+        private const val KEY_FLOATING_LEFT = "floating_left"
+        private const val KEY_FLOATING_WIDTH = "floating_width"
         private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"
         private const val KEY_FLOATING_LOCKED = "floating_locked"
         private const val KEY_FLOATING_TOP = "floating_top"

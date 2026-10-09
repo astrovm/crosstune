@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -36,7 +37,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.launch
-import kotlin.math.abs
+import kotlin.math.hypot
 
 /** The screen the words float out of, which keeps them in time and does what they ask. */
 internal interface FloatingHost {
@@ -44,8 +45,8 @@ internal interface FloatingHost {
     val dark: Boolean
     val artwork: ArtworkLoader
     fun toggleListening()
-    fun setLocked(locked: Boolean)
-    fun moveTo(top: Int)
+    /** How the words look and where they are, kept when [save]d, e.g. once a drag is done. */
+    fun update(options: FloatingOptions, save: Boolean = true)
 }
 
 /**
@@ -69,7 +70,10 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
         PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP }
+    ).apply { gravity = Gravity.TOP or Gravity.START }
+
+    /** Where in the window the sliders are, whose drags are theirs, not the window's. */
+    private var sliders: Rect? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -89,7 +93,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 startForeground()
                 if (host == null) stopSelf() else if (view == null) show(host)
             }
-            ACTION_UNLOCK -> host?.setLocked(false)
+            ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -128,7 +132,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private fun show(host: FloatingHost) {
         // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
         if (!Settings.canDrawOverlays(this)) return stopSelf()
-        params.y = host.state.floating.top.takeIf { it >= 0 } ?: (resources.displayMetrics.heightPixels / 4)
+        val options = host.state.floating
+        val screen = resources.displayMetrics
+        val margin = (MARGIN_DP * screen.density).toInt()
+        params.width = options.width.takeIf { it > 0 }?.coerceAtMost(screen.widthPixels) ?: (screen.widthPixels - 2 * margin)
+        params.x = options.left.takeIf { it >= 0 }?.coerceAtMost(screen.widthPixels - params.width) ?: ((screen.widthPixels - params.width) / 2)
+        params.y = options.top.takeIf { it >= 0 } ?: (screen.heightPixels / 4)
         val content = ComposeView(this).apply {
             setContent {
                 val state = host.state
@@ -139,14 +148,17 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                         FloatingActions(
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,
-                            onLock = { host.setLocked(true) },
-                            onClose = ::stopSelf
+                            onLock = { host.update(host.state.floating.copy(locked = true)) },
+                            onClose = ::stopSelf,
+                            onChange = host::update,
+                            onSave = { host.update(host.state.floating) },
+                            onSlidersAt = { sliders = it }
                         )
                     )
                 }
             }
         }
-        val view = DragFrame(this, onDrag = ::moveTo, onDragEnd = { host.moveTo(params.y) }).apply {
+        val view = GestureFrame(this, host).apply {
             addView(content)
             setViewTreeLifecycleOwner(this@FloatingLyricsService)
             setViewTreeSavedStateRegistryOwner(this@FloatingLyricsService)
@@ -166,31 +178,46 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
     }
 
-    /** Where a drag that started at [from] puts the words, kept on screen. */
-    private fun moveTo(from: Int, by: Float) {
-        val view = view ?: return
-        params.y = (from + by.toInt()).coerceIn(0, maxOf(0, resources.displayMetrics.heightPixels - view.height))
-        windows.updateViewLayout(view, params)
-    }
-
     /**
-     * Holds the words and moves their window with a finger dragged up or down. It goes by where the
-     * finger is on screen, since the window, and everything in it, moves under it.
+     * Holds the words and moves their window with them: a finger dragged moves it, one dragged from
+     * either side makes it wider or narrower, and two pinched make the words bigger or smaller. It
+     * goes by where fingers are on screen, since the window, and everything in it, moves under them.
+     * Taps, and drags on the sliders, are left to the words.
      */
-    private inner class DragFrame(context: Context, val onDrag: (from: Int, by: Float) -> Unit, val onDragEnd: () -> Unit) : FrameLayout(context) {
+    private inner class GestureFrame(context: Context, private val host: FloatingHost) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
+        private val edge = EDGE_DP * resources.displayMetrics.density
+        private val narrowest = (NARROWEST_DP * resources.displayMetrics.density).toInt()
+        private var gesture = Gesture.NONE
+        private var downX = 0f
         private var downY = 0f
-        private var downTop = 0
+        private var from = Rect()
+        private var pinchFrom = 0f
+        private var scaleFrom = 1f
 
         override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
                     downY = event.rawY
-                    downTop = params.y
+                    from = Rect(params.x, params.y, params.x + params.width, params.y)
+                    gesture = when {
+                        sliders?.contains(event.x.toInt(), event.y.toInt()) == true -> Gesture.SLIDER
+                        event.x < edge -> Gesture.LEFT
+                        event.x > width - edge -> Gesture.RIGHT
+                        else -> Gesture.NONE
+                    }
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> if (gesture != Gesture.SLIDER) {
+                    pinchFrom = spread(event)
+                    scaleFrom = host.state.floating.scale
+                    gesture = Gesture.PINCH
+                    return true
                 }
                 // Past a tap's wobble it's a drag: the words' own taps are let go, and they move from here.
-                MotionEvent.ACTION_MOVE -> if (abs(event.rawY - downY) > slop) {
-                    onDrag(downTop, event.rawY - downY)
+                MotionEvent.ACTION_MOVE -> if (gesture != Gesture.SLIDER && hypot(event.rawX - downX, event.rawY - downY) > slop) {
+                    if (gesture == Gesture.NONE) gesture = Gesture.MOVE
+                    drag(event)
                     return true
                 }
             }
@@ -200,12 +227,50 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
-                MotionEvent.ACTION_MOVE -> onDrag(downTop, event.rawY - downY)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> onDragEnd()
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    pinchFrom = spread(event)
+                    scaleFrom = host.state.floating.scale
+                    gesture = Gesture.PINCH
+                }
+                MotionEvent.ACTION_MOVE -> drag(event)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    host.update(host.state.floating.copy(left = params.x, top = params.y, width = params.width))
+                    gesture = Gesture.NONE
+                }
             }
             return true
         }
+
+        private fun spread(event: MotionEvent) =
+            if (event.pointerCount < 2) 0f else hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1))
+
+        private fun drag(event: MotionEvent) {
+            val screen = resources.displayMetrics
+            val dx = (event.rawX - downX).toInt()
+            val dy = (event.rawY - downY).toInt()
+            when (gesture) {
+                Gesture.PINCH -> {
+                    val spread = spread(event)
+                    if (pinchFrom <= 0f || spread <= 0f) return
+                    val scale = (scaleFrom * spread / pinchFrom).coerceIn(FloatingOptions.MIN_SCALE, FloatingOptions.MAX_SCALE)
+                    host.update(host.state.floating.copy(scale = scale), save = false)
+                    return
+                }
+                Gesture.LEFT -> {
+                    params.x = (from.left + dx).coerceIn(0, from.right - narrowest)
+                    params.width = from.right - params.x
+                }
+                Gesture.RIGHT -> params.width = (from.width() + dx).coerceIn(narrowest, screen.widthPixels - from.left)
+                else -> {
+                    params.x = (from.left + dx).coerceIn(0, maxOf(0, screen.widthPixels - params.width))
+                    params.y = (from.top + dy).coerceIn(0, maxOf(0, screen.heightPixels - height))
+                }
+            }
+            windows.updateViewLayout(this, params)
+        }
     }
+
+    private enum class Gesture { NONE, MOVE, LEFT, RIGHT, PINCH, SLIDER }
 
     override fun onDestroy() {
         view?.let(windows::removeView)
@@ -222,6 +287,15 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"
         private const val CHANNEL = "floating_lyrics"
         private const val NOTIFICATION_ID = 1
+
+        /** How far in from either side a drag makes the words wider or narrower rather than moving them. */
+        private const val EDGE_DP = 24
+        private const val NARROWEST_DP = 160
+        /**
+         * Room either side of the words, until they're first resized: enough to keep their sides,
+         * dragged to resize, clear of the edges, where a swipe is Android's back gesture.
+         */
+        private const val MARGIN_DP = 32
 
         /** The most Android lets a window be seen while touches pass through it to another app's. */
         private const val LOCKED_ALPHA = 0.8f
