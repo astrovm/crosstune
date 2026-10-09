@@ -4584,6 +4584,25 @@ class MainActivityTest {
     }
 
     @Test
+    fun setupMarksFollowingDoneWhenItsAlreadyAllowed() {
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_step, 5, 5))
+        assertTextShown(string(R.string.setup_done))
+        assertTextAbsent(string(R.string.follow_help_access_button))
+        click(string(R.string.setup_finish))
+        assertTrue(prefs().getBoolean("setup_complete", false))
+    }
+
+    @Test
     @Config(sdk = [30])
     fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
         shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))

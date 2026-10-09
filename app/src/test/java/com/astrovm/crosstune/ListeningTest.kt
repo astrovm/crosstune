@@ -526,6 +526,26 @@ class ListeningTest {
     }
 
     @Test
+    fun onlyTheVisualsCanShowUntilATapBringsTheWordsBack() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_only))
+        // The words and the buttons make way, the visuals stay.
+        composeRule.waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        assertFalse(described(string(R.string.visuals_options)))
+        assertTrue(visualsShown().isNotEmpty())
+        // A tap anywhere brings the words back.
+        val showWords = string(R.string.visuals_show_words)
+        composeRule.onNode(SemanticsMatcher("shows the words") {
+            androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
+        }).performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        assertTrue(visualsShown().isNotEmpty())
+    }
+
+    @Test
     fun visualsAskForTheMicrophoneFirstWhichAndroidNeedsToShareWhatPlays() {
         demoWords(FakeHearing())
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)

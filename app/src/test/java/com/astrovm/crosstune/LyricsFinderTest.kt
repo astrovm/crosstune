@@ -296,6 +296,12 @@ class LyricsFinderTest {
 
     @Test
     fun noneAnywhereIsBelievedOverAPlaceThatWouldntAnswer() {
+        // A store answer that isn't JSON is no names, and the rest still goes on.
+        val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
+        piperSong(lengthMs = 187_000)
+        val piper = fake.handler
+        fake.handler = { request -> if (request.url.encodedPath == "/lookup") FakeSpotify.html(request, "{") else piper(request) }
+        assertEquals("Sunroofを開けて", words(sunshine))
         // LRCLIB says none, NetEase is down: none.
         japaneseSong(netEase = { "not json" })
         assertEquals(Lyrics.None, found(hatsukoi))
