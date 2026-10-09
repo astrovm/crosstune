@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.width
@@ -82,7 +83,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -145,6 +145,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         return
     }
     BackHandler(onBack = actions.onDismissLyrics)
+    // Where the timed words are scrolled to, kept out here so they're right where they were when they
+    // come back, e.g. once the visuals come or go, with nothing to glide back to.
+    val timedList = rememberSaveable(song, saver = LazyListState.Saver) { LazyListState() }
     // Only the visuals, full screen, until a tap or Back brings the words back.
     var visualsOnly by rememberSaveable { mutableStateOf(false) }
     val onlyVisuals = visualsOnly && state.visuals
@@ -223,7 +226,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     } else if (shown == LyricsShown.NONE) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
-                        TimedLyrics(state, actions, onStudy = { studying = it })
+                        TimedLyrics(state, actions, timedList, onStudy = { studying = it })
                     } else if (state.learning.shows) {
                         // Read line by line, each with what helps read it.
                         LyricLines(state, onStudy = { studying = it })
@@ -625,19 +628,13 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): In
  * the music app there when it can.
  */
 @Composable
-private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -> Unit) {
+private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListState, onStudy: (Int) -> Unit) {
     val lines = state.lyricLines
     val following = state.following
     val active = rememberSungLine(lines, following)
-    val list = rememberLazyListState()
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
-    // Shown afresh, e.g. once the visuals come or go, the words start where the song is; only then
-    // do they glide from line to line.
-    var placed by remember { mutableStateOf(false) }
     LaunchedEffect(active) {
-        if (active < 0) return@LaunchedEffect
-        if (placed) list.animateScrollToItem(active, scrollOffset = -third) else list.scrollToItem(active, scrollOffset = -third)
-        placed = true
+        if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
     }
     LazyColumn(
         state = list,
