@@ -1,5 +1,12 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Slider
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideOutVertically
@@ -184,7 +191,16 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, actions)
+            Box(
+                modifier = if (state.visuals) {
+                    // A little darker behind the song, so it reads over whatever the visuals do.
+                    Modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = state.visualsShade), 1f to Color.Transparent))
+                } else {
+                    Modifier
+                }
+            ) {
+                LyricsHeader(song, actions)
+            }
             TranslationStatus(state.learning, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -256,7 +272,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {
-                content(Color.Black.copy(alpha = VISUALS_SHADE))
+                content(Color.Black.copy(alpha = state.visualsShade))
             }
         }
     }
@@ -275,8 +291,6 @@ private fun HiddenSystemBars() {
     }
 }
 
-/** How much the ground dims the visuals behind the words. */
-private const val VISUALS_SHADE = 0.45f
 
 private enum class LyricsShown { LOADING, FAILED, NONE, TIMED, PLAIN }
 
@@ -333,7 +347,7 @@ private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: (
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
             if (state.lyrics.isNotEmpty()) LearnButton(state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved)
-            VisualsButton(state.visuals, actions, onOnlyVisuals)
+            VisualsButton(state.visuals, state.visualsShade, actions, onOnlyVisuals)
             // Floating shows the line being sung, which only timed words have.
             if (state.lyricLines.isNotEmpty()) {
                 IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
@@ -342,6 +356,16 @@ private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: (
         }
     }
 }
+
+/** The words fade out at the top and bottom, rather than being cut off mid-line under the song or the bar. */
+private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+    drawContent()
+    val edge = 32.dp.toPx() / size.height
+    drawRect(Brush.verticalGradient(0f to Color.Transparent, edge to Color.Black, 1f - edge to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+}
+
+/** The darkest the ground over the visuals goes, so they never vanish altogether. */
+private const val MAX_VISUALS_SHADE = 0.9f
 
 /** How long after the words stop being scrolled the bar comes back. */
 private const val BAR_BACK_MS = 1_200L
@@ -475,7 +499,7 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
 
 /** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
 @Composable
-private fun VisualsButton(on: Boolean, actions: ScreenActions, onOnlyVisuals: () -> Unit) {
+private fun VisualsButton(on: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
@@ -491,6 +515,18 @@ private fun VisualsButton(on: Boolean, actions: ScreenActions, onOnlyVisuals: ()
             }
         }
         DropdownMenu(expanded = open && on, onDismissRequest = { open = false }) {
+            // How dark the ground over them is, from none to nearly black.
+            val darken = stringResource(R.string.visuals_shade)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
+                AppIcon(R.drawable.ic_shade, contentDescription = null)
+                Slider(
+                    value = shade,
+                    onValueChange = { actions.onVisualsShadeChange(it, false) },
+                    onValueChangeFinished = { actions.onVisualsShadeChange(shade, true) },
+                    valueRange = 0f..MAX_VISUALS_SHADE,
+                    modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.visuals_only)) },
                 leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
@@ -560,6 +596,7 @@ private fun PlainLyrics(words: String) {
         style = MaterialTheme.typography.titleLarge.copy(lineHeight = 34.sp),
         modifier = Modifier
             .fillMaxSize()
+            .fadedEdges()
             .verticalScroll(rememberScrollState())
             .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM)
             // The words are the point, so they read as one block rather than by line.
@@ -594,14 +631,19 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, onStudy: (Int) -
     val active = rememberSungLine(lines, following)
     val list = rememberLazyListState()
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
+    // Shown afresh, e.g. once the visuals come or go, the words start where the song is; only then
+    // do they glide from line to line.
+    var placed by remember { mutableStateOf(false) }
     LaunchedEffect(active) {
-        if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
+        if (active < 0) return@LaunchedEffect
+        if (placed) list.animateScrollToItem(active, scrollOffset = -third) else list.scrollToItem(active, scrollOffset = -third)
+        placed = true
     }
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 240.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(lines) { index, line ->
             LyricLineText(
@@ -624,7 +666,7 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(state.lyrics.lines()) { index, line ->
             LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
@@ -742,8 +784,12 @@ private fun RubyLine(parts: List<Ruby>, style: TextStyle) {
     }
 }
 
-/** A word and the space after it, or a run of space alone. */
-private val WORDS = Regex("""\S+\s*|\s+""")
+/**
+ * What a line can wrap between: a word in Latin letters with the space after it, or, since
+ * Japanese and Chinese wrap anywhere, a single character (Korean, spaced, wraps by word), keeping the marks that can't start a
+ * line, like 。 or ー or small kana, with the one before.
+ */
+private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
 
 /**
  * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an
@@ -814,9 +860,14 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     // Open all the way, so one back closes it rather than lowering it halfway first.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
-            reading?.reading?.takeIf { it != text }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            // The line, once: each of its words underlined, to tap for its meaning.
-            TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+            // The line, once: each of its words underlined, to tap for its meaning, with its readings
+            // over the kanji, as in the lyrics.
+            val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
+            if (parts != null) {
+                TappableRubyLine(parts, words, state.word?.word, actions.onLookUpWord)
+            } else {
+                TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+            }
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
@@ -826,9 +877,15 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                 // Only a music app the words follow, and that can be moved, can play a line again.
                 if (state.following?.canSeek == true && index < state.lyricLines.size) {
                     val repeating = state.repeating == index
-                    FilledTonalButton(onClick = { if (repeating) actions.onStopRepeating() else actions.onRepeatLine(index) }) {
+                    val content: @Composable RowScope.() -> Unit = {
                         AppIcon(R.drawable.ic_repeat_one, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text(stringResource(if (repeating) R.string.lyrics_stop_repeating else R.string.lyrics_repeat_line), modifier = Modifier.padding(start = 8.dp))
+                    }
+                    // Filled only while it repeats, like the Save button once saved looks done.
+                    if (repeating) {
+                        FilledTonalButton(onClick = actions.onStopRepeating, content = content)
+                    } else {
+                        OutlinedButton(onClick = { actions.onRepeatLine(index) }, content = content)
                     }
                 }
                 OutlinedButton(onClick = { actions.onToggleSavedLine(index) }) {
@@ -861,6 +918,50 @@ private fun TappableLine(text: String, words: List<Word>, picked: Word?, onPick:
     Text(line, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
 }
 
+/**
+ * [parts] of a line with their readings over them, wrapping as the lyrics do, each piece of one of
+ * [words] a link to it. The word looked up stands out.
+ */
+@Composable
+private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?, onPick: (Word) -> Unit) {
+    val text = parts.joinToString("") { it.text }
+    // Where in the line each word is.
+    val spans = buildList {
+        var from = 0
+        words.forEach { word ->
+            val at = text.indexOf(word.text, from).takeIf { it >= 0 } ?: return@forEach
+            add(at until at + word.text.length to word)
+            from = at + word.text.length
+        }
+    }
+    val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+    val over = style.copy(fontSize = style.fontSize * 0.45f, lineHeight = style.fontSize * 0.5f, fontWeight = FontWeight.Medium)
+    val highlight = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
+    FlowRow(modifier = Modifier.testTag(STUDY_LINE_TAG)) {
+        var at = 0
+        parts.forEach { part ->
+            // A part with a reading stays whole; one without wraps as the lyrics do.
+            val pieces = if (part.reading == null) WORDS.findAll(part.text).map { it.value }.toList() else listOf(part.text)
+            pieces.forEach { piece ->
+                val start = at
+                at += piece.length
+                val word = spans.firstOrNull { start in it.first }?.second
+                val shown = buildAnnotatedString {
+                    append(piece)
+                    if (word != null) {
+                        val linkStyle = if (word == picked) highlight else SpanStyle(textDecoration = TextDecoration.Underline)
+                        addLink(LinkAnnotation.Clickable(word.text, TextLinkStyles(linkStyle)) { onPick(word) }, 0, piece.trimEnd().length)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Bottom)) {
+                    if (part.reading != null) Text(part.reading, style = over, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(shown, style = style)
+                }
+            }
+        }
+    }
+}
+
 /** A word tapped: how it reads, and what it means once found. */
 @Composable
 private fun WordCard(meaning: WordMeaning) {
@@ -878,6 +979,7 @@ private fun WordCard(meaning: WordMeaning) {
             } else if (meaning.failed) {
                 Text(stringResource(R.string.lyrics_word_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } else if (meaning.meaning != null) {
+                meaning.type?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text(meaning.meaning, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

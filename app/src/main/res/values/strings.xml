@@ -131,6 +131,7 @@
     <string name="lyrics_stop_listening">Stop listening</string>
     <string name="visuals_show">Show visuals</string>
     <string name="visuals_hide">Hide visuals</string>
+    <string name="visuals_shade">Darkness over the visuals</string>
     <string name="visuals_only">Only visuals</string>
     <string name="visuals_options">Visuals options</string>
     <string name="visuals_show_words">Show the words</string>
