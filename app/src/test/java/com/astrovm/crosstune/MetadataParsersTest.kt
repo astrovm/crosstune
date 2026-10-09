@@ -103,6 +103,14 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun japaneseVideoTitlesNameTheSongInBrackets() {
+        assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("アーティスト「曲名」 Official Music Video", "アーティスト"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band『Song』MV", "BandOfficial"))
+        // Brackets alone leave the artist to the channel.
+        assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("「曲名」", "アーティスト - Topic"))
+    }
+
+    @Test
     fun appleMusicLookupResultsForEachType() {
         val lookup = json(
             """{"results":[{"trackName":"Cut To The Feeling","collectionName":"Cut To The Feeling - Single","artistName":"Carly Rae Jepsen"}]}"""

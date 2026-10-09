@@ -73,7 +73,7 @@ class PlaybackTest {
         return controller
     }
 
-    private fun followed(): MutableList<Following?> {
+    private fun followed(song: MusicMetadata = this.song): MutableList<Following?> {
         val seen = mutableListOf<Following?>()
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
@@ -157,6 +157,33 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("Spotify", seen.last()?.app)
+    }
+
+    @Test
+    fun aJapaneseVideoIsFollowedAndNamedAsTheSongInItsBrackets() {
+        allow()
+        sounding()
+        val seen = followed(MusicMetadata("曲名", "アーティスト"))
+        shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "アーティスト「曲名」 Official Music Video", "アーティスト"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("YouTube", seen.last()?.app)
+        assertEquals(MusicMetadata("曲名", "アーティスト"), playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun anAppMovingOnToTheSongIsFollowedFromThen() {
+        allow()
+        // YouTube plays an ad first, then the video, in the same session.
+        val youtube = player("com.google.android.youtube", "YouTube", "An Ad", "Advertiser")
+        shadowOf(sessions).addController(youtube)
+        val seen = followed()
+        assertNull(seen.last())
+        val video = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "The Weeknd - Blinding Lights (Official Video)")
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "TheWeekndVEVO").build()
+        shadowOf(youtube).setMetadata(video)
+        shadowOf(youtube).executeOnMetadataChanged(video)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("YouTube", seen.last()?.app)
     }
 
     @Test

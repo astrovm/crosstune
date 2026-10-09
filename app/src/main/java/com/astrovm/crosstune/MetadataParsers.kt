@@ -36,6 +36,8 @@ internal object MetadataParsers {
     )
 
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
+    private val bracketedSongRegex = Regex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
+
     private val videoNoiseRegex = Regex(
         """\s*[(\[][^)\]]*\b(official|video|audio|lyrics?|visuali[sz]er|hd|4k|mv|m/v)\b[^)\]]*[)\]]""",
         RegexOption.IGNORE_CASE
@@ -100,6 +102,12 @@ internal object MetadataParsers {
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
         val rawTitle = title.replace(videoNoiseRegex, "").trim().ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
+        // Japanese videos name the song in brackets after the artist, whatever follows them:
+        // "YOASOBI「アイドル」 Official Music Video".
+        bracketedSongRegex.matchEntire(rawTitle)?.let { found ->
+            val (artist, song) = found.destructured
+            return MusicMetadata(song.trim(), artist.trim().ifEmpty { author })
+        }
         // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011".
         val separator = if (channel.endsWith(" - Topic")) -1 else rawTitle.indexOf(" - ")
         return if (separator > 0) {
