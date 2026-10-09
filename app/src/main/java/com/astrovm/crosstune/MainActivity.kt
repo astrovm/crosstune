@@ -254,9 +254,9 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark }
                 )
             }
-            // Words on screen float over other apps when Crosstune is left, with the microphone as it is now.
-            // Words that show what's below float in a window of their own instead; see onUserLeaveHint.
-            val lyricsShown = viewModel.uiState.lyricsFor != null && !viewModel.uiState.canFloatOverApps
+            // Words on screen float over other apps when Crosstune is left, with the microphone as it is now,
+            // while the song is playing. Words that show what's below float in a window of their own instead; see onUserLeaveHint.
+            val lyricsShown = viewModel.uiState.floatsByThemselves && !viewModel.uiState.canFloatOverApps
             val listening = viewModel.uiState.listeningAlong
             LaunchedEffect(lyricsShown, listening) { setPictureInPictureParams(floatingParams(lyricsShown, listening)) }
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
@@ -440,13 +440,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Leaving Crosstune with words on screen floats them: in a window of their own over other apps,
-     * started while Crosstune is still in sight so it may keep listening along, or, before Android 12,
-     * in picture-in-picture.
+     * Leaving Crosstune with words on screen floats them, while the song plays: in a music app, or
+     * nearby, listening along. With nothing playing there's nothing for them to keep up with, so
+     * they don't get in the way; the Float button still floats them. They float in a window of their
+     * own over other apps, started while Crosstune is still in sight so it may keep listening along,
+     * or, before Android 12, in picture-in-picture.
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (viewModel.uiState.lyricsFor == null) return
+        if (!viewModel.uiState.floatsByThemselves) return
         if (viewModel.uiState.canFloatOverApps && !floatingOverApps) {
             floatingOverApps = true
             FloatingLyricsService.start(this, floatingHost)

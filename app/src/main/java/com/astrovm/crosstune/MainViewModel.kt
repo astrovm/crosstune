@@ -231,6 +231,14 @@ internal fun savedPalette(name: String?): Palette {
 internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
 
 /**
+ * Whether the words float by themselves once Crosstune is left: there are words, and the song is
+ * playing, in the music app they follow or nearby, listened along to. A song only heard keeps its
+ * time once the microphone stops, but nothing says it's still playing.
+ */
+internal val UiState.floatsByThemselves: Boolean
+    get() = lyricsFor != null && lyrics.isNotEmpty() && (listeningAlong || following?.let { it.app != null && it.clock.playing } == true)
+
+/**
  * What's switched on to help read a song's words in another language: [readings] over them, kana
  * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
  * Then what's been worked out for the words shown, line by line.

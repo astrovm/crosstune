@@ -522,6 +522,30 @@ class ListeningTest {
     }
 
     @Test
+    fun leavingWithNothingPlayingDoesntFloatTheWords() {
+        ShadowSettings.setCanDrawOverlays(true)
+        demoWords(FakeHearing())
+        // Listening along stopped, nothing says the song is playing: they'd only be in the way.
+        click(string(R.string.lyrics_stop_listening))
+        controller!!.userLeaving()
+        assertEquals(null, shadowOf(app).nextStartedService)
+        // Listening along again, they float.
+        click(string(R.string.lyrics_listen_along))
+        controller!!.userLeaving()
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12LeavingWithNothingPlayingDoesntFloatEither() {
+        demoWords(FakeHearing())
+        click(string(R.string.lyrics_stop_listening))
+        val activity = controller!!.get()
+        controller!!.userLeaving()
+        assertFalse(activity.isInPictureInPictureMode)
+    }
+
+    @Test
     @Config(sdk = [30])
     fun beforeAndroid12LeavingWithoutWordsDoesntFloat() {
         allowMicrophone()
