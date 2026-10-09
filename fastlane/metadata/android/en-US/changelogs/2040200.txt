@@ -1,0 +1,1 @@
+Naming the song playing on your phone now skips apps that only say they're playing, and files playing in a browser. Videos are named as the song in their title, so YouTube in a browser finds the right song.
