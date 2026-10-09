@@ -192,6 +192,31 @@ class PlaybackTest {
     }
 
     @Test
+    fun followingStopsListeningToEveryApp() {
+        allow()
+        val playing = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
+        val other = player("com.other", "Other", "Another Song", "Someone")
+        shadowOf(sessions).addController(playing)
+        shadowOf(sessions).addController(other)
+        followed()
+        assertEquals(true, shadowOf(other).callbacks.isNotEmpty())
+        // Another app starting doesn't leave the others listened to twice.
+        val before = shadowOf(playing).callbacks.size
+        shadowOf(sessions).addController(player("com.third", "Third", "Third Song", "Someone"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(before, shadowOf(playing).callbacks.size)
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Any>(), shadowOf(playing).callbacks + shadowOf(other).callbacks)
+        // An app showing up later is listened to in its place.
+        val later = player("com.later", "Later", "Song", "Band")
+        followed()
+        shadowOf(sessions).addController(later)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(true, shadowOf(later).callbacks.isNotEmpty())
+    }
+
+    @Test
     fun theOnePlayingWinsOverOnePausedOnTheSameSong() {
         allow()
         shadowOf(sessions).addController(player("com.paused", "Paused", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))

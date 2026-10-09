@@ -193,6 +193,11 @@ class LyricsFinderTest {
         assertEquals(first, runBlocking { kept.lyricsOf(MusicMetadata("song", "BAND")) })
         assertEquals(1, fake.requestedUrls.size)
 
+        // Kept on disk too, so they're there after the app starts again.
+        val again = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        assertEquals(first, runBlocking { again.lyricsOf(MusicMetadata("Song", "Band")) })
+        assertEquals(1, fake.requestedUrls.size)
+
         // Neither a song without words nor one that couldn't be looked up is kept, so both are asked again.
         respond("[]")
         assertEquals(Lyrics.None, runBlocking { kept.lyricsOf(MusicMetadata("Quiet", "Band")) })
@@ -273,6 +278,59 @@ class LyricsFinderTest {
         // The words of its own singer's recording, not the namesake's.
         assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") })
         assertEquals("https://music.163.com/", fake.requestHeaders.last { it.first == "Referer" }.second)
+    }
+
+    @Test
+    fun withOwnNamesNetEaseIsStillAskedUnderTheGivenOnes() {
+        japaneseSong(
+            netEase = { query -> if (query == "Hatsukoi Hiroko Mita") """{"result":{"songs":[{"id":3,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{"songs":[]}}""" },
+            lyric = "Plain words, no timings"
+        )
+        assertEquals(Lyrics.Found("Plain words, no timings"), found(hatsukoi))
+    }
+
+    @Test
+    fun ownNamesThatAreTheGivenOnesArentAskedAgain() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[{"trackId":42,"trackName":"Hatsukoi","artistName":"Hiroko Mita"}]}""")
+                url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"Hatsukoi","artistName":"Hiroko Mita"}]}""")
+                else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+            }
+        }
+        assertEquals(Lyrics.None, found(hatsukoi))
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
+        assertEquals(1, fake.requestedUrls.count { "/api/search/get" in it })
+    }
+
+    @Test
+    fun ownNamesWithoutATitleArentUsed() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[{"trackId":42,"trackName":"Hatsukoi","artistName":"Hiroko Mita"}]}""")
+                url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"","artistName":"三田 寛子"}]}""")
+                else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+            }
+        }
+        assertEquals(Lyrics.None, found(hatsukoi))
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
+    }
+
+    @Test
+    fun netEaseHavingNoSuchSongIsNoneEvenWithLrclibDown() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> throw IOException("down")
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"Band"}]}]}}""")
+            }
+        }
+        assertEquals(Lyrics.None, found(MusicMetadata("Song", "Band")))
     }
 
     @Test
@@ -408,6 +466,11 @@ class LyricsFinderTest {
         assertEquals(false, isRomaji("sakura sakura yayoi no sora"))
         assertEquals(false, isRomaji("空は青い から 君と 歩く ni wa ga wo"))
         assertEquals(false, isRomaji(""))
+        // Just under half the words read as Japanese is enough, with three of its little words.
+        val english = "street night black dream lights think world green stand river shout"
+        assertEquals(true, isRomaji("ni wa ga sora kaze yume hana michi namida $english"))
+        assertEquals(false, isRomaji("ni wa ga sora kaze yume hana michi cloud $english"))
+        assertEquals(false, isRomaji("ni wa koe sora kaze yume hana michi namida $english"))
     }
 
     /** A song LRCLIB has only [lrclib], and NetEase has with [netEase] words. */
