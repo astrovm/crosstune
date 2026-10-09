@@ -58,12 +58,14 @@ android {
                 "proguard-rules.pro"
             )
         }
-        // A debug build that installs next to the released app, named "Crosstune Dev".
+        // "Crosstune Dev": optimized like the release, so what's tried on a phone runs as fast as
+        // what ships, but signed with the debug key, so it installs next to the released app.
         create("dev") {
-            initWith(getByName("debug"))
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            matchingFallbacks += listOf("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
