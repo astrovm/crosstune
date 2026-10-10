@@ -1,10 +1,12 @@
 package com.astrovm.crosstune
 
 import com.astrovm.crosstune.LyricsFinder.Lyrics
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -230,7 +232,8 @@ class LyricsFinderTest {
             FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
         }
         assertEquals(Lyrics.Found("Words"), found(MusicMetadata("Song", "Band")))
-        assertEquals(2, calls)
+        // The second try, then once more for a timed copy of the words to time them by.
+        assertEquals(3, calls)
     }
 
     /**
@@ -632,5 +635,67 @@ class LyricsFinderTest {
         val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
         respond("[$timedOnLrclib]")
         assertEquals("First\nSecond", (runBlocking { kept.lyricsOf(song) } as Lyrics.Found).words)
+    }
+
+    /** Asphalt Lady's opening, timed by guesswork, as NetEase has it. */
+    private val guessed = "[00:24.52] 街角のテレフォン\n[00:28.16] 流し目の彼女\n[00:33.40] Ah　グラビアみたいな\n[00:34.00] 長い脚　めまいさ\n" +
+        "[00:43.48] 金色のブレス\n[00:44.64] きらめいたピアス\n[00:45.20] Ah　ブローした髪を\n[00:56.28] くびすじに跳ねた\n" +
+        "[00:59.80] 誘いの言葉には　ウィンク\n[01:04.08] つれなく返すだけ　シャクだね\n[01:07.24] Shock!　君はアスファルト・レディ"
+
+    /** The same, well timed in romaji, two lines at a time, under the song's bare name. */
+    private val romaji = "[00:24.33] Machikado no terefuon nagashime no kanojo\n[00:31.82] Aah gurabia mitaina nagai ashi memaisa\n" +
+        "[00:39.77] Kin'iro no buresu kirameita piasu\n[00:47.11] Aah buro- shita kami o ku Bisujini haneta\n" +
+        "[00:55.81] Sasoi no kotoba ni wa whinku\n[01:03.53] Tsurenaku kaesu dake shaku da ne\n[01:12.20] Shock! kimi wa asufuaruto redi"
+
+    private val remix = MusicMetadata("ASPHALT LADY (2018 Remix) (2024 Remaster)", "S.Kiyotaka & Omega Tribe")
+
+    /** LRCLIB has the remix's words timed by guesswork, and [bare] under the song's bare name. */
+    private fun remixWords(vararg bare: String) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = guessed)}]")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${bare.joinToString(",")}]")
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    @Test
+    fun wordsTimedByGuessworkTakeTheTimesOfTheSameWordsWellTimedElsewhere() {
+        remixWords(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji))
+        val found = found(remix) as Lyrics.Found
+        // When each line is really sung, to a second or two: the words stay as they were, in Japanese.
+        val sung = listOf(24_000L, 28_000L, 31_000L, 35_000L, 39_000L, 43_000L, 46_000L, 50_000L, 54_000L, 63_500L, 71_000L)
+        assertEquals(SyncedLyrics.parse(guessed).map { it.text }, found.lines.map { it.text })
+        found.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sung[index]) <= 2_500) }
+    }
+
+    @Test
+    fun anotherTakeUnderTheBareNameLendsNoTimes() {
+        // A live take, a minute later throughout.
+        val live = SyncedLyrics.parse(romaji).joinToString("\n") { "[${"%02d".format((it.timeMs + 60_000) / 60_000)}:${"%05.2f".format((it.timeMs + 60_000) % 60_000 / 1000.0)}] ${it.text}" }
+        remixWords(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = live))
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
+        // Nor does someone else's song of that name, another song, or words timed by guesswork too.
+        remixWords(
+            answer("Asphalt Lady", "Someone Else", "", synced = romaji),
+            answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = "[00:24.00] Yesterday all my troubles\n[00:31.00] Seemed so far away\n[00:39.00] Now it looks as though"),
+            answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = guessed)
+        )
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
+        // LRCLIB not answering for the bare name, the words are as found.
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = guessed)}]")
+                url.host == "lrclib.net" -> throw IOException("offline")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
     }
 }

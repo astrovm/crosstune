@@ -76,7 +76,9 @@ internal class LyricsFinder(
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
         val key = cacheKey(metadata)
         cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
-        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        // Words timed badly, or not at all, are timed as a well-timed copy of the song times them, when there's one.
+        val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { timedWell(metadata, words, timeoutMs) } } ?: found
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(key, it) }
             cache.save()
@@ -89,6 +91,57 @@ internal class LyricsFinder(
      * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
      */
     private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+
+    /**
+     * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
+     * written otherwise there, e.g. in romaji; as it is when there's none, or its own timing is good.
+     * A copy under the song's name is the song. One under its bare name, without "(2018 Remix)",
+     * may be another take, so it only counts when its times agree with [found]'s rough ones.
+     */
+    private suspend fun timedWell(metadata: MusicMetadata, found: Lyrics.Found, timeoutMs: Long): Lyrics.Found {
+        if (timing(found) == WELL_TIMED) return found
+        val rough = found.lines.filter { it.text.isNotBlank() }
+        val lines = rough.map { it.text }.ifEmpty { found.words.lines().map(String::trim).filter(String::isNotEmpty) }
+        val sounds = soundsOf(lines)
+        val bare = bareTitle(metadata.title)
+        val names = listOf(metadata.title to false) + listOfNotNull((bare to true).takeIf { bare != metadata.title && bare.isNotEmpty() && rough.isNotEmpty() })
+        for ((title, onlyIfAgrees) in names) {
+            val named = metadata.copy(title = title)
+            val answers = withTimeoutOrNull(timeoutMs) {
+                try {
+                    answersFor(named)
+                } catch (_: IOException) {
+                    null
+                } catch (_: JSONException) {
+                    null
+                }
+            } ?: continue
+            for (answer in answers.filter { it.isExact(named) || it.belongsTo(named) }) {
+                val other = answer.synced().filter { it.text.isNotBlank() }
+                if (other.isEmpty() || SyncedLyrics.rushed(other)) continue
+                val timed = BorrowedTimings.retime(lines, sounds, other, soundsOf(other.map { it.text })) ?: continue
+                if (onlyIfAgrees && !BorrowedTimings.agrees(rough, timed)) continue
+                return Lyrics.Found(found.words, timed)
+            }
+        }
+        return found
+    }
+
+    /** Each line as the letters it's said with: words in Japanese, Chinese or Korean written out in Latin ones. */
+    private suspend fun soundsOf(lines: List<String>): List<String> = withContext(Dispatchers.Default) {
+        val script = Readings.scriptOf(lines)
+        (if (script == null) lines else Readings.of(lines, script).map { it.romanized }).map(BorrowedTimings::sound)
+    }
+
+    /** The song's name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
+    private fun bareTitle(title: String): String {
+        var bare = title.trim()
+        while (true) {
+            val shorter = bare.replace(trailingTag, "").trim()
+            if (shorter == bare || shorter.isEmpty()) return bare
+            bare = shorter
+        }
+    }
 
     /**
      * YouTube Music's words and those from everywhere else, asked for at once; the better of them.
@@ -447,7 +500,10 @@ internal class LyricsFinder(
         const val APP_CLIENT_VERSION = "7.21.50"
 
         /** Bumped when words kept from before should be looked up again. */
-        const val CACHE_VERSION = 2
+        const val CACHE_VERSION = 3
+
+        /** How long looking for a well-timed copy of badly timed words can take. */
+        const val BORROW_TIMEOUT_MS = 15_000L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
@@ -459,6 +515,9 @@ internal class LyricsFinder(
 private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
 }
+
+/** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
+private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
 
 /** The page YouTube Music shows a song's words on, by its id. */
 private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")
