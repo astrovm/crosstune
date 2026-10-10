@@ -134,4 +134,12 @@ class ReadingsTest {
         assertEquals("", Readings.of(listOf("Just summer night"), Script.JAPANESE).single().romanized)
     }
 
+    @Test
+    fun englishInJapaneseLyricsIsRomanizedAsWritten() {
+        // The dictionary splits "Don't" into Don, ' and t.
+        assertEquals("Don't Say dare ka no udedokei wa", Readings.of(listOf("Don't Say 誰かの腕時計は"), Script.JAPANESE).single().romanized)
+        assertEquals("I’m Here kimi no", Readings.of(listOf("I’m Here 君の"), Script.JAPANESE).single().romanized)
+        // And looked up as one word.
+        assertEquals(true, Readings.words("Don't Say 誰かの腕時計は", Script.JAPANESE).any { it.text == "Don't" })
+    }
 }
