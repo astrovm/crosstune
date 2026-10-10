@@ -142,8 +142,6 @@ internal class ChatGpt(
             }
         } catch (_: IOException) {
             ChatGptReply.Failed
-        } catch (_: JSONException) {
-            ChatGptReply.Failed
         }
         // Not allowed to search the web, it answers from what it knows.
         return reply ?: ask(instructions, input, webSearch = false, onText = onText)
