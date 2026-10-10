@@ -17,6 +17,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.runtime.mutableLongStateOf
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
@@ -168,14 +171,24 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
-    // The bar makes way while the words are scrolled, and comes back once they rest.
+    // The bar makes way while the words are scrolled, and comes back once they rest. Left alone it
+    // goes too, so only the words show, and a touch anywhere brings it back. A menu open from it keeps
+    // it, and so does Android's setting to give more time to act, as long as it asks.
     var scrolledAt by remember { mutableLongStateOf(0L) }
+    var touchedAt by remember { mutableLongStateOf(0L) }
+    var menuOpen by remember { mutableStateOf(false) }
     var barShown by remember { mutableStateOf(true) }
-    LaunchedEffect(scrolledAt) {
-        if (scrolledAt == 0L) return@LaunchedEffect
-        barShown = false
-        delay(BAR_BACK_MS)
+    val idleMs = LocalAccessibilityManager.current?.calculateRecommendedTimeoutMillis(BAR_IDLE_MS, containsIcons = true, containsControls = true)
+        ?: BAR_IDLE_MS
+    LaunchedEffect(scrolledAt, touchedAt, menuOpen, idleMs) {
+        if (scrolledAt > touchedAt) {
+            barShown = false
+            delay(BAR_BACK_MS)
+        }
         barShown = true
+        if (menuOpen || idleMs == Long.MAX_VALUE) return@LaunchedEffect
+        delay(idleMs)
+        barShown = false
     }
     val scrolling = remember {
         object : NestedScrollConnection {
@@ -191,6 +204,15 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrolling)
+            // Seen before anything under it handles it, and left for that to handle.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        touchedAt = SystemClock.uptimeMillis()
+                    }
+                }
+            }
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
@@ -260,7 +282,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         ) {
             LyricsActions(
                 state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
-                onSync = { syncingAsked = !syncing }
+                onSync = { syncingAsked = !syncing }, onMenu = { menuOpen = it }
             )
         }
     }
@@ -367,9 +389,11 @@ private fun LyricsActions(
     onOpenSaved: () -> Unit,
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
+    onMenu: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
+    LaunchedEffect(menu) { onMenu(menu != null) }
     Box(modifier = modifier) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
@@ -421,6 +445,9 @@ private val BAR_FADE = 88.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 private const val MAX_VISUALS_SHADE = 0.9f
+
+/** How long the bar stays without a touch before it goes. */
+internal const val BAR_IDLE_MS = 4_000L
 
 /** How long after the words stop being scrolled the bar comes back. */
 private const val BAR_BACK_MS = 1_200L
