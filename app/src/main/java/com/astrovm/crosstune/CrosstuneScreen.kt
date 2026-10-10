@@ -216,6 +216,10 @@ internal data class ScreenActions(
     val onTranslationServerChange: (String, String) -> Boolean = { _, _ -> true },
     /** One of the app's languages to translate into, or null for the app's own. */
     val onTranslateIntoChange: (String?) -> Unit = {},
+    val onSignInWithChatGpt: () -> Unit = {},
+    val onCancelChatGptSignIn: () -> Unit = {},
+    val onSignOutOfChatGpt: () -> Unit = {},
+    val onDismissChatGptWelcome: () -> Unit = {},
     /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */
     val onAllowFollowing: () -> Unit = {},
     /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */
