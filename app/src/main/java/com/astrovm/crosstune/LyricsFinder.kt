@@ -90,11 +90,14 @@ internal class LyricsFinder(
      */
     private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
 
-    /** YouTube Music's words and those from everywhere else, asked for at once; the better of them. */
+    /**
+     * YouTube Music's words and those from everywhere else, asked for at once; the better of them.
+     * YouTube Music only adds words: it not having them doesn't mean the song has none.
+     */
     private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = coroutineScope {
         val official = async { fromYouTubeMusic(metadata, timeoutMs) }
         val elsewhere = anywhere(metadata, timeoutMs)
-        better(official.await(), elsewhere)
+        official.await().let { if (it is Lyrics.Found) better(it, elsewhere) else elsewhere }
     }
 
     /**

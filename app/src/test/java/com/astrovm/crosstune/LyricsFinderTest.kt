@@ -604,13 +604,14 @@ class LyricsFinderTest {
             if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}", code = 500) else FakeSpotify.html(request, "[$timedOnLrclib]")
         }
         assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
-        // Nowhere has them: none, and none either when YouTube Music has none but LRCLIB won't answer.
+        // Nowhere has them: none. YouTube Music having none doesn't mean the song has none, so with
+        // LRCLIB not answering, that's what's said.
         everywhere("[]", null, next = "{}")
         assertEquals(Lyrics.None, runBlocking { withYouTubeMusic().lyricsOf(song) })
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}") else FakeSpotify.html(request, "busy", code = 503)
         }
-        assertEquals(Lyrics.None, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        assertEquals(Lyrics.Unavailable, runBlocking { withYouTubeMusic().lyricsOf(song) })
         // Nothing answers at all.
         fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
         assertEquals(Lyrics.Unavailable, runBlocking { withYouTubeMusic().lyricsOf(song) })
