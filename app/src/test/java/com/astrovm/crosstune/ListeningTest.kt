@@ -420,7 +420,15 @@ class ListeningTest {
         }
         MainActivity.playbackFactory = { phone }
         val hearing = FakeHearing()
-        demoWords(hearing)
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // Followed in the app, which shows instead of the microphone, still listening along.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_following_app, "Music")) }
         // Shazam names it otherwise while the app plays it: the words stay.
         hearing.song("Demo (Remix)", 5.0)
         composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }

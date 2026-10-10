@@ -51,6 +51,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextStyle
@@ -518,24 +519,34 @@ private fun AppSource(name: String, packageName: String?, playing: Boolean, onPl
         packageName?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
     }
     val description = stringResource(R.string.lyrics_following_app, name)
-    IconButton(
-        onClick = onPlayPause,
-        modifier = Modifier.semantics { contentDescription = description }
+    // Not an IconButton, which clips to a circle and would cut the badge off at its corner.
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onPlayPause)
+            .semantics { contentDescription = description }
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
-            if (icon != null) Image(icon, null, Modifier.size(28.dp).clip(CircleShape)) else Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp))
+        // The badge sits on the icon's corner, inside the button.
+        Box(modifier = Modifier.size(34.dp)) {
+            if (icon != null) {
+                Image(icon, null, Modifier.size(28.dp).align(Alignment.Center).clip(CircleShape))
+            } else {
+                Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp).align(Alignment.Center))
+            }
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .size(18.dp)
+                    .size(16.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             ) {
                 Icon(
                     painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
                     contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play),
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(13.dp)
+                    modifier = Modifier.size(12.dp)
                 )
             }
         }
