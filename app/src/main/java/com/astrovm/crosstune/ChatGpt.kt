@@ -113,9 +113,9 @@ internal class ChatGpt(
      * What ChatGPT answers to [input], told how by [instructions], on the user's plan. [onText] gets
      * the answer so far as it's written.
      */
-    suspend fun ask(instructions: String, input: String, onText: (String) -> Unit = {}): ChatGptReply {
+    suspend fun ask(instructions: String, input: String, webSearch: Boolean = false, onText: (String) -> Unit = {}): ChatGptReply {
         val token = accessToken() ?: return ChatGptReply.Failed
-        return try {
+        val reply = try {
             val model = model() ?: return ChatGptReply.Failed
             val body = JSONObject()
                 .put("model", model)
@@ -124,6 +124,7 @@ internal class ChatGpt(
                 // OpenAI asks for both, on every request on the user's plan.
                 .put("store", false)
                 .put("stream", true)
+                .apply { if (webSearch) put("tools", JSONArray().put(JSONObject().put("type", "web_search"))) }
             val request = Request.Builder().url(RESPONSES_URL).header("Authorization", "Bearer $token")
                 .post(body.toString().toRequestBody(JSON)).build()
             // All of it away from the main thread, closing too: an answer read only up to "completed"
@@ -132,6 +133,8 @@ internal class ChatGpt(
                 answers.newCall(request).executeAsync().use { response ->
                     when {
                         response.code == 429 -> ChatGptReply.LimitReached
+                        // A tool the account may not use is refused, with a 400, before anything's written.
+                        response.code == 400 && webSearch -> null
                         !response.isSuccessful -> ChatGptReply.Failed
                         else -> read(response.body.source(), onText)
                     }
@@ -139,9 +142,9 @@ internal class ChatGpt(
             }
         } catch (_: IOException) {
             ChatGptReply.Failed
-        } catch (_: JSONException) {
-            ChatGptReply.Failed
         }
+        // Not allowed to search the web, it answers from what it knows.
+        return reply ?: ask(instructions, input, webSearch = false, onText = onText)
     }
 
     /**

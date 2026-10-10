@@ -277,6 +277,7 @@
     <string name="lyrics_song_meaning_failed">Şarkı açıklanamadı.</string>
     <string name="explanation_in_song">Şarkıda</string>
     <string name="explanation_language">Dil</string>
+    <string name="song_about">Şarkı hakkında</string>
     <string name="song_story">Hikâye</string>
     <string name="song_mood">Duygu</string>
     <string name="song_key_lines">Önemli dizeler</string>

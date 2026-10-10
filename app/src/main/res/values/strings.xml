@@ -296,6 +296,7 @@
     <string name="lyrics_song_meaning_failed">Couldn\'t explain the song.</string>
     <string name="explanation_in_song">In the song</string>
     <string name="explanation_language">Language</string>
+    <string name="song_about">About</string>
     <string name="song_story">Story</string>
     <string name="song_mood">Mood</string>
     <string name="song_key_lines">Key lines</string>

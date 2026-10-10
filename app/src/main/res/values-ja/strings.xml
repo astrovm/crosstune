@@ -278,6 +278,7 @@
     <string name="lyrics_song_meaning_failed">この曲を解説できませんでした。</string>
     <string name="explanation_in_song">曲の中で</string>
     <string name="explanation_language">言葉</string>
+    <string name="song_about">曲について</string>
     <string name="song_story">ストーリー</string>
     <string name="song_mood">雰囲気</string>
     <string name="song_key_lines">注目の歌詞</string>

@@ -454,7 +454,7 @@ class ChatGptTest {
         assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor.explainSong(song, lines, "en") { written += it } })
         assertEquals("A man dazzled by a woman of the city.", written.last())
         val asked = openAi.asked.single()
-        assertTrue(asked.getString("instructions").contains("explain what the song is about"))
+        assertTrue(asked.getString("instructions").contains("explain the song in four parts"))
         assertTrue(asked.getJSONArray("input").getJSONObject(0).getString("content").endsWith("Lyrics:\nShock!\n君はアスファルト・レディ"))
         // Kept, and its lines are explained knowing it.
         assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor.explainSong(song, lines, "en") {} })
@@ -544,5 +544,24 @@ class ChatGptTest {
         // Without the models, there's no model to ask.
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+    }
+
+    @Test
+    fun theSongIsLookedUpOnTheWebAndWithoutWhenTheAccountMayNot() {
+        val tutor = tutor()
+        val song = MusicMetadata("November Blue (2023 Remix)", "S.Kiyotaka & Omega Tribe")
+        answering("FIRST FINALE, 1985.\n---\nStory.")
+        runBlocking { tutor.explainSong(song, listOf("ガラス越しの City Talk"), "es") {} }
+        val asked = openAi.asked.single()
+        assertEquals("web_search", asked.getJSONArray("tools").getJSONObject(0).getString("type"))
+        assertTrue(asked.getString("instructions").contains("First search the web for this song"))
+        // Refused, as OpenAI refuses a tool it doesn't allow, it's asked again without.
+        openAi.reply = { body -> if (body.has("tools")) 400 to """{"detail":"Unsupported tool type: web_search"}""" else 200 to FakeOpenAi.stream("From the lyrics.") }
+        assertEquals(ChatGptReply.Answer("From the lyrics."), runBlocking { tutor.explainSong(song.copy(title = "Other"), listOf("Line"), "es") {} })
+        assertEquals(listOf(true, false), openAi.asked.takeLast(2).map { it.has("tools") })
+        // Other questions don't search, and a 400 for them is no answer.
+        openAi.reply = { 400 to "" }
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor.explain(song, listOf("Line"), 0, "es") {} })
+        assertFalse(openAi.asked.last().has("tools"))
     }
 }
