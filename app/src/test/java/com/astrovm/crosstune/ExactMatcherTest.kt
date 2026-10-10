@@ -292,6 +292,22 @@ class ExactMatcherTest {
             {"musicShelfRenderer":{"contents":[${rows.joinToString(",")}]}}]}}}}]}}}"""
 
     @Test
+    fun aRemixIsFoundOnYouTubeMusicByItsAlbumWhenItsNameLeavesItOut() {
+        respond(
+            youTubeMusicPage(
+                // The original first, and the remix named the same, on its remix album.
+                youTubeMusicRow("Twilight Bay City", "S.Kiyotaka & Omega Tribe • NEVER ENDING SUMMER • 4:11", videoId = "original000"),
+                youTubeMusicRow("Twilight Bay City", "S.Kiyotaka & Omega Tribe • NEVER ENDING SUMMER REMIX • 4:19", videoId = "remix000000")
+            )
+        )
+        val remix = MusicMetadata("Twilight Bay City (Remix)", "S.Kiyotaka & Omega Tribe")
+        assertEquals("https://music.youtube.com/watch?v=remix000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, remix) })
+        // Without the remix there, the original doesn't stand in for it.
+        respond(youTubeMusicPage(youTubeMusicRow("Twilight Bay City", "S.Kiyotaka & Omega Tribe • NEVER ENDING SUMMER • 4:11", videoId = "original000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, remix) })
+    }
+
+    @Test
     fun youTubeMusicMatchesSongsAlbumsAndArtists() {
         respond(
             youTubeMusicPage(

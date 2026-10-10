@@ -105,7 +105,7 @@ internal class LyricsFinder(
      */
     private suspend fun timedWell(metadata: MusicMetadata, found: Lyrics.Found, timeoutMs: Long): Lyrics.Found {
         val wellTimed = timing(found) == WELL_TIMED
-        val bare = bareTitle(metadata.title).takeIf { it != metadata.title }
+        val bare = SongNames.bareTitle(metadata.title).takeIf { it != metadata.title }
         if (wellTimed && bare == null) return found
         val rough = found.lines.filter { it.text.isNotBlank() }
         val lines = rough.map { it.text }.ifEmpty { found.words.lines().map(String::trim).filter(String::isNotEmpty) }
@@ -150,15 +150,6 @@ internal class LyricsFinder(
         (if (script == null) lines else Readings.of(lines, script).map { it.romanized }).map(BorrowedTimings::sound)
     }
 
-    /** The song's name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
-    private fun bareTitle(title: String): String {
-        var bare = title.trim()
-        while (true) {
-            val shorter = bare.replace(trailingTag, "").trim()
-            if (shorter == bare || shorter.isEmpty()) return bare
-            bare = shorter
-        }
-    }
 
     /**
      * YouTube Music's words and those from everywhere else, asked for at once; the better of them.
@@ -388,7 +379,8 @@ internal class LyricsFinder(
                 // An artist only written in another script there, say パイパー for Piper, counts when
                 // the recording lasts as long as the store's.
                 val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_RECORDING_LENGTH_MS
-                SongNames.same(song.optString("name"), metadata.title) &&
+                // Its album may say what version it is, "Song" on "… Remix".
+                SongNames.sameVersion(metadata.title, song.optString("name"), song.optJSONObject("album")?.optString("name").orEmpty()) &&
                     artists.any { name ->
                         listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
                     }
@@ -487,7 +479,8 @@ internal class LyricsFinder(
          * "Randy Nota Loca", and a title in another script is written out in letters.
          */
         fun belongsTo(metadata: MusicMetadata) =
-            SongNames.wordsMatch(title, metadata.title) && SongNames.artistInside(artist, metadata.artist)
+            (SongNames.wordsMatch(title, metadata.title) || SongNames.sameVersion(metadata.title, title, json.optString("albumName"))) &&
+                SongNames.artistInside(artist, metadata.artist)
 
         companion object {
             fun of(json: JSONObject?): Answer? {
@@ -542,8 +535,6 @@ private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
 }
 
-/** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
-private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
 
 /** The page YouTube Music shows a song's words on, by its id. */
 private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")

@@ -87,6 +87,34 @@ internal object SongNames {
     fun same(one: String, other: String): Boolean =
         normalize(withoutEditionTag(one)) == normalize(withoutEditionTag(other))
 
+    /**
+     * [candidate] is the recording [title] names, also when it says what version that is other
+     * than in its name: "Song (Remix)" is "Song (2022 Remix)", or "Song" on the album "NEVER
+     * ENDING SUMMER REMIX". The original "Song", on an album that doesn't say so, is another.
+     */
+    fun sameVersion(title: String, candidate: String, album: String = ""): Boolean {
+        if (same(title, candidate)) return true
+        val named = withoutEditionTag(title).trim()
+        val bare = bareTitle(named)
+        if (bare == named || normalize(bare) != normalize(bareTitle(withoutEditionTag(candidate)))) return false
+        // What the tags say, "(Remix)", has to be said there too.
+        val version = words(named.removePrefix(bare))
+        return version.isNotEmpty() && (words(candidate) + words(album)).containsAll(version)
+    }
+
+    /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
+    fun bareTitle(title: String): String {
+        var bare = title.trim()
+        while (true) {
+            val shorter = bare.replace(trailingTag, "").trim()
+            if (shorter == bare || shorter.isEmpty()) return bare
+            bare = shorter
+        }
+    }
+
+    /** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
+    private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
+
     /** Two credits for one artist, near enough: "Randy" is in "Randy Nota Loca". */
     fun sameArtist(one: String, other: String): Boolean {
         val theirs = artists(other)
