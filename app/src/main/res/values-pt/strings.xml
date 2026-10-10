@@ -279,7 +279,7 @@
     <string name="explanation_language">Idioma</string>
     <string name="song_story">História</string>
     <string name="song_mood">Clima</string>
-    <string name="song_references">Referências</string>
+    <string name="song_key_lines">Versos-chave</string>
     <string name="chatgpt_limit_reached">Seu plano do ChatGPT acabou por enquanto.</string>
     <string name="lyrics_repeat_line">Repetir esta linha</string>
     <string name="lyrics_stop_repeating">Parar de repetir</string>

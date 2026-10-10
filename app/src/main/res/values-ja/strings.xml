@@ -280,7 +280,7 @@
     <string name="explanation_language">言葉</string>
     <string name="song_story">ストーリー</string>
     <string name="song_mood">雰囲気</string>
-    <string name="song_references">背景</string>
+    <string name="song_key_lines">注目の歌詞</string>
     <string name="chatgpt_limit_reached">ChatGPT プランの上限に達しました。</string>
     <string name="lyrics_repeat_line">この行をくり返す</string>
     <string name="lyrics_stop_repeating">くり返しを止める</string>

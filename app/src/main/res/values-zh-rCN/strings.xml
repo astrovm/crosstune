@@ -279,7 +279,7 @@
     <string name="explanation_language">语言</string>
     <string name="song_story">故事</string>
     <string name="song_mood">情绪</string>
-    <string name="song_references">典故</string>
+    <string name="song_key_lines">关键歌词</string>
     <string name="chatgpt_limit_reached">你的 ChatGPT 套餐暂时用完了。</string>
     <string name="lyrics_repeat_line">重复这一行</string>
     <string name="lyrics_stop_repeating">停止重复</string>

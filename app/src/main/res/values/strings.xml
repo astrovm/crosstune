@@ -298,7 +298,7 @@
     <string name="explanation_language">Language</string>
     <string name="song_story">Story</string>
     <string name="song_mood">Mood</string>
-    <string name="song_references">References</string>
+    <string name="song_key_lines">Key lines</string>
     <string name="chatgpt_limit_reached">Your ChatGPT plan is used up for now.</string>
     <string name="lyrics_repeat_line">Repeat this line</string>
     <string name="lyrics_stop_repeating">Stop repeating</string>

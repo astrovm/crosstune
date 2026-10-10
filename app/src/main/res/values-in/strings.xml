@@ -279,7 +279,7 @@
     <string name="explanation_language">Bahasa</string>
     <string name="song_story">Cerita</string>
     <string name="song_mood">Suasana</string>
-    <string name="song_references">Rujukan</string>
+    <string name="song_key_lines">Baris kunci</string>
     <string name="chatgpt_limit_reached">Paket ChatGPT kamu habis untuk sementara.</string>
     <string name="lyrics_repeat_line">Ulangi baris ini</string>
     <string name="lyrics_stop_repeating">Berhenti mengulang</string>

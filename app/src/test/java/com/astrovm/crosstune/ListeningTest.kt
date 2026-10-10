@@ -1284,9 +1284,9 @@ class ListeningTest {
         openAi.reply = explained
         click(string(R.string.retry_button))
         composeRule.waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
-        // Its story and mood; no references, so none are shown.
+        // Its story and mood; no key lines, so their label isn't shown.
         assertTrue(shown("Calm.") && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
-        assertFalse(shown(string(R.string.song_references)))
+        assertFalse(shown(string(R.string.song_key_lines)))
         val asked = openAi.asked.count { "explain what the song is about" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
