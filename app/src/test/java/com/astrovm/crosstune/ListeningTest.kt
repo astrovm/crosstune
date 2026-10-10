@@ -413,6 +413,26 @@ class ListeningTest {
     }
 
     @Test
+    fun aSongHeardByAnotherNameDoesntReplaceTheWordsOfTheOneAnAppPlays() {
+        val phone = FakePlayback().apply {
+            access = true
+            playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // Shazam names it otherwise while the app plays it: the words stay.
+        hearing.song("Demo (Remix)", 5.0)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }
+        assertTrue(shown("Demo one"))
+        assertFalse(shown("Demo (Remix) one"))
+        // The app no longer plays it: the song heard takes over.
+        phone.playing.value = null
+        hearing.song("Other", 1.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+    }
+
+    @Test
     fun wordsOutOfTimeArePutInTimeByTappingTheLineHeard() {
         val synced = """[{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]"""
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
@@ -577,10 +597,21 @@ class ListeningTest {
         listeningAlong(hearing)
         allowMicrophone()
         launch()
+        // Named without a cover, the song gets Deezer's, which the words show too.
+        val words = fake.handler
+        val cover = "https://cdn.example/demo.jpg"
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"album":{"cover_big":"$cover"}}]}""")
+            } else {
+                words(request)
+            }
+        }
         hearing.song("Demo", 2.0)
         click(string(R.string.tile_lyrics_label))
         // No result to tap Lyrics on first: the words open as soon as the song is named.
         composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(cover) }
     }
 
     @Test

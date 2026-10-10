@@ -1104,6 +1104,9 @@ internal class MainViewModel(
     private fun heardAlong(heard: Heard.Song) {
         val song = heard.metadata
         val shown = uiState.lyricsFor
+        // While a music app plays the song shown, it says exactly what plays: a hearing naming it
+        // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
+        if (shown != null && !sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
         if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
             heardSong = song

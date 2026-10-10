@@ -144,6 +144,8 @@ internal const val STUDY_LINE_TAG = "study-line"
 @Composable
 internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val song = state.lyricsFor ?: return
+    // Named by the app playing it, a song often comes without a cover, which is then found for the result.
+    val cover = song.artworkUrl ?: state.result?.takeIf { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) }?.artworkUrl
     // The line open to study, and whether the lines kept are shown, over the words.
     var studying by rememberSaveable(song) { mutableStateOf<Int?>(null) }
     var savedShown by rememberSaveable { mutableStateOf(false) }
@@ -164,7 +166,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val onlyVisuals = visualsOnly && state.visuals
     BackHandler(enabled = onlyVisuals) { visualsOnly = false }
     val tint by animateColorAsState(
-        coverColor(song.artworkUrl, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
+        coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
@@ -216,7 +218,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            LyricsHeader(song, actions)
+            LyricsHeader(song.copy(artworkUrl = cover), actions)
             TranslationStatus(state.learning, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
