@@ -278,6 +278,9 @@
     <string name="translation_server_description">비워 두면 MyMemory를 씁니다. 하루 몇 곡까지 무료입니다.</string>
     <string name="translation_server_invalid">https://libretranslate.com 같은 웹 주소를 입력하세요</string>
     <string name="lyrics_study_line">이 줄 공부하기</string>
+    <string name="lyrics_explain_line">이 줄 설명</string>
+    <string name="lyrics_explain_failed">이 줄을 설명할 수 없어요.</string>
+    <string name="chatgpt_limit_reached">ChatGPT 요금제 사용량을 지금은 모두 썼어요.</string>
     <string name="lyrics_repeat_line">이 줄 반복</string>
     <string name="lyrics_stop_repeating">반복 중지</string>
     <string name="lyrics_save_line">줄 저장</string>

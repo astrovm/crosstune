@@ -12,8 +12,10 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
@@ -32,6 +34,18 @@ import java.security.Signature
 import java.security.spec.RSAPublicKeySpec
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+/** What ChatGPT answered: [text], or why there's none. */
+internal sealed interface ChatGptReply {
+    data class Answer(val text: String) : ChatGptReply
+
+    /** The user's plan, or what they let Crosstune use of it, is used up for now. */
+    data object LimitReached : ChatGptReply
+
+    /** Signed out, offline, or anything else that kept it from answering. */
+    data object Failed : ChatGptReply
+}
 
 /** How signing in with ChatGPT ended. */
 internal enum class ChatGptSignInResult {
@@ -61,6 +75,79 @@ internal class ChatGpt(
     private val random = SecureRandom()
     private val tokens = Mutex()
     private var saved: JSONObject? = null
+
+    /** Answers take as long as they take to write, far longer than any lookup. */
+    private val answers = client.newBuilder().callTimeout(ANSWER_TIMEOUT_SECONDS, TimeUnit.SECONDS).readTimeout(ANSWER_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
+
+    /** The model asked, once picked from the account's. */
+    private var model: String? = null
+
+    /**
+     * What ChatGPT answers to [input], told how by [instructions], on the user's plan. [onText] gets
+     * the answer so far as it's written.
+     */
+    suspend fun ask(instructions: String, input: String, onText: (String) -> Unit = {}): ChatGptReply {
+        val token = accessToken() ?: return ChatGptReply.Failed
+        return try {
+            val model = model ?: pickModel(token) ?: return ChatGptReply.Failed
+            this.model = model
+            val body = JSONObject()
+                .put("model", model)
+                .put("instructions", instructions)
+                .put("input", JSONArray().put(JSONObject().put("role", "user").put("content", input)))
+                // OpenAI asks for both, on every request on the user's plan.
+                .put("store", false)
+                .put("stream", true)
+            val request = Request.Builder().url(RESPONSES_URL).header("Authorization", "Bearer $token")
+                .post(body.toString().toRequestBody(JSON)).build()
+            answers.newCall(request).executeAsync().use { response ->
+                if (response.code == 429) return ChatGptReply.LimitReached
+                if (!response.isSuccessful) return ChatGptReply.Failed
+                withContext(ioDispatcher) { read(response.body.source(), onText) }
+            }
+        } catch (_: IOException) {
+            ChatGptReply.Failed
+        } catch (_: JSONException) {
+            ChatGptReply.Failed
+        }
+    }
+
+    /**
+     * The answer streamed in [source], one event at a time, done only once it says it's complete;
+     * it may also stop partway when the plan runs out.
+     */
+    private fun read(source: okio.BufferedSource, onText: (String) -> Unit): ChatGptReply {
+        val text = StringBuilder()
+        while (true) {
+            val line = source.readUtf8Line() ?: return ChatGptReply.Failed
+            if (!line.startsWith("data:")) continue
+            val event = runCatching { JSONObject(line.removePrefix("data:").trim()) }.getOrNull() ?: continue
+            when (event.optString("type")) {
+                "response.output_text.delta" -> {
+                    text.append(event.optString("delta"))
+                    if (text.length > MAX_ANSWER_CHARS) return ChatGptReply.Failed
+                    onText(text.toString())
+                }
+                "response.completed" -> return ChatGptReply.Answer(text.toString())
+                // Wherever in the event the error says what it is.
+                "response.failed", "response.incomplete", "error" -> return if (USAGE_LIMITS.any { it in line }) ChatGptReply.LimitReached else ChatGptReply.Failed
+            }
+        }
+    }
+
+    /**
+     * The model to ask, from those the account offers: a small one, quick and light on the plan,
+     * when there is one, else the first.
+     */
+    private suspend fun pickModel(token: String): String? {
+        val request = Request.Builder().url(MODELS_URL).header("Authorization", "Bearer $token").build()
+        val models = client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) return null
+            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() }).getJSONArray("models")
+        }
+        val listed = (0 until models.length()).map(models::getJSONObject).filter { it.optString("visibility") == "list" }.map { it.getString("slug") }
+        return listed.firstOrNull { "mini" in it } ?: listed.firstOrNull()
+    }
 
     /** The email signed in with, or null when signed out. */
     suspend fun email(): String? = tokens.withLock { load().takeIf { it.has(ACCESS_TOKEN) }?.optString(EMAIL) }
@@ -347,6 +434,16 @@ internal class ChatGpt(
         const val REVOKE_URL = "$ISSUER/api/accounts/oauth/revoke"
         const val JWKS_URL = "$ISSUER/.well-known/jwks.json"
         const val RESOURCE = "https://api.openai.com/v1"
+        const val MODELS_URL = "$RESOURCE/models"
+        const val RESPONSES_URL = "$RESOURCE/responses"
+        private val JSON = "application/json".toMediaType()
+        private const val ANSWER_TIMEOUT_SECONDS = 120L
+
+        /** Far more than any explanation or song's translation; anything longer has gone wrong. */
+        private const val MAX_ANSWER_CHARS = 20_000
+
+        /** What OpenAI calls the plan, or the app's share of it, being used up. */
+        private val USAGE_LIMITS = listOf("subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable")
 
         /** Where the user sees and limits what Crosstune uses of their plan. */
         const val USAGE_URL = "https://chatgpt.com/settings/usage"

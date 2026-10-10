@@ -208,7 +208,9 @@ internal data class ScreenActions(
     val onRetryTranslation: () -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
     val onRemoveSavedLine: (SavedLine) -> Unit = {},
-    val onLookUpWord: (Word) -> Unit = {},
+    /** Looks up a word, in the line it's in, by the line's index. */
+    val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
+    val onExplainLine: (Int) -> Unit = {},
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},

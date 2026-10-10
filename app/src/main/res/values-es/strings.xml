@@ -278,6 +278,9 @@
     <string name="translation_server_description">Dejalo vacío para MyMemory, gratis para unas pocas canciones por día.</string>
     <string name="translation_server_invalid">Ingresá una dirección web, como https://libretranslate.com</string>
     <string name="lyrics_study_line">Estudiar esta línea</string>
+    <string name="lyrics_explain_line">Explicar esta línea</string>
+    <string name="lyrics_explain_failed">No se pudo explicar esta línea.</string>
+    <string name="chatgpt_limit_reached">Tu plan de ChatGPT se agotó por ahora.</string>
     <string name="lyrics_repeat_line">Repetir esta línea</string>
     <string name="lyrics_stop_repeating">Dejar de repetir</string>
     <string name="lyrics_save_line">Guardar línea</string>

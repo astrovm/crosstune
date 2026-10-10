@@ -278,6 +278,9 @@
     <string name="translation_server_description">留空则使用 MyMemory，每天可免费翻译几首歌。</string>
     <string name="translation_server_invalid">请输入网址，例如 https://libretranslate.com</string>
     <string name="lyrics_study_line">学习这一行</string>
+    <string name="lyrics_explain_line">解释这一行</string>
+    <string name="lyrics_explain_failed">无法解释这一行。</string>
+    <string name="chatgpt_limit_reached">你的 ChatGPT 套餐暂时用完了。</string>
     <string name="lyrics_repeat_line">重复这一行</string>
     <string name="lyrics_stop_repeating">停止重复</string>
     <string name="lyrics_save_line">保存这一行</string>

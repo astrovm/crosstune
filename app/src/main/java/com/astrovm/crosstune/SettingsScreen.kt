@@ -233,7 +233,7 @@ private fun SettingsList(
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
             TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
             GroupDivider()
-            TranslationServerRow(state.learning.server, actions.onTranslationServerChange)
+            TranslationServerRow(state.learning.server, chatGpt = state.chatGpt.email != null, actions.onTranslationServerChange)
             GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
@@ -391,7 +391,7 @@ private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> 
  * Tapping it edits them in place.
  */
 @Composable
-private fun TranslationServerRow(server: TranslationServer?, onChange: (String, String) -> Boolean) {
+private fun TranslationServerRow(server: TranslationServer?, chatGpt: Boolean, onChange: (String, String) -> Boolean) {
     var editing by rememberSaveable { mutableStateOf(false) }
     if (!editing) {
         Row(
@@ -403,7 +403,8 @@ private fun TranslationServerRow(server: TranslationServer?, onChange: (String, 
         ) {
             Text(stringResource(R.string.setting_translation_server), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(
-                server?.url?.substringAfter("://") ?: MYMEMORY,
+                // Signed in, ChatGPT translates, and the server set here only when it can't.
+                if (chatGpt) CHATGPT else server?.url?.substringAfter("://") ?: MYMEMORY,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
@@ -503,6 +504,7 @@ private fun ChatGptWelcome(onDismiss: () -> Unit) {
 
 /** The translation service used when no server is set; a name, so never translated. */
 private const val MYMEMORY = "MyMemory"
+private const val CHATGPT = "ChatGPT"
 
 /** Marks where the heart icon goes in [R.string.made_with_love]. */
 internal const val HEART = "\uFFFC"

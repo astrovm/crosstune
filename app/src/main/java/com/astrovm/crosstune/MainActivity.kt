@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
         viewModelFactory {
             initializer {
                 val client = httpClientFactory()
+                // Left out of backups, so the tokens never leave the phone.
+                val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 val playback = playbackFactory(applicationContext)
@@ -90,8 +92,9 @@ class MainActivity : ComponentActivity() {
                     // Each line translated is kept, so a song read again needs no translating.
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
                     translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
-                    // Left out of backups, so the tokens never leave the phone.
-                    chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
+                    chatGpt = chatGpt,
+                    // What ChatGPT said is kept, so a song read again asks nothing.
+                    tutor = ChatGptTutor(chatGpt, LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000))
                 )
             }
         }
@@ -303,6 +306,7 @@ class MainActivity : ComponentActivity() {
                         onToggleSavedLine = viewModel::toggleSavedLine,
                         onRemoveSavedLine = viewModel::removeSavedLine,
                         onLookUpWord = viewModel::lookUpWord,
+                        onExplainLine = viewModel::explainLine,
                         onDismissWord = viewModel::dismissWord,
                         onRepeatLine = viewModel::repeatLine,
                         onStopRepeating = viewModel::stopRepeating,

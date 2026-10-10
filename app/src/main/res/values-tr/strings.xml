@@ -278,6 +278,9 @@
     <string name="translation_server_description">MyMemory için boş bırak, günde birkaç şarkı ücretsiz.</string>
     <string name="translation_server_invalid">https://libretranslate.com gibi bir web adresi gir</string>
     <string name="lyrics_study_line">Bu satırı çalış</string>
+    <string name="lyrics_explain_line">Bu satırı açıkla</string>
+    <string name="lyrics_explain_failed">Bu satır açıklanamadı.</string>
+    <string name="chatgpt_limit_reached">ChatGPT planın şimdilik doldu.</string>
     <string name="lyrics_repeat_line">Bu satırı tekrarla</string>
     <string name="lyrics_stop_repeating">Tekrarı durdur</string>
     <string name="lyrics_save_line">Satırı kaydet</string>

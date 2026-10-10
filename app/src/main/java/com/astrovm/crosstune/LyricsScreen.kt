@@ -71,6 +71,8 @@ import androidx.compose.foundation.clickable
 import android.app.Activity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.animation.animateContentSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -990,14 +992,27 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // over the kanji, as in the lyrics.
             val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
             if (parts != null) {
-                TappableRubyLine(parts, words, state.word?.word, actions.onLookUpWord)
+                TappableRubyLine(parts, words, state.word?.word) { actions.onLookUpWord(it, index) }
             } else {
-                TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+                TappableLine(text.ifBlank { "♪" }, words, state.word?.word) { actions.onLookUpWord(it, index) }
             }
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) WordCard(meaning)
+            }
+            // Signed in with ChatGPT, it can explain the line.
+            if (state.chatGpt.email != null) {
+                val explanation = learning.explanation?.takeIf { it.index == index }
+                if (explanation != null && !explanation.failed) {
+                    ExplanationCard(explanation)
+                } else {
+                    explanation?.let { Text(stringResource(R.string.lyrics_explain_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                    OutlinedButton(onClick = { actions.onExplainLine(index) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.lyrics_explain_line), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
             }
             // Side by side, as wide and as tall as each other, however long their words are.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp).height(IntrinsicSize.Min)) {
@@ -1116,6 +1131,26 @@ private fun WordCard(meaning: WordMeaning) {
     }
 }
 
+/** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */
+@Composable
+private fun ExplanationCard(explanation: LineExplanation) {
+    val uriHandler = LocalUriHandler.current
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            when {
+                explanation.limitReached -> {
+                    Text(stringResource(R.string.chatgpt_limit_reached), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { uriHandler.openUri(ChatGpt.USAGE_URL) }, modifier = Modifier.align(Alignment.End)) {
+                        Text(stringResource(R.string.chatgpt_manage_usage))
+                    }
+                }
+                explanation.text.isEmpty() -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                else -> Text(explanation.text, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable
 private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: () -> Unit) {
@@ -1140,6 +1175,7 @@ private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: (
                                 Text(line.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 line.translation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
+                                line.explanation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
                                 Text(
                                     line.title,
                                     style = MaterialTheme.typography.labelMedium,
