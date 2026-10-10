@@ -79,6 +79,8 @@ internal data class UiState(
     val lyricsFailed: Boolean = false,
     /** The words with when each is sung, so they can follow the song; empty when they aren't timed. */
     val lyricLines: List<LyricLine> = emptyList(),
+    /** Whether the user put any of [lyricLines] in time by hand. */
+    val lyricsSynced: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
     val following: Following? = null,
     /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
@@ -319,6 +321,11 @@ internal class MainViewModel(
 
     private val historyStore = HistoryStore(preferences)
     private val savedLinesStore = SavedLinesStore(preferences)
+    private val syncStore = LyricsSyncStore(preferences)
+
+    /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
+    private var foundLines: List<LyricLine> = emptyList()
+    private var syncPoints: List<SyncPoint> = emptyList()
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
     init {
@@ -1018,16 +1025,22 @@ internal class MainViewModel(
         lyricsJob?.cancel()
         stopLearning()
         stopFollowing()
+        foundLines = emptyList()
+        syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
             uiState = uiState.copy(
-                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
+                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
                 // A lookup that failed says so, rather than claiming the song has no words.
                 when (val answer = finder.lyricsOf(song)) {
                     is LyricsFinder.Lyrics.Found -> {
-                        uiState = uiState.copy(lyrics = answer.words, lyricLines = answer.lines, lyricsFailed = false)
+                        foundLines = answer.lines
+                        syncPoints = syncStore.load(song, answer.lines)
+                        uiState = uiState.copy(
+                            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false
+                        )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
                         learn()
                     }
@@ -1308,6 +1321,28 @@ internal class MainViewModel(
         playback?.seekTo(song, inApp(positionMs))
     }
 
+    /**
+     * Line [index] is being sung right now, the user says: it's put there, and the lines around it
+     * move with it. Only while something says where the song is.
+     */
+    fun syncLine(index: Int) {
+        val song = uiState.lyricsFor ?: return
+        val line = foundLines.getOrNull(index) ?: return
+        val position = uiState.following?.clock?.positionAt(now()) ?: return
+        setSync(song, LyricsSync.with(syncPoints, SyncPoint(line.timeMs, position.coerceAtLeast(0L))))
+    }
+
+    /** The words back in time as they were found. */
+    fun resetSync() {
+        setSync(uiState.lyricsFor ?: return, emptyList())
+    }
+
+    private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
+        syncPoints = points
+        syncStore.save(song, foundLines, points)
+        uiState = uiState.copy(lyricLines = LyricsSync.adjust(foundLines, points), lyricsSynced = points.isNotEmpty())
+    }
+
     /** Closes the words. The next song starts without them, rather than showing the last one's. */
     fun dismissLyrics() {
         lyricsJob?.cancel()
@@ -1317,7 +1352,7 @@ internal class MainViewModel(
         stopListeningAlong()
         askedForAccess = false
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
             learning = uiState.learning.fresh()
         )
     }

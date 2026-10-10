@@ -67,15 +67,17 @@ class MainActivity : ComponentActivity() {
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 val playback = playbackFactory(applicationContext)
+                // What was found for songs is kept, so a playlist played again needs no lookups.
+                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis)
                 MainViewModel(
                     LinkResolver(client, apis = apis),
-                    // What was found for songs is kept, so a playlist played again needs no lookups.
-                    ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis),
+                    matcher,
                     LyricsFinder(
                         client,
                         packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                         busyPauseMs = lyricsBusyPauseMs,
-                        cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300)
+                        cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300),
+                        youTubeMusicSong = { song -> matcher.find(MusicService.YOUTUBE_MUSIC, song)?.substringAfter("watch?v=", "")?.ifEmpty { null } }
                     ),
                     SongSearcher(client),
                     playback,
@@ -288,6 +290,8 @@ class MainActivity : ComponentActivity() {
                         onDismissPicker = viewModel::dismissDestinationPicker,
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
+                        onSyncLine = viewModel::syncLine,
+                        onResetSync = viewModel::resetSync,
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
                         onTranslationChange = viewModel::setTranslation,

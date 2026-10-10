@@ -271,7 +271,10 @@ internal class ExactMatcher(
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
         // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
         val artists = SongNames.artists(metadata.artist)
-        return searchDeezer(metadata.copy(type = ItemType.TRACK)).firstOrNull { result ->
+        // Searched for without its edition tag too: Deezer finds nothing for "Song (2018 Remix) (2024
+        // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
+        val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
+        return searchDeezer(searched).firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("title")))
             val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }

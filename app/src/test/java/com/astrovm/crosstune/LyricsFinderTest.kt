@@ -510,4 +510,120 @@ class LyricsFinderTest {
         assertEquals(1, fake.requestedUrls.size)
     }
 
+
+    /** YouTube Music's lyrics page: [lines] as text to start time, or untimed where the time is null. */
+    private fun youTubeMusicPage(vararg lines: Pair<String, Long?>): String {
+        val data = lines.joinToString(",") { (text, start) ->
+            val cue = start?.let { ""","cueRange":{"startTimeMilliseconds":"$it","endTimeMilliseconds":"0"}""" }.orEmpty()
+            """{"lyricLine":${quote(text)}$cue}"""
+        }
+        return """{"contents":{"elementRenderer":{"newElement":{"type":{"componentType":{"model":{"timedLyricsModel":{"lyricsData":{"timedLyricsData":[$data]}}}}}}}}}"""
+    }
+
+    /** LRCLIB answers [lrclib]; YouTube Music has the song with [page] for its words; nothing else has it. */
+    private fun everywhere(lrclib: String, page: String?, next: String = """{"tabs":[{"browseEndpoint":{"browseId":"MPLYt_words"}}]}""") {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, lrclib)
+                url.encodedPath == "/youtubei/v1/next" -> FakeSpotify.html(request, next)
+                url.encodedPath == "/youtubei/v1/browse" -> page?.let { FakeSpotify.html(request, it) } ?: throw IOException("offline")
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private fun withYouTubeMusic(videoId: String? = "vid1") =
+        LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, youTubeMusicSong = { videoId })
+
+    private val song = MusicMetadata("Song", "Band")
+    private val timedOnLrclib = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:10.00] Second")
+
+    @Test
+    fun youTubeMusicsTimedWordsWin() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("♪" to 0, "Erste" to 12_000, "Zweite" to 15_500))
+        assertEquals(
+            // The note at the start is a pause, as it's long enough.
+            Lyrics.Found("Erste\nZweite", listOf(LyricLine(0, ""), LyricLine(12_000, "Erste"), LyricLine(15_500, "Zweite"))),
+            runBlocking { withYouTubeMusic().lyricsOf(song) }
+        )
+        // The song's page is asked for by its video, and the words as YouTube Music's app, which gets them timed.
+        val next = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/next") }]
+        assertEquals(true, next.contains(""""videoId":"vid1"""") && next.contains("WEB_REMIX"))
+        val browse = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/browse") }]
+        assertEquals(true, browse.contains(""""browseId":"MPLYt_words"""") && browse.contains("ANDROID_MUSIC"))
+    }
+
+    @Test
+    fun youTubeMusicsUntimedWordsGiveWayToTimedOnes() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to null, "Zweite" to null))
+        assertEquals(Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second"))), runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // With none elsewhere, they're the words.
+        everywhere("[]", youTubeMusicPage("Erste" to null, "♪" to null, "Zweite" to null))
+        assertEquals(Lyrics.Found("Erste\nZweite"), runBlocking { withYouTubeMusic().lyricsOf(song) })
+    }
+
+    @Test
+    fun wordsTimedBadlyGiveWayToWordsTimedWell() {
+        // Two lines of eight syllables each, in about half a second.
+        val rushed = answer(
+            "Song", "Band", "",
+            synced = "[00:43.48] 金色のブレス\n[00:44.64] きらめいたピアス\n[00:45.20] Ah ブローした髪を\n[02:14.35] たそがれのワイン\n[02:14.99] Ah 振りまわす恋を\n[02:22.20] 楽しんで 罪さ"
+        )
+        everywhere("[$rushed]", youTubeMusicPage("街角のテレフォン" to 24_520, "流し目の彼女" to 28_160))
+        assertEquals(listOf(LyricLine(24_520, "街角のテレフォン"), LyricLine(28_160, "流し目の彼女")), (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).lines)
+        // Still timed, they beat untimed words: they mostly follow the song, and can be put in time by hand.
+        everywhere("[$rushed]", youTubeMusicPage("街角のテレフォン" to null))
+        assertEquals(6, (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).lines.size)
+        // Timed badly, LRCLIB's words don't stop other places from being asked for timed ones.
+        everywhere("[$rushed]", null)
+        runBlocking { withYouTubeMusic().lyricsOf(song) }
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/search/get") })
+    }
+
+    @Test
+    fun withoutYouTubeMusicsWordsTheOthersStillCount() {
+        val lrclibWords = Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")))
+        // Not on YouTube Music.
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to 1))
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic(videoId = null).lyricsOf(song) })
+        // On it, but with no lyrics page, or a page that says there are none.
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to 1), next = "{}")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", """{"contents":{"elementRenderer":{"newElement":{"type":{"componentType":{"model":{"musicMessageModel":{"text":"Lyrics not available"}}}}}}}}""")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("♪" to 0))
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Offline, an error, or something that isn't JSON.
+        everywhere("[$timedOnLrclib]", null)
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", "not json")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}", code = 500) else FakeSpotify.html(request, "[$timedOnLrclib]")
+        }
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Nowhere has them: none, and none either when YouTube Music has none but LRCLIB won't answer.
+        everywhere("[]", null, next = "{}")
+        assertEquals(Lyrics.None, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}") else FakeSpotify.html(request, "busy", code = 503)
+        }
+        assertEquals(Lyrics.None, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Nothing answers at all.
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertEquals(Lyrics.Unavailable, runBlocking { withYouTubeMusic().lyricsOf(song) })
+    }
+
+    @Test
+    fun wordsKeptBeforeYouTubeMusicWasAskedAreAskedAgain() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val old = """{"words":"Old words","lines":[[1000,"Old words"]]}"""
+        runBlocking { cache.put("${SongNames.normalize("Song")}\u0000${SongNames.normalize("Band")}", old) }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+        respond("[$timedOnLrclib]")
+        assertEquals("First\nSecond", (runBlocking { kept.lyricsOf(song) } as Lyrics.Found).words)
+    }
 }

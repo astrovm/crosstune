@@ -3,12 +3,16 @@ package com.astrovm.crosstune
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
@@ -44,7 +48,9 @@ internal class LyricsFinder(
      * What songs' words were, so a song shown again needs no lookup. Only words found are kept: a
      * song without any is asked about again, since the places with words keep getting more.
      */
-    private val cache: LookupCache? = null
+    private val cache: LookupCache? = null,
+    /** The song's video id on YouTube Music, whose own words come timed for it; null when it isn't there. */
+    private val youTubeMusicSong: (suspend (MusicMetadata) -> String?)? = null
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
@@ -59,17 +65,18 @@ internal class LyricsFinder(
     }
 
     /**
-     * What there is to show for [metadata]'s song: LRCLIB's words first. A song from Japan, say, is
-     * often there under its own names, not the ones in Latin letters a music app shows, so those are
-     * asked for too, and NetEase, which has many more such songs, last. Words found anywhere win;
-     * otherwise "none" from any of them is believed over one that wouldn't answer.
+     * What there is to show for [metadata]'s song: YouTube Music's own words, which come from the
+     * labels' lyrics services and are timed for the song as released, beside LRCLIB's. A song from
+     * Japan, say, is often on LRCLIB under its own names, not the ones in Latin letters a music app
+     * shows, so those are asked for too, and NetEase, which has many more such songs, last. Words
+     * found anywhere win; otherwise "none" from any of them is believed over one that wouldn't answer.
      */
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
         val key = cacheKey(metadata)
         cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
-        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { anywhere(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        val answer = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(key, it) }
             cache.save()
@@ -77,8 +84,30 @@ internal class LyricsFinder(
         return answer
     }
 
-    /** The song, whatever the case or spacing of its name. */
-    private fun cacheKey(metadata: MusicMetadata) = "${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+    /**
+     * The song, whatever the case or spacing of its name. Words kept by versions that didn't ask
+     * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
+     */
+    private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+
+    /** YouTube Music's words and those from everywhere else, asked for at once; the better of them. */
+    private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = coroutineScope {
+        val official = async { fromYouTubeMusic(metadata, timeoutMs) }
+        val elsewhere = anywhere(metadata, timeoutMs)
+        better(official.await(), elsewhere)
+    }
+
+    /**
+     * Words found over none, the better timed of two, and [first] among equals; with no words,
+     * "none" over one that wouldn't answer.
+     */
+    private fun better(first: Lyrics, second: Lyrics): Lyrics = when {
+        first is Lyrics.Found && second is Lyrics.Found -> if (timing(second) > timing(first)) second else first
+        first is Lyrics.Found -> first
+        second is Lyrics.Found -> second
+        first is Lyrics.None || second is Lyrics.None -> Lyrics.None
+        else -> Lyrics.Unavailable
+    }
 
     /** Words as kept: the plain words and each timed line. */
     private fun toCache(answer: Lyrics): String? = (answer as? Lyrics.Found)?.let { found ->
@@ -120,12 +149,13 @@ internal class LyricsFinder(
     private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         val first = fromLrclib(metadata, timeoutMs)
         val romaji = first is Lyrics.Found && isRomaji(first.words)
-        val untimed = first is Lyrics.Found && first.lines.isEmpty()
+        // Words timed badly are no better than untimed ones: both give way to words timed well.
+        val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
         if (first is Lyrics.Found && !romaji && !untimed) return first
         val answers = mutableListOf(first)
         // Romaji is only bettered by words in Japanese, and untimed words by timed ones.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
-            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || it.lines.isNotEmpty())
+            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) == WELL_TIMED)
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
@@ -135,8 +165,43 @@ internal class LyricsFinder(
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
         if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
         if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
-        if (first is Lyrics.Found) return first
-        return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
+        // None better: the best timed of what was found, the first among equals, e.g. words timed
+        // badly over untimed ones, as they still mostly follow the song and can be put in time by hand.
+        return answers.reduce(::better)
+    }
+
+    /**
+     * YouTube Music's words for the song, from the page its app shows them on. They come timed when
+     * its lyrics service has them so, and are otherwise the words alone.
+     */
+    private suspend fun fromYouTubeMusic(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+        val find = youTubeMusicSong ?: return Lyrics.Unavailable
+        return withTimeoutOrNull(timeoutMs) {
+            try {
+                val videoId = find(metadata) ?: return@withTimeoutOrNull Lyrics.None
+                val watching = post(YOUTUBE_MUSIC_NEXT_URL, innertube(WEB_CLIENT, WEB_CLIENT_VERSION).put("videoId", videoId))
+                // A song without words has no page for them.
+                val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull Lyrics.None
+                // Only YouTube Music's app is given them timed.
+                val lyrics = JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page)))
+                youTubeMusicWords(lyrics) ?: Lyrics.None
+            } catch (_: IOException) {
+                Lyrics.Unavailable
+            } catch (_: JSONException) {
+                Lyrics.Unavailable
+            }
+        } ?: Lyrics.Unavailable
+    }
+
+    private fun innertube(name: String, version: String) =
+        JSONObject().put("context", JSONObject().put("client", JSONObject().put("clientName", name).put("clientVersion", version).put("hl", "en")))
+
+    private suspend fun post(url: String, body: JSONObject): String {
+        val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        return client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) throw IOException("YouTube Music returned ${response.code}")
+            withContext(ioDispatcher) { response.body.stringAtMost() }
+        }
     }
 
     /**
@@ -268,6 +333,22 @@ internal class LyricsFinder(
         }
     } ?: Lyrics.Unavailable
 
+    /**
+     * The words on YouTube Music's lyrics page, each line with when it starts if they're timed; a
+     * note, "♪", where nothing is sung. Null when the page has none, e.g. "Lyrics not available".
+     */
+    private fun youTubeMusicWords(page: JSONObject): Lyrics.Found? {
+        val data = page.optJSONObject("contents")?.optJSONObject("elementRenderer")?.optJSONObject("newElement")?.optJSONObject("type")
+            ?.optJSONObject("componentType")?.optJSONObject("model")?.optJSONObject("timedLyricsModel")?.optJSONObject("lyricsData")
+            ?.optJSONArray("timedLyricsData") ?: return null
+        val all = (0 until data.length()).mapNotNull { data.optJSONObject(it) }
+        val texts = all.map { line -> line.optString("lyricLine").trim().takeUnless { it == "♪" }.orEmpty() }
+        val words = texts.filter { it.isNotEmpty() }.joinToString("\n").ifEmpty { return null }
+        val starts = all.map { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds")?.toLongOrNull() }
+        if (starts.any { it == null }) return Lyrics.Found(words)
+        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }))
+    }
+
     /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
     private fun netEaseWords(lrc: String): Lyrics.Found? {
         val stamped = SyncedLyrics.parse(lrc)
@@ -355,6 +436,15 @@ internal class LyricsFinder(
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
+        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
+        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
+        const val WEB_CLIENT = "WEB_REMIX"
+        const val WEB_CLIENT_VERSION = "1.20240101.01.00"
+        const val APP_CLIENT = "ANDROID_MUSIC"
+        const val APP_CLIENT_VERSION = "7.21.50"
+
+        /** Bumped when words kept from before should be looked up again. */
+        const val CACHE_VERSION = 2
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
@@ -365,6 +455,21 @@ internal class LyricsFinder(
 /** Whether any of it is written in Latin letters. */
 private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
+}
+
+/** The page YouTube Music shows a song's words on, by its id. */
+private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")
+
+/** How well words are timed: well, so they follow the song; badly; or not at all. */
+private const val WELL_TIMED = 2
+
+private fun timing(answer: LyricsFinder.Lyrics): Int {
+    val lines = (answer as? LyricsFinder.Lyrics.Found)?.lines.orEmpty()
+    return when {
+        lines.isEmpty() -> 0
+        SyncedLyrics.rushed(lines) -> 1
+        else -> WELL_TIMED
+    }
 }
 
 /** Whether any of it is written in Japanese: kana, or the kanji Japanese shares with Chinese. */

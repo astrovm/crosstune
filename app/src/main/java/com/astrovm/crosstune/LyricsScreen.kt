@@ -157,6 +157,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val timedList = rememberSaveable(song, saver = LazyListState.Saver) { LazyListState() }
     // Only the visuals, full screen, until a tap or Back brings the words back.
     var visualsOnly by rememberSaveable { mutableStateOf(false) }
+    // Putting the words in time: a line tapped is the one being sung. Only while something says where the song is.
+    var syncingAsked by rememberSaveable(song) { mutableStateOf(false) }
+    val syncing = syncingAsked && state.lyricLines.isNotEmpty() && state.following != null
+    BackHandler(enabled = syncing) { syncingAsked = false }
     val onlyVisuals = visualsOnly && state.visuals
     BackHandler(enabled = onlyVisuals) { visualsOnly = false }
     val tint by animateColorAsState(
@@ -221,6 +225,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             ) {
                 FollowOffer(actions, onDismiss = { followOffered = false })
             }
+            AnimatedVisibility(visible = syncing) {
+                SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
+            }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -235,7 +242,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     } else if (shown == LyricsShown.NONE) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
-                        TimedLyrics(state, actions, timedList, onStudy = { studying = it })
+                        TimedLyrics(state, actions, timedList, syncing, onStudy = { studying = it })
                     } else if (state.learning.shows) {
                         // Read line by line, each with what helps read it.
                         LyricLines(state, onStudy = { studying = it })
@@ -251,7 +258,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             exit = slideOutVertically { it * 2 } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
         ) {
-            LyricsActions(state, actions, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true })
+            LyricsActions(
+                state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
+                onSync = { syncingAsked = !syncing }
+            )
         }
     }
     }
@@ -350,7 +360,15 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions) {
  * them, the visuals, floating them, and what they follow.
  */
 @Composable
-private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onOnlyVisuals: () -> Unit, modifier: Modifier = Modifier) {
+private fun LyricsActions(
+    state: UiState,
+    actions: ScreenActions,
+    syncing: Boolean,
+    onOpenSaved: () -> Unit,
+    onOnlyVisuals: () -> Unit,
+    onSync: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
     Box(modifier = modifier) {
         Surface(
@@ -366,6 +384,10 @@ private fun LyricsActions(state: UiState, actions: ScreenActions, onOpenSaved: (
                 // Floating shows the line being sung, which only timed words have.
                 if (state.lyricLines.isNotEmpty()) {
                     IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+                }
+                // Putting the words in time needs to know where the song is.
+                if (state.lyricLines.isNotEmpty() && state.following != null) {
+                    LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
                 }
                 SyncSource(state, actions)
             }
@@ -524,17 +546,17 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
 
 /** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
 @Composable
-private fun VisualsButton(on: Boolean, onClick: () -> Unit) {
-    val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "visuals background")
-    val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "visuals tint")
-    IconButton(onClick = onClick) {
+private fun VisualsButton(on: Boolean, onClick: () -> Unit) =
+    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
+
+/** A button in the bar, lit while what it does is on. */
+@Composable
+private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -> Unit) {
+    val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "button background")
+    val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "button tint")
+    IconButton(onClick = onClick, modifier = Modifier.semantics { selected = on }) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
-            Icon(
-                painterResource(R.drawable.ic_visuals),
-                contentDescription = stringResource(if (on) R.string.visuals_options else R.string.visuals_show),
-                tint = tint,
-                modifier = Modifier.size(22.dp)
-            )
+            Icon(painterResource(icon), contentDescription = description, tint = tint, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -665,7 +687,7 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): In
  * the music app there when it can.
  */
 @Composable
-private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListState, onStudy: (Int) -> Unit) {
+private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListState, syncing: Boolean, onStudy: (Int) -> Unit) {
     val lines = state.lyricLines
     val following = state.following
     val active = rememberSungLine(lines, following)
@@ -685,8 +707,13 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListSt
                 place = following?.let { index.compareTo(active) },
                 // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
                 waiting = active < 0,
-                // Tapping a line moves the music app there, when it can.
-                onSeek = if (following?.canSeek == true) ({ actions.onSeekLyrics(line.timeMs) }) else null,
+                // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
+                onSeek = when {
+                    syncing -> ({ actions.onSyncLine(index) })
+                    following?.canSeek == true -> ({ actions.onSeekLyrics(line.timeMs) })
+                    else -> null
+                },
+                seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
                 help = state.learning.helpFor(index)
             )
@@ -716,6 +743,26 @@ internal fun Learning.helpFor(index: Int): LineHelp? {
     return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation })
 }
 
+/**
+ * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
+ * Reset puts them back as they were found, once any line was moved.
+ */
+@Composable
+private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
+            IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
+        }
+    }
+}
+
 /** A strip over the words: they can follow the music app playing the song, once it's allowed. */
 @Composable
 private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
@@ -738,7 +785,15 @@ private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
  * null while nothing says where the song is, when every line reads alike, calmer, as a page.
  */
 @Composable
-private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, onStudy: () -> Unit, help: LineHelp? = null, waiting: Boolean = false) {
+private fun LyricLineText(
+    text: String,
+    place: Int?,
+    onSeek: (() -> Unit)?,
+    onStudy: () -> Unit,
+    help: LineHelp? = null,
+    waiting: Boolean = false,
+    seekLabel: Int = R.string.lyrics_jump
+) {
     val lit = place == 0
     val alpha by animateFloatAsState(
         if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
@@ -767,13 +822,13 @@ private fun LyricLineText(text: String, place: Int?, onSeek: (() -> Unit)?, onSt
             .then(
                 if (text.isNotBlank()) {
                     Modifier.combinedClickable(
-                        onClickLabel = stringResource(if (onSeek != null) R.string.lyrics_jump else R.string.lyrics_study_line),
+                        onClickLabel = stringResource(if (onSeek != null) seekLabel else R.string.lyrics_study_line),
                         onClick = onSeek ?: onStudy,
                         onLongClickLabel = stringResource(R.string.lyrics_study_line),
                         onLongClick = onStudy
                     )
                 } else {
-                    onSeek?.let { Modifier.clickable(onClickLabel = stringResource(R.string.lyrics_jump), onClick = it) } ?: Modifier
+                    onSeek?.let { Modifier.clickable(onClickLabel = stringResource(seekLabel), onClick = it) } ?: Modifier
                 }
             )
             .padding(vertical = 6.dp)

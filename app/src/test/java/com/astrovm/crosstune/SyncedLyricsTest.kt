@@ -62,4 +62,36 @@ class SyncedLyricsTest {
         assertEquals(13_000, playing.positionAt(3_000))
         assertEquals(10_000, playing.copy(playing = false).positionAt(3_000))
     }
+
+    @Test
+    fun wordsTimedFasterThanAnyoneSingsAreRushed() {
+        // Timed by guesswork: two lines of eight syllables each gone in about half a second.
+        val guessed = listOf(
+            LyricLine(43_480, "金色のブレス"),
+            LyricLine(44_640, "きらめいたピアス"),
+            LyricLine(45_200, "Ah　ブローした髪を"),
+            LyricLine(134_350, "たそがれのワイン"),
+            LyricLine(134_990, "Ah　振りまわす恋を"),
+            LyricLine(142_200, "楽しんで　罪さ")
+        )
+        assertEquals(true, SyncedLyrics.rushed(guessed))
+        // One such line can be a slip.
+        assertEquals(false, SyncedLyrics.rushed(guessed.take(3)))
+        // Fast rap, eleven words a second, is still sung.
+        val rap = listOf(
+            LyricLine(179_400, "I don't wanna hurt 'em, but I did, I'm in a fit of rage"),
+            LyricLine(180_620, "I got a trailer full of money and I'm paid in full"),
+            LyricLine(181_670, "Murder, murder, murder")
+        )
+        assertEquals(false, SyncedLyrics.rushed(rap))
+        // The same lines sung faster than twelve words a second, twice, are rushed.
+        val tooFast = listOf(LyricLine(0, rap[0].text), LyricLine(1_000, rap[1].text), LyricLine(1_900, "End"))
+        assertEquals(true, SyncedLyrics.rushed(tooFast))
+        // Short calls, "Oh, yeah", can go by in a moment.
+        val calls = listOf(LyricLine(0, "Oh, yeah"), LyricLine(100, "Hey hey"), LyricLine(200, "Oh, yeah"), LyricLine(300, "Ho"))
+        assertEquals(false, SyncedLyrics.rushed(calls))
+        // Korean and Chinese count by syllable too.
+        assertEquals(true, SyncedLyrics.rushed(listOf(LyricLine(0, "사랑해요 정말로"), LyricLine(300, "我爱你中国人"), LyricLine(600, "끝"))))
+        assertEquals(false, SyncedLyrics.rushed(emptyList()))
+    }
 }

@@ -127,6 +127,11 @@
     <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
     <string name="lyrics_following_app">Following %1$s</string>
     <string name="lyrics_jump">Jump here</string>
+    <string name="lyrics_sync">Fix the timing</string>
+    <string name="lyrics_sync_hint">Tap the line you hear now</string>
+    <string name="lyrics_sync_line">Sung now</string>
+    <string name="lyrics_sync_reset">Reset</string>
+    <string name="lyrics_sync_done">Done</string>
     <string name="lyrics_listen_along">Listen along</string>
     <string name="lyrics_stop_listening">Stop listening</string>
     <string name="visuals_show">Show visuals</string>

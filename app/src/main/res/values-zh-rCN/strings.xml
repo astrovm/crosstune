@@ -192,6 +192,11 @@
     <string name="lyrics_follow_allow">让歌词跟随音乐应用中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟随 %1$s</string>
     <string name="lyrics_jump">跳到这里</string>
+    <string name="lyrics_sync">校准时间</string>
+    <string name="lyrics_sync_hint">点按你现在听到的那一行</string>
+    <string name="lyrics_sync_line">正在唱</string>
+    <string name="lyrics_sync_reset">重置</string>
+    <string name="lyrics_sync_done">完成</string>
     <string name="lyrics_listen_along">一起听</string>
     <string name="lyrics_stop_listening">停止收听</string>
     <string name="visuals_show">显示视觉效果</string>

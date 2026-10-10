@@ -192,6 +192,11 @@
     <string name="lyrics_follow_allow">Deixe a letra acompanhar a música tocando no seu app de música.</string>
     <string name="lyrics_following_app">Acompanhando %1$s</string>
     <string name="lyrics_jump">Ir para aqui</string>
+    <string name="lyrics_sync">Ajustar o tempo</string>
+    <string name="lyrics_sync_hint">Toque na linha que você ouve agora</string>
+    <string name="lyrics_sync_line">Tocando agora</string>
+    <string name="lyrics_sync_reset">Redefinir</string>
+    <string name="lyrics_sync_done">Concluído</string>
     <string name="lyrics_listen_along">Ouvir junto</string>
     <string name="lyrics_stop_listening">Parar de ouvir</string>
     <string name="visuals_show">Mostrar visuais</string>

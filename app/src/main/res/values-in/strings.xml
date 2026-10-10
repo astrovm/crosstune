@@ -192,6 +192,11 @@
     <string name="lyrics_follow_allow">Biarkan lirik mengikuti lagu yang diputar di aplikasi musikmu.</string>
     <string name="lyrics_following_app">Mengikuti %1$s</string>
     <string name="lyrics_jump">Lompat ke sini</string>
+    <string name="lyrics_sync">Perbaiki waktu</string>
+    <string name="lyrics_sync_hint">Ketuk baris yang kamu dengar sekarang</string>
+    <string name="lyrics_sync_line">Dinyanyikan sekarang</string>
+    <string name="lyrics_sync_reset">Atur ulang</string>
+    <string name="lyrics_sync_done">Selesai</string>
     <string name="lyrics_listen_along">Dengarkan bersama</string>
     <string name="lyrics_stop_listening">Berhenti mendengarkan</string>
     <string name="visuals_show">Tampilkan visual</string>

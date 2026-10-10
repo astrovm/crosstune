@@ -194,6 +194,10 @@ internal data class ScreenActions(
     val onStopListeningAlong: () -> Unit = {},
     /** Moves the music app playing the song to where a line of its words is sung. */
     val onSeekLyrics: (Long) -> Unit = {},
+    /** The line of the timed words being sung right now, as the user taps it, to put the words in time. */
+    val onSyncLine: (Int) -> Unit = {},
+    /** The words back in time as they were found. */
+    val onResetSync: () -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onTranslationChange: (Boolean) -> Unit = {},
