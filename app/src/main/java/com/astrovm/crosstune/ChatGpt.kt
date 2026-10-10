@@ -94,7 +94,8 @@ internal class ChatGpt(
         offered?.let { return it }
         val token = accessToken() ?: return null
         return try {
-            fetchModels(token)?.also { offered = it }
+            // None listed is kept no more than an error is: it's asked again next time.
+            fetchModels(token)?.also { if (it.isNotEmpty()) offered = it }
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {
