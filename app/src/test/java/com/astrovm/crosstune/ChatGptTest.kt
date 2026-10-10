@@ -564,4 +564,18 @@ class ChatGptTest {
         assertEquals(ChatGptReply.Failed, runBlocking { tutor.explain(song, listOf("Line"), 0, "es") {} })
         assertFalse(openAi.asked.last().has("tools"))
     }
+
+    @Test
+    fun aLineIsTranslatedForTheSongItsIn() {
+        val tutor = tutor()
+        val one = MusicMetadata("November Blue", "S.Kiyotaka & Omega Tribe")
+        answering("[\"Too vivid\"]")
+        assertEquals(listOf("Too vivid"), runBlocking { tutor.translate(listOf("鮮やかすぎる"), "en", one) })
+        // The same line in another song is translated in that song.
+        answering("[\"So bright\"]")
+        assertEquals(listOf("So bright"), runBlocking { tutor.translate(listOf("鮮やかすぎる"), "en", one.copy(title = "Asphalt Lady")) })
+        // And kept for each.
+        assertEquals(listOf("Too vivid"), runBlocking { tutor.translate(listOf("鮮やかすぎる"), "en", one) })
+        assertEquals(2, openAi.asked.size)
+    }
 }
