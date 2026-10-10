@@ -262,7 +262,10 @@ internal data class ChatGptState(
     /** How the last sign-in ended when it didn't. */
     val problem: ChatGptSignInResult? = null,
     /** Set after the first sign-in, to say the AI features now use the user's plan. */
-    val welcome: Boolean = false
+    val welcome: Boolean = false,
+    /** The models the account offers, and the one asked. */
+    val models: List<ChatGptModel> = emptyList(),
+    val model: String? = null
 )
 
 /** Line [index] explained by ChatGPT: [text] so far, until [done]; or why it couldn't be. */
@@ -422,10 +425,12 @@ internal class MainViewModel(
 
     init {
         chatGpt?.let { account ->
+            account.picked = preferences.getString(KEY_CHATGPT_MODEL, null)
             viewModelScope.launch {
                 // Read before the state is, which may change while the account's read.
                 val email = account.email() ?: return@launch
                 uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(email = email))
+                loadModels(account)
             }
         }
     }
@@ -445,6 +450,7 @@ internal class MainViewModel(
                 // Said once, the first time the plan's used.
                 val welcome = signedIn && !preferences.getBoolean(KEY_CHATGPT_WELCOMED, false)
                 uiState = uiState.copy(chatGpt = ChatGptState(email = email, problem = result.takeUnless { signedIn }, welcome = welcome))
+                if (signedIn) loadModels(account)
             } finally {
                 // Unless another sign-in took over, which still needs Crosstune kept running.
                 if (chatGptJob === coroutineContext[Job]) done()
@@ -461,6 +467,27 @@ internal class MainViewModel(
     fun dismissChatGptWelcome() {
         preferences.edit { putBoolean(KEY_CHATGPT_WELCOMED, true) }
         uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(welcome = false))
+    }
+
+    /** The models [account] offers to pick from in Settings, and the one asked. */
+    private suspend fun loadModels(account: ChatGpt) {
+        val models = account.models() ?: return
+        val model = account.model()
+        uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(models = models, model = model))
+    }
+
+    /** Asks [slug] from now on: the words are translated again, and lines explained again, by it. */
+    fun pickChatGptModel(slug: String) {
+        val account = chatGpt ?: return
+        preferences.edit { putString(KEY_CHATGPT_MODEL, slug) }
+        account.picked = slug
+        translationJob?.cancel()
+        explanationJob?.cancel()
+        uiState = uiState.copy(
+            chatGpt = uiState.chatGpt.copy(model = slug),
+            learning = uiState.learning.copy(translations = emptyList(), translating = false, translationFailed = false, explanation = null)
+        )
+        learn()
     }
 
     fun signOutOfChatGpt() {
@@ -2044,6 +2071,7 @@ internal class MainViewModel(
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
+        private const val KEY_CHATGPT_MODEL = "chatgpt_model"
         private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
