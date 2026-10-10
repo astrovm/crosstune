@@ -13,7 +13,7 @@
   "download": "Download untuk Android",
   "note": "Gratis, open source, dan tanpa iklan.",
   "alt_home": "Tautan siap dibuka di YouTube Music, lalu lagu-lagu dalam playlist",
-  "alt_lyrics": "Lirik yang mengikuti lagu, dengan huruf Latin dan terjemahan, lalu melayang di atas layar utama",
+  "alt_lyrics": "Lirik yang mengikuti lagu, dengan huruf Latin dan terjemahan, lalu dengan visual MilkDrop di belakangnya, lalu mengambang di atas layar utama",
   "how_h2": "Cara kerjanya",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Privat",
       "Tanpa akun, tanpa pelacakan. Riwayat tetap di ponselmu."
+    ],
+    [
+      "Visual MilkDrop",
+      "Di balik lirik, mengikuti irama yang diputar ponselmu."
+    ],
+    [
+      "Widget",
+      "Lagu terbaru dan tindakan cepat di layar utama."
+    ],
+    [
+      "Link bersih",
+      "Pelacakan seperti ?si= dihapus dari setiap link yang kamu bagikan."
     ]
   ],
   "play_button": "Google Play",

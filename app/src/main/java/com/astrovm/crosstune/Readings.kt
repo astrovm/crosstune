@@ -45,7 +45,12 @@ internal object Readings {
         Script.JAPANESE -> lines.map(::japanese)
         Script.CHINESE -> lines.map(::chinese)
         Script.KOREAN -> lines.map(::korean)
+    }.zip(lines) { reading, line ->
+        // A line already in Latin letters, as an English one in a Korean song, isn't written out again.
+        if (letters(reading.romanized) == letters(line)) reading.copy(romanized = "") else reading
     }
+
+    private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
 
     private val tokenizer by lazy { Tokenizer() }
 

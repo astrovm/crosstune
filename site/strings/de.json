@@ -13,7 +13,7 @@
   "download": "Für Android herunterladen",
   "note": "Kostenlos, Open Source und werbefrei.",
   "alt_home": "Ein Link, bereit für YouTube Music, dann die Songs einer Playlist",
-  "alt_lyrics": "Songtext, der einem Song folgt, mit lateinischen Buchstaben und Übersetzung, dann schwebend über dem Startbildschirm",
+  "alt_lyrics": "Songtext, der einem Song folgt, mit lateinischen Buchstaben und Übersetzung, dann mit MilkDrop-Visuals dahinter, dann schwebend über dem Startbildschirm",
   "how_h2": "So funktioniert's",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Privat",
       "Kein Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
+    ],
+    [
+      "MilkDrop-Visuals",
+      "Hinter dem Songtext, im Takt dessen, was dein Handy spielt."
+    ],
+    [
+      "Widgets",
+      "Letzte Songs und Schnellaktionen auf deinem Startbildschirm."
+    ],
+    [
+      "Saubere Links",
+      "Tracking wie ?si= verschwindet aus jedem Link, den du teilst."
     ]
   ],
   "play_button": "Google Play",

@@ -13,7 +13,7 @@
   "download": "Descargar para Android",
   "note": "Gratis, de código abierto y sin publicidad.",
   "alt_home": "Un enlace listo para abrir en YouTube Music y luego las canciones de una playlist",
-  "alt_lyrics": "Letra que sigue a la canción, con letras latinas y traducción, y luego flotando sobre la pantalla de inicio",
+  "alt_lyrics": "Letra que sigue a la canción, con letras latinas y traducción, luego con visuales MilkDrop detrás, y luego flotando sobre la pantalla de inicio",
   "how_h2": "Cómo funciona",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Privado",
       "Sin cuenta ni rastreo. El historial se queda en tu celular."
+    ],
+    [
+      "Visuales MilkDrop",
+      "Detrás de la letra, al ritmo de lo que suena en tu teléfono."
+    ],
+    [
+      "Widgets",
+      "Canciones recientes y accesos rápidos en tu pantalla de inicio."
+    ],
+    [
+      "Links limpios",
+      "Sin rastreo como ?si= en cada link que compartís."
     ]
   ],
   "play_button": "Google Play",
