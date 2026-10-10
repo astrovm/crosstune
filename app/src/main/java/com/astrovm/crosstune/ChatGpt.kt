@@ -113,7 +113,14 @@ internal class ChatGpt(
      * What ChatGPT answers to [input], told how by [instructions], on the user's plan. [onText] gets
      * the answer so far as it's written.
      */
-    suspend fun ask(instructions: String, input: String, webSearch: Boolean = false, onText: (String) -> Unit = {}): ChatGptReply {
+    suspend fun ask(
+        instructions: String,
+        input: String,
+        webSearch: Boolean = false,
+        /** How hard it thinks before answering, "low" for quick ones, or the model's own when null. */
+        effort: String? = null,
+        onText: (String) -> Unit = {}
+    ): ChatGptReply {
         val token = accessToken() ?: return ChatGptReply.Failed
         val reply = try {
             val model = model() ?: return ChatGptReply.Failed
@@ -125,6 +132,7 @@ internal class ChatGpt(
                 .put("store", false)
                 .put("stream", true)
                 .apply { if (webSearch) put("tools", JSONArray().put(JSONObject().put("type", "web_search"))) }
+                .apply { effort?.let { put("reasoning", JSONObject().put("effort", it)) } }
             val request = Request.Builder().url(RESPONSES_URL).header("Authorization", "Bearer $token")
                 .post(body.toString().toRequestBody(JSON)).build()
             // All of it away from the main thread, closing too: an answer read only up to "completed"
@@ -144,7 +152,7 @@ internal class ChatGpt(
             ChatGptReply.Failed
         }
         // Not allowed to search the web, it answers from what it knows.
-        return reply ?: ask(instructions, input, webSearch = false, onText = onText)
+        return reply ?: ask(instructions, input, webSearch = false, effort = effort, onText = onText)
     }
 
     /**
