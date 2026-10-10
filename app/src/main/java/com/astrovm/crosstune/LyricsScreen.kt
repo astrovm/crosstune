@@ -530,11 +530,7 @@ private fun AppSource(name: String, packageName: String?, playing: Boolean, onPl
     ) {
         // The badge sits on the icon's corner, inside the button.
         Box(modifier = Modifier.size(34.dp)) {
-            if (icon != null) {
-                Image(icon, null, Modifier.size(28.dp).align(Alignment.Center).clip(CircleShape))
-            } else {
-                Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp).align(Alignment.Center))
-            }
+            if (icon != null) Image(icon, null, Modifier.size(28.dp).align(Alignment.Center).clip(CircleShape)) else Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp).align(Alignment.Center))
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
