@@ -277,6 +277,7 @@
     <string name="lyrics_song_meaning_failed">Tidak bisa menjelaskan lagu ini.</string>
     <string name="explanation_in_song">Dalam lagu</string>
     <string name="explanation_language">Bahasa</string>
+    <string name="song_about">Tentang lagu</string>
     <string name="song_story">Cerita</string>
     <string name="song_mood">Suasana</string>
     <string name="song_key_lines">Baris kunci</string>

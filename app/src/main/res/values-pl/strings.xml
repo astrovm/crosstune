@@ -277,6 +277,7 @@
     <string name="lyrics_song_meaning_failed">Nie udało się wyjaśnić piosenki.</string>
     <string name="explanation_in_song">W piosence</string>
     <string name="explanation_language">Język</string>
+    <string name="song_about">O piosence</string>
     <string name="song_story">Historia</string>
     <string name="song_mood">Nastrój</string>
     <string name="song_key_lines">Kluczowe wersy</string>

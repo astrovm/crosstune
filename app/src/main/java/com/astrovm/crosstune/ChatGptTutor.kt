@@ -53,16 +53,19 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val model = chatGpt.model() ?: return ChatGptReply.Failed
         val key = songKey(model, language, song)
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
+        // Tried on real songs with the plan's models: told to go by the lyrics alone, it never
+        // searched; told to search first, it found the album, year, writers and story.
         val reply = chatGpt.ask(
             "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics. " +
-                "In ${nameOf(language)}, explain what the song is about. Go by the lyrics, and use what you know for sure about the song, " +
-                "the artist, its genre or its era, but never invent facts. " +
-                "Reply in three parts, separated by a line with only $PART_BREAK: first its story, who's speaking, to whom and what happens; " +
+                "First search the web for this song: when and on what album it came out, who wrote it, and any story behind it. " +
+                "Then, in ${nameOf(language)}, explain the song in four parts, separated by a line with only $PART_BREAK: " +
+                "first what you found about it, only facts you found, with no links or sources; then its story, who's speaking, to whom and what happens; " +
                 "then its mood; then one or two of its key lines, quoted as written, each with what it means and why it matters. " +
-                "One or two short sentences each, about 100 words in all. Never say that something is missing or absent. " +
-                "Plain text, without headings, labels or Markdown.",
+                "One or two short sentences each, about 120 words in all. Never say that something is missing or absent. " +
+                "Plain text, without headings, labels, links or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
-            onText
+            onText,
+            webSearch = true
         )
         return reply.also { keep(key, it) }
     }
@@ -93,7 +96,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return reply.also { keep(key, it) }
     }
 
-    private fun songKey(model: String, language: String, song: MusicMetadata) = "song3|$model|$language|${song.title}|${song.artist}"
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song4|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
@@ -153,7 +156,17 @@ internal const val PART_BREAK = "---"
  * them with a line of dashes, ChatGPT sometimes leaves a blank line instead, which then does.
  */
 internal fun explanationParts(text: String): List<String> {
-    val parts = text.split(Regex("""\n[ \t]*-{3,}[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
+    val parts = plainText(text).split(Regex("""\n[ \t]*-{3,}[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
     if (parts.size > 1) return parts
     return parts.single().split(Regex("""\n[ \t]*\n\s*""")).map { it.trim() }
 }
+
+/**
+ * [text] as plain words: ChatGPT, told not to, still writes *album names* in Markdown and adds
+ * sources as "([site](https://…))", which would show as they are.
+ */
+internal fun plainText(text: String): String = text
+    .replace(Regex("""\s*\(\[[^\]]*]\([^)]*\)\)"""), "")
+    .replace(Regex("""\[([^\]]+)]\(https?://[^)]*\)"""), "$1")
+    .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
+    .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")

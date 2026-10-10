@@ -277,6 +277,7 @@
     <string name="lyrics_song_meaning_failed">Kon het nummer niet uitleggen.</string>
     <string name="explanation_in_song">In het nummer</string>
     <string name="explanation_language">Taal</string>
+    <string name="song_about">Over het nummer</string>
     <string name="song_story">Verhaal</string>
     <string name="song_mood">Sfeer</string>
     <string name="song_key_lines">Belangrijke regels</string>

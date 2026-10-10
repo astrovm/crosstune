@@ -1244,7 +1244,7 @@ private fun ExplanationParts(text: String, labels: List<Int>) {
 private val LINE_PARTS = listOf(R.string.explanation_in_song, R.string.explanation_language)
 
 /** What a song's explanation says, in order. */
-private val SONG_PARTS = listOf(R.string.song_story, R.string.song_mood, R.string.song_key_lines)
+private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
 
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable

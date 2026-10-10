@@ -277,6 +277,7 @@
     <string name="lyrics_song_meaning_failed">गाना समझाया नहीं जा सका।</string>
     <string name="explanation_in_song">गाने में</string>
     <string name="explanation_language">भाषा</string>
+    <string name="song_about">गाने के बारे में</string>
     <string name="song_story">कहानी</string>
     <string name="song_mood">मूड</string>
     <string name="song_key_lines">खास पंक्तियां</string>
