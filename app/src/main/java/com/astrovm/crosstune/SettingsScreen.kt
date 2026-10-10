@@ -696,7 +696,7 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
                 AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                (listOf(null) + AppLanguage.tags).forEach { tag ->
+                (listOf(null) + AppLanguage.translationTags).forEach { tag ->
                     DropdownMenuItem(
                         text = { Text(tag?.let(AppLanguage::displayName) ?: appLanguage) },
                         leadingIcon = { LanguageMark(tag) },

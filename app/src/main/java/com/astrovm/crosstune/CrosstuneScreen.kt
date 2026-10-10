@@ -211,6 +211,13 @@ internal data class ScreenActions(
     /** Looks up a word, in the line it's in, by the line's index. */
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
+    val onStartPractice: () -> Unit = {},
+    val onAnswerPractice: (Int) -> Unit = {},
+    val onRevealPractice: () -> Unit = {},
+    val onGradePractice: (Boolean) -> Unit = {},
+    val onStopPractice: () -> Unit = {},
+    /** Asks ChatGPT a question about a line, by its index. */
+    val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
     val onExplainSong: () -> Unit = {},
     val onDismissWord: () -> Unit = {},
@@ -829,7 +836,9 @@ private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> Ima
                 }
             } else {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    state.songSearch.forEach { song ->
+                    // ChatGPT's picks come in a moment later, ahead of the others.
+                    if (state.isAskingForSongs) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    state.songSearch.forEachIndexed { index, song ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -844,9 +853,12 @@ private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> Ima
                                 Text(song.title, style = MaterialTheme.typography.bodyLarge)
                                 Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            if (index < state.songsFromChatGpt) {
+                                AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.song_search_chatgpt), modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
-                    if (state.songSearch.isEmpty()) {
+                    if (state.songSearch.isEmpty() && !state.isAskingForSongs) {
                         Text(
                             stringResource(R.string.song_search_none, state.songSearchQuery),
                             style = MaterialTheme.typography.bodyMedium,

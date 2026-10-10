@@ -14,7 +14,11 @@ internal data class SavedLine(
     val title: String,
     val artist: String,
     /** What ChatGPT said the line means, when asked. */
-    val explanation: String? = null
+    val explanation: String? = null,
+    /** How well it's known, from 0, after each time it's practised. */
+    val box: Int = 0,
+    /** When it's next practised, in milliseconds since 1970; 0, right away. */
+    val due: Long = 0
 ) {
     fun isSame(other: SavedLine) = text == other.text && title == other.title && artist == other.artist
 }
@@ -27,7 +31,10 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return (0 until array.length()).mapNotNull { index ->
             val json = array.optJSONObject(index) ?: return@mapNotNull null
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            SavedLine(text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"))
+            SavedLine(
+                text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
+                json.optInt("box"), json.optLong("due")
+            )
         }
     }
 
@@ -45,13 +52,25 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return save(load().map { if (it.isSame(key)) it.copy(explanation = explanation) else it })
     }
 
+    /**
+     * [line] practised at [now]: known, it comes back after longer each time, 1, 3, 7, 16 then 35
+     * days; not known, in ten minutes, from the start again.
+     */
+    fun practised(line: SavedLine, knew: Boolean, now: Long): List<SavedLine> = save(
+        load().map {
+            if (!it.isSame(line)) it
+            else if (knew) it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + PRACTICE_DAYS[minOf(it.box, PRACTICE_DAYS.lastIndex)] * DAY_MS)
+            else it.copy(box = 0, due = now + AGAIN_MS)
+        }
+    )
+
     private fun save(lines: List<SavedLine>): List<SavedLine> {
         val array = JSONArray()
         lines.forEach { line ->
             array.put(
                 JSONObject().put("text", line.text).put("reading", line.reading).put("romanized", line.romanized)
                     .put("translation", line.translation).put("title", line.title).put("artist", line.artist)
-                    .put("explanation", line.explanation)
+                    .put("explanation", line.explanation).put("box", line.box).put("due", line.due)
             )
         }
         preferences.edit { putString(KEY, array.toString()) }
@@ -63,5 +82,10 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     private companion object {
         const val KEY = "saved_lines"
         const val MAX = 500
+        const val DAY_MS = 24 * 60 * 60 * 1000L
+        const val AGAIN_MS = 10 * 60 * 1000L
     }
 }
+
+/** How many days a line known waits before it's practised again, the more times it's known in a row. */
+private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L)

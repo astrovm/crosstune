@@ -112,6 +112,124 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return reply.also { keep(key, it) }
     }
 
+    /**
+     * The answer, in [language], to [question] about line [index] of [song], whose words are
+     * [lines], after [explanation] of it and the [earlier] questions and answers. Not kept: each
+     * question is the user's own. [onText] gets it as it's written.
+     */
+    suspend fun askAboutLine(
+        song: MusicMetadata,
+        lines: List<String>,
+        index: Int,
+        explanation: String?,
+        earlier: List<Pair<String, String>>,
+        question: String,
+        language: String,
+        onText: (String) -> Unit
+    ): ChatGptReply {
+        val line = lines.getOrNull(index) ?: return ChatGptReply.Failed
+        // Tried on real questions with GPT-6-Luna: answered in 2 to 4 s, under 60 words, and a
+        // question that isn't about the song is turned down.
+        return chatGpt.ask(
+            "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, one line of it, what you already said about that line, and their question about it, maybe after earlier ones. Answer the last question in ${nameOf(language)}, about that line in this song, in at most 60 words of plain text, without headings or Markdown. If the question isn't about the song or learning its language, say briefly that you can only help with the song.",
+            "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}" +
+                "\n\nLine ${index + 1}: $line\n\n" + explanation?.let { "What you said about it:\n$it\n\n" }.orEmpty() +
+                earlier.joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
+            effort = "low",
+            onText = onText
+        )
+    }
+
+    /**
+     * [read], the readings the dictionary gave [song]'s Japanese [lines], with those ChatGPT finds
+     * wrong in this song put right, e.g. 君 as きみ rather than くん; null when it couldn't check.
+     */
+    suspend fun checkReadings(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<LineReading>? {
+        val model = chatGpt.model() ?: return null
+        val key = "readings|$model|${song.title}|${song.artist}"
+        val fixes = cache.get(key) ?: run {
+            val asked = JSONArray()
+            lines.forEachIndexed { index, line ->
+                val readings = JSONArray(read.getOrNull(index)?.parts.orEmpty().filter { it.reading != null }.map { "${it.text}=${it.reading}" })
+                asked.put(JSONObject().put("line", index + 1).put("text", line).put("readings", readings))
+            }
+            // Tried on real songs with GPT-6-Luna: in about 3 s with low thinking it found every
+            // reading the dictionary got wrong, 君 as くん, 重ね着's 着 as ちゃく, 身体 as しんたい.
+            val reply = chatGpt.ask(
+                "You check the readings a Japanese dictionary gave the kanji in a song's lyrics, for someone learning Japanese. The user sends the lyrics as a JSON array of lines, each with its kanji and the reading the dictionary gave, as kanji=reading. Find only the readings that are wrong in this song, as it's sung: names, words read otherwise in context, and readings songs use. Reply with only a JSON array of corrections, each an object with \"line\" (the line's number, from 1), \"kanji\" as given, and \"reading\" in hiragana; an empty array when all are right.",
+                asked.toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
+                cache.put(key, it)
+                cache.save()
+            } ?: return null
+        }
+        return Readings.corrected(read, JSONArray(fixes).let { list ->
+            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading")) }
+        })
+    }
+
+    /**
+     * Two wrong meanings for [line], whose right one is [meaning], for a quiz: each clearly wrong
+     * to a careful reader. Null when they can't be had.
+     */
+    suspend fun quizChoices(line: String, meaning: String): List<String>? {
+        val model = chatGpt.model() ?: return null
+        val key = "quiz|$model|$line|$meaning"
+        val kept = cache.get(key) ?: run {
+            // Tried on real lines with GPT-6-Luna: asked only for wrong meanings, some were as right
+            // as the real one; held to getting a key word, who does what, or the tense wrong, each
+            // tested one word, 風 as rain, 遅れた as early, in about 3 s.
+            val reply = chatGpt.ask(
+                "You make a quiz for someone learning a language through song lyrics. The user sends a line from a song and what it means. Write two wrong meanings, in the same language and style as the right one and about as long. Each must be clearly wrong to someone who reads the line carefully: it gets a key word, who does what to whom, or the tense wrong. Never a paraphrase or a near synonym of the right meaning, and never silly. Reply with only a JSON array of the two strings.",
+                JSONObject().put("line", line).put("meaning", meaning).toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+        }
+        val wrong = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it).trim() } }.filter { it.isNotEmpty() && it != meaning }.distinct()
+        if (wrong.size < 2) return null
+        cache.put(key, kept)
+        cache.save()
+        return wrong.take(2)
+    }
+
+    /** Songs that match [description], what someone remembers about them, most likely first, as title to artist. */
+    suspend fun songsFor(description: String): List<Pair<String, String>>? {
+        val model = chatGpt.model() ?: return null
+        val key = "describe|$model|${description.trim().lowercase()}"
+        val kept = cache.get(key) ?: run {
+            // Tried on real descriptions with GPT-6-Luna: "plastic algo" found Plastic Love and "una
+            // ciudad de la furia" Soda Stereo's, in about 3 s; searching the web found no more.
+            val reply = chatGpt.ask("You find songs from what someone remembers about them. The user sends a description, maybe vague, in any language. Name up to five songs that match it, most likely first, only real songs you're sure exist. Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.", description.trim())
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
+                cache.put(key, it)
+                cache.save()
+            } ?: return null
+        }
+        return JSONArray(kept).let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }
+            .map { it.optString("title").trim() to it.optString("artist").trim() }
+            .filter { (title, artist) -> title.isNotEmpty() && artist.isNotEmpty() }
+    }
+
+    /**
+     * Which of [rows], a music service's search results as "title | artist • album • length", is
+     * [song], by its index; null when none is, or it couldn't say.
+     */
+    suspend fun pickSong(song: MusicMetadata, rows: List<String>): Int? {
+        if (rows.isEmpty()) return null
+        // Tried on real YouTube Music results with GPT-6-Luna: 7 of 7 right in about 2.5 s, e.g.
+        // Stay With Me as 真夜中のドア〜stay with me, and none for Sam Smith's among Miki Matsubara's.
+        val reply = chatGpt.ask(
+            "You match songs across music services. The user sends a song, as title and artist, and a numbered list of search results from another service, each as title | artist • album • length. Pick the result that is this same song by this same artist: titles may be written in another script or language, or with a subtitle. Prefer the original recording over remixes, covers, live or later versions, unless the song's own title names one. Reply with only the number, or 0 when none is this song.",
+            "Song: ${song.title} by ${song.artist}\n\nResults:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
+            effort = "low"
+        )
+        val number = (reply as? ChatGptReply.Answer)?.text?.trim()?.takeWhile(Char::isDigit)?.toIntOrNull() ?: return null
+        return (number - 1).takeIf { it in rows.indices }
+    }
+
     private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */

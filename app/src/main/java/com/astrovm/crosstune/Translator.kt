@@ -95,7 +95,7 @@ internal class Translator(
      * was: a word already in [language]. Only English has one to ask; null without an entry.
      */
     suspend fun define(word: String, language: String): Definition? {
-        if (language != "en") return null
+        if (Locale.forLanguageTag(language).language != "en") return null
         val url = WIKTIONARY_URL.toHttpUrl().newBuilder().addPathSegment(word.lowercase(Locale.ROOT)).build()
         val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).get().build()
         return try {
@@ -133,12 +133,16 @@ internal class Translator(
         /** MyMemory's limit on what's sent at once is 500 bytes; a little under, to be safe. */
         const val MYMEMORY_BYTES = 450
 
-        /** The language lyrics are translated into, as the services name it: the app's own. */
-        fun languageOf(locale: Locale): String = when (locale.language) {
-            "zh" -> "zh-CN"
-            "pt" -> "pt-BR"
-            "in", "id" -> "id"
-            else -> locale.language
+        /**
+         * The language lyrics are translated into for [locale], the app's own: where it's spoken
+         * there when that's one of [AppLanguage.translationTags], e.g. "es-ES", else the language's first.
+         */
+        fun languageOf(locale: Locale): String {
+            val language = if (locale.language == "in") "id" else locale.language
+            // Traditional Chinese is written in Taiwan, Hong Kong and Macao.
+            val region = if (language == "zh" && (locale.script == "Hant" || locale.country in setOf("HK", "MO"))) "TW" else locale.country
+            val regional = "$language-$region"
+            return if (regional in AppLanguage.translationTags) regional else AppLanguage.translationTag(language) ?: language
         }
     }
 

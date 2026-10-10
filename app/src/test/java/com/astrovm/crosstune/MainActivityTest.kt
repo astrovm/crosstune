@@ -80,6 +80,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import kotlin.concurrent.thread
+import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -3118,6 +3119,53 @@ class MainActivityTest {
     }
 
     @Test
+    fun signedInASongDescribedIsFoundByChatGptAheadOfTheOthers() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val file = File(app.noBackupFilesDir, "chatgpt.json").apply { delete() }
+        fake.handler = { request -> openAi.answer(request) ?: FakeSpotify.html(request, "") }
+        runBlocking {
+            ChatGpt(fake.client(), file, app.packageName).signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                thread { openAi.comeBack() }
+            })
+        }
+        // Named the other way round, as ChatGPT sometimes does; the catalogue has it right.
+        openAi.reply = { 200 to FakeOpenAi.stream("[{\"title\": \"Mariya Takeuchi\", \"artist\": \"Plastic Love\"}, {\"title\": \"Made Up\", \"artist\": \"Nobody\"}]") }
+        fake.handler = { request ->
+            val q = request.url.queryParameter("q").orEmpty()
+            openAi.answer(request) ?: when {
+                request.url.host == "api.deezer.com" && "Plastic Love" in q ->
+                    FakeSpotify.html(request, """{"data":[{"id":1,"title":"Plastic Love","link":"https://www.deezer.com/track/1","artist":{"name":"Mariya Takeuchi"}}]}""")
+                request.url.host == "api.deezer.com" && "Made Up" in q ->
+                    FakeSpotify.html(request, """{"data":[{"id":3,"title":"Something Else","link":"https://www.deezer.com/track/3","artist":{"name":"Other"}}]}""")
+                request.url.host == "api.deezer.com" ->
+                    FakeSpotify.html(request, """{"data":[{"id":2,"title":"City Pop Night","link":"https://www.deezer.com/track/2","artist":{"name":"Someone"}}]}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        launch()
+        typeUrl("japanese 80s plastic song")
+        click(string(R.string.resolve_button))
+        waitForText("City Pop Night")
+        // ChatGPT's real pick comes first, marked; one the catalogue doesn't have is left out.
+        waitUntil { composeRule.onAllNodesWithText("Plastic Love").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(composeRule.onAllNodesWithContentDescription(string(R.string.song_search_chatgpt), useUnmergedTree = true).fetchSemanticsNodes().size == 1)
+        assertTextAbsent("Something Else")
+        val plastic = composeRule.onNodeWithText("Plastic Love").fetchSemanticsNode().boundsInRoot.top
+        val city = composeRule.onNodeWithText("City Pop Night").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(plastic < city)
+        // A name of two words isn't asked about.
+        val asked = openAi.asked.size
+        composeRule.onNode(hasText(string(R.string.dismiss_button))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasSetTextAction()).performTextClearance()
+        typeUrl("Plastic Love")
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.song_search_title))
+        assertEquals(asked, openAi.asked.size)
+    }
+
+    @Test
     fun aFoundSongWithNoLinkOfItsOwnIsOpenedByItsNameAndArtist() {
         // A catalogue row with no link can't be opened as itself, so it's matched by name instead,
         // which is what the app already does for a song shared without a link.
@@ -3425,6 +3473,12 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals("ja", prefs().getString("translate_into", null))
         composeRule.onNodeWithText("日本語").assertExists()
+
+        // Or into one as it's spoken somewhere.
+        composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()
+        composeRule.onNodeWithText("Español (Argentina)").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals("es-AR", prefs().getString("translate_into", null))
 
         // Back to the app's own language.
         composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()

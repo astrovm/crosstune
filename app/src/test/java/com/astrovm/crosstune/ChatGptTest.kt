@@ -602,4 +602,126 @@ class ChatGptTest {
         assertEquals(listOf("Charla urbana tras el cristal", null, "El viento trae rumores", null), shown.first())
         assertEquals(JSONArray(listOf("君が遅れたのは")).toString(), openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content"))
     }
+
+    @Test
+    fun aQuestionAboutALineIsAnsweredWithWhatWasSaidBefore() {
+        val tutor = tutor()
+        val song = MusicMetadata("November Blue (2023 Remix)", "S.Kiyotaka & Omega Tribe")
+        val lines = listOf("ガラス越しの City Talk", "Don't Say 誰かの腕時計は")
+        answering("Es una elección estilística.")
+        val written = mutableListOf<String>()
+        val reply = runBlocking {
+            tutor.askAboutLine(song, lines, 1, "Le pide que no lo diga.", listOf("¿Qué es は?" to "La partícula de tema."), "¿Por qué en inglés?", "es") { written += it }
+        }
+        assertEquals(ChatGptReply.Answer("Es una elección estilística."), reply)
+        assertEquals("Es una elección estilística.", written.last())
+        val asked = openAi.asked.single()
+        val input = asked.getJSONArray("input").getJSONObject(0).getString("content")
+        assertTrue(input, input.contains("2. Don't Say 誰かの腕時計は") && input.contains("What you said about it:\nLe pide que no lo diga."))
+        assertTrue(input, input.endsWith("Question: ¿Qué es は?\nAnswer: La partícula de tema.\n\nQuestion: ¿Por qué en inglés?"))
+        assertTrue(asked.getString("instructions").contains("you can only help with the song"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Without an explanation, or about a line that isn't there.
+        runBlocking { tutor.askAboutLine(song, lines, 0, null, emptyList(), "¿Y esto?", "es") {} }
+        assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor.askAboutLine(song, lines, 5, null, emptyList(), "?", "es") {} })
+    }
+
+    @Test
+    fun readingsAreCheckedOncePerSong() {
+        val tutor = tutor()
+        val song = MusicMetadata("Asphalt Lady", "S.Kiyotaka & Omega Tribe")
+        val lines = listOf("Shock!　君はアスファルト・レディ")
+        val read = listOf(LineReading(listOf(Ruby("Shock!　"), Ruby("君", "くん"), Ruby("はアスファルト・レディ")), "Shock!　くんはアスファルト・レディ", "Shock! kun wa asufaruto redi"))
+        answering("Here:\n[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
+        val checked = runBlocking { tutor.checkReadings(song, lines, read) }!!
+        assertEquals("きみ", checked[0].parts[1].reading)
+        assertEquals("Shock! kimi wa asufaruto redi", checked[0].romanized)
+        val asked = openAi.asked.single()
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        val sent = JSONArray(asked.getJSONArray("input").getJSONObject(0).getString("content")).getJSONObject(0)
+        assertEquals(1, sent.getInt("line"))
+        assertEquals("君=くん", sent.getJSONArray("readings").getString(0))
+        // Kept for the song.
+        assertEquals(checked, runBlocking { tutor.checkReadings(song, lines, read) })
+        assertEquals(1, openAi.asked.size)
+        // Nothing wrong, or no answer.
+        answering("[]")
+        assertEquals(read, runBlocking { tutor.checkReadings(song.copy(title = "Other"), lines, read) })
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.checkReadings(song.copy(title = "Third"), lines, read) })
+        answering("No idea")
+        assertNull(runBlocking { tutor.checkReadings(song.copy(title = "Fourth"), lines, read) })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).checkReadings(song.copy(title = "Fifth"), lines, read) })
+    }
+
+    @Test
+    fun aQuizHasTwoWrongMeaningsKeptForTheLine() {
+        val tutor = tutor()
+        answering("[\"La lluvia se lleva los rumores\", \"Los rumores traen el viento\"]")
+        assertEquals(listOf("La lluvia se lleva los rumores", "Los rumores traen el viento"), runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") })
+        val asked = openAi.asked.single()
+        assertEquals("El viento trae rumores", JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content")).getString("meaning"))
+        assertTrue(asked.getString("instructions").contains("Never a paraphrase"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Kept for the line.
+        runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") }
+        assertEquals(1, openAi.asked.size)
+        // Fewer than two wrong ones, once the right one, blanks and repeats are left out, are none.
+        listOf("[\"El viento trae rumores\", \"Otra\"]", "[\"Una\", \"Una\", \" \"]", "[\"Una\"]", "No JSON").forEachIndexed { index, text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.quizChoices("Line $index", "El viento trae rumores") })
+        }
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.quizChoices("Line 9", "El viento trae rumores") })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).quizChoices("Line 10", "El viento trae rumores") })
+    }
+
+    @Test
+    fun songsAreNamedFromADescription() {
+        val tutor = tutor()
+        answering("[{\"title\": \"Plastic Love\", \"artist\": \"Mariya Takeuchi\"}, {\"title\": \" \", \"artist\": \"Nobody\"}]")
+        assertEquals(listOf("Plastic Love" to "Mariya Takeuchi"), runBlocking { tutor.songsFor("  japanese 80s song, plastic something ") })
+        assertEquals("japanese 80s song, plastic something", openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
+        // Kept, whatever the case.
+        runBlocking { tutor.songsFor("Japanese 80s song, plastic something") }
+        assertEquals(1, openAi.asked.size)
+        answering("[]")
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("nothing like it") })
+        answering("No idea")
+        assertNull(runBlocking { tutor.songsFor("something else") })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).songsFor("another") })
+    }
+
+    @Test
+    fun aSongIsPickedFromAnotherServicesResultsByNumber() {
+        val tutor = tutor()
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        val rows = listOf("真夜中のドア〜stay with me | 松原みき • Pocket Park • 5:26", "Stay With Me | Sam Smith • In the Lonely Hour • 2:52")
+        answering("1")
+        assertEquals(0, runBlocking { tutor.pickSong(song, rows) })
+        val asked = openAi.asked.single()
+        assertEquals(
+            "Song: Stay With Me by Miki Matsubara\n\nResults:\n1. ${rows[0]}\n2. ${rows[1]}",
+            asked.getJSONArray("input").getJSONObject(0).getString("content")
+        )
+        assertTrue(asked.getString("instructions").contains("Prefer the original recording"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        answering(" 2.\n")
+        assertEquals(1, runBlocking { tutor.pickSong(song, rows) })
+        // None, a number past the list, no number or no answer is no pick.
+        listOf("0", "3", "None", "").forEach { text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.pickSong(song, rows) })
+        }
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.pickSong(song, rows) })
+        // Nothing to pick from asks nothing.
+        val count = openAi.asked.size
+        assertNull(runBlocking { tutor.pickSong(song, emptyList()) })
+        assertEquals(count, openAi.asked.size)
+    }
 }

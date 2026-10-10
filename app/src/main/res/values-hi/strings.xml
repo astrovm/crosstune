@@ -273,6 +273,16 @@
     <string name="lyrics_study_line">यह लाइन सीखें</string>
     <string name="lyrics_explain_line">इस पंक्ति को समझाएं</string>
     <string name="lyrics_explain_failed">यह पंक्ति समझाई नहीं जा सकी।</string>
+    <string name="song_search_chatgpt">ChatGPT ने ढूंढा</string>
+    <string name="saved_practice">अभ्यास</string>
+    <string name="practice_show">मतलब देखें</string>
+    <string name="practice_again">फिर से</string>
+    <string name="practice_knew">पता था</string>
+    <string name="practice_next">अगला</string>
+    <string name="practice_caught_up">सब हो गया</string>
+    <string name="lyrics_ask_line">इस पंक्ति के बारे में पूछें</string>
+    <string name="lyrics_ask_send">भेजें</string>
+    <string name="lyrics_ask_failed">जवाब नहीं दिया जा सका।</string>
     <string name="lyrics_song_meaning">गाने का मतलब</string>
     <string name="lyrics_song_meaning_failed">गाना समझाया नहीं जा सका।</string>
     <string name="explanation_in_song">गाने में</string>

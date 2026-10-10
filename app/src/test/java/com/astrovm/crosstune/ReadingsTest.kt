@@ -142,4 +142,21 @@ class ReadingsTest {
         // And looked up as one word.
         assertEquals(true, Readings.words("Don't Say 誰かの腕時計は", Script.JAPANESE).any { it.text == "Don't" })
     }
+
+    @Test
+    fun readingsTheDictionaryGotWrongArePutRight() {
+        // As the dictionary really reads Asphalt Lady: 君 as くん, and 重ね着's 着 as ちゃく.
+        val read = Readings.of(listOf("Shock!　君はアスファルト・レディ", "恋を一枚　重ね着したね", "ガラス越しの City Talk"), Script.JAPANESE)
+        assertEquals("くん", read[0].parts.first { it.text == "君" }.reading)
+        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ"), ReadingFix(1, "着", "ぎ"), ReadingFix(2, "越", "ごし")))
+        assertEquals("きみ", fixed[0].parts.first { it.text == "君" }.reading)
+        assertEquals(true, fixed[0].reading.contains("きみ") && !fixed[0].reading.contains("くん"))
+        assertEquals(true, fixed[0].romanized.contains("kimi wa"))
+        assertEquals("ぎ", fixed[1].parts.first { it.text == "着" }.reading)
+        // ごし for 越 is only 越's ご, with the し written after it: nothing to put right.
+        assertEquals(read[2], fixed[2])
+        // In katakana it's the same; a kanji the line hasn't, or a reading that isn't kana, is left out.
+        assertEquals("きみ", Readings.corrected(read, listOf(ReadingFix(0, "君", "キミ")))[0].parts.first { it.text == "君" }.reading)
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "愛", "あい"), ReadingFix(1, "着", "gi"), ReadingFix(9, "君", "きみ"), ReadingFix(0, "君", ""))))
+    }
 }

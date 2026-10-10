@@ -36,7 +36,12 @@ internal class ExactMatcher(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Where what's found is remembered, so the same song isn't looked up again. */
     private val cache: LookupCache? = null,
-    private val apis: ServiceApis = ServiceApis(client, country, ioDispatcher)
+    private val apis: ServiceApis = ServiceApis(client, country, ioDispatcher),
+    /**
+     * The one of [rows], a service's search results as "title | details", that is the song, by its
+     * index; null for none. Asked last, when nothing matches by name: ChatGPT, when signed in.
+     */
+    private val pick: suspend (MusicMetadata, List<String>) -> Int? = { _, _ -> null }
 ) {
 
     /** What an artist's own Bandcamp page name may add to their name. */
@@ -459,7 +464,21 @@ internal class ExactMatcher(
         return items.firstNotNullOfOrNull { found(it, loose = false) }
             ?: (if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) } else null)
             // A song that was never released, e.g. one only on SoundCloud, may still be uploaded as a video.
-            ?: if (isSong) findVideoOnYouTubeMusic(metadata, watchUrl, client) else null
+            ?: (if (isSong) findVideoOnYouTubeMusic(metadata, watchUrl, client) else null)
+            // Last, a song named otherwise there, e.g. in Japanese, is picked from the results.
+            ?: if (isSong) pickedFrom(metadata, items, watchUrl) else null
+    }
+
+    /** The song among a YouTube Music search's song [items] that [pick] says it is. */
+    private suspend fun pickedFrom(metadata: MusicMetadata, items: List<JSONObject>, watchUrl: String): String? {
+        val songs = items.mapNotNull { item ->
+            val id = item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null } ?: return@mapNotNull null
+            val columns = item.optJSONArray("flexColumns")?.objects()?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
+            id to "${columns.getOrNull(0).orEmpty()} | ${columns.getOrNull(1).orEmpty()}"
+        }.take(PICK_FROM)
+        if (songs.isEmpty()) return null
+        val index = pick(metadata, songs.map { it.second }) ?: return null
+        return songs.getOrNull(index)?.let { watchUrl + it.first }
     }
 
     /**
@@ -555,6 +574,8 @@ internal class ExactMatcher(
         const val YOUTUBE_MUSIC_ALBUM_URL = "https://music.youtube.com/browse/"
         const val YOUTUBE_MUSIC_ARTIST_URL = "https://music.youtube.com/channel/"
         const val YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v="
+        /** How many search results the song is picked from. */
+        const val PICK_FROM = 6
         const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
 
         // Search filters as YouTube Music itself encodes them: the song, album and artist tabs.
