@@ -415,7 +415,7 @@ internal class MainViewModel(
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
-                into = preferences.getString(KEY_TRANSLATE_INTO, null)?.takeIf { it in AppLanguage.tags }
+                into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag)
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -1852,9 +1852,9 @@ internal class MainViewModel(
     private fun translateInto(): String =
         uiState.learning.into?.let { Translator.languageOf(java.util.Locale.forLanguageTag(it)) } ?: translationLanguage()
 
-    /** Translates into [tag], one of the app's languages, from now on, or into the app's own with null. */
+    /** Translates into [tag], one of [AppLanguage.translationTags], from now on, or into the app's own with null. */
     fun setTranslateInto(tag: String?) {
-        val into = tag?.takeIf { it in AppLanguage.tags }
+        val into = tag?.takeIf { it in AppLanguage.translationTags }
         preferences.edit { if (into == null) remove(KEY_TRANSLATE_INTO) else putString(KEY_TRANSLATE_INTO, into) }
         // Lines translated into the last language are no use in this one.
         translationJob?.cancel()

@@ -19,19 +19,37 @@ internal object AppLanguage {
     /** The languages under res/values-*, in the order the picker lists them. */
     val tags = listOf("en", "es", "pt-BR", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-CN")
 
+    /**
+     * The languages lyrics are translated into: the app's, by where they're spoken where that
+     * changes the words, e.g. Argentina's Spanish, with vos. The first of each is its own default.
+     */
+    val translationTags = listOf(
+        "en-US", "en-GB", "es-AR", "es-ES", "es-MX", "pt-BR", "pt-PT", "de", "fr-FR", "fr-CA", "it", "nl", "pl", "ru", "tr",
+        "id", "hi", "ja", "ko", "zh-CN", "zh-TW"
+    )
+
+    /** What lyrics are translated into for [tag]: itself, or its language's first, e.g. "es-AR" for one saved as "es"; null for none. */
+    fun translationTag(tag: String): String? {
+        if (tag in translationTags) return tag
+        val language = Locale.forLanguageTag(tag).language
+        return translationTags.firstOrNull { Locale.forLanguageTag(it).language == language }
+    }
+
     private const val KEY = "language"
 
     /** Each language's flag, from where its speakers, or this app's words in it, come. */
     private val flags = mapOf(
         "en" to "🇺🇸", "es" to "🇦🇷", "pt-BR" to "🇧🇷", "de" to "🇩🇪", "fr" to "🇫🇷", "it" to "🇮🇹", "nl" to "🇳🇱", "pl" to "🇵🇱",
-        "ru" to "🇷🇺", "tr" to "🇹🇷", "id" to "🇮🇩", "hi" to "🇮🇳", "ja" to "🇯🇵", "ko" to "🇰🇷", "zh-CN" to "🇨🇳"
+        "ru" to "🇷🇺", "tr" to "🇹🇷", "id" to "🇮🇩", "hi" to "🇮🇳", "ja" to "🇯🇵", "ko" to "🇰🇷", "zh-CN" to "🇨🇳",
+        "en-US" to "🇺🇸", "en-GB" to "🇬🇧", "es-AR" to "🇦🇷", "es-ES" to "🇪🇸", "es-MX" to "🇲🇽", "pt-PT" to "🇵🇹",
+        "fr-FR" to "🇫🇷", "fr-CA" to "🇨🇦", "zh-TW" to "🇹🇼"
     )
 
     /** The flag shown by the language [tag], or null for one without. */
     fun flag(tag: String): String? = flags[tag]
 
     /** How speakers name these languages, where Java's own names read oddly. */
-    private val names = mapOf("id" to "Bahasa Indonesia", "zh-CN" to "简体中文")
+    private val names = mapOf("id" to "Bahasa Indonesia", "zh-CN" to "简体中文", "zh-TW" to "繁體中文")
 
     /** The picked language tag, or null to follow the phone. [sdk] guards the Android 13 calls. */
     @SuppressLint("NewApi")

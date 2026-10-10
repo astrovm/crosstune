@@ -3474,6 +3474,12 @@ class MainActivityTest {
         assertEquals("ja", prefs().getString("translate_into", null))
         composeRule.onNodeWithText("日本語").assertExists()
 
+        // Or into one as it's spoken somewhere.
+        composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()
+        composeRule.onNodeWithText("Español (Argentina)").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals("es-AR", prefs().getString("translate_into", null))
+
         // Back to the app's own language.
         composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()
         composeRule.onAllNodesWithText(string(R.string.translate_into_app_language)).onLast().performClick()

@@ -99,12 +99,15 @@ class TranslatorTest {
         assertEquals(Definition("contraction", "Contraction of we + are"), runBlocking { translator().define("We're", "en") })
         // No type said, none shown.
         assertEquals(Definition(null, "a word, a term"), runBlocking { translator().define("word", "en") })
+        // English from anywhere has one.
+        assertEquals(Definition(null, "a word, a term"), runBlocking { translator().define("word", "en-GB") })
         // Wikimedia is told who's asking.
         assertTrue("User-Agent" to "Crosstune (https://github.com/astrovm/crosstune)" in fake.requestHeaders)
         listOf("nothing", "empty", "broken", "unknown").forEach { assertNull(it, runBlocking { translator().define(it, "en") }) }
         // Only English has a dictionary to ask.
         val asked = fake.requestedUrls.size
         assertNull(runBlocking { translator().define("palabra", "es") })
+        assertNull(runBlocking { translator().define("palabra", "es-AR") })
         assertEquals(asked, fake.requestedUrls.size)
     }
 
@@ -168,5 +171,22 @@ class TranslatorTest {
         assertEquals("id", Translator.languageOf(Locale.forLanguageTag("id")))
         assertEquals("id", Translator.languageOf(Locale("in")))
         assertEquals("ja", Translator.languageOf(Locale.JAPAN))
+        // Where it's spoken, when that changes the words.
+        assertEquals("es-AR", Translator.languageOf(Locale.forLanguageTag("es-AR")))
+        assertEquals("es-ES", Translator.languageOf(Locale.forLanguageTag("es-ES")))
+        assertEquals("pt-PT", Translator.languageOf(Locale.forLanguageTag("pt-PT")))
+        assertEquals("en-GB", Translator.languageOf(Locale.UK))
+        // Else the language's first, or the language alone.
+        assertEquals("es-AR", Translator.languageOf(Locale.forLanguageTag("es")))
+        assertEquals("es-AR", Translator.languageOf(Locale.forLanguageTag("es-CL")))
+        assertEquals("en-US", Translator.languageOf(Locale.ENGLISH))
+        assertEquals("de", Translator.languageOf(Locale.GERMANY))
+        assertEquals("sv", Translator.languageOf(Locale.forLanguageTag("sv-SE")))
+        // Traditional Chinese, by its script or where it's written.
+        assertEquals("zh-TW", Translator.languageOf(Locale.TRADITIONAL_CHINESE))
+        assertEquals("zh-TW", Translator.languageOf(Locale.forLanguageTag("zh-HK")))
+        assertEquals("zh-TW", Translator.languageOf(Locale.forLanguageTag("zh-MO")))
+        assertEquals("zh-TW", Translator.languageOf(Locale.forLanguageTag("zh-Hant-SG")))
+        assertEquals("zh-CN", Translator.languageOf(Locale.forLanguageTag("zh-SG")))
     }
 }

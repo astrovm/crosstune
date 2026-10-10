@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -48,5 +49,19 @@ class AppLanguageTest {
         assertEquals("日本語", AppLanguage.displayName("ja"))
         assertEquals("Português (Brasil)", AppLanguage.displayName("pt-BR"))
         assertEquals("简体中文", AppLanguage.displayName("zh-CN"))
+        assertEquals("繁體中文", AppLanguage.displayName("zh-TW"))
+        assertEquals("Español (Argentina)", AppLanguage.displayName("es-AR"))
+    }
+
+    @Test
+    fun lyricsAreTranslatedIntoALanguageAsSpokenSomewhere() {
+        assertEquals("es-ES", AppLanguage.translationTag("es-ES"))
+        assertEquals("de", AppLanguage.translationTag("de"))
+        // One saved before regions, or a region not listed, is its language's first.
+        assertEquals("es-AR", AppLanguage.translationTag("es"))
+        assertEquals("en-US", AppLanguage.translationTag("en-AU"))
+        assertNull(AppLanguage.translationTag("sv"))
+        // Each has a flag.
+        AppLanguage.translationTags.forEach { assertNotNull(it, AppLanguage.flag(it)) }
     }
 }
