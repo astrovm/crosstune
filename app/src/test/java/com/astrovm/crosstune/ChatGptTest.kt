@@ -554,7 +554,7 @@ class ChatGptTest {
         runBlocking { tutor.explainSong(song, listOf("ガラス越しの City Talk"), "es") {} }
         val asked = openAi.asked.single()
         assertEquals("web_search", asked.getJSONArray("tools").getJSONObject(0).getString("type"))
-        assertTrue(asked.getString("instructions").contains("First search the web for this song"))
+        assertTrue(asked.getString("instructions").contains("First search the web for this exact song") && asked.getString("instructions").contains("for this song by name"))
         // Refused, as OpenAI refuses a tool it doesn't allow, it's asked again without.
         openAi.reply = { body -> if (body.has("tools")) 400 to """{"detail":"Unsupported tool type: web_search"}""" else 200 to FakeOpenAi.stream("From the lyrics.") }
         assertEquals(ChatGptReply.Answer("From the lyrics."), runBlocking { tutor.explainSong(song.copy(title = "Other"), listOf("Line"), "es") {} })

@@ -53,15 +53,19 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val model = chatGpt.model() ?: return ChatGptReply.Failed
         val key = songKey(model, language, song)
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
-        // Tried on real songs with the plan's models: told to go by the lyrics alone, it never
-        // searched; told to search first, it found the album, year, writers and story.
+        // Tried on real songs with GPT-6-Luna: told to go by the lyrics alone, it never searched;
+        // told to search first, it found the album, year and writers, but now and then gave a song
+        // another's writers, from a page listing many. Held to pages about the song by name, it
+        // got none wrong in 20 tries, leaving the writers out when unsure.
         val reply = chatGpt.ask(
             "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics. " +
-                "First search the web for this song: when and on what album it came out, who wrote it, and any story behind it. " +
+                "First search the web for this exact song: when and on what album it came out, who wrote it, and any story behind it. " +
+                "Only state a fact when a page you found gives it for this song by name: pages listing many of the artist's songs mix them up. " +
+                "Leave out who wrote it unless a page names them for this song. " +
                 "Then, in ${nameOf(language)}, explain the song in four parts, separated by a line with only $PART_BREAK: " +
-                "first what you found about it, only facts you found, with no links or sources; then its story, who's speaking, to whom and what happens; " +
+                "first what you found about it, with no links or sources; then its story, who's speaking, to whom and what happens; " +
                 "then its mood; then one or two of its key lines, quoted as written, each with what it means and why it matters. " +
-                "One or two short sentences each, about 120 words in all. Never say that something is missing or absent. " +
+                "One or two short sentences each, about 120 words in all. Never say what you didn't find, or that something is missing or absent. " +
                 "Plain text, without headings, labels, links or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
             webSearch = true,
@@ -96,7 +100,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return reply.also { keep(key, it) }
     }
 
-    private fun songKey(model: String, language: String, song: MusicMetadata) = "song4|$model|$language|${song.title}|${song.artist}"
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
