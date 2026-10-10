@@ -279,7 +279,7 @@
     <string name="explanation_language">भाषा</string>
     <string name="song_story">कहानी</string>
     <string name="song_mood">मूड</string>
-    <string name="song_references">संदर्भ</string>
+    <string name="song_key_lines">खास पंक्तियां</string>
     <string name="chatgpt_limit_reached">आपका ChatGPT प्लान अभी के लिए खत्म हो गया है।</string>
     <string name="lyrics_repeat_line">यह लाइन दोहराएं</string>
     <string name="lyrics_stop_repeating">दोहराना बंद करें</string>

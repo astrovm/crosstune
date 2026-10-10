@@ -22,4 +22,13 @@ class ExplanationPartsTest {
         assertEquals(listOf("What it means.", ""), explanationParts("What it means.\n---"))
         assertEquals(listOf(""), explanationParts(""))
     }
+
+    @Test
+    fun partsLeftOnlyABlankLineApartAreStillParts() {
+        assertEquals(listOf("Story.", "Mood.", "「風が噂をはこんでく」: rumors on the wind."), explanationParts("Story.\n\nMood.\n \n「風が噂をはこんでく」: rumors on the wind."))
+        // A line break alone keeps a part whole.
+        assertEquals(listOf("Story,\ngoing on."), explanationParts("Story,\ngoing on."))
+        // Breaks win over blank lines, which are then part of a part.
+        assertEquals(listOf("Story.\n\nMore story.", "Mood."), explanationParts("Story.\n\nMore story.\n---\nMood."))
+    }
 }

@@ -279,7 +279,7 @@
     <string name="explanation_language">Dil</string>
     <string name="song_story">Hikâye</string>
     <string name="song_mood">Duygu</string>
-    <string name="song_references">Göndermeler</string>
+    <string name="song_key_lines">Önemli dizeler</string>
     <string name="chatgpt_limit_reached">ChatGPT planın şimdilik doldu.</string>
     <string name="lyrics_repeat_line">Bu satırı tekrarla</string>
     <string name="lyrics_stop_repeating">Tekrarı durdur</string>
