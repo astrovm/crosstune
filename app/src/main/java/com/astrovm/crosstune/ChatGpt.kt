@@ -100,10 +100,16 @@ internal class ChatGpt(
                 .put("stream", true)
             val request = Request.Builder().url(RESPONSES_URL).header("Authorization", "Bearer $token")
                 .post(body.toString().toRequestBody(JSON)).build()
-            answers.newCall(request).executeAsync().use { response ->
-                if (response.code == 429) return ChatGptReply.LimitReached
-                if (!response.isSuccessful) return ChatGptReply.Failed
-                withContext(ioDispatcher) { read(response.body.source(), onText) }
+            // All of it away from the main thread, closing too: an answer read only up to "completed"
+            // leaves the rest of the stream, which closing reads off the network.
+            withContext(ioDispatcher) {
+                answers.newCall(request).executeAsync().use { response ->
+                    when {
+                        response.code == 429 -> ChatGptReply.LimitReached
+                        !response.isSuccessful -> ChatGptReply.Failed
+                        else -> read(response.body.source(), onText)
+                    }
+                }
             }
         } catch (_: IOException) {
             ChatGptReply.Failed
@@ -141,10 +147,11 @@ internal class ChatGpt(
      */
     private suspend fun pickModel(token: String): String? {
         val request = Request.Builder().url(MODELS_URL).header("Authorization", "Bearer $token").build()
-        val models = client.newCall(request).executeAsync().use { response ->
-            if (!response.isSuccessful) return null
-            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() }).getJSONArray("models")
-        }
+        val models = withContext(ioDispatcher) {
+            client.newCall(request).executeAsync().use { response ->
+                if (response.isSuccessful) JSONObject(response.body.stringAtMost()).getJSONArray("models") else null
+            }
+        } ?: return null
         val listed = (0 until models.length()).map(models::getJSONObject).filter { it.optString("visibility") == "list" }.map { it.getString("slug") }
         return listed.firstOrNull { "mini" in it } ?: listed.firstOrNull()
     }

@@ -4,6 +4,8 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okio.buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -58,7 +60,17 @@ internal class FakeOpenAi(private val now: () -> Long) {
             }
             else -> return null
         }
-        return FakeSpotify.html(request, body, code = code)
+        val response = FakeSpotify.html(request, body, code = code)
+        if (url != ChatGpt.MODELS_URL && url != ChatGpt.RESPONSES_URL) return response
+        // Closing an answer not read to its end reads the rest off the network, which Android
+        // only allows away from the main thread.
+        val source = object : okio.ForwardingSource(response.body.source()) {
+            override fun close() {
+                if (android.os.Looper.getMainLooper().isCurrentThread) throw android.os.NetworkOnMainThreadException()
+                super.close()
+            }
+        }.buffer()
+        return response.newBuilder().body(source.asResponseBody(response.body.contentType())).build()
     }
 
     fun tokens(idToken: String = idToken(), access: String = "access-1", refresh: String = "refresh-1", scope: String = PLAN_SCOPES): String =

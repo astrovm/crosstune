@@ -383,7 +383,7 @@ private fun LyricsActions(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
-                    IconButton(onClick = { menu = BarMenu.LEARN }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
+                    LearnButton(state.learning.translating, onClick = { menu = BarMenu.LEARN })
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
@@ -477,18 +477,16 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
 /** While the words are being translated, or why they couldn't be. */
 @Composable
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
-    val shown = learning.translation && (learning.translating || learning.translationFailed)
-    AnimatedVisibility(visible = shown, enter = Motion.appear, exit = Motion.disappear) {
+    // While it's on its way the translate button shows it; only failing needs saying.
+    AnimatedVisibility(visible = learning.translation && learning.translationFailed, enter = Motion.appear, exit = Motion.disappear) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             Text(
-                stringResource(
-                    if (learning.translationFailed) R.string.lyrics_translation_failed else R.string.lyrics_translating
-                ),
+                stringResource(R.string.lyrics_translation_failed),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(vertical = 12.dp)
             )
-            if (learning.translationFailed) TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+            TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
         }
     }
 }
@@ -574,6 +572,20 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
                 modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+/** What helps read the words, its icon breathing while a translation is on its way. */
+@Composable
+private fun LearnButton(translating: Boolean, onClick: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "translating")
+    val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
+    IconButton(onClick = onClick) {
+        AppIcon(
+            R.drawable.ic_translate,
+            contentDescription = stringResource(R.string.lyrics_learn),
+            modifier = Modifier.graphicsLayer { alpha = if (translating) breath else 1f }
+        )
     }
 }
 

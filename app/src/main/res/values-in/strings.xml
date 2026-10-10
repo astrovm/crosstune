@@ -268,15 +268,10 @@
     <string name="lyrics_readings">Bacaan di atas kata</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_translation">Terjemahan</string>
-    <string name="lyrics_translating">Menerjemahkan…</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
     <string name="setting_translate_into">Terjemahkan ke</string>
     <string name="translate_into_app_language">Bahasa aplikasi</string>
     <string name="setting_translation_server">Terjemahan dari</string>
-    <string name="translation_server_address">Server LibreTranslate</string>
-    <string name="translation_server_key">Kunci API, jika perlu</string>
-    <string name="translation_server_description">Kosongkan untuk MyMemory, gratis untuk beberapa lagu per hari.</string>
-    <string name="translation_server_invalid">Masukkan alamat web, seperti https://libretranslate.com</string>
     <string name="lyrics_study_line">Pelajari baris ini</string>
     <string name="lyrics_explain_line">Jelaskan baris ini</string>
     <string name="lyrics_explain_failed">Tidak bisa menjelaskan baris ini.</string>

@@ -268,15 +268,10 @@
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_translation">Перевод</string>
-    <string name="lyrics_translating">Перевод…</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
     <string name="setting_translate_into">Переводить на</string>
     <string name="translate_into_app_language">Язык приложения</string>
     <string name="setting_translation_server">Переводы от</string>
-    <string name="translation_server_address">Сервер LibreTranslate</string>
-    <string name="translation_server_key">Ключ API, если нужен</string>
-    <string name="translation_server_description">Оставьте пустым для MyMemory: бесплатно для нескольких песен в день.</string>
-    <string name="translation_server_invalid">Введите веб-адрес, например https://libretranslate.com</string>
     <string name="lyrics_study_line">Изучить эту строку</string>
     <string name="lyrics_explain_line">Объяснить строку</string>
     <string name="lyrics_explain_failed">Не удалось объяснить строку.</string>

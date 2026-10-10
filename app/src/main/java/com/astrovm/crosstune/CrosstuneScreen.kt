@@ -215,7 +215,8 @@ internal data class ScreenActions(
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
     /** Sets where translations come from, by address and key; false when the address isn't one. */
-    val onTranslationServerChange: (String, String) -> Boolean = { _, _ -> true },
+    /** ChatGPT translates, signed in, or else MyMemory. */
+    val onChatGptTranslationChange: (Boolean) -> Unit = {},
     /** One of the app's languages to translate into, or null for the app's own. */
     val onTranslateIntoChange: (String?) -> Unit = {},
     val onSignInWithChatGpt: () -> Unit = {},

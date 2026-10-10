@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 
 import androidx.compose.ui.test.hasClickAction
@@ -1224,6 +1225,26 @@ class ListeningTest {
     }
 
     @Test
+    fun signedInTranslationsComeFromChatGptOrMyMemoryAsPicked() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        // Back to the song, then to Settings, where ChatGPT is picked.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_translation_server)).performScrollTo()
+        click(string(R.string.setting_translation_server))
+        click("MyMemory")
+        assertFalse(prefs().getBoolean("translation_chatgpt", true))
+        assertTrue(shown("MyMemory"))
+        // The words are translated again, by MyMemory now.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+    }
+
+    @Test
     fun aLineSavedFirstGetsItsExplanationAndAUsedUpPlanSaysSo() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
@@ -1326,7 +1347,7 @@ class ListeningTest {
         click(string(R.string.lyrics_translation))
         // Not an error, and nothing worth saying: there's just nothing to translate them into.
         composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_translating)) }
+        composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }

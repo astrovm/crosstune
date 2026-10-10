@@ -233,8 +233,11 @@ private fun SettingsList(
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
             TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
             GroupDivider()
-            TranslationServerRow(state.learning.server, chatGpt = state.chatGpt.email != null, actions.onTranslationServerChange)
-            GroupDivider()
+            // Signed in with ChatGPT, it or MyMemory; without, MyMemory is all there is.
+            if (state.chatGpt.email != null) {
+                TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
+                GroupDivider()
+            }
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
                 description = stringResource(R.string.setting_lyrics_follow_description),
@@ -386,67 +389,14 @@ private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> 
     }
 }
 
-/**
- * Where lyrics are translated: MyMemory, or a LibreTranslate server, with its key when it wants one.
- * Tapping it edits them in place.
- */
+/** Where lyrics are translated, signed in with ChatGPT: by ChatGPT, or by MyMemory. */
 @Composable
-private fun TranslationServerRow(server: TranslationServer?, chatGpt: Boolean, onChange: (String, String) -> Boolean) {
-    var editing by rememberSaveable { mutableStateOf(false) }
-    if (!editing) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { editing = true }
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.setting_translation_server), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(
-                // Signed in, ChatGPT translates, and the server set here only when it can't.
-                if (chatGpt) CHATGPT else server?.url?.substringAfter("://") ?: MYMEMORY,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // Against the right edge, like the picked choice in the rows around it.
-                modifier = Modifier.padding(start = 16.dp).widthIn(max = 200.dp)
-            )
-            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(16.dp))
-        }
-        return
-    }
-    var address by rememberSaveable { mutableStateOf(server?.url.orEmpty()) }
-    var key by rememberSaveable { mutableStateOf(server?.key.orEmpty()) }
-    var invalid by rememberSaveable { mutableStateOf(false) }
-    Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)) {
-        OutlinedTextField(
-            value = address,
-            onValueChange = { address = it; invalid = false },
-            label = { Text(stringResource(R.string.translation_server_address)) },
-            supportingText = { Text(stringResource(if (invalid) R.string.translation_server_invalid else R.string.translation_server_description)) },
-            isError = invalid,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            shape = MaterialTheme.shapes.small,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it },
-            label = { Text(stringResource(R.string.translation_server_key)) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.small,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
-        Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { editing = false }) { Text(stringResource(R.string.cancel_button)) }
-            TextButton(onClick = { if (onChange(address, key)) editing = false else invalid = true }) {
-                Text(stringResource(R.string.save_button))
-            }
-        }
-    }
-}
+private fun TranslationSourceRow(chatGpt: Boolean, onSelect: (Boolean) -> Unit) = ChoiceRow(
+    label = stringResource(R.string.setting_translation_server),
+    choices = listOf(true to CHATGPT, false to MYMEMORY),
+    selected = chatGpt,
+    onSelect = onSelect
+)
 
 /**
  * Signing in with ChatGPT: why, with OpenAI's own "Continue with ChatGPT" to start; who's signed
