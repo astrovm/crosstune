@@ -655,4 +655,27 @@ class ChatGptTest {
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).checkReadings(song.copy(title = "Fifth"), lines, read) })
     }
+
+    @Test
+    fun aQuizHasTwoWrongMeaningsKeptForTheLine() {
+        val tutor = tutor()
+        answering("[\"La lluvia se lleva los rumores\", \"Los rumores traen el viento\"]")
+        assertEquals(listOf("La lluvia se lleva los rumores", "Los rumores traen el viento"), runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") })
+        val asked = openAi.asked.single()
+        assertEquals("El viento trae rumores", JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content")).getString("meaning"))
+        assertTrue(asked.getString("instructions").contains("Never a paraphrase"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Kept for the line.
+        runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") }
+        assertEquals(1, openAi.asked.size)
+        // Fewer than two wrong ones, once the right one, blanks and repeats are left out, are none.
+        listOf("[\"El viento trae rumores\", \"Otra\"]", "[\"Una\", \"Una\", \" \"]", "[\"Una\"]", "No JSON").forEachIndexed { index, text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.quizChoices("Line $index", "El viento trae rumores") })
+        }
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.quizChoices("Line 9", "El viento trae rumores") })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).quizChoices("Line 10", "El viento trae rumores") })
+    }
 }

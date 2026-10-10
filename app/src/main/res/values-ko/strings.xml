@@ -273,6 +273,12 @@
     <string name="lyrics_study_line">이 줄 공부하기</string>
     <string name="lyrics_explain_line">이 줄 설명</string>
     <string name="lyrics_explain_failed">이 줄을 설명할 수 없어요.</string>
+    <string name="saved_practice">연습</string>
+    <string name="practice_show">뜻 보기</string>
+    <string name="practice_again">다시</string>
+    <string name="practice_knew">알았어요</string>
+    <string name="practice_next">다음</string>
+    <string name="practice_caught_up">모두 완료</string>
     <string name="lyrics_ask_line">이 줄에 대해 질문</string>
     <string name="lyrics_ask_send">보내기</string>
     <string name="lyrics_ask_failed">답할 수 없어요.</string>

@@ -273,6 +273,12 @@
     <string name="lyrics_study_line">Bu satırı çalış</string>
     <string name="lyrics_explain_line">Bu satırı açıkla</string>
     <string name="lyrics_explain_failed">Bu satır açıklanamadı.</string>
+    <string name="saved_practice">Pratik yap</string>
+    <string name="practice_show">Anlamı göster</string>
+    <string name="practice_again">Tekrar</string>
+    <string name="practice_knew">Biliyordum</string>
+    <string name="practice_next">Sonraki</string>
+    <string name="practice_caught_up">Hepsi tamam</string>
     <string name="lyrics_ask_line">Bu satır hakkında sor</string>
     <string name="lyrics_ask_send">Gönder</string>
     <string name="lyrics_ask_failed">Yanıtlanamadı.</string>

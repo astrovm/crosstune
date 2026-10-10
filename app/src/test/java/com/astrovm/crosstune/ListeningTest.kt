@@ -1195,6 +1195,7 @@ class ListeningTest {
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
+                "You make a quiz" in instructions -> FakeOpenAi.stream("[\"Day sky\", \"Night rain\"]")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
                 "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
@@ -1335,6 +1336,51 @@ class ListeningTest {
         // The dictionary reads 君 as くん here; ChatGPT puts it right.
         composeRule.waitUntil(TIMEOUT_MS) { shown("きみ") }
         assertFalse(shown("くん"))
+    }
+
+    @Test
+    fun savedLinesArePractisedPickingTheirMeaningSignedIn() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Night sky»") }
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        click(string(R.string.lyrics_save_line))
+        // The sheet closed, back to the words.
+        composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
+        learnMenu()
+        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.saved_practice))
+        // Its meaning among two wrong ones; picked, it's practised.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Night rain") }
+        assertTrue(shown("«Night sky»") && shown("Day sky"))
+        click("«Night sky»")
+        assertEquals(1, SavedLinesStore(prefs()).load().single().box)
+        click(string(R.string.practice_next))
+        // Nothing else is due.
+        waitForText(string(R.string.practice_caught_up))
+    }
+
+    @Test
+    fun savedLinesArePractisedAsCardsSignedOut() {
+        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo nocturno","title":"Demo","artist":"Band"}]""").commit()
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        wordsOf(null, "Night sky\\nStars")
+        waitForText("[Stars]")
+        learnMenu()
+        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.saved_practice))
+        click(string(R.string.practice_show))
+        waitForText("Cielo nocturno")
+        // Missed, it's back in ten minutes, so nothing's due now.
+        click(string(R.string.practice_again))
+        waitForText(string(R.string.practice_caught_up))
+        assertEquals(0, SavedLinesStore(prefs()).load().single().box)
+        // Back goes back to the lines.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.saved_practice)))
     }
 
     @Test

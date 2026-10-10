@@ -273,6 +273,12 @@
     <string name="lyrics_study_line">Estudar esta linha</string>
     <string name="lyrics_explain_line">Explicar esta linha</string>
     <string name="lyrics_explain_failed">Não foi possível explicar esta linha.</string>
+    <string name="saved_practice">Praticar</string>
+    <string name="practice_show">Ver significado</string>
+    <string name="practice_again">De novo</string>
+    <string name="practice_knew">Eu sabia</string>
+    <string name="practice_next">Próxima</string>
+    <string name="practice_caught_up">Tudo em dia</string>
     <string name="lyrics_ask_line">Pergunte sobre esta linha</string>
     <string name="lyrics_ask_send">Enviar</string>
     <string name="lyrics_ask_failed">Não foi possível responder.</string>

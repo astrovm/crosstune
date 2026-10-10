@@ -273,6 +273,12 @@
     <string name="lyrics_study_line">Pelajari baris ini</string>
     <string name="lyrics_explain_line">Jelaskan baris ini</string>
     <string name="lyrics_explain_failed">Tidak bisa menjelaskan baris ini.</string>
+    <string name="saved_practice">Latihan</string>
+    <string name="practice_show">Lihat arti</string>
+    <string name="practice_again">Lagi</string>
+    <string name="practice_knew">Sudah tahu</string>
+    <string name="practice_next">Berikutnya</string>
+    <string name="practice_caught_up">Semua sudah</string>
     <string name="lyrics_ask_line">Tanya tentang baris ini</string>
     <string name="lyrics_ask_send">Kirim</string>
     <string name="lyrics_ask_failed">Tidak bisa menjawab.</string>

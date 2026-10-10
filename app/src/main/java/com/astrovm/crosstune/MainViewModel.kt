@@ -110,6 +110,8 @@ internal data class UiState(
     val learning: Learning = Learning(),
     /** Lines kept to study later, newest first. */
     val savedLines: List<SavedLine> = emptyList(),
+    /** Saved lines being practised, while they are. */
+    val practice: Practice? = null,
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */
@@ -268,6 +270,18 @@ internal data class ChatGptState(
     val model: String? = null
 )
 
+/**
+ * A saved [line] being practised: its meaning to pick among [choices], or, without them, to show
+ * when [revealed]; [picked], the choice picked. With no [line], none is due: all are caught up.
+ */
+internal data class Practice(
+    val line: SavedLine? = null,
+    val choices: List<String>? = null,
+    val loading: Boolean = false,
+    val picked: Int? = null,
+    val revealed: Boolean = false
+)
+
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
 internal data class LineQuestion(val question: String, val answer: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
     val writing get() = !done && !failed && !limitReached
@@ -354,7 +368,9 @@ internal class MainViewModel(
     /** The ChatGPT account the AI features use; nullable so tests need none. */
     private val chatGpt: ChatGpt? = null,
     /** What the AI features ask ChatGPT, with that account. */
-    private val tutor: ChatGptTutor? = null
+    private val tutor: ChatGptTutor? = null,
+    /** The time of day, for when saved lines are next practised. */
+    private val wallClock: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -1511,6 +1527,55 @@ internal class MainViewModel(
             learning.explanation?.takeIf { it.index == index && it.done }?.text
         )
         uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
+    }
+
+    private var practiceJob: Job? = null
+
+    /**
+     * Practises the next saved line due, the one due longest: signed in, its meaning picked among
+     * two wrong ones; otherwise, shown, then said whether it was known.
+     */
+    fun startPractice() {
+        val line = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }.minByOrNull { it.due }
+        practiceJob?.cancel()
+        if (line == null || !usesChatGpt()) {
+            uiState = uiState.copy(practice = Practice(line))
+            return
+        }
+        uiState = uiState.copy(practice = Practice(line, loading = true))
+        practiceJob = viewModelScope.launch {
+            val meaning = line.translation!!
+            val wrong = tutor?.quizChoices(line.text, meaning)
+            val choices = wrong?.let { (it + meaning).shuffled() }
+            uiState = uiState.copy(practice = Practice(line, choices))
+        }
+    }
+
+    /** Picks choice [index]: right or wrong, the line is practised. */
+    fun answerPractice(index: Int) {
+        val practice = uiState.practice ?: return
+        val line = practice.line ?: return
+        val choices = practice.choices ?: return
+        if (practice.picked != null) return
+        val knew = choices.getOrNull(index) == line.translation
+        uiState = uiState.copy(practice = practice.copy(picked = index), savedLines = savedLinesStore.practised(line, knew, wallClock()))
+    }
+
+    /** Shows the meaning, to say whether it was known. */
+    fun revealPractice() {
+        uiState = uiState.copy(practice = uiState.practice?.copy(revealed = true))
+    }
+
+    /** Says whether the line shown was known, and goes on to the next. */
+    fun gradePractice(knew: Boolean) {
+        val line = uiState.practice?.line ?: return
+        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, knew, wallClock()))
+        startPractice()
+    }
+
+    fun stopPractice() {
+        practiceJob?.cancel()
+        uiState = uiState.copy(practice = null)
     }
 
     fun removeSavedLine(line: SavedLine) {

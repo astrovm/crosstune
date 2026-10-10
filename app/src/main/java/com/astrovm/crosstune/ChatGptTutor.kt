@@ -170,6 +170,31 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         })
     }
 
+    /**
+     * Two wrong meanings for [line], whose right one is [meaning], for a quiz: each clearly wrong
+     * to a careful reader. Null when they can't be had.
+     */
+    suspend fun quizChoices(line: String, meaning: String): List<String>? {
+        val model = chatGpt.model() ?: return null
+        val key = "quiz|$model|$line|$meaning"
+        val kept = cache.get(key) ?: run {
+            // Tried on real lines with GPT-6-Luna: asked only for wrong meanings, some were as right
+            // as the real one; held to getting a key word, who does what, or the tense wrong, each
+            // tested one word, 風 as rain, 遅れた as early, in about 3 s.
+            val reply = chatGpt.ask(
+                "You make a quiz for someone learning a language through song lyrics. The user sends a line from a song and what it means. Write two wrong meanings, in the same language and style as the right one and about as long. Each must be clearly wrong to someone who reads the line carefully: it gets a key word, who does what to whom, or the tense wrong. Never a paraphrase or a near synonym of the right meaning, and never silly. Reply with only a JSON array of the two strings.",
+                JSONObject().put("line", line).put("meaning", meaning).toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+        }
+        val wrong = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it).trim() } }.filter { it.isNotEmpty() && it != meaning }.distinct()
+        if (wrong.size < 2) return null
+        cache.put(key, kept)
+        cache.save()
+        return wrong.take(2)
+    }
+
     private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */

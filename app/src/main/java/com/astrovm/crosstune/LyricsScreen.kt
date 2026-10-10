@@ -34,6 +34,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -158,7 +160,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var savedShown by rememberSaveable { mutableStateOf(false) }
     var songMeaningShown by rememberSaveable(song) { mutableStateOf(false) }
     if (savedShown) {
-        SavedLines(state.savedLines, actions, onBack = { savedShown = false })
+        state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
     }
     BackHandler(onBack = actions.onDismissLyrics)
@@ -1289,6 +1291,71 @@ private val LINE_PARTS = listOf(R.string.explanation_in_song, R.string.explanati
 /** What a song's explanation says, in order. */
 private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
 
+/**
+ * A saved line to practise: its meaning picked among three, or shown and then said whether it was
+ * known; or, with none due, a check that all are caught up.
+ */
+@Composable
+private fun PracticeScreen(practice: Practice, actions: ScreenActions) {
+    BackHandler(onBack = actions.onStopPractice)
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)) {
+                IconButton(onClick = actions.onStopPractice) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
+                Text(stringResource(R.string.saved_practice), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+            }
+            val line = practice.line
+            if (line == null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                    Text(stringResource(R.string.practice_caught_up), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+                }
+                return@Column
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                line.reading?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val choices = practice.choices
+                when {
+                    practice.loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+                    choices != null -> {
+                        choices.forEachIndexed { index, choice ->
+                            val right = choice == line.translation
+                            // Picked, the right one lights, and a wrong pick shows it was.
+                            val color = when {
+                                practice.picked != null && right -> MaterialTheme.colorScheme.primaryContainer
+                                practice.picked == index -> MaterialTheme.colorScheme.errorContainer
+                                else -> Color.Transparent
+                            }
+                            OutlinedButton(
+                                onClick = { actions.onAnswerPractice(index) },
+                                colors = ButtonDefaults.outlinedButtonColors(containerColor = color, contentColor = MaterialTheme.colorScheme.onSurface),
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(choice, modifier = Modifier.padding(vertical = 6.dp)) }
+                        }
+                        if (practice.picked != null) {
+                            Button(onClick = actions.onStartPractice, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.practice_next)) }
+                        }
+                    }
+                    !practice.revealed -> FilledTonalButton(onClick = actions.onRevealPractice, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_show)) }
+                    else -> {
+                        Text(line.translation.orEmpty(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
+                            OutlinedButton(onClick = { actions.onGradePractice(false) }) { Text(stringResource(R.string.practice_again)) }
+                            Button(onClick = { actions.onGradePractice(true) }) { Text(stringResource(R.string.practice_knew)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable
 private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: () -> Unit) {
@@ -1299,7 +1366,11 @@ private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: (
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)) {
                 IconButton(onClick = onBack) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
-                Text(stringResource(R.string.lyrics_saved_lines), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.lyrics_saved_lines), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                // Lines with their meaning can be practised.
+                if (lines.any { it.translation != null }) {
+                    TextButton(onClick = actions.onStartPractice, modifier = Modifier.padding(end = 8.dp)) { Text(stringResource(R.string.saved_practice)) }
+                }
             }
             LazyColumn(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),

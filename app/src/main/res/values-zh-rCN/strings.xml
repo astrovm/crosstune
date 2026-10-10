@@ -273,6 +273,12 @@
     <string name="lyrics_study_line">学习这一行</string>
     <string name="lyrics_explain_line">解释这一行</string>
     <string name="lyrics_explain_failed">无法解释这一行。</string>
+    <string name="saved_practice">练习</string>
+    <string name="practice_show">查看含义</string>
+    <string name="practice_again">再来</string>
+    <string name="practice_knew">记住了</string>
+    <string name="practice_next">下一个</string>
+    <string name="practice_caught_up">全部完成</string>
     <string name="lyrics_ask_line">就这一行提问</string>
     <string name="lyrics_ask_send">发送</string>
     <string name="lyrics_ask_failed">无法回答。</string>
