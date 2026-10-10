@@ -94,37 +94,54 @@ internal class LyricsFinder(
 
     /**
      * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
-     * written otherwise there, e.g. in romaji; as it is when there's none, or its own timing is good.
-     * A copy under the song's name is the song. One under its bare name, without "(2018 Remix)",
-     * may be another take, so it only counts when its times agree with [found]'s rough ones.
+     * written otherwise there, e.g. in romaji; as it is when there's none, or it needs none.
+     *
+     * A copy under the song's own name is the song, and times words timed badly or not at all. A
+     * song named with more, "Song (2018 Remix) (2024 Remaster)", is often only there under its bare
+     * name, where a copy may be another take of it, so such copies count only when about as long as
+     * the song. They time badly timed words they agree with roughly, and they even retime words
+     * that seem well timed when two of them agree with each other and not with those: such words,
+     * from a place that names recordings loosely, are timed for another take.
      */
     private suspend fun timedWell(metadata: MusicMetadata, found: Lyrics.Found, timeoutMs: Long): Lyrics.Found {
-        if (timing(found) == WELL_TIMED) return found
+        val wellTimed = timing(found) == WELL_TIMED
+        val bare = bareTitle(metadata.title).takeIf { it != metadata.title }
+        if (wellTimed && bare == null) return found
         val rough = found.lines.filter { it.text.isNotBlank() }
         val lines = rough.map { it.text }.ifEmpty { found.words.lines().map(String::trim).filter(String::isNotEmpty) }
         val sounds = soundsOf(lines)
-        val bare = bareTitle(metadata.title)
-        val names = listOf(metadata.title to false) + listOfNotNull((bare to true).takeIf { bare != metadata.title && bare.isNotEmpty() && rough.isNotEmpty() })
-        for ((title, onlyIfAgrees) in names) {
-            val named = metadata.copy(title = title)
-            val answers = withTimeoutOrNull(timeoutMs) {
-                try {
-                    answersFor(named)
-                } catch (_: IOException) {
-                    null
-                } catch (_: JSONException) {
-                    null
-                }
-            } ?: continue
-            for (answer in answers.filter { it.isExact(named) || it.belongsTo(named) }) {
-                val other = answer.synced().filter { it.text.isNotBlank() }
-                if (other.isEmpty() || SyncedLyrics.rushed(other)) continue
-                val timed = BorrowedTimings.retime(lines, sounds, other, soundsOf(other.map { it.text })) ?: continue
-                if (onlyIfAgrees && !BorrowedTimings.agrees(rough, timed)) continue
-                return Lyrics.Found(found.words, timed)
+        suspend fun timedAs(copy: Answer): List<LyricLine>? {
+            val other = copy.synced().filter { it.text.isNotBlank() }
+            if (other.isEmpty() || SyncedLyrics.rushed(other)) return null
+            return BorrowedTimings.retime(lines, sounds, other, soundsOf(other.map { it.text }))
+        }
+        if (!wellTimed) {
+            copiesNamed(metadata, metadata.title, timeoutMs).firstNotNullOfOrNull { timedAs(it) }?.let { return Lyrics.Found(found.words, it) }
+        }
+        if (bare == null || rough.isEmpty()) return found
+        val lengthMs = withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs
+        val timings = copiesNamed(metadata, bare, timeoutMs)
+            .filter { copy -> lengthMs == null || copy.lengthMs()?.let { abs(it - lengthMs) <= SAME_TAKE_LENGTH_MS } != false }
+            .mapNotNull { timedAs(it) }
+        if (!wellTimed) return timings.firstOrNull { BorrowedTimings.agrees(rough, it) }?.let { Lyrics.Found(found.words, it) } ?: found
+        // Well timed, the words are kept unless two copies agree with each other, and neither with them.
+        val agreed = timings.firstOrNull { one -> timings.count { BorrowedTimings.agrees(one, it, CLOSE_MS) } >= 2 } ?: return found
+        return if (BorrowedTimings.agrees(rough, agreed, CLOSE_MS * 2)) found else Lyrics.Found(found.words, agreed)
+    }
+
+    /** LRCLIB's copies of [metadata]'s song under [title]; none when it won't answer. */
+    private suspend fun copiesNamed(metadata: MusicMetadata, title: String, timeoutMs: Long): List<Answer> {
+        val named = metadata.copy(title = title)
+        val answers = withTimeoutOrNull(timeoutMs) {
+            try {
+                answersFor(named)
+            } catch (_: IOException) {
+                null
+            } catch (_: JSONException) {
+                null
             }
         }
-        return found
+        return answers.orEmpty().filter { it.isExact(named) || it.belongsTo(named) }
     }
 
     /** Each line as the letters it's said with: words in Japanese, Chinese or Korean written out in Latin ones. */
@@ -450,6 +467,9 @@ internal class LyricsFinder(
     private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
         fun plain(): String? = (json.opt("plainLyrics") as? String)?.trim()?.takeIf { it.isNotEmpty() }
 
+        /** How long the recording it's for lasts, when it says. */
+        fun lengthMs(): Long? = (json.opt("duration") as? Number)?.toDouble()?.takeIf { it > 0 }?.let { (it * 1000).toLong() }
+
         /** The words with when each line is sung, empty when it has none timed. */
         fun synced(): List<LyricLine> = (json.opt("syncedLyrics") as? String)?.let { SyncedLyrics.withPauses(SyncedLyrics.parse(it)) }.orEmpty()
 
@@ -504,6 +524,12 @@ internal class LyricsFinder(
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
+
+        /** How much longer or shorter another copy's recording can be and still be the same take, remastered or not. */
+        const val SAME_TAKE_LENGTH_MS = 15_000L
+
+        /** How close two copies' times are, on the middle line, when they're timed alike. */
+        const val CLOSE_MS = 2_500L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */

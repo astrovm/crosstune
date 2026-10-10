@@ -63,11 +63,11 @@ internal object BorrowedTimings {
         return lines.mapIndexed { index, text -> LyricLine(timeAt(starts[index], kept), text) }
     }
 
-    /** Whether [borrowed] times are close to [rough] ones, line for line, as for the same take of the song. */
-    fun agrees(rough: List<LyricLine>, borrowed: List<LyricLine>): Boolean {
+    /** Whether [borrowed] times are within [withinMs] of [rough] ones on the middle line, as for the same take of the song. */
+    fun agrees(rough: List<LyricLine>, borrowed: List<LyricLine>, withinMs: Long = AGREE_MS): Boolean {
         if (rough.size != borrowed.size || rough.isEmpty()) return false
         val apart = rough.indices.map { abs(rough[it].timeMs - borrowed[it].timeMs) }.sorted()
-        return apart[apart.size / 2] <= AGREE_MS
+        return apart[apart.size / 2] <= withinMs
     }
 
     /** The time at letter [at] of the words, between the [anchors] around it, or as far on from the nearest. */

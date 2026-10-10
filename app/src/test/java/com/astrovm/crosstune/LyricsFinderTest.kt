@@ -698,4 +698,75 @@ class LyricsFinderTest {
         }
         assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
     }
+
+    /** [lrc]'s lines, each [byMs] later. */
+    private fun shifted(lrc: String, byMs: Long) = SyncedLyrics.parse(lrc).joinToString("\n") {
+        val at = it.timeMs + byMs
+        "[${"%02d".format(at / 60_000)}:${"%05.2f".format(at % 60_000 / 1000.0)}] ${it.text}"
+    }
+
+    /** [answer] saying how long its recording lasts. */
+    private fun lasting(answer: String, seconds: Double) = answer.dropLast(1) + ""","duration":$seconds}"""
+
+    /** Asphalt Lady's opening, evenly timed but for another edit, 9 seconds early, as NetEase's other copy has it. */
+    private val early = shifted(guessed.replace("[00:34.00]", "[00:35.60]").replace("[00:44.64]", "[00:42.80]"), -9_000)
+
+    /** LRCLIB has the remix's words timed [early] under its full name, the store knows it [storeSeconds] long, and [bare] under its bare name. */
+    private fun remixTimedEarly(vararg bare: String, storeSeconds: Double? = null) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = early)}]")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${bare.joinToString(",")}]")
+                url.encodedPath == "/search" && storeSeconds != null -> FakeSpotify.html(
+                    request,
+                    """{"results":[{"trackId":7,"trackName":"Asphalt Lady (2018 Remix) [2024 Remaster]","artistName":"S.Kiyotaka & Omega Tribe","trackTimeMillis":${(storeSeconds * 1000).toLong()}}]}"""
+                )
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val sungAt = listOf(24_000L, 28_000L, 31_000L, 35_000L, 39_000L, 43_000L, 46_000L, 50_000L, 54_000L, 63_500L, 71_000L)
+
+    @Test
+    fun wordsTimedForAnotherEditTakeTheTimesTwoCopiesAgreeOn() {
+        val copies = arrayOf(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0)
+        )
+        remixTimedEarly(*copies, storeSeconds = 318.483)
+        val found = found(remix) as Lyrics.Found
+        assertEquals(SyncedLyrics.parse(early).map { it.text }, found.lines.map { it.text })
+        found.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+    }
+
+    @Test
+    fun wordsTimedWellAreKeptWithoutTwoCopiesAgainstThem() {
+        // One copy alone.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two that agree with the words.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, -9_000)), answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, -8_500)))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two that disagree with each other.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 30_000)))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two for a recording much shorter than the song: a radio edit, say.
+        val short = arrayOf(
+            lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 284.0),
+            lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 250.0)
+        )
+        remixTimedEarly(*short, storeSeconds = 318.483)
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // A song named without more has nothing under another name to check against.
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[${answer("Asphalt Lady", remix.artist, "", synced = early)}]" else """{"results":[]}""")
+        }
+        val before = fake.requestedUrls.size
+        assertEquals(SyncedLyrics.parse(early), (found(MusicMetadata("Asphalt Lady", remix.artist)) as Lyrics.Found).lines)
+        assertEquals(1, fake.requestedUrls.drop(before).count { it.startsWith("https://lrclib.net") })
+    }
 }
