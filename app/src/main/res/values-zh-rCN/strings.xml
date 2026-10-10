@@ -191,6 +191,8 @@
     <string name="lyrics_sync_service">Crosstune 歌词同步</string>
     <string name="lyrics_follow_allow">让歌词跟随音乐应用中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟随 %1$s</string>
+    <string name="lyrics_play">播放</string>
+    <string name="lyrics_pause">暂停</string>
     <string name="lyrics_jump">跳到这里</string>
     <string name="lyrics_sync">校准时间</string>
     <string name="lyrics_sync_hint">点按你现在听到的那一行</string>

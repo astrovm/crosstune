@@ -1332,6 +1332,13 @@ internal class MainViewModel(
         setSync(song, LyricsSync.with(syncPoints, SyncPoint(line.timeMs, position.coerceAtLeast(0L))))
     }
 
+    /** Plays or pauses the song in the music app the words follow. */
+    fun playPause() {
+        val song = uiState.lyricsFor ?: return
+        val app = uiState.following?.takeIf { it.app != null } ?: return
+        playback?.playPause(song, !app.clock.playing)
+    }
+
     /** The words back in time as they were found. */
     fun resetSync() {
         setSync(uiState.lyricsFor ?: return, emptyList())

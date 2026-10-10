@@ -45,6 +45,9 @@ internal interface PlaybackSource {
     /** Moves the app playing [song] to [positionMs]. */
     fun seekTo(song: MusicMetadata, positionMs: Long)
 
+    /** Has the app playing [song] [play] it, or pause it. */
+    fun playPause(song: MusicMetadata, play: Boolean)
+
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
 
@@ -120,6 +123,11 @@ internal class MediaSessionPlayback(
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
         // Taken back meanwhile, the words just stay where they are.
         runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.seekTo(positionMs) }
+    }
+
+    override fun playPause(song: MusicMetadata, play: Boolean) {
+        // Taken back meanwhile, the song just keeps on as it was.
+        runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.run { if (play) play() else pause() } }
     }
 
     // Without the user's say-so Android shows none, and says so by throwing.

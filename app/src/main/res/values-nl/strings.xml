@@ -191,6 +191,8 @@
     <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
     <string name="lyrics_follow_allow">Laat de tekst het nummer volgen dat in je muziek-app speelt.</string>
     <string name="lyrics_following_app">Volgt %1$s</string>
+    <string name="lyrics_play">Afspelen</string>
+    <string name="lyrics_pause">Pauzeren</string>
     <string name="lyrics_jump">Hierheen springen</string>
     <string name="lyrics_sync">Timing corrigeren</string>
     <string name="lyrics_sync_hint">Tik op de regel die je nu hoort</string>

@@ -353,6 +353,16 @@ class PlaybackTest {
         playback.seekTo(MusicMetadata("Other", "Band"), 1_000)
     }
 
+    @Test
+    fun theAppPlayingItIsAskedToPlayOrPause() {
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        playback.playPause(song, play = false)
+        playback.playPause(song, play = true)
+        // Nothing playing it, nothing to ask.
+        playback.playPause(MusicMetadata("Other", "Band"), play = true)
+    }
+
     private companion object {
         const val NOW = 500_000L
         const val PLAYED_AT = 400_000L

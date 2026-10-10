@@ -191,6 +191,8 @@
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>
     <string name="lyrics_follow_allow">Sözler müzik uygulamanda çalan şarkıyı takip etsin.</string>
     <string name="lyrics_following_app">%1$s takip ediliyor</string>
+    <string name="lyrics_play">Oynat</string>
+    <string name="lyrics_pause">Duraklat</string>
     <string name="lyrics_jump">Buraya atla</string>
     <string name="lyrics_sync">Zamanlamayı düzelt</string>
     <string name="lyrics_sync_hint">Şu an duyduğun satıra dokun</string>

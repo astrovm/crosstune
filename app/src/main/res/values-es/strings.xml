@@ -191,6 +191,8 @@
     <string name="lyrics_sync_service">Sincronización de letras de Crosstune</string>
     <string name="lyrics_follow_allow">Hacé que la letra siga la canción que suena en tu app de música.</string>
     <string name="lyrics_following_app">Siguiendo %1$s</string>
+    <string name="lyrics_play">Reproducir</string>
+    <string name="lyrics_pause">Pausar</string>
     <string name="lyrics_jump">Ir acá</string>
     <string name="lyrics_sync">Ajustar el tiempo</string>
     <string name="lyrics_sync_hint">Tocá la línea que escuchás ahora</string>

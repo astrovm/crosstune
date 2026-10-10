@@ -498,23 +498,45 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
     val app = state.following?.takeIf { it.app != null }
     AnimatedContent(targetState = app?.app to app?.appPackage, transitionSpec = { swap() }, label = "sync source") { (name, packageName) ->
         if (name != null) {
-            AppSource(name, packageName)
+            AppSource(name, packageName, playing = state.following?.clock?.playing == true, onPlayPause = actions.onPlayPause)
         } else {
             ListenAlongButton(state.listeningAlong, actions)
         }
     }
 }
 
-/** The music app the words follow, by its icon, or a note when it has none to show. */
+/**
+ * The music app the words follow, by its icon, or a note when it has none to show. Tapped, it plays
+ * or pauses the song there, which a small badge on it shows.
+ */
 @Composable
-private fun AppSource(name: String, packageName: String?) {
+private fun AppSource(name: String, packageName: String?, playing: Boolean, onPlayPause: () -> Unit) {
     val context = LocalContext.current
     val icon = remember(packageName) {
         packageName?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
     }
     val description = stringResource(R.string.lyrics_following_app, name)
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp).semantics { contentDescription = description }) {
-        if (icon != null) Image(icon, null, Modifier.size(28.dp).clip(CircleShape)) else Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp))
+    IconButton(
+        onClick = onPlayPause,
+        modifier = Modifier.semantics { contentDescription = description }
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+            if (icon != null) Image(icon, null, Modifier.size(28.dp).clip(CircleShape)) else Icon(painterResource(R.drawable.ic_music_note), null, Modifier.size(22.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(18.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+            ) {
+                Icon(
+                    painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+                    contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play),
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
     }
 }
 

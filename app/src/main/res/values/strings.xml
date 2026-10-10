@@ -126,6 +126,8 @@
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>
     <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
     <string name="lyrics_following_app">Following %1$s</string>
+    <string name="lyrics_play">Play</string>
+    <string name="lyrics_pause">Pause</string>
     <string name="lyrics_jump">Jump here</string>
     <string name="lyrics_sync">Fix the timing</string>
     <string name="lyrics_sync_hint">Tap the line you hear now</string>

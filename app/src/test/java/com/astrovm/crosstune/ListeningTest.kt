@@ -572,6 +572,18 @@ class ListeningTest {
     }
 
     @Test
+    fun theLyricsButtonOnTheMainScreenNamesTheSongAndShowsItsWords() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        click(string(R.string.tile_lyrics_label))
+        // No result to tap Lyrics on first: the words open as soon as the song is named.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
     fun leavingCrosstuneNeverFloatsTheWordsByThemselves() {
         ShadowSettings.setCanDrawOverlays(true)
         demoWords(FakeHearing())

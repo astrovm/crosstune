@@ -191,6 +191,8 @@
     <string name="lyrics_sync_service">Crosstune 가사 동기화</string>
     <string name="lyrics_follow_allow">음악 앱에서 재생 중인 곡에 맞춰 가사가 흐르게 합니다.</string>
     <string name="lyrics_following_app">%1$s에 맞추는 중</string>
+    <string name="lyrics_play">재생</string>
+    <string name="lyrics_pause">일시정지</string>
     <string name="lyrics_jump">여기로 이동</string>
     <string name="lyrics_sync">타이밍 맞추기</string>
     <string name="lyrics_sync_hint">지금 들리는 줄을 탭하세요</string>

@@ -134,6 +134,8 @@ internal data class ScreenActions(
     /** The one the Recognize button opens: the user's pick, or else the first there is. */
     val recognizer: SongRecognizer? = null,
     val onRecognize: (SongRecognizer) -> Unit = {},
+    /** Names what's playing and opens its words straight away, as the lyrics tile does. */
+    val onLyricsNow: () -> Unit = {},
     val onRecognizerChange: (SongRecognizer) -> Unit = {},
     val onStopListening: () -> Unit = {},
     /** Android's settings for Crosstune, where the microphone is allowed. */
@@ -194,6 +196,8 @@ internal data class ScreenActions(
     val onStopListeningAlong: () -> Unit = {},
     /** Moves the music app playing the song to where a line of its words is sung. */
     val onSeekLyrics: (Long) -> Unit = {},
+    /** Plays or pauses the song in the music app the words follow. */
+    val onPlayPause: () -> Unit = {},
     /** The line of the timed words being sung right now, as the user taps it, to put the words in time. */
     val onSyncLine: (Int) -> Unit = {},
     /** The words back in time as they were found. */
@@ -661,6 +665,9 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             AnimatedContent(targetState = state.linkText.isEmpty(), transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
                     Row {
+                        IconButton(onClick = actions.onLyricsNow, enabled = !busy) {
+                            AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.tile_lyrics_label))
+                        }
                         // Crosstune listens itself, or opens another app, which shares the song back here.
                         actions.recognizer?.let { recognizer ->
                             IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {

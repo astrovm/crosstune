@@ -274,6 +274,7 @@ class MainActivity : ComponentActivity() {
                         recognizers = recognizers,
                         recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
                         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
+                        onLyricsNow = { withMicrophone { viewModel.listen(lyrics = true) } },
                         onStopListening = viewModel::stopListening,
                         onOpenMicrophoneSettings = ::openAppInfo,
                         onRecognizerChange = { picked ->
@@ -291,6 +292,7 @@ class MainActivity : ComponentActivity() {
                         onShowLyrics = viewModel::showLyrics,
                         onSeekLyrics = viewModel::seekLyrics,
                         onSyncLine = viewModel::syncLine,
+                        onPlayPause = viewModel::playPause,
                         onResetSync = viewModel::resetSync,
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
