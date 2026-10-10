@@ -292,6 +292,43 @@ class ExactMatcherTest {
             {"musicShelfRenderer":{"contents":[${rows.joinToString(",")}]}}]}}}}]}}}"""
 
     @Test
+    fun aSongNamedOtherwiseOnYouTubeMusicIsPickedFromItsResultsLast() {
+        val asked = mutableListOf<List<String>>()
+        var answer: Int? = 1
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { metadata, rows ->
+            assertEquals("Stay With Me", metadata.title)
+            asked += rows
+            answer
+        })
+        val rows = (0..7).map { youTubeMusicRow("真夜中のドア$it", "松原みき • Pocket Park • 5:26", videoId = "door00000$it") }
+        respond(youTubeMusicPage(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x"), *rows.toTypedArray()))
+        val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
+        assertEquals("https://music.youtube.com/watch?v=door000001", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        // Picked among the first six songs, as "title | details".
+        assertEquals(listOf((0..5).map { "真夜中のドア$it | 松原みき • Pocket Park • 5:26" }), asked)
+        // No answer, or one past the songs, is no match.
+        answer = -1
+        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        answer = null
+        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        answer = 6
+        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        // Not asked when there's no song to pick from, or a song matches by name.
+        asked.clear()
+        respond(youTubeMusicPage(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")))
+        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        respond(youTubeMusicPage(youTubeMusicRow("Stay With Me", "Miki Matsubara • Album • 5:26", videoId = "named000000")))
+        assertEquals("https://music.youtube.com/watch?v=named000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        assertEquals(emptyList<List<String>>(), asked)
+        // Nor for an album.
+        respond(youTubeMusicPage(*rows.toTypedArray()))
+        runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Pocket Park", "Miki Matsubara", type = ItemType.ALBUM)) }
+        assertEquals(emptyList<List<String>>(), asked)
+        // By default nothing is picked.
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+    }
+
+    @Test
     fun aRemixIsFoundOnYouTubeMusicByItsAlbumWhenItsNameLeavesItOut() {
         respond(
             youTubeMusicPage(

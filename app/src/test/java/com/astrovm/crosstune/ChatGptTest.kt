@@ -695,4 +695,33 @@ class ChatGptTest {
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).songsFor("another") })
     }
+
+    @Test
+    fun aSongIsPickedFromAnotherServicesResultsByNumber() {
+        val tutor = tutor()
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        val rows = listOf("真夜中のドア〜stay with me | 松原みき • Pocket Park • 5:26", "Stay With Me | Sam Smith • In the Lonely Hour • 2:52")
+        answering("1")
+        assertEquals(0, runBlocking { tutor.pickSong(song, rows) })
+        val asked = openAi.asked.single()
+        assertEquals(
+            "Song: Stay With Me by Miki Matsubara\n\nResults:\n1. ${rows[0]}\n2. ${rows[1]}",
+            asked.getJSONArray("input").getJSONObject(0).getString("content")
+        )
+        assertTrue(asked.getString("instructions").contains("Prefer the original recording"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        answering(" 2.\n")
+        assertEquals(1, runBlocking { tutor.pickSong(song, rows) })
+        // None, a number past the list, no number or no answer is no pick.
+        listOf("0", "3", "None", "").forEach { text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.pickSong(song, rows) })
+        }
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.pickSong(song, rows) })
+        // Nothing to pick from asks nothing.
+        val count = openAi.asked.size
+        assertNull(runBlocking { tutor.pickSong(song, emptyList()) })
+        assertEquals(count, openAi.asked.size)
+    }
 }

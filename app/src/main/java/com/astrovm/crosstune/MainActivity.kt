@@ -66,11 +66,14 @@ class MainActivity : ComponentActivity() {
                 val client = httpClientFactory()
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
+                // What ChatGPT said is kept, so a song read again asks nothing.
+                val tutor = ChatGptTutor(chatGpt, LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000))
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 val playback = playbackFactory(applicationContext)
                 // What was found for songs is kept, so a playlist played again needs no lookups.
-                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis)
+                // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
+                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong)
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     matcher,
@@ -93,8 +96,7 @@ class MainActivity : ComponentActivity() {
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
                     translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
                     chatGpt = chatGpt,
-                    // What ChatGPT said is kept, so a song read again asks nothing.
-                    tutor = ChatGptTutor(chatGpt, LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000))
+                    tutor = tutor
                 )
             }
         }
