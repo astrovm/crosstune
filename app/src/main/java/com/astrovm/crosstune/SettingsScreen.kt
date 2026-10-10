@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
@@ -249,7 +250,11 @@ private fun SettingsList(
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))
         Group {
-            ChatGptRow(state.chatGpt, actions, onManageUsage = { uriHandler.openUri(ChatGpt.USAGE_URL) })
+            ChatGptRow(state.chatGpt, actions)
+            if (state.chatGpt.email != null) {
+                GroupDivider()
+                ManageUsageRow(onClick = { uriHandler.openUri(ChatGpt.USAGE_URL) })
+            }
             // Signed in, which of the account's models to ask.
             val model = state.chatGpt.model?.takeIf { slug -> state.chatGpt.email != null && state.chatGpt.models.any { it.slug == slug } }
             if (model != null) {
@@ -408,49 +413,71 @@ private fun TranslationSourceRow(chatGpt: Boolean, onSelect: (Boolean) -> Unit) 
     label = stringResource(R.string.setting_translation_server),
     choices = listOf(true to CHATGPT, false to MYMEMORY),
     selected = chatGpt,
-    onSelect = onSelect
+    onSelect = onSelect,
+    icon = { if (it) R.drawable.ic_translator_chatgpt else R.drawable.ic_translator_mymemory }
 )
 
+/** A language's flag, or a globe for the app's or the phone's own. */
+@Composable
+private fun LanguageMark(tag: String?, modifier: Modifier = Modifier) {
+    val flag = tag?.let(AppLanguage::flag)
+    if (flag != null) Text(flag, style = MaterialTheme.typography.bodyLarge, modifier = modifier)
+    else AppIcon(R.drawable.ic_language, contentDescription = null, modifier = modifier.size(18.dp))
+}
+
 /**
- * Signing in with ChatGPT: why, with OpenAI's own "Continue with ChatGPT" to start; who's signed
- * in, with where to see what Crosstune used of their plan; or the browser being waited for.
+ * The ChatGPT account, by its logo: OpenAI's own "Continue with ChatGPT" to sign in, the browser
+ * being waited for, or who's signed in, to sign out.
  */
 @Composable
-private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions, onManageUsage: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp)) {
+private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
         val email = chatGpt.email
-        Text(
-            if (email != null) stringResource(R.string.chatgpt_signed_in, email) else stringResource(R.string.chatgpt_use_plan),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Text(
-            stringResource(if (chatGpt.signingIn) R.string.chatgpt_signing_in else R.string.chatgpt_use_plan_description),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
+            AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(24.dp))
+            Text(
+                email ?: stringResource(R.string.chatgpt_use_plan),
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(start = 16.dp)
+            )
+            when {
+                chatGpt.signingIn -> {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    TextButton(onClick = actions.onCancelChatGptSignIn) { Text(stringResource(R.string.cancel_button)) }
+                }
+                email != null -> TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
+            }
+        }
         chatGpt.problem?.let { problem ->
             Text(
                 stringResource(if (problem == ChatGptSignInResult.DECLINED) R.string.chatgpt_declined else R.string.chatgpt_failed),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(start = 40.dp)
             )
         }
-        Row(modifier = Modifier.align(Alignment.End).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            when {
-                chatGpt.signingIn -> TextButton(onClick = actions.onCancelChatGptSignIn) { Text(stringResource(R.string.cancel_button)) }
-                email != null -> {
-                    TextButton(onClick = onManageUsage) { Text(stringResource(R.string.chatgpt_manage_usage)) }
-                    TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
-                }
-                // Black, as OpenAI asks of its sign-in button.
-                else -> Button(
-                    onClick = actions.onSignInWithChatGpt,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
-                ) { Text(stringResource(R.string.chatgpt_continue)) }
-            }
+        // Black, as OpenAI asks of its sign-in button.
+        if (email == null && !chatGpt.signingIn) {
+            Button(
+                onClick = actions.onSignInWithChatGpt,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White),
+                modifier = Modifier.align(Alignment.End).padding(end = 8.dp, top = 4.dp)
+            ) { Text(stringResource(R.string.chatgpt_continue)) }
         }
+    }
+}
+
+/** Opens where the user sees, and limits, what Crosstune uses of their plan. */
+@Composable
+private fun ManageUsageRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.chatgpt_manage_usage), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -543,7 +570,7 @@ private fun ThemeRow(theme: ThemeMode, onSelect: (ThemeMode) -> Unit) = ChoiceRo
 
 /** A setting picked from a short list, with the one picked shown beside its name. */
 @Composable
-private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
     var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -555,6 +582,7 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                icon?.let { AppIcon(it(selected), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp)) }
                 Text(
                     text = choices.first { it.first == selected }.second,
                     style = MaterialTheme.typography.bodyMedium,
@@ -566,6 +594,7 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
                 choices.forEach { (choice, name) ->
                     DropdownMenuItem(
                         text = { Text(name) },
+                        leadingIcon = icon?.let { { AppIcon(it(choice), contentDescription = null, modifier = Modifier.size(20.dp)) } },
                         onClick = {
                             expanded = false
                             onSelect(choice)
@@ -658,6 +687,7 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
         Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                LanguageMark(into, modifier = Modifier.padding(end = 6.dp))
                 Text(
                     text = into?.let(AppLanguage::displayName) ?: appLanguage,
                     style = MaterialTheme.typography.bodyMedium,
@@ -669,6 +699,7 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
                 (listOf(null) + AppLanguage.tags).forEach { tag ->
                     DropdownMenuItem(
                         text = { Text(tag?.let(AppLanguage::displayName) ?: appLanguage) },
+                        leadingIcon = { LanguageMark(tag) },
                         onClick = {
                             expanded = false
                             onSelect(tag)
@@ -701,6 +732,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
         )
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                LanguageMark(current, modifier = Modifier.padding(end = 6.dp))
                 Text(
                     text = current?.let(AppLanguage::displayName) ?: systemDefault,
                     style = MaterialTheme.typography.bodyMedium,
@@ -712,6 +744,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
                 (listOf(null) + AppLanguage.tags).forEach { tag ->
                     DropdownMenuItem(
                         text = { Text(tag?.let(AppLanguage::displayName) ?: systemDefault) },
+                        leadingIcon = { LanguageMark(tag) },
                         onClick = {
                             expanded = false
                             onSelect(tag)

@@ -2921,6 +2921,10 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo()
         assertTextAbsent(string(R.string.setting_translation_server))
+        // Each language by its flag.
+        click(string(R.string.setting_translate_into))
+        assertTextShown("🇦🇷")
+        assertTextShown("🇯🇵")
     }
 
     @Test
@@ -2942,7 +2946,7 @@ class MainActivityTest {
             assertEquals(Intent.ACTION_VIEW, browser.action)
             openAi.authorize = browser.dataString!!.toHttpUrl()
             assertEquals("https://auth.openai.com/api/accounts/authorize", openAi.authorize.toString().substringBefore("?"))
-            assertTextShown(string(R.string.chatgpt_signing_in))
+            assertTextShown(string(R.string.cancel_button))
         }
 
         // Left in the browser, it can be given up on.
@@ -2972,7 +2976,7 @@ class MainActivityTest {
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
         onNewIntent.invoke(controller!!.get(), Intent(Intent.ACTION_VIEW, Uri.parse("crosstune://chatgpt")))
-        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodesWithText(FakeOpenAi.EMAIL).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(fake.requestedUrls.none { "crosstune" in it })
 
         // Said once, the first time.
@@ -2988,7 +2992,7 @@ class MainActivityTest {
         controller!!.pause().stop().destroy()
         launch()
         click(string(R.string.settings_button))
-        composeRule.onNodeWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).performScrollTo()
+        composeRule.onNodeWithText(FakeOpenAi.EMAIL).performScrollTo()
         click(string(R.string.chatgpt_sign_out))
         assertTextShown(string(R.string.chatgpt_continue))
         waitUntil { ChatGpt.REVOKE_URL in fake.requestedUrls }
@@ -2996,7 +3000,7 @@ class MainActivityTest {
         // Signed in again, it isn't said again.
         startSigningIn()
         thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}") }
-        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { composeRule.onAllNodesWithText(FakeOpenAi.EMAIL).fetchSemanticsNodes().isNotEmpty() }
         assertTextAbsent(string(R.string.chatgpt_welcome_title))
     }
 

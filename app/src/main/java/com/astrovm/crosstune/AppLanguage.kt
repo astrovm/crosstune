@@ -21,6 +21,15 @@ internal object AppLanguage {
 
     private const val KEY = "language"
 
+    /** Each language's flag, from where its speakers, or this app's words in it, come. */
+    private val flags = mapOf(
+        "en" to "🇺🇸", "es" to "🇦🇷", "pt-BR" to "🇧🇷", "de" to "🇩🇪", "fr" to "🇫🇷", "it" to "🇮🇹", "nl" to "🇳🇱", "pl" to "🇵🇱",
+        "ru" to "🇷🇺", "tr" to "🇹🇷", "id" to "🇮🇩", "hi" to "🇮🇳", "ja" to "🇯🇵", "ko" to "🇰🇷", "zh-CN" to "🇨🇳"
+    )
+
+    /** The flag shown by the language [tag], or null for one without. */
+    fun flag(tag: String): String? = flags[tag]
+
     /** How speakers name these languages, where Java's own names read oddly. */
     private val names = mapOf("id" to "Bahasa Indonesia", "zh-CN" to "简体中文")
 
