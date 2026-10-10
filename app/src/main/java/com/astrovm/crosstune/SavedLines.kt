@@ -12,7 +12,9 @@ internal data class SavedLine(
     val romanized: String? = null,
     val translation: String? = null,
     val title: String,
-    val artist: String
+    val artist: String,
+    /** What ChatGPT said the line means, when asked. */
+    val explanation: String? = null
 ) {
     fun isSame(other: SavedLine) = text == other.text && title == other.title && artist == other.artist
 }
@@ -25,7 +27,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return (0 until array.length()).mapNotNull { index ->
             val json = array.optJSONObject(index) ?: return@mapNotNull null
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            SavedLine(text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"))
+            SavedLine(text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"))
         }
     }
 
@@ -37,12 +39,19 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     fun remove(line: SavedLine): List<SavedLine> = save(load().filterNot { it.isSame(line) })
 
+    /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
+    fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> {
+        val key = SavedLine(text, title = title, artist = artist)
+        return save(load().map { if (it.isSame(key)) it.copy(explanation = explanation) else it })
+    }
+
     private fun save(lines: List<SavedLine>): List<SavedLine> {
         val array = JSONArray()
         lines.forEach { line ->
             array.put(
                 JSONObject().put("text", line.text).put("reading", line.reading).put("romanized", line.romanized)
                     .put("translation", line.translation).put("title", line.title).put("artist", line.artist)
+                    .put("explanation", line.explanation)
             )
         }
         preferences.edit { putString(KEY, array.toString()) }

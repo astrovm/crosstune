@@ -208,12 +208,15 @@ internal data class ScreenActions(
     val onRetryTranslation: () -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
     val onRemoveSavedLine: (SavedLine) -> Unit = {},
-    val onLookUpWord: (Word) -> Unit = {},
+    /** Looks up a word, in the line it's in, by the line's index. */
+    val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
+    val onExplainLine: (Int) -> Unit = {},
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
     /** Sets where translations come from, by address and key; false when the address isn't one. */
-    val onTranslationServerChange: (String, String) -> Boolean = { _, _ -> true },
+    /** ChatGPT translates, signed in, or else MyMemory. */
+    val onChatGptTranslationChange: (Boolean) -> Unit = {},
     /** One of the app's languages to translate into, or null for the app's own. */
     val onTranslateIntoChange: (String?) -> Unit = {},
     val onSignInWithChatGpt: () -> Unit = {},

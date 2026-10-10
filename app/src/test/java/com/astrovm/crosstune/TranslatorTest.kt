@@ -45,7 +45,7 @@ class TranslatorTest {
         }
     }
 
-    private fun translate(lines: List<String>, server: TranslationServer? = null) = runBlocking { translator().translate(lines, "es", server) }
+    private fun translate(lines: List<String>) = runBlocking { translator().translate(lines, "es") }
 
     @Test
     fun linesAreTranslatedTogetherAndEachOnceKept() {
@@ -74,7 +74,7 @@ class TranslatorTest {
         fake.handler = { request ->
             FakeSpotify.html(request, """{"responseData":{"translatedText":"PLEASE SELECT TWO DISTINCT LANGUAGES"},"responseDetails":"PLEASE SELECT TWO DISTINCT LANGUAGES","responseStatus":"403"}""")
         }
-        assertEquals(listOf(null, null), runBlocking { translator().translate(listOf("Me and Michael", "So you think"), "en", null) })
+        assertEquals(listOf(null, null), runBlocking { translator().translate(listOf("Me and Michael", "So you think"), "en") })
     }
 
     @Test
@@ -159,31 +159,6 @@ class TranslatorTest {
         fake.requestedUrls.clear()
         assertEquals(listOf(null, null), translate(listOf("", "123")))
         assertEquals(0, fake.requestedUrls.size)
-    }
-
-    @Test
-    fun aLibreTranslateServerGetsEveryLineAtOnceWithItsKey() {
-        fake.handler = { request ->
-            val asked = JSONObject(fake.requestBodies.last()).getJSONArray("q")
-            val out = JSONArray((0 until asked.length()).map { "<${asked.getString(it)}>" })
-            FakeSpotify.html(request, JSONObject().put("translatedText", out).toString())
-        }
-        val server = TranslationServer("https://translate.example.org", "secret")
-        assertEquals(listOf("<One>", "<Two>"), runBlocking { translator().translate(listOf("One", "Two"), "pt-BR", server) })
-        assertEquals("https://translate.example.org/translate", fake.requestedUrls.single())
-        val body = JSONObject(fake.requestBodies.single())
-        assertEquals("pt", body.getString("target"))
-        assertEquals("auto", body.getString("source"))
-        assertEquals("secret", body.getString("api_key"))
-
-        // Without a key, none is sent; kept apart from what MyMemory said for the same line.
-        assertEquals(listOf("<Three>"), translate(listOf("Three"), TranslationServer("https://translate.example.org")))
-        assertEquals(false, JSONObject(fake.requestBodies.last()).has("api_key"))
-
-        // Fewer lines back than went, or no address at all, is no translation.
-        fake.handler = { request -> FakeSpotify.html(request, JSONObject().put("translatedText", JSONArray(listOf("only one"))).toString()) }
-        assertNull(translate(listOf("Four", "Five"), server))
-        assertNull(translate(listOf("Six"), TranslationServer("not an address")))
     }
 
     @Test

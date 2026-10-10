@@ -71,6 +71,8 @@ import androidx.compose.foundation.clickable
 import android.app.Activity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.animation.animateContentSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -381,7 +383,7 @@ private fun LyricsActions(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
-                    IconButton(onClick = { menu = BarMenu.LEARN }) { AppIcon(R.drawable.ic_translate, contentDescription = stringResource(R.string.lyrics_learn)) }
+                    LearnButton(state.learning.translating, onClick = { menu = BarMenu.LEARN })
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
@@ -475,18 +477,16 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
 /** While the words are being translated, or why they couldn't be. */
 @Composable
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
-    val shown = learning.translation && (learning.translating || learning.translationFailed)
-    AnimatedVisibility(visible = shown, enter = Motion.appear, exit = Motion.disappear) {
+    // While it's on its way the translate button shows it; only failing needs saying.
+    AnimatedVisibility(visible = learning.translation && learning.translationFailed, enter = Motion.appear, exit = Motion.disappear) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             Text(
-                stringResource(
-                    if (learning.translationFailed) R.string.lyrics_translation_failed else R.string.lyrics_translating
-                ),
+                stringResource(R.string.lyrics_translation_failed),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(vertical = 12.dp)
             )
-            if (learning.translationFailed) TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+            TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
         }
     }
 }
@@ -572,6 +572,20 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
                 modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+/** What helps read the words, its icon breathing while a translation is on its way. */
+@Composable
+private fun LearnButton(translating: Boolean, onClick: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "translating")
+    val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
+    IconButton(onClick = onClick) {
+        AppIcon(
+            R.drawable.ic_translate,
+            contentDescription = stringResource(R.string.lyrics_learn),
+            modifier = Modifier.graphicsLayer { alpha = if (translating) breath else 1f }
+        )
     }
 }
 
@@ -990,14 +1004,29 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // over the kanji, as in the lyrics.
             val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
             if (parts != null) {
-                TappableRubyLine(parts, words, state.word?.word, actions.onLookUpWord)
+                TappableRubyLine(parts, words, state.word?.word) { actions.onLookUpWord(it, index) }
             } else {
-                TappableLine(text.ifBlank { "♪" }, words, state.word?.word, actions.onLookUpWord)
+                TappableLine(text.ifBlank { "♪" }, words, state.word?.word) { actions.onLookUpWord(it, index) }
             }
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) WordCard(meaning)
+            }
+            // Signed in with ChatGPT, it can explain the line.
+            if (state.chatGpt.email != null) {
+                val explanation = learning.explanation?.takeIf { it.index == index }
+                if (explanation != null && (explanation.writing || explanation.done)) {
+                    ExplanationCard(explanation)
+                } else {
+                    // Used up for now, or failed, it can be asked again.
+                    if (explanation?.limitReached == true) ExplanationCard(explanation)
+                    if (explanation?.failed == true) Text(stringResource(R.string.lyrics_explain_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = { actions.onExplainLine(index) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.lyrics_explain_line), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
             }
             // Side by side, as wide and as tall as each other, however long their words are.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp).height(IntrinsicSize.Min)) {
@@ -1116,6 +1145,26 @@ private fun WordCard(meaning: WordMeaning) {
     }
 }
 
+/** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */
+@Composable
+private fun ExplanationCard(explanation: LineExplanation) {
+    val uriHandler = LocalUriHandler.current
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            when {
+                explanation.limitReached -> {
+                    Text(stringResource(R.string.chatgpt_limit_reached), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { uriHandler.openUri(ChatGpt.USAGE_URL) }, modifier = Modifier.align(Alignment.End)) {
+                        Text(stringResource(R.string.chatgpt_manage_usage))
+                    }
+                }
+                explanation.text.isEmpty() -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                else -> Text(explanation.text, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable
 private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: () -> Unit) {
@@ -1140,6 +1189,7 @@ private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: (
                                 Text(line.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 line.translation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
+                                line.explanation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
                                 Text(
                                     line.title,
                                     style = MaterialTheme.typography.labelMedium,
