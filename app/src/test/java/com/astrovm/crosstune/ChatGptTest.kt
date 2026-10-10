@@ -458,4 +458,61 @@ class ChatGptTest {
         openAi.reply = { 500 to "" }
         assertNull(runBlocking { tutor.meaning("愛", "愛してる", "en") })
     }
+
+    @Test
+    fun theNewestLunaIsAskedByDefault() {
+        fun named(vararg slugs: String) = slugs.map { ChatGptModel(it, it) }
+        assertEquals("gpt-6.1-luna", defaultModel(named("gpt-6-luna", "gpt-6.1-luna-mini", "gpt-6.1-luna", "gpt-6.1-sol-mini"))?.slug)
+        // By version, not by how it's written: 6.10 is newer than 6.9.
+        assertEquals("gpt-6.10-luna", defaultModel(named("gpt-6.9-luna", "gpt-6.10-luna", "gpt-6-luna"))?.slug)
+        assertEquals("gpt-6.1-Luna", defaultModel(named("gpt-6-luna", "gpt-6.1-Luna"))?.slug)
+        // Without a Luna, a small one, else the first.
+        assertEquals("gpt-6.1-sol-mini", defaultModel(named("gpt-6.1-sol", "gpt-6.1-sol-mini"))?.slug)
+        assertEquals("gpt-6.1-sol", defaultModel(named("gpt-6.1-sol", "gpt-6.1-pro"))?.slug)
+        assertNull(defaultModel(emptyList()))
+    }
+
+    @Test
+    fun theModelsOfferedArePickedFromAndThePickAskedWhileOffered() {
+        val models = JSONObject().put(
+            "models",
+            JSONArray()
+                .put(JSONObject().put("slug", "gpt-6.1-luna").put("display_name", "GPT-6.1 Luna").put("visibility", "list"))
+                .put(JSONObject().put("slug", "gpt-6.1-sol").put("display_name", " ").put("visibility", "list"))
+                .put(JSONObject().put("slug", "gpt-6-hidden").put("visibility", "hide"))
+        ).toString()
+        openAi.models = { 200 to models }
+        val chatGpt = signedIn()
+        assertEquals(listOf(ChatGptModel("gpt-6.1-luna", "GPT-6.1 Luna"), ChatGptModel("gpt-6.1-sol", "gpt-6.1-sol")), runBlocking { chatGpt.models() })
+        runBlocking { chatGpt.ask("", "Hi") }
+        assertEquals("gpt-6.1-luna", openAi.asked.last().getString("model"))
+        chatGpt.picked = "gpt-6.1-sol"
+        runBlocking { chatGpt.ask("", "Hi") }
+        assertEquals("gpt-6.1-sol", openAi.asked.last().getString("model"))
+        // One no longer offered gives way to the default.
+        chatGpt.picked = "gpt-5"
+        assertEquals("gpt-6.1-luna", runBlocking { chatGpt.model() })
+        // Read once while signed in, and again for whoever signs in next.
+        assertEquals(1, fake.requestedUrls.count { it == ChatGpt.MODELS_URL })
+        runBlocking { chatGpt.signOut() }
+        assertNull(runBlocking { chatGpt.models() })
+        signIn(chatGpt)
+        runBlocking { chatGpt.models() }
+        assertEquals(2, fake.requestedUrls.count { it == ChatGpt.MODELS_URL })
+    }
+
+    @Test
+    fun anotherModelAnswersAnew() {
+        val chatGpt = signedIn()
+        val tutor = tutor(chatGpt)
+        answering("[\"Hello\"]")
+        assertEquals(listOf("Hello"), runBlocking { tutor.translate(listOf("Hola"), "en") })
+        chatGpt.picked = "gpt-6.1-sol"
+        answering("[\"Hi\"]")
+        assertEquals(listOf("Hi"), runBlocking { tutor.translate(listOf("Hola"), "en") })
+        assertEquals(listOf("gpt-6.1-sol-mini", "gpt-6.1-sol"), openAi.asked.map { it.getString("model") })
+        // Without the models, there's no model to ask.
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+    }
 }
