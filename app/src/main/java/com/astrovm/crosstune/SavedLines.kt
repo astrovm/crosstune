@@ -82,8 +82,10 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     private companion object {
         const val KEY = "saved_lines"
         const val MAX = 500
-        val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L)
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val AGAIN_MS = 10 * 60 * 1000L
     }
 }
+
+/** How many days a line known waits before it's practised again, the more times it's known in a row. */
+private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L)
