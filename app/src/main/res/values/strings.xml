@@ -294,6 +294,11 @@
     <string name="lyrics_explain_failed">Couldn\'t explain this line.</string>
     <string name="lyrics_song_meaning">What the song means</string>
     <string name="lyrics_song_meaning_failed">Couldn\'t explain the song.</string>
+    <string name="explanation_in_song">In the song</string>
+    <string name="explanation_language">Language</string>
+    <string name="song_story">Story</string>
+    <string name="song_mood">Mood</string>
+    <string name="song_references">References</string>
     <string name="chatgpt_limit_reached">Your ChatGPT plan is used up for now.</string>
     <string name="lyrics_repeat_line">Repeat this line</string>
     <string name="lyrics_stop_repeating">Stop repeating</string>
