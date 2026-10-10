@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">Bu satırı çalış</string>
     <string name="lyrics_explain_line">Bu satırı açıkla</string>
     <string name="lyrics_explain_failed">Bu satır açıklanamadı.</string>
+    <string name="song_search_chatgpt">ChatGPT buldu</string>
     <string name="saved_practice">Pratik yap</string>
     <string name="practice_show">Anlamı göster</string>
     <string name="practice_again">Tekrar</string>

@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">यह लाइन सीखें</string>
     <string name="lyrics_explain_line">इस पंक्ति को समझाएं</string>
     <string name="lyrics_explain_failed">यह पंक्ति समझाई नहीं जा सकी।</string>
+    <string name="song_search_chatgpt">ChatGPT ने ढूंढा</string>
     <string name="saved_practice">अभ्यास</string>
     <string name="practice_show">मतलब देखें</string>
     <string name="practice_again">फिर से</string>

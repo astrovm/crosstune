@@ -195,6 +195,24 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return wrong.take(2)
     }
 
+    /** Songs that match [description], what someone remembers about them, most likely first, as title to artist. */
+    suspend fun songsFor(description: String): List<Pair<String, String>>? {
+        val model = chatGpt.model() ?: return null
+        val key = "describe|$model|${description.trim().lowercase()}"
+        val kept = cache.get(key) ?: run {
+            // Tried on real descriptions with GPT-6-Luna: "plastic algo" found Plastic Love and "una
+            // ciudad de la furia" Soda Stereo's, in about 3 s; searching the web found no more.
+            val reply = chatGpt.ask("You find songs from what someone remembers about them. The user sends a description, maybe vague, in any language. Name up to five songs that match it, most likely first, only real songs you're sure exist. Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.", description.trim())
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
+                cache.put(key, it)
+                cache.save()
+            } ?: return null
+        }
+        return JSONArray(kept).let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }
+            .map { it.optString("title").trim() to it.optString("artist").trim() }
+            .filter { (title, artist) -> title.isNotEmpty() && artist.isNotEmpty() }
+    }
+
     private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */

@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">이 줄 공부하기</string>
     <string name="lyrics_explain_line">이 줄 설명</string>
     <string name="lyrics_explain_failed">이 줄을 설명할 수 없어요.</string>
+    <string name="song_search_chatgpt">ChatGPT가 찾은 곡</string>
     <string name="saved_practice">연습</string>
     <string name="practice_show">뜻 보기</string>
     <string name="practice_again">다시</string>

@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">Estudar esta linha</string>
     <string name="lyrics_explain_line">Explicar esta linha</string>
     <string name="lyrics_explain_failed">Não foi possível explicar esta linha.</string>
+    <string name="song_search_chatgpt">Encontrada pelo ChatGPT</string>
     <string name="saved_practice">Praticar</string>
     <string name="practice_show">Ver significado</string>
     <string name="practice_again">De novo</string>

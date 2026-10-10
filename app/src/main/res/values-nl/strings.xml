@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">Deze regel leren</string>
     <string name="lyrics_explain_line">Leg deze regel uit</string>
     <string name="lyrics_explain_failed">Kon deze regel niet uitleggen.</string>
+    <string name="song_search_chatgpt">Gevonden door ChatGPT</string>
     <string name="saved_practice">Oefenen</string>
     <string name="practice_show">Betekenis tonen</string>
     <string name="practice_again">Nog eens</string>

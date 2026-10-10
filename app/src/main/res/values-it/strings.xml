@@ -274,6 +274,7 @@
     <string name="lyrics_study_line">Studia questa riga</string>
     <string name="lyrics_explain_line">Spiega questa riga</string>
     <string name="lyrics_explain_failed">Impossibile spiegare questa riga.</string>
+    <string name="song_search_chatgpt">Trovata da ChatGPT</string>
     <string name="saved_practice">Esercitati</string>
     <string name="practice_show">Mostra significato</string>
     <string name="practice_again">Di nuovo</string>

@@ -678,4 +678,21 @@ class ChatGptTest {
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).quizChoices("Line 10", "El viento trae rumores") })
     }
+
+    @Test
+    fun songsAreNamedFromADescription() {
+        val tutor = tutor()
+        answering("[{\"title\": \"Plastic Love\", \"artist\": \"Mariya Takeuchi\"}, {\"title\": \" \", \"artist\": \"Nobody\"}]")
+        assertEquals(listOf("Plastic Love" to "Mariya Takeuchi"), runBlocking { tutor.songsFor("  japanese 80s song, plastic something ") })
+        assertEquals("japanese 80s song, plastic something", openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
+        // Kept, whatever the case.
+        runBlocking { tutor.songsFor("Japanese 80s song, plastic something") }
+        assertEquals(1, openAi.asked.size)
+        answering("[]")
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("nothing like it") })
+        answering("No idea")
+        assertNull(runBlocking { tutor.songsFor("something else") })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).songsFor("another") })
+    }
 }

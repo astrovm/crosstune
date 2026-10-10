@@ -132,6 +132,10 @@ internal data class UiState(
     val songSearchQuery: String = "",
     /** Set while the songs for typed text are being looked up. */
     val isSearchingSongs: Boolean = false,
+    /** Set while ChatGPT is asked what songs the typed text describes. */
+    val isAskingForSongs: Boolean = false,
+    /** How many of [songSearch], from the first, ChatGPT named. */
+    val songsFromChatGpt: Int = 0,
     val showLinkSettingsHelper: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
@@ -646,19 +650,37 @@ internal class MainViewModel(
             // The sheet says what was found, an empty list included, so it is the one place that
             // does. NOT_FOUND reads as a link that went missing, and would sit over the songs of
             // the next search, so any error from before is cleared with it.
+            // Signed in, a description, more than a name, is asked of ChatGPT too.
+            val describes = usesChatGpt() && words.split(Regex("\\s+")).size >= DESCRIPTION_WORDS
             uiState = uiState.copy(
                 isSearchingSongs = false,
+                isAskingForSongs = describes,
                 songSearch = songs,
+                songsFromChatGpt = 0,
                 songSearchQuery = words,
                 error = null
             )
+            if (!describes) return@launch
+            val named = try {
+                tutor?.songsFor(words).orEmpty().mapNotNull { (title, artist) ->
+                    // Each looked up, so it's a real song with its link; titles and artists swapped happen.
+                    searcher.search("$title $artist").firstOrNull { found ->
+                        (SongNames.same(found.title, title) && SongNames.sameArtist(found.artist, artist)) ||
+                            (SongNames.same(found.title, artist) && SongNames.sameArtist(found.artist, title))
+                    }
+                }.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+            } finally {
+                if (isActive) uiState = uiState.copy(isAskingForSongs = false)
+            }
+            val rest = songs.filterNot { song -> named.any { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) } }
+            uiState = uiState.copy(songSearch = named + rest, songsFromChatGpt = named.size)
         }
     }
 
     /** Closes the songs offered, leaving the typed text as it was. */
     fun dismissSongSearch() {
         searchJob?.cancel()
-        uiState = uiState.copy(isSearchingSongs = false, songSearch = emptyList(), songSearchQuery = "")
+        uiState = uiState.copy(isSearchingSongs = false, isAskingForSongs = false, songSearch = emptyList(), songsFromChatGpt = 0, songSearchQuery = "")
     }
 
     /**
@@ -2230,6 +2252,9 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
+
+        /** Typed text of this many words or more may describe a song rather than name it. */
+        const val DESCRIPTION_WORDS = 3
 
         /** Where a song's explanation, which is no line's, says it's from. */
         const val SONG = -1

@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">Diese Zeile lernen</string>
     <string name="lyrics_explain_line">Diese Zeile erklären</string>
     <string name="lyrics_explain_failed">Diese Zeile konnte nicht erklärt werden.</string>
+    <string name="song_search_chatgpt">Von ChatGPT gefunden</string>
     <string name="saved_practice">Üben</string>
     <string name="practice_show">Bedeutung zeigen</string>
     <string name="practice_again">Nochmal</string>

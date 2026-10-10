@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">Изучить эту строку</string>
     <string name="lyrics_explain_line">Объяснить строку</string>
     <string name="lyrics_explain_failed">Не удалось объяснить строку.</string>
+    <string name="song_search_chatgpt">Найдено ChatGPT</string>
     <string name="saved_practice">Практика</string>
     <string name="practice_show">Показать смысл</string>
     <string name="practice_again">Ещё раз</string>

@@ -273,6 +273,7 @@
     <string name="lyrics_study_line">学习这一行</string>
     <string name="lyrics_explain_line">解释这一行</string>
     <string name="lyrics_explain_failed">无法解释这一行。</string>
+    <string name="song_search_chatgpt">由 ChatGPT 找到</string>
     <string name="saved_practice">练习</string>
     <string name="practice_show">查看含义</string>
     <string name="practice_again">再来</string>
