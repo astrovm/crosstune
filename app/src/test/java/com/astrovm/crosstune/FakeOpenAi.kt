@@ -33,6 +33,15 @@ internal class FakeOpenAi(private val now: () -> Long) {
     var jwks: () -> Pair<Int, String> = { 200 to jwksJson() }
     var revokeFails = false
 
+    /** The models the account offers. */
+    var models: () -> Pair<Int, String> = { 200 to modelsJson("gpt-6.1-sol" to "list", "gpt-6.1-sol-mini" to "list") }
+
+    /** What ChatGPT streams back to a request with this body; "Hello" by default. */
+    var reply: (JSONObject) -> Pair<Int, String> = { 200 to stream("Hel", "lo") }
+
+    /** The requests ChatGPT was asked, as sent. */
+    val asked = mutableListOf<JSONObject>()
+
     /** OpenAI's answer to [request], or null when it isn't for OpenAI. */
     fun answer(request: Request): Response? {
         val url = request.url.toString()
@@ -41,6 +50,12 @@ internal class FakeOpenAi(private val now: () -> Long) {
             ChatGpt.TOKEN_URL -> tokenAnswer(form)
             ChatGpt.JWKS_URL -> jwks()
             ChatGpt.REVOKE_URL -> if (revokeFails) throw IOException("offline") else 200 to ""
+            ChatGpt.MODELS_URL -> models()
+            ChatGpt.RESPONSES_URL -> {
+                val body = JSONObject(okio.Buffer().also { request.body!!.writeTo(it) }.readUtf8())
+                asked += body
+                reply(body)
+            }
             else -> return null
         }
         return FakeSpotify.html(request, body, code = code)
@@ -85,6 +100,14 @@ internal class FakeOpenAi(private val now: () -> Long) {
 
     companion object {
         const val EMAIL = "ana@example.com"
+
+        fun modelsJson(vararg models: Pair<String, String>): String =
+            JSONObject().put("models", JSONArray().apply { models.forEach { (slug, visibility) -> put(JSONObject().put("slug", slug).put("visibility", visibility)) } }).toString()
+
+        /** An answer streamed as OpenAI does, [deltas] at a time, ending with [end]. */
+        fun stream(vararg deltas: String, end: String? = """{"type":"response.completed"}"""): String =
+            (deltas.map { JSONObject().put("type", "response.output_text.delta").put("delta", it).toString() } + listOfNotNull(end))
+                .joinToString("") { "event: x\ndata: $it\n\n" }
         const val PLAN_SCOPES = "chatgpt.tokens.use.direct email offline_access openid profile resource.invoke"
 
         fun base64Url(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)

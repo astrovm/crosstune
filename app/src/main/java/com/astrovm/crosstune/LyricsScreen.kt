@@ -1004,10 +1004,12 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // Signed in with ChatGPT, it can explain the line.
             if (state.chatGpt.email != null) {
                 val explanation = learning.explanation?.takeIf { it.index == index }
-                if (explanation != null && !explanation.failed) {
+                if (explanation != null && (explanation.writing || explanation.done)) {
                     ExplanationCard(explanation)
                 } else {
-                    explanation?.let { Text(stringResource(R.string.lyrics_explain_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                    // Used up for now, or failed, it can be asked again.
+                    if (explanation?.limitReached == true) ExplanationCard(explanation)
+                    if (explanation?.failed == true) Text(stringResource(R.string.lyrics_explain_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick = { actions.onExplainLine(index) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         AppIcon(R.drawable.ic_info, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text(stringResource(R.string.lyrics_explain_line), modifier = Modifier.padding(start = 8.dp))
