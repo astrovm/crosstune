@@ -74,6 +74,7 @@
   button.btn { font: inherit; font-weight: 600; cursor: pointer; }
   .btn .chevron { width: 20px; height: 20px; margin-right: -6px; transition: transform .2s; }
   .play-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+  .hero.open .shots { align-self: start; }
   .play { margin-top: 16px; }
   .play ol.steps { grid-template-columns: 1fr; gap: 8px; }
   .play ol.steps li { padding: 12px 14px; }
@@ -275,7 +276,22 @@
   // Google Play's steps show under its button, and straight away for a link to them.
   const play = document.querySelector(".play-toggle");
   const steps = document.getElementById("google-play");
-  const showSteps = open => { steps.hidden = !open; play.setAttribute("aria-expanded", open); };
+  // The clips stay where they were while the steps are open, instead of sliding down with the text.
+  const hero = document.querySelector(".hero");
+  const clips = hero.querySelector(".shots");
+  const place = () => {
+    hero.classList.remove("open");
+    clips.style.marginTop = "";
+    if (steps.hidden) return;
+    steps.hidden = true;
+    const closed = clips.getBoundingClientRect().top;
+    steps.hidden = false;
+    hero.classList.add("open");
+    clips.style.marginTop = Math.max(0, closed - clips.getBoundingClientRect().top) + "px";
+  };
+  const showSteps = open => { steps.hidden = !open; play.setAttribute("aria-expanded", open); place(); };
+  addEventListener("resize", place);
+  document.fonts.ready.then(place);
   play.addEventListener("click", () => showSteps(steps.hidden));
   if (location.hash === "#google-play") showSteps(true);
   update();
