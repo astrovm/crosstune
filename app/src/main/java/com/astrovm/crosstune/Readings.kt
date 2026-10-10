@@ -113,14 +113,19 @@ internal object Readings {
             val opening = piece.surface in OPENING
             val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
-            // An ending after a particle starts a word of its own: だけだった is dake datta.
-            val attaches = previous != null && (opened || (piece.kind == "記号" && !opening) || (ending && previous.kind != "助詞"))
+            // An ending after a particle starts a word of its own: だけだった is dake datta. English
+            // the dictionary splits, "Don't" into Don, ' and t, stays as written.
+            val english = previous != null && isEnglish(previous.surface) && isEnglish(piece.surface)
+            val attaches = previous != null && (opened || english || (piece.kind == "記号" && !opening) || (ending && previous.kind != "助詞"))
             if (attaches) words.last() += piece else words += mutableListOf(piece)
             opened = opening
             previous = piece
         }
         return words
     }
+
+    /** Latin letters, digits and apostrophes, as English is written in Japanese lyrics. */
+    private fun isEnglish(text: String) = text.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '\'' || it == '’' }
 
     /**
      * The words of [line], to look up one by one: Japanese as its dictionary splits it, with each
