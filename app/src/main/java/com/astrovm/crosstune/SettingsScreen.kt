@@ -37,6 +37,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
@@ -240,6 +243,11 @@ private fun SettingsList(
             )
         }
 
+        // The AI features run on the user's ChatGPT plan, once signed in.
+        SectionHeader(stringResource(R.string.settings_chatgpt_title))
+        Group { ChatGptRow(state.chatGpt, actions, onManageUsage = { uriHandler.openUri(ChatGpt.USAGE_URL) }) }
+        if (state.chatGpt.welcome) ChatGptWelcome(onDismiss = actions.onDismissChatGptWelcome)
+
         SectionHeader(stringResource(R.string.settings_appearance_title))
         Group {
             ThemeRow(state.theme, actions.onThemeChange)
@@ -437,6 +445,60 @@ private fun TranslationServerRow(server: TranslationServer?, onChange: (String, 
             }
         }
     }
+}
+
+/**
+ * Signing in with ChatGPT: why, with OpenAI's own "Continue with ChatGPT" to start; who's signed
+ * in, with where to see what Crosstune used of their plan; or the browser being waited for.
+ */
+@Composable
+private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions, onManageUsage: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp)) {
+        val email = chatGpt.email
+        Text(
+            if (email != null) stringResource(R.string.chatgpt_signed_in, email) else stringResource(R.string.chatgpt_use_plan),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            stringResource(if (chatGpt.signingIn) R.string.chatgpt_signing_in else R.string.chatgpt_use_plan_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        chatGpt.problem?.let { problem ->
+            Text(
+                stringResource(if (problem == ChatGptSignInResult.DECLINED) R.string.chatgpt_declined else R.string.chatgpt_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        Row(modifier = Modifier.align(Alignment.End).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            when {
+                chatGpt.signingIn -> TextButton(onClick = actions.onCancelChatGptSignIn) { Text(stringResource(R.string.cancel_button)) }
+                email != null -> {
+                    TextButton(onClick = onManageUsage) { Text(stringResource(R.string.chatgpt_manage_usage)) }
+                    TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
+                }
+                // Black, as OpenAI asks of its sign-in button.
+                else -> Button(
+                    onClick = actions.onSignInWithChatGpt,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                ) { Text(stringResource(R.string.chatgpt_continue)) }
+            }
+        }
+    }
+}
+
+/** Said once, after the first sign-in: the AI features use the user's ChatGPT plan from now on. */
+@Composable
+private fun ChatGptWelcome(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.chatgpt_welcome_title)) },
+        text = { Text(stringResource(R.string.chatgpt_welcome_message)) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.got_it_button)) } }
+    )
 }
 
 /** The translation service used when no server is set; a name, so never translated. */

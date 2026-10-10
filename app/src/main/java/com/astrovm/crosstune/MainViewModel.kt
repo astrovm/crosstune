@@ -110,6 +110,8 @@ internal data class UiState(
     val learning: Learning = Learning(),
     /** Lines kept to study later, newest first. */
     val savedLines: List<SavedLine> = emptyList(),
+    /** The ChatGPT account whose plan the AI features run on. */
+    val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */
     val repeating: Int? = null,
     /** A word of the words being looked up, or looked up. */
@@ -252,6 +254,17 @@ internal const val DEFAULT_VISUALS_SHADE = 0.45f
 /** [type] is what kind of word it is, e.g. "noun", when the dictionary says. */
 internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false, val type: String? = null)
 
+/** Signing in with ChatGPT: [email] once signed in, and how the last try went. */
+internal data class ChatGptState(
+    val email: String? = null,
+    /** Set while the browser's open to sign in. */
+    val signingIn: Boolean = false,
+    /** How the last sign-in ended when it didn't. */
+    val problem: ChatGptSignInResult? = null,
+    /** Set after the first sign-in, to say the AI features now use the user's plan. */
+    val welcome: Boolean = false
+)
+
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
@@ -316,7 +329,9 @@ internal class MainViewModel(
     /** Where a song's words are translated; nullable so tests need no translation service. */
     private val translator: Translator? = null,
     /** The language words are translated into: the app's. */
-    private val translationLanguage: () -> String = { Translator.languageOf(java.util.Locale.getDefault()) }
+    private val translationLanguage: () -> String = { Translator.languageOf(java.util.Locale.getDefault()) },
+    /** The ChatGPT account the AI features use; nullable so tests need none. */
+    private val chatGpt: ChatGpt? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -394,6 +409,56 @@ internal class MainViewModel(
 
     private val effectChannel = Channel<Effect>(Channel.BUFFERED)
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
+
+    init {
+        chatGpt?.let { account ->
+            viewModelScope.launch {
+                // Read before the state is, which may change while the account's read.
+                val email = account.email() ?: return@launch
+                uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(email = email))
+            }
+        }
+    }
+
+    private var chatGptJob: Job? = null
+
+    /** Opens the browser to sign in with ChatGPT, and waits for it to come back; [done] once it's over. */
+    fun signInWithChatGpt(done: () -> Unit) {
+        val account = chatGpt ?: return
+        chatGptJob?.cancel()
+        uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(signingIn = true, problem = null))
+        chatGptJob = viewModelScope.launch {
+            try {
+                val result = account.signIn(open = { url -> effectChannel.send(Effect.Open(url, packageName = null, finishAfterOpen = false)) })
+                val signedIn = result == ChatGptSignInResult.SIGNED_IN
+                val email = if (signedIn) account.email() else null
+                // Said once, the first time the plan's used.
+                val welcome = signedIn && !preferences.getBoolean(KEY_CHATGPT_WELCOMED, false)
+                uiState = uiState.copy(chatGpt = ChatGptState(email = email, problem = result.takeUnless { signedIn }, welcome = welcome))
+            } finally {
+                // Unless another sign-in took over, which still needs Crosstune kept running.
+                if (chatGptJob === coroutineContext[Job]) done()
+            }
+        }
+    }
+
+    /** Stops waiting for the browser, which won't be listened to anymore. */
+    fun cancelChatGptSignIn() {
+        chatGptJob?.cancel()
+        uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(signingIn = false))
+    }
+
+    fun dismissChatGptWelcome() {
+        preferences.edit { putBoolean(KEY_CHATGPT_WELCOMED, true) }
+        uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(welcome = false))
+    }
+
+    fun signOutOfChatGpt() {
+        val account = chatGpt ?: return
+        chatGptJob?.cancel()
+        uiState = uiState.copy(chatGpt = ChatGptState())
+        viewModelScope.launch { account.signOut() }
+    }
 
     private var job: Job? = null
     private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
@@ -1940,6 +2005,7 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION_SERVER = "translation_server"
         private const val KEY_TRANSLATION_KEY = "translation_key"
         private const val KEY_TRANSLATE_INTO = "translate_into"
+        private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"
         private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"

@@ -89,7 +89,9 @@ class MainActivity : ComponentActivity() {
                     listenAlongPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
-                    translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) }
+                    translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
+                    // Left out of backups, so the tokens never leave the phone.
+                    chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
                 )
             }
         }
@@ -306,6 +308,14 @@ class MainActivity : ComponentActivity() {
                         onStopRepeating = viewModel::stopRepeating,
                         onTranslationServerChange = viewModel::setTranslationServer,
                         onTranslateIntoChange = viewModel::setTranslateInto,
+                        onSignInWithChatGpt = {
+                            // Kept running while the browser signs in, until it's done, however it ends.
+                            ChatGptSignInService.start(this)
+                            viewModel.signInWithChatGpt(done = { ChatGptSignInService.stop(applicationContext) })
+                        },
+                        onCancelChatGptSignIn = viewModel::cancelChatGptSignIn,
+                        onSignOutOfChatGpt = viewModel::signOutOfChatGpt,
+                        onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
                         onListenAlong = { withMicrophone(viewModel::listenAlong) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
@@ -489,8 +499,9 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
 
         when (intent.action) {
-            // The widget's songs ask to be shown here rather than opened.
-            Intent.ACTION_VIEW -> viewModel.resolveIncoming(
+            // The widget's songs ask to be shown here rather than opened. Back from signing in with
+            // ChatGPT, it's all done by then.
+            Intent.ACTION_VIEW -> if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
                 intent.dataString,
                 show = viewModel.uiState.showSongFirst || intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
             )

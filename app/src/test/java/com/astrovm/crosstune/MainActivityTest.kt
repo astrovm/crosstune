@@ -79,6 +79,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import kotlin.concurrent.thread
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.shadows.ShadowSettings
@@ -2948,6 +2950,83 @@ class MainActivityTest {
         click("MyMemory")
         click(string(R.string.cancel_button))
         assertTextShown("MyMemory")
+    }
+
+    @Test
+    fun signingInWithChatGptUsesThePlanSaysSoOnceAndSignsOut() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        fake.handler = { request -> openAi.answer(request) ?: FakeSpotify.html(request, "") }
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        File(app.noBackupFilesDir, "chatgpt.json").delete()
+        launch()
+        click(string(R.string.settings_button))
+
+        /** Starts signing in, and returns once the browser's open for it. */
+        fun startSigningIn() {
+            composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
+            // Kept running while the browser's open, so Android won't freeze it.
+            assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+            val browser = nextStartedActivity()!!
+            assertEquals(Intent.ACTION_VIEW, browser.action)
+            openAi.authorize = browser.dataString!!.toHttpUrl()
+            assertEquals("https://auth.openai.com/api/accounts/authorize", openAi.authorize.toString().substringBefore("?"))
+            assertTextShown(string(R.string.chatgpt_signing_in))
+        }
+
+        // Left in the browser, it can be given up on.
+        startSigningIn()
+        click(string(R.string.cancel_button))
+        assertTextShown(string(R.string.chatgpt_continue))
+        // No longer needed once it's over, however it ended.
+        val stopped = mutableListOf<String?>()
+        waitUntil {
+            generateSequence { shadowOf(app).nextStoppedService }.forEach { stopped += it.component?.className }
+            ChatGptSignInService::class.java.name in stopped
+        }
+
+        // Back with someone else's answer, it didn't work.
+        startSigningIn()
+        thread { openAi.comeBack("code=c&state=forged&client_id=oaiapp_1") }
+        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_failed)).fetchSemanticsNodes().isNotEmpty() }
+
+        startSigningIn()
+        thread { openAi.comeBack("error=access_denied&state=${openAi.authorize.queryParameter("state")}") }
+        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_declined)).fetchSemanticsNodes().isNotEmpty() }
+
+        startSigningIn()
+        val page = openAi.comeBack()
+        // The page the browser lands on sends it back to Crosstune, which shows Settings as it was.
+        assertTrue(page.contains("package=${app.packageName}"))
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(controller!!.get(), Intent(Intent.ACTION_VIEW, Uri.parse("crosstune://chatgpt")))
+        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(fake.requestedUrls.none { "crosstune" in it })
+
+        // Said once, the first time.
+        assertTextShown(string(R.string.chatgpt_welcome_title))
+        click(string(R.string.got_it_button))
+        assertTextAbsent(string(R.string.chatgpt_welcome_title))
+        assertTrue(prefs().getBoolean("chatgpt_welcomed", false))
+
+        click(string(R.string.chatgpt_manage_usage))
+        assertEquals("https://chatgpt.com/settings/usage", nextStartedActivity()!!.dataString)
+
+        // Signed in still when Crosstune's opened again.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).performScrollTo()
+        click(string(R.string.chatgpt_sign_out))
+        assertTextShown(string(R.string.chatgpt_continue))
+        waitUntil { ChatGpt.REVOKE_URL in fake.requestedUrls }
+
+        // Signed in again, it isn't said again.
+        startSigningIn()
+        thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}") }
+        waitUntil { composeRule.onAllNodesWithText(string(R.string.chatgpt_signed_in, FakeOpenAi.EMAIL)).fetchSemanticsNodes().isNotEmpty() }
+        assertTextAbsent(string(R.string.chatgpt_welcome_title))
     }
 
     @Test
