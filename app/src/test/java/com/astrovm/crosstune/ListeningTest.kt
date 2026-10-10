@@ -1195,6 +1195,7 @@ class ListeningTest {
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
+                "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
                 "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
                 else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
@@ -1324,6 +1325,16 @@ class ListeningTest {
         composeRule.onNode(hasText(string(R.string.lyrics_ask_line))).performTextInput("Again?")
         click(string(R.string.lyrics_ask_send))
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
+    }
+
+    @Test
+    fun signedInReadingsTheDictionaryGetsWrongArePutRight() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "君はアスファルト・レディ\\n夜の雨", openAi = openAi)
+        // The dictionary reads 君 as くん here; ChatGPT puts it right.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("きみ") }
+        assertFalse(shown("くん"))
     }
 
     @Test

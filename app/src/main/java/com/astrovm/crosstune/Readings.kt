@@ -24,6 +24,9 @@ internal data class LineReading(val parts: List<Ruby>, val reading: String, val 
  */
 internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text)
 
+/** A reading put right: on line [line], from 0, [kanji] reads [reading], in hiragana. */
+internal data class ReadingFix(val line: Int, val kanji: String, val reading: String)
+
 /** Readings of lyrics in Japanese, Chinese and Korean, all worked out on the phone. */
 internal object Readings {
 
@@ -92,6 +95,29 @@ internal object Readings {
     }
 
     private val TOGETHER = mapOf("一人" to "ひとり", "二人" to "ふたり")
+
+    /**
+     * [read] with [fixes] made: each kanji takes its new reading, on the line and in its kana and
+     * romaji. A fix that also gives the kana written after the kanji, ごし for 越 in 越し, has
+     * those left off; one that changes nothing, or names a kanji the line hasn't, is left out.
+     */
+    fun corrected(read: List<LineReading>, fixes: List<ReadingFix>): List<LineReading> = read.mapIndexed { index, line ->
+        fixes.filter { it.line == index }.fold(line) { fixed, fix ->
+            val at = fixed.parts.indexOfFirst { it.text == fix.kanji && it.reading != null }
+            if (at < 0) return@fold fixed
+            val old = fixed.parts[at].reading!!
+            val after = hiragana(fixed.parts.drop(at + 1).joinToString("") { it.text })
+            val wanted = hiragana(fix.reading).let { reading ->
+                (reading.length - 1 downTo 1).firstOrNull { cut -> after.startsWith(reading.substring(cut)) }?.let { reading.substring(0, it) } ?: reading
+            }
+            if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return@fold fixed
+            LineReading(
+                fixed.parts.map { if (it.text == fix.kanji && it.reading == old) it.copy(reading = wanted) else it },
+                fixed.reading.replace(old, wanted),
+                fixed.romanized.replace(Regex("""\b${Regex.escape(romaji(old))}"""), romaji(wanted))
+            )
+        }
+    }
 
     /**
      * The words of a line in kana, as romaji spaces them: a verb with its endings is one word, e.g.

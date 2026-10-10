@@ -1693,6 +1693,12 @@ internal class MainViewModel(
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
                 val read = withContext(systemDispatcher) { Readings.of(lines, script) }
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
+                val song = uiState.lyricsFor
+                if (script == Script.JAPANESE && usesChatGpt() && song != null) {
+                    val checked = tutor?.checkReadings(song, lines, read) ?: return@launch
+                    if (wordLines() == lines && uiState.learning.lines == read) uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+                }
             }
         }
         val translator = translator ?: return

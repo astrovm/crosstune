@@ -140,6 +140,36 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         )
     }
 
+    /**
+     * [read], the readings the dictionary gave [song]'s Japanese [lines], with those ChatGPT finds
+     * wrong in this song put right, e.g. 君 as きみ rather than くん; null when it couldn't check.
+     */
+    suspend fun checkReadings(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<LineReading>? {
+        val model = chatGpt.model() ?: return null
+        val key = "readings|$model|${song.title}|${song.artist}"
+        val fixes = cache.get(key) ?: run {
+            val asked = JSONArray()
+            lines.forEachIndexed { index, line ->
+                val readings = JSONArray(read.getOrNull(index)?.parts.orEmpty().filter { it.reading != null }.map { "${it.text}=${it.reading}" })
+                asked.put(JSONObject().put("line", index + 1).put("text", line).put("readings", readings))
+            }
+            // Tried on real songs with GPT-6-Luna: in about 3 s with low thinking it found every
+            // reading the dictionary got wrong, 君 as くん, 重ね着's 着 as ちゃく, 身体 as しんたい.
+            val reply = chatGpt.ask(
+                "You check the readings a Japanese dictionary gave the kanji in a song's lyrics, for someone learning Japanese. The user sends the lyrics as a JSON array of lines, each with its kanji and the reading the dictionary gave, as kanji=reading. Find only the readings that are wrong in this song, as it's sung: names, words read otherwise in context, and readings songs use. Reply with only a JSON array of corrections, each an object with \"line\" (the line's number, from 1), \"kanji\" as given, and \"reading\" in hiragana; an empty array when all are right.",
+                asked.toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
+                cache.put(key, it)
+                cache.save()
+            } ?: return null
+        }
+        return Readings.corrected(read, JSONArray(fixes).let { list ->
+            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading")) }
+        })
+    }
+
     private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */

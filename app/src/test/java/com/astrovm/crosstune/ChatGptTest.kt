@@ -626,4 +626,33 @@ class ChatGptTest {
         assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
         assertEquals(ChatGptReply.Failed, runBlocking { tutor.askAboutLine(song, lines, 5, null, emptyList(), "?", "es") {} })
     }
+
+    @Test
+    fun readingsAreCheckedOncePerSong() {
+        val tutor = tutor()
+        val song = MusicMetadata("Asphalt Lady", "S.Kiyotaka & Omega Tribe")
+        val lines = listOf("Shock!　君はアスファルト・レディ")
+        val read = listOf(LineReading(listOf(Ruby("Shock!　"), Ruby("君", "くん"), Ruby("はアスファルト・レディ")), "Shock!　くんはアスファルト・レディ", "Shock! kun wa asufaruto redi"))
+        answering("Here:\n[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
+        val checked = runBlocking { tutor.checkReadings(song, lines, read) }!!
+        assertEquals("きみ", checked[0].parts[1].reading)
+        assertEquals("Shock! kimi wa asufaruto redi", checked[0].romanized)
+        val asked = openAi.asked.single()
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        val sent = JSONArray(asked.getJSONArray("input").getJSONObject(0).getString("content")).getJSONObject(0)
+        assertEquals(1, sent.getInt("line"))
+        assertEquals("君=くん", sent.getJSONArray("readings").getString(0))
+        // Kept for the song.
+        assertEquals(checked, runBlocking { tutor.checkReadings(song, lines, read) })
+        assertEquals(1, openAi.asked.size)
+        // Nothing wrong, or no answer.
+        answering("[]")
+        assertEquals(read, runBlocking { tutor.checkReadings(song.copy(title = "Other"), lines, read) })
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.checkReadings(song.copy(title = "Third"), lines, read) })
+        answering("No idea")
+        assertNull(runBlocking { tutor.checkReadings(song.copy(title = "Fourth"), lines, read) })
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).checkReadings(song.copy(title = "Fifth"), lines, read) })
+    }
 }
