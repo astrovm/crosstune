@@ -18,7 +18,9 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      */
     suspend fun translate(lines: List<String>, language: String): List<String?>? {
         val words = lines.filter { line -> line.any(Char::isLetter) }.distinct()
-        val key = { line: String -> "translation|$language|$line" }
+        // Each model's own, so picking another translates anew.
+        val model = chatGpt.model() ?: return null
+        val key = { line: String -> "translation|$model|$language|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val found = if (missing.isEmpty()) {
@@ -48,7 +50,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      * grammar and any slang or references. [onText] gets the explanation as it's written.
      */
     suspend fun explain(song: MusicMetadata, lines: List<String>, line: String, language: String, onText: (String) -> Unit): ChatGptReply {
-        val key = "explanation|$language|${song.title}|${song.artist}|$line"
+        val model = chatGpt.model() ?: return ChatGptReply.Failed
+        val key = "explanation|$model|$language|${song.title}|${song.artist}|$line"
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         val reply = chatGpt.ask(
             "You help someone learn a language through the songs they listen to. The user sends a song's lyrics and one line from it. " +
@@ -66,7 +69,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
 
     /** What [word] means as used in [line], in [language], and what kind of word it is there; null when it couldn't be found. */
     suspend fun meaning(word: String, line: String, language: String): Definition? {
-        val key = "word|$language|$line|$word"
+        val model = chatGpt.model() ?: return null
+        val key = "word|$model|$language|$line|$word"
         val answer = cache.get(key) ?: run {
             val name = nameOf(language)
             val reply = chatGpt.ask(

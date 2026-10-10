@@ -55,6 +55,7 @@
     <string name="chatgpt_signing_in">Finish signing in in the browser.</string>
     <string name="chatgpt_signed_in">Signed in as %1$s</string>
     <string name="chatgpt_manage_usage">Manage usage</string>
+    <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Sign out</string>
     <string name="chatgpt_declined">Crosstune wasn\'t allowed to use your ChatGPT plan.</string>
     <string name="chatgpt_failed">Couldn\'t sign in with ChatGPT. Try again.</string>
