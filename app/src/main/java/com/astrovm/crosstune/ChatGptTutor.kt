@@ -112,6 +112,34 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return reply.also { keep(key, it) }
     }
 
+    /**
+     * The answer, in [language], to [question] about line [index] of [song], whose words are
+     * [lines], after [explanation] of it and the [earlier] questions and answers. Not kept: each
+     * question is the user's own. [onText] gets it as it's written.
+     */
+    suspend fun askAboutLine(
+        song: MusicMetadata,
+        lines: List<String>,
+        index: Int,
+        explanation: String?,
+        earlier: List<Pair<String, String>>,
+        question: String,
+        language: String,
+        onText: (String) -> Unit
+    ): ChatGptReply {
+        val line = lines.getOrNull(index) ?: return ChatGptReply.Failed
+        // Tried on real questions with GPT-6-Luna: answered in 2 to 4 s, under 60 words, and a
+        // question that isn't about the song is turned down.
+        return chatGpt.ask(
+            "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, one line of it, what you already said about that line, and their question about it, maybe after earlier ones. Answer the last question in ${nameOf(language)}, about that line in this song, in at most 60 words of plain text, without headings or Markdown. If the question isn't about the song or learning its language, say briefly that you can only help with the song.",
+            "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}" +
+                "\n\nLine ${index + 1}: $line\n\n" + explanation?.let { "What you said about it:\n$it\n\n" }.orEmpty() +
+                earlier.joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
+            effort = "low",
+            onText = onText
+        )
+    }
+
     private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */

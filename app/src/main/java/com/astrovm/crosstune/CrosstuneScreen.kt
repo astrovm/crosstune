@@ -211,6 +211,8 @@ internal data class ScreenActions(
     /** Looks up a word, in the line it's in, by the line's index. */
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
+    /** Asks ChatGPT a question about a line, by its index. */
+    val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
     val onExplainSong: () -> Unit = {},
     val onDismissWord: () -> Unit = {},

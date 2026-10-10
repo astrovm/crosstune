@@ -273,6 +273,9 @@
     <string name="lyrics_study_line">Pelajari baris ini</string>
     <string name="lyrics_explain_line">Jelaskan baris ini</string>
     <string name="lyrics_explain_failed">Tidak bisa menjelaskan baris ini.</string>
+    <string name="lyrics_ask_line">Tanya tentang baris ini</string>
+    <string name="lyrics_ask_send">Kirim</string>
+    <string name="lyrics_ask_failed">Tidak bisa menjawab.</string>
     <string name="lyrics_song_meaning">Arti lagu ini</string>
     <string name="lyrics_song_meaning_failed">Tidak bisa menjelaskan lagu ini.</string>
     <string name="explanation_in_song">Dalam lagu</string>

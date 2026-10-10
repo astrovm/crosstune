@@ -273,6 +273,9 @@
     <string name="lyrics_study_line">Estudiar esta línea</string>
     <string name="lyrics_explain_line">Explicar esta línea</string>
     <string name="lyrics_explain_failed">No se pudo explicar esta línea.</string>
+    <string name="lyrics_ask_line">Preguntá sobre esta línea</string>
+    <string name="lyrics_ask_send">Enviar</string>
+    <string name="lyrics_ask_failed">No se pudo responder.</string>
     <string name="lyrics_song_meaning">Qué significa la canción</string>
     <string name="lyrics_song_meaning_failed">No se pudo explicar la canción.</string>
     <string name="explanation_in_song">En la canción</string>

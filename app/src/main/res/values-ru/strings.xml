@@ -273,6 +273,9 @@
     <string name="lyrics_study_line">Изучить эту строку</string>
     <string name="lyrics_explain_line">Объяснить строку</string>
     <string name="lyrics_explain_failed">Не удалось объяснить строку.</string>
+    <string name="lyrics_ask_line">Спросите об этой строке</string>
+    <string name="lyrics_ask_send">Отправить</string>
+    <string name="lyrics_ask_failed">Не удалось ответить.</string>
     <string name="lyrics_song_meaning">О чём песня</string>
     <string name="lyrics_song_meaning_failed">Не удалось объяснить песню.</string>
     <string name="explanation_in_song">В песне</string>

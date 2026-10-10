@@ -602,4 +602,28 @@ class ChatGptTest {
         assertEquals(listOf("Charla urbana tras el cristal", null, "El viento trae rumores", null), shown.first())
         assertEquals(JSONArray(listOf("君が遅れたのは")).toString(), openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content"))
     }
+
+    @Test
+    fun aQuestionAboutALineIsAnsweredWithWhatWasSaidBefore() {
+        val tutor = tutor()
+        val song = MusicMetadata("November Blue (2023 Remix)", "S.Kiyotaka & Omega Tribe")
+        val lines = listOf("ガラス越しの City Talk", "Don't Say 誰かの腕時計は")
+        answering("Es una elección estilística.")
+        val written = mutableListOf<String>()
+        val reply = runBlocking {
+            tutor.askAboutLine(song, lines, 1, "Le pide que no lo diga.", listOf("¿Qué es は?" to "La partícula de tema."), "¿Por qué en inglés?", "es") { written += it }
+        }
+        assertEquals(ChatGptReply.Answer("Es una elección estilística."), reply)
+        assertEquals("Es una elección estilística.", written.last())
+        val asked = openAi.asked.single()
+        val input = asked.getJSONArray("input").getJSONObject(0).getString("content")
+        assertTrue(input, input.contains("2. Don't Say 誰かの腕時計は") && input.contains("What you said about it:\nLe pide que no lo diga."))
+        assertTrue(input, input.endsWith("Question: ¿Qué es は?\nAnswer: La partícula de tema.\n\nQuestion: ¿Por qué en inglés?"))
+        assertTrue(asked.getString("instructions").contains("you can only help with the song"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Without an explanation, or about a line that isn't there.
+        runBlocking { tutor.askAboutLine(song, lines, 0, null, emptyList(), "¿Y esto?", "es") {} }
+        assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor.askAboutLine(song, lines, 5, null, emptyList(), "?", "es") {} })
+    }
 }

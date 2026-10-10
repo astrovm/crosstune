@@ -268,6 +268,11 @@ internal data class ChatGptState(
     val model: String? = null
 )
 
+/** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
+internal data class LineQuestion(val question: String, val answer: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
+    val writing get() = !done && !failed && !limitReached
+}
+
 /** Line [index] explained by ChatGPT: [text] so far, until [done]; or why it couldn't be. */
 internal data class LineExplanation(val index: Int, val text: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
     val writing get() = !done && !failed && !limitReached
@@ -293,7 +298,10 @@ internal data class Learning(
     /** A line ChatGPT is explaining, or has. */
     val explanation: LineExplanation? = null,
     /** What the whole song is about, as ChatGPT is explaining it, or has. */
-    val songExplanation: LineExplanation? = null
+    val songExplanation: LineExplanation? = null,
+    /** Questions asked about line [questionsAbout], in order, with their answers. */
+    val questionsAbout: Int? = null,
+    val questions: List<LineQuestion> = emptyList()
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script)
@@ -1482,6 +1490,7 @@ internal class MainViewModel(
         wordJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()
+        questionJob?.cancel()
         stopRepeating()
         uiState = uiState.copy(word = null)
     }
@@ -1566,6 +1575,40 @@ internal class MainViewModel(
             // A line kept already keeps its explanation too.
             if (explanation.done) uiState = uiState.copy(savedLines = savedLinesStore.explain(line, song.title, song.artist, explanation.text))
         }
+    }
+
+    private var questionJob: Job? = null
+
+    /** Asks ChatGPT [question] about line [index], after its explanation and what was asked before. */
+    fun askAboutLine(index: Int, question: String) {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val asked = question.trim().takeIf { it.isNotEmpty() } ?: return
+        val learning = uiState.learning
+        // Questions about another line start over.
+        val before = if (learning.questionsAbout == index) learning.questions.filter { it.done } else emptyList()
+        val explanation = learning.explanation?.takeIf { it.index == index && it.done }?.text
+        questionJob?.cancel()
+        setQuestions(index, before + LineQuestion(asked))
+        questionJob = viewModelScope.launch {
+            val reply = tutor.askAboutLine(song, wordLines(), index, explanation, before.map { it.question to it.answer }, asked, translateInto()) { text ->
+                viewModelScope.launch {
+                    if (uiState.learning.questions.lastOrNull()?.writing == true) setQuestions(index, before + LineQuestion(asked, text))
+                }
+            }
+            setQuestions(
+                index,
+                before + when (reply) {
+                    is ChatGptReply.Answer -> LineQuestion(asked, reply.text.trim(), done = true)
+                    ChatGptReply.LimitReached -> LineQuestion(asked, limitReached = true)
+                    ChatGptReply.Failed -> LineQuestion(asked, failed = true)
+                }
+            )
+        }
+    }
+
+    private fun setQuestions(index: Int, questions: List<LineQuestion>) {
+        uiState = uiState.copy(learning = uiState.learning.copy(questionsAbout = index, questions = questions))
     }
 
     private var songExplanationJob: Job? = null

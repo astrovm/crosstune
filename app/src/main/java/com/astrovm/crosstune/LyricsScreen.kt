@@ -34,6 +34,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1052,6 +1056,8 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                 val explanation = learning.explanation?.takeIf { it.index == index }
                 if (explanation != null && (explanation.writing || explanation.done)) {
                     ExplanationCard(explanation)
+                    // Explained, more can be asked about it.
+                    if (explanation.done) LineQuestions(index, learning, actions)
                 } else {
                     // Used up for now, or failed, it can be asked again.
                     if (explanation?.limitReached == true) ExplanationCard(explanation)
@@ -1204,6 +1210,43 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
             }
         }
     }
+}
+
+/** The questions asked about line [index] with their answers, and a field to ask another. */
+@Composable
+private fun LineQuestions(index: Int, learning: Learning, actions: ScreenActions) {
+    val questions = learning.questions.takeIf { learning.questionsAbout == index }.orEmpty()
+    questions.forEach { asked ->
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 8.dp)) {
+            Text(asked.question, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            when {
+                asked.limitReached -> Text(stringResource(R.string.chatgpt_limit_reached), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                asked.failed -> Text(stringResource(R.string.lyrics_ask_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                asked.answer.isEmpty() -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                else -> Text(plainText(asked.answer), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+    var question by rememberSaveable(index) { mutableStateOf("") }
+    val send = {
+        actions.onAskAboutLine(index, question)
+        question = ""
+    }
+    val asking = questions.lastOrNull()?.writing == true
+    OutlinedTextField(
+        value = question,
+        onValueChange = { question = it },
+        placeholder = { Text(stringResource(R.string.lyrics_ask_line)) },
+        trailingIcon = {
+            IconButton(onClick = send, enabled = question.isNotBlank() && !asking) {
+                AppIcon(R.drawable.ic_send, contentDescription = stringResource(R.string.lyrics_ask_send))
+            }
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+        keyboardActions = KeyboardActions(onSend = { if (question.isNotBlank() && !asking) send() }),
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    )
 }
 
 /** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */

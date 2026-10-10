@@ -274,6 +274,9 @@
     <string name="lyrics_study_line">この行を学ぶ</string>
     <string name="lyrics_explain_line">この行を解説</string>
     <string name="lyrics_explain_failed">この行を解説できませんでした。</string>
+    <string name="lyrics_ask_line">この行について質問</string>
+    <string name="lyrics_ask_send">送信</string>
+    <string name="lyrics_ask_failed">答えられませんでした。</string>
     <string name="lyrics_song_meaning">この曲の意味</string>
     <string name="lyrics_song_meaning_failed">この曲を解説できませんでした。</string>
     <string name="explanation_in_song">曲の中で</string>

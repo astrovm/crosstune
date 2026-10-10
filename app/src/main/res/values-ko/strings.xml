@@ -273,6 +273,9 @@
     <string name="lyrics_study_line">이 줄 공부하기</string>
     <string name="lyrics_explain_line">이 줄 설명</string>
     <string name="lyrics_explain_failed">이 줄을 설명할 수 없어요.</string>
+    <string name="lyrics_ask_line">이 줄에 대해 질문</string>
+    <string name="lyrics_ask_send">보내기</string>
+    <string name="lyrics_ask_failed">답할 수 없어요.</string>
     <string name="lyrics_song_meaning">이 노래의 의미</string>
     <string name="lyrics_song_meaning_failed">이 노래를 설명할 수 없어요.</string>
     <string name="explanation_in_song">노래 속에서</string>
