@@ -526,12 +526,10 @@ internal class ChatGpt(
 
 /**
  * The model asked unless another's picked: the newest Luna, by its version, the plain one before
- * its smaller kinds; else a small one, quick and light on the plan; else the first.
+ * any longer name of the same; else the first the account lists.
  */
-internal fun defaultModel(models: List<ChatGptModel>): ChatGptModel? {
-    val luna = models.filter { "luna" in it.slug.lowercase() }
-    return luna.maxWithOrNull(newestFirst) ?: models.firstOrNull { "mini" in it.slug } ?: models.firstOrNull()
-}
+internal fun defaultModel(models: List<ChatGptModel>): ChatGptModel? =
+    models.filter { "luna" in it.slug.lowercase() }.maxWithOrNull(newestFirst) ?: models.firstOrNull()
 
 /** By the numbers in their names, "gpt-6.1" after "gpt-6"; for the same ones, the shorter name. */
 private val newestFirst = Comparator<ChatGptModel> { a, b ->
