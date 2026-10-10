@@ -274,6 +274,8 @@
     <string name="lyrics_study_line">Studia questa riga</string>
     <string name="lyrics_explain_line">Spiega questa riga</string>
     <string name="lyrics_explain_failed">Impossibile spiegare questa riga.</string>
+    <string name="lyrics_song_meaning">Cosa significa la canzone</string>
+    <string name="lyrics_song_meaning_failed">Impossibile spiegare la canzone.</string>
     <string name="chatgpt_limit_reached">Il tuo piano ChatGPT è esaurito per ora.</string>
     <string name="lyrics_repeat_line">Ripeti questa riga</string>
     <string name="lyrics_stop_repeating">Smetti di ripetere</string>

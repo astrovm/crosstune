@@ -292,6 +292,8 @@
     <string name="lyrics_study_line">Study this line</string>
     <string name="lyrics_explain_line">Explain this line</string>
     <string name="lyrics_explain_failed">Couldn\'t explain this line.</string>
+    <string name="lyrics_song_meaning">What the song means</string>
+    <string name="lyrics_song_meaning_failed">Couldn\'t explain the song.</string>
     <string name="chatgpt_limit_reached">Your ChatGPT plan is used up for now.</string>
     <string name="lyrics_repeat_line">Repeat this line</string>
     <string name="lyrics_stop_repeating">Stop repeating</string>

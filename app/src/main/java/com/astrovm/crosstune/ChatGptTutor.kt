@@ -46,25 +46,56 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * [line] of [song], whose words are [lines], explained in [language]: what it means there, its
-     * grammar and any slang or references. [onText] gets the explanation as it's written.
+     * What [song], whose words are [lines], is about, in [language]: its story, who's speaking, its
+     * mood, images and references. [onText] gets it as it's written.
      */
-    suspend fun explain(song: MusicMetadata, lines: List<String>, line: String, language: String, onText: (String) -> Unit): ChatGptReply {
+    suspend fun explainSong(song: MusicMetadata, lines: List<String>, language: String, onText: (String) -> Unit): ChatGptReply {
         val model = chatGpt.model() ?: return ChatGptReply.Failed
-        val key = "explanation|$model|$language|${song.title}|${song.artist}|$line"
+        val key = songKey(model, language, song)
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         val reply = chatGpt.ask(
-            "You help someone learn a language through the songs they listen to. The user sends a song's lyrics and one line from it. " +
-                "In ${nameOf(language)}, explain that line: what it means in the song, the grammar worth knowing in it, and any slang, idioms or cultural references. " +
-                "Keep it short, a few sentences, in plain text without Markdown.",
-            "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}\n\nLine: $line",
+            "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics. " +
+                "In ${nameOf(language)}, explain what the song is about: its story, who's speaking and to whom, its mood, " +
+                "its main images and metaphors, and any cultural or historical references. Go by the lyrics, and say where you're unsure " +
+                "rather than inventing facts about the artist. Two or three short paragraphs of plain text, without Markdown.",
+            "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
             onText
         )
-        if (reply is ChatGptReply.Answer) {
-            cache.put(key, reply.text.trim())
-            cache.save()
-        }
-        return reply
+        return reply.also { keep(key, it) }
+    }
+
+    /**
+     * Line [index] of [song], whose words are [lines], explained in [language] as part of the song:
+     * what it means at that point, who's saying it, how it ties to the lines around it, then its
+     * grammar, slang and references. What the song is about goes along when it's known. [onText] gets
+     * the explanation as it's written.
+     */
+    suspend fun explain(song: MusicMetadata, lines: List<String>, index: Int, language: String, onText: (String) -> Unit): ChatGptReply {
+        val line = lines.getOrNull(index) ?: return ChatGptReply.Failed
+        val model = chatGpt.model() ?: return ChatGptReply.Failed
+        val key = "line|$model|$language|${song.title}|${song.artist}|$index|$line"
+        cache.get(key)?.let { return ChatGptReply.Answer(it) }
+        val about = cache.get(songKey(model, language, song))?.let { "What the song is about:\n$it\n\n" }.orEmpty()
+        val reply = chatGpt.ask(
+            "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, and the number of one line. " +
+                "First read the whole song to understand its story. Then, in ${nameOf(language)}, explain that line as part of the song: " +
+                "what it means at that point, who's saying it and to whom, and how it ties to the lines around it. " +
+                "After that, briefly note any grammar, slang, idioms or references in it worth knowing. " +
+                "A short paragraph or two of plain text, without Markdown.",
+            "Song: ${song.title} by ${song.artist}\n\n$about" +
+                "Lyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}\n\nLine ${index + 1}: $line",
+            onText
+        )
+        return reply.also { keep(key, it) }
+    }
+
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song|$model|$language|${song.title}|${song.artist}"
+
+    /** An answer kept, so it's not asked again; what couldn't be answered is. */
+    private suspend fun keep(key: String, reply: ChatGptReply) {
+        if (reply !is ChatGptReply.Answer) return
+        cache.put(key, reply.text.trim())
+        cache.save()
     }
 
     /** What [word] means as used in [line], in [language], and what kind of word it is there; null when it couldn't be found. */

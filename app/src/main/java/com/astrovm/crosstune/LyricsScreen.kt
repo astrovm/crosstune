@@ -152,6 +152,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // The line open to study, and whether the lines kept are shown, over the words.
     var studying by rememberSaveable(song) { mutableStateOf<Int?>(null) }
     var savedShown by rememberSaveable { mutableStateOf(false) }
+    var songMeaningShown by rememberSaveable(song) { mutableStateOf(false) }
     if (savedShown) {
         SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
@@ -265,12 +266,17 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         ) {
             LyricsActions(
                 state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
-                onSync = { syncingAsked = !syncing }
+                onSync = { syncingAsked = !syncing },
+                onSongMeaning = {
+                    songMeaningShown = true
+                    actions.onExplainSong()
+                }
             )
         }
     }
     }
     }
+    if (songMeaningShown) SongMeaningSheet(state, actions, onDismiss = { songMeaningShown = false })
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -372,6 +378,7 @@ private fun LyricsActions(
     onOpenSaved: () -> Unit,
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
+    onSongMeaning: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
@@ -400,7 +407,11 @@ private fun LyricsActions(
         // The menus open from the bar rather than from their button, so they line up with it and
         // keep off the screen's edge.
         val close = { menu = null }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved, close)
+        LearnMenu(
+            menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved, close,
+            // Signed in with ChatGPT, it can say what the song's about.
+            onSongMeaning = onSongMeaning.takeIf { state.chatGpt.email != null }
+        )
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
@@ -442,8 +453,27 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, anySaved: Boolean, actions: ScreenActions, onOpenSaved: () -> Unit, onClose: () -> Unit) {
+private fun LearnMenu(
+    open: Boolean,
+    learning: Learning,
+    anySaved: Boolean,
+    actions: ScreenActions,
+    onOpenSaved: () -> Unit,
+    onClose: () -> Unit,
+    onSongMeaning: (() -> Unit)? = null
+) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        onSongMeaning?.let { open ->
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.lyrics_song_meaning)) },
+                leadingIcon = { AppIcon(R.drawable.ic_info, contentDescription = null) },
+                onClick = {
+                    onClose()
+                    open()
+                }
+            )
+            HorizontalDivider()
+        }
         if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
             LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
         }
@@ -1140,6 +1170,33 @@ private fun WordCard(meaning: WordMeaning) {
                 Text(meaning.meaning, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/**
+ * What ChatGPT says the whole song is about, as it writes it; or that the plan's used up, or it
+ * couldn't, with a way to ask again.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: () -> Unit) {
+    val explanation = state.learning.songExplanation
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+        ) {
+            Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            if (explanation == null || explanation.writing || explanation.done || explanation.limitReached) {
+                ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG))
+            }
+            if (explanation?.failed == true) {
+                Text(stringResource(R.string.lyrics_song_meaning_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+            if (explanation?.failed == true || explanation?.limitReached == true) {
+                OutlinedButton(onClick = actions.onExplainSong, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
             }
         }
     }

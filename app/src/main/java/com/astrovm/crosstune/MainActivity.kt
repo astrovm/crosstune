@@ -307,6 +307,7 @@ class MainActivity : ComponentActivity() {
                         onRemoveSavedLine = viewModel::removeSavedLine,
                         onLookUpWord = viewModel::lookUpWord,
                         onExplainLine = viewModel::explainLine,
+                        onExplainSong = viewModel::explainSong,
                         onDismissWord = viewModel::dismissWord,
                         onRepeatLine = viewModel::repeatLine,
                         onStopRepeating = viewModel::stopRepeating,
