@@ -13,7 +13,7 @@
   "download": "Scarica per Android",
   "note": "Gratis, open source e senza pubblicità.",
   "alt_home": "Un link pronto da aprire in YouTube Music, poi i brani di una playlist",
-  "alt_lyrics": "Testo che segue il brano, con lettere latine e traduzione, poi fluttuante sulla schermata Home",
+  "alt_lyrics": "Testo che segue una canzone, con lettere latine e traduzione, poi con effetti visivi MilkDrop dietro, poi fluttuante sulla schermata Home",
   "how_h2": "Come funziona",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Privata",
       "Niente account né tracciamento. La cronologia resta sul tuo telefono."
+    ],
+    [
+      "Effetti visivi MilkDrop",
+      "Dietro al testo, a ritmo di ciò che suona sul telefono."
+    ],
+    [
+      "Widget",
+      "Brani recenti e azioni rapide nella schermata Home."
+    ],
+    [
+      "Link puliti",
+      "Via il tracciamento come ?si= da ogni link che condividi."
     ]
   ],
   "play_button": "Google Play",

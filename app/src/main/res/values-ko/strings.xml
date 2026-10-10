@@ -249,6 +249,8 @@
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translating">번역 중…</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
+    <string name="setting_translate_into">번역할 언어</string>
+    <string name="translate_into_app_language">앱 언어</string>
     <string name="setting_translation_server">번역 제공</string>
     <string name="translation_server_address">LibreTranslate 서버</string>
     <string name="translation_server_key">API 키(필요한 경우)</string>
@@ -261,6 +263,5 @@
     <string name="lyrics_line_saved">저장됨</string>
     <string name="lyrics_saved_lines">저장한 줄</string>
     <string name="lyrics_word_failed">지금은 뜻을 찾을 수 없습니다.</string>
-    <string name="lyrics_already_translated">이 가사는 이미 사용 중인 언어로 되어 있어요.</string>
     <string name="lyrics_word_unknown">이 단어의 사전 항목이 없어요.</string>
 </resources>

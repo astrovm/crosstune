@@ -13,7 +13,7 @@
   "download": "Android için indir",
   "note": "Ücretsiz, açık kaynak ve reklamsız.",
   "alt_home": "YouTube Music'te açılmaya hazır bir bağlantı, ardından bir çalma listesinin şarkıları",
-  "alt_lyrics": "Şarkıyı takip eden sözler, Latin harfleri ve çeviriyle, ardından ana ekranın üzerinde",
+  "alt_lyrics": "Şarkıyı takip eden sözler, Latin harfleri ve çeviriyle, ardından arkasında MilkDrop görselleriyle, ardından ana ekranın üzerinde yüzerken",
   "how_h2": "Nasıl çalışır",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Gizli",
       "Hesap yok, izleme yok. Geçmiş telefonunuzda kalır."
+    ],
+    [
+      "MilkDrop görselleri",
+      "Şarkı sözlerinin arkasında, telefonunda çalanın ritminde."
+    ],
+    [
+      "Widget'lar",
+      "Ana ekranında son şarkılar ve hızlı işlemler."
+    ],
+    [
+      "Temiz bağlantılar",
+      "Paylaştığın her bağlantıdan ?si= gibi izleme kodları silinir."
     ]
   ],
   "play_button": "Google Play",

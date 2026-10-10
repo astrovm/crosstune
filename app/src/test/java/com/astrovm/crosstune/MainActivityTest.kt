@@ -3353,6 +3353,23 @@ class MainActivityTest {
     }
 
     @Test
+    fun lyricsCanBeTranslatedIntoALanguageOtherThanTheApps() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()
+        composeRule.onNodeWithText("日本語").performClick()
+        composeRule.waitForIdle()
+        assertEquals("ja", prefs().getString("translate_into", null))
+        composeRule.onNodeWithText("日本語").assertExists()
+
+        // Back to the app's own language.
+        composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo().performClick()
+        composeRule.onAllNodesWithText(string(R.string.translate_into_app_language)).onLast().performClick()
+        composeRule.waitForIdle()
+        assertNull(prefs().getString("translate_into", null))
+    }
+
+    @Test
     fun exactMatchOpensDirectLinkAndFallsBackToSearch() {
         fake.handler = { request ->
             when (request.url.host) {

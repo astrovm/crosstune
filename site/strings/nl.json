@@ -13,7 +13,7 @@
   "download": "Downloaden voor Android",
   "note": "Gratis, open source en zonder advertenties.",
   "alt_home": "Een link klaar om te openen in YouTube Music, daarna de nummers van een playlist",
-  "alt_lyrics": "Songtekst die een nummer volgt, met Latijnse letters en vertaling, daarna zwevend boven het startscherm",
+  "alt_lyrics": "Songtekst die een nummer volgt, met Latijnse letters en een vertaling, dan met MilkDrop-visuals erachter, dan zwevend boven het startscherm",
   "how_h2": "Zo werkt het",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Privé",
       "Geen account, geen tracking. Je geschiedenis blijft op je telefoon."
+    ],
+    [
+      "MilkDrop-visuals",
+      "Achter de songtekst, op het ritme van wat je telefoon speelt."
+    ],
+    [
+      "Widgets",
+      "Recente nummers en snelle acties op je startscherm."
+    ],
+    [
+      "Schone links",
+      "Tracking zoals ?si= verdwijnt uit elke link die je deelt."
     ]
   ],
   "play_button": "Google Play",

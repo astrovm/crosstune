@@ -125,4 +125,13 @@ class ReadingsTest {
         assertEquals(listOf(Word("Don't"), Word("stop"), Word("me")), Readings.words("Don't stop me 123 ♪", null))
         assertEquals(emptyList<Word>(), Readings.words("", null))
     }
+
+    @Test
+    fun aLineAlreadyInLatinLettersIsntWrittenOutAgain() {
+        val korean = Readings.of(listOf("Funny how I feel for you", "처음 느낌 그대로"), Script.KOREAN)
+        assertEquals("", korean[0].romanized)
+        assertEquals("cheoeum neukkim geudaero", korean[1].romanized)
+        assertEquals("", Readings.of(listOf("Just summer night"), Script.JAPANESE).single().romanized)
+    }
+
 }

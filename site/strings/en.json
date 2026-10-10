@@ -13,7 +13,7 @@
   "download": "Download for Android",
   "note": "Free, open source and ad-free.",
   "alt_home": "A link opened in YouTube Music, then a playlist's songs",
-  "alt_lyrics": "Lyrics following a song, with Latin letters and a translation, then floating over the home screen",
+  "alt_lyrics": "Lyrics following a song, with Latin letters and a translation, then MilkDrop visuals behind them, then floating over the home screen",
   "how_h2": "How it works",
   "how_steps": [
     [
@@ -54,6 +54,18 @@
     [
       "Private",
       "No account, no tracking. History stays on your phone."
+    ],
+    [
+      "MilkDrop visuals",
+      "Behind the lyrics, moving to what your phone plays."
+    ],
+    [
+      "Widgets",
+      "Recent songs and quick actions on your home screen."
+    ],
+    [
+      "Clean links",
+      "Tracking like ?si= gone from every link you share."
     ]
   ],
   "play_button": "Google Play",
