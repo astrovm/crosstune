@@ -1193,8 +1193,8 @@ class ListeningTest {
             val input = body.getJSONArray("input").getJSONObject(0).getString("content")
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
-                "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.")
-                "explain what the song is about" in instructions -> FakeOpenAi.stream("A night ", "under the stars.")
+                "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
+                "explain what the song is about" in instructions -> FakeOpenAi.stream("A night ", "under the stars.\n---\nCalm.\n---\n")
                 else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
             }
         }
@@ -1215,8 +1215,11 @@ class ListeningTest {
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         click(string(R.string.lyrics_explain_line))
         composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
+        // In its parts, each under its label.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("A noun and its adjective.") }
+        assertTrue(shown(string(R.string.explanation_in_song)) && shown(string(R.string.explanation_language)))
         click(string(R.string.lyrics_save_line))
-        assertEquals("Looking up at night.", SavedLinesStore(prefs()).load().single().explanation)
+        assertEquals("Looking up at night.\n---\nA noun and its adjective.", SavedLinesStore(prefs()).load().single().explanation)
 
         // A word in it means what it does in that line.
         val line = hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
@@ -1281,6 +1284,9 @@ class ListeningTest {
         openAi.reply = explained
         click(string(R.string.retry_button))
         composeRule.waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
+        // Its story and mood; no references, so none are shown.
+        assertTrue(shown("Calm.") && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
+        assertFalse(shown(string(R.string.song_references)))
         val asked = openAi.asked.count { "explain what the song is about" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
@@ -1313,7 +1319,7 @@ class ListeningTest {
         click(string(R.string.lyrics_explain_line))
         composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
         // Saved before it was explained, the line keeps the explanation too.
-        assertEquals("Looking up at night.", SavedLinesStore(prefs()).load().single().explanation)
+        assertEquals("Looking up at night.\n---\nA noun and its adjective.", SavedLinesStore(prefs()).load().single().explanation)
     }
 
     @Test

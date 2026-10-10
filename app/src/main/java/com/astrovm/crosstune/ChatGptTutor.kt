@@ -149,4 +149,4 @@ internal const val PART_BREAK = "---"
  * written, those so far, without the start of a break that's only half there.
  */
 internal fun explanationParts(text: String): List<String> =
-    text.split(Regex("""\n\s*-{3,}\s*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
+    text.split(Regex("""\n[ \t]*-{3,}[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
