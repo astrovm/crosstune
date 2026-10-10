@@ -43,6 +43,7 @@
     <string name="chatgpt_signing_in">브라우저에서 로그인을 마치세요.</string>
     <string name="chatgpt_signed_in">%1$s(으)로 로그인됨</string>
     <string name="chatgpt_manage_usage">사용량 관리</string>
+    <string name="chatgpt_model">모델</string>
     <string name="chatgpt_sign_out">로그아웃</string>
     <string name="chatgpt_declined">Crosstune이 ChatGPT 요금제를 사용하도록 허용되지 않았습니다.</string>
     <string name="chatgpt_failed">ChatGPT로 로그인하지 못했습니다. 다시 시도하세요.</string>

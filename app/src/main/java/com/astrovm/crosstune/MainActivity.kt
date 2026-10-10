@@ -311,6 +311,7 @@ class MainActivity : ComponentActivity() {
                         onRepeatLine = viewModel::repeatLine,
                         onStopRepeating = viewModel::stopRepeating,
                         onChatGptTranslationChange = viewModel::setChatGptTranslation,
+                        onChatGptModelChange = viewModel::pickChatGptModel,
                         onTranslateIntoChange = viewModel::setTranslateInto,
                         onSignInWithChatGpt = {
                             // Kept running while the browser signs in, until it's done, however it ends.

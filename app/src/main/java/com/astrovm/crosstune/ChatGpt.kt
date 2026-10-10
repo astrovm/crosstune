@@ -47,6 +47,9 @@ internal sealed interface ChatGptReply {
     data object Failed : ChatGptReply
 }
 
+/** A model the account offers: [slug] to ask for it by, [name] to show. */
+internal data class ChatGptModel(val slug: String, val name: String)
+
 /** How signing in with ChatGPT ended. */
 internal enum class ChatGptSignInResult {
     SIGNED_IN,
@@ -79,8 +82,32 @@ internal class ChatGpt(
     /** Answers take as long as they take to write, far longer than any lookup. */
     private val answers = client.newBuilder().callTimeout(ANSWER_TIMEOUT_SECONDS, TimeUnit.SECONDS).readTimeout(ANSWER_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
 
-    /** The model asked, once picked from the account's. */
-    private var model: String? = null
+    /** The models the account offers, once read. */
+    private var offered: List<ChatGptModel>? = null
+
+    /** The model picked in Settings, asked while the account offers it. */
+    @Volatile
+    var picked: String? = null
+
+    /** The models the account offers, to pick from; null when they can't be read, e.g. offline. */
+    suspend fun models(): List<ChatGptModel>? {
+        offered?.let { return it }
+        val token = accessToken() ?: return null
+        return try {
+            // None listed is kept no more than an error is: it's asked again next time.
+            fetchModels(token)?.also { if (it.isNotEmpty()) offered = it }
+        } catch (_: IOException) {
+            null
+        } catch (_: JSONException) {
+            null
+        }
+    }
+
+    /** The model asked: the one picked, while the account offers it, or else [defaultModel]'s. */
+    suspend fun model(): String? {
+        val models = models() ?: return null
+        return models.firstOrNull { it.slug == picked }?.slug ?: defaultModel(models)?.slug
+    }
 
     /**
      * What ChatGPT answers to [input], told how by [instructions], on the user's plan. [onText] gets
@@ -89,8 +116,7 @@ internal class ChatGpt(
     suspend fun ask(instructions: String, input: String, onText: (String) -> Unit = {}): ChatGptReply {
         val token = accessToken() ?: return ChatGptReply.Failed
         return try {
-            val model = model ?: pickModel(token) ?: return ChatGptReply.Failed
-            this.model = model
+            val model = model() ?: return ChatGptReply.Failed
             val body = JSONObject()
                 .put("model", model)
                 .put("instructions", instructions)
@@ -141,19 +167,18 @@ internal class ChatGpt(
         }
     }
 
-    /**
-     * The model to ask, from those the account offers: a small one, quick and light on the plan,
-     * when there is one, else the first.
-     */
-    private suspend fun pickModel(token: String): String? {
+    /** The models the account lists to pick from; it also has some it keeps out of sight. */
+    private suspend fun fetchModels(token: String): List<ChatGptModel>? {
         val request = Request.Builder().url(MODELS_URL).header("Authorization", "Bearer $token").build()
         val models = withContext(ioDispatcher) {
             client.newCall(request).executeAsync().use { response ->
                 if (response.isSuccessful) JSONObject(response.body.stringAtMost()).getJSONArray("models") else null
             }
         } ?: return null
-        val listed = (0 until models.length()).map(models::getJSONObject).filter { it.optString("visibility") == "list" }.map { it.getString("slug") }
-        return listed.firstOrNull { "mini" in it } ?: listed.firstOrNull()
+        return (0 until models.length()).map(models::getJSONObject).filter { it.optString("visibility") == "list" }.map { model ->
+            val slug = model.getString("slug")
+            ChatGptModel(slug, model.optString("display_name").trim().ifEmpty { slug })
+        }
     }
 
     /** The email signed in with, or null when signed out. */
@@ -275,6 +300,8 @@ internal class ChatGpt(
 
     /** Signs out, asking OpenAI to end the session too; the registration is kept for signing in again. */
     suspend fun signOut() = tokens.withLock {
+        // Another account may offer others.
+        offered = null
         val account = load()
         val refresh = account.optString(REFRESH_TOKEN).ifEmpty { null }
         if (refresh != null) {
@@ -496,3 +523,20 @@ internal class ChatGpt(
         private fun base64UrlDecode(text: String): ByteArray = Base64.getUrlDecoder().decode(text)
     }
 }
+
+/**
+ * The model asked unless another's picked: the newest Luna, by its version, the plain one before
+ * any longer name of the same; else the first the account lists.
+ */
+internal fun defaultModel(models: List<ChatGptModel>): ChatGptModel? =
+    models.filter { "luna" in it.slug.lowercase() }.maxWithOrNull(newestFirst) ?: models.firstOrNull()
+
+/** By the numbers in their names, "gpt-6.1" after "gpt-6"; for the same ones, the shorter name. */
+private val newestFirst = Comparator<ChatGptModel> { a, b ->
+    val one = version(a.slug)
+    val other = version(b.slug)
+    (0 until maxOf(one.size, other.size)).firstNotNullOfOrNull { i -> (one.getOrElse(i) { -1 } compareTo other.getOrElse(i) { -1 }).takeIf { it != 0 } }
+        ?: (b.slug.length compareTo a.slug.length)
+}
+
+private fun version(slug: String) = Regex("""\d+""").findAll(slug).map { it.value.toLong() }.toList()

@@ -248,7 +248,20 @@ private fun SettingsList(
 
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))
-        Group { ChatGptRow(state.chatGpt, actions, onManageUsage = { uriHandler.openUri(ChatGpt.USAGE_URL) }) }
+        Group {
+            ChatGptRow(state.chatGpt, actions, onManageUsage = { uriHandler.openUri(ChatGpt.USAGE_URL) })
+            // Signed in, which of the account's models to ask.
+            val model = state.chatGpt.model?.takeIf { slug -> state.chatGpt.email != null && state.chatGpt.models.any { it.slug == slug } }
+            if (model != null) {
+                GroupDivider()
+                ChoiceRow(
+                    label = stringResource(R.string.chatgpt_model),
+                    choices = state.chatGpt.models.map { it.slug to it.name },
+                    selected = model,
+                    onSelect = actions.onChatGptModelChange
+                )
+            }
+        }
         if (state.chatGpt.welcome) ChatGptWelcome(onDismiss = actions.onDismissChatGptWelcome)
 
         SectionHeader(stringResource(R.string.settings_appearance_title))

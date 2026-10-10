@@ -43,6 +43,7 @@
     <string name="chatgpt_signing_in">Dokończ logowanie w przeglądarce.</string>
     <string name="chatgpt_signed_in">Zalogowano jako %1$s</string>
     <string name="chatgpt_manage_usage">Zarządzaj użyciem</string>
+    <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Wyloguj się</string>
     <string name="chatgpt_declined">Crosstune nie otrzymał zgody na używanie Twojego planu ChatGPT.</string>
     <string name="chatgpt_failed">Nie udało się zalogować przez ChatGPT. Spróbuj ponownie.</string>

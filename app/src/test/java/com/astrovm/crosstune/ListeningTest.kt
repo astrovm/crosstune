@@ -1245,6 +1245,26 @@ class ListeningTest {
     }
 
     @Test
+    fun theModelAskedIsPickedInSettingsAndTranslatesAnew() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        openAi.models = { 200 to FakeOpenAi.modelsJson("gpt-6.1-sol" to "list", "gpt-6.1-luna" to "list") }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        assertEquals("gpt-6.1-luna", openAi.asked.last().getString("model"))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.chatgpt_model)).performScrollTo()
+        click(string(R.string.chatgpt_model))
+        click("gpt-6.1-sol")
+        assertEquals("gpt-6.1-sol", prefs().getString("chatgpt_model", null))
+        // Translated again, by the model picked.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
+    }
+
+    @Test
     fun aLineSavedFirstGetsItsExplanationAndAUsedUpPlanSaysSo() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()

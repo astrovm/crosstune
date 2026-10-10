@@ -44,6 +44,7 @@
     <string name="chatgpt_signing_in">Completa l\'accesso nel browser.</string>
     <string name="chatgpt_signed_in">Accesso eseguito come %1$s</string>
     <string name="chatgpt_manage_usage">Gestisci utilizzo</string>
+    <string name="chatgpt_model">Modello</string>
     <string name="chatgpt_sign_out">Esci</string>
     <string name="chatgpt_declined">Crosstune non è stato autorizzato a usare il tuo piano ChatGPT.</string>
     <string name="chatgpt_failed">Impossibile accedere con ChatGPT. Riprova.</string>

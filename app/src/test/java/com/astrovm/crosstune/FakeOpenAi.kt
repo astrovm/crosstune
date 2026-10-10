@@ -36,7 +36,7 @@ internal class FakeOpenAi(private val now: () -> Long) {
     var revokeFails = false
 
     /** The models the account offers. */
-    var models: () -> Pair<Int, String> = { 200 to modelsJson("gpt-6.1-sol" to "list", "gpt-6.1-sol-mini" to "list") }
+    var models: () -> Pair<Int, String> = { 200 to modelsJson("gpt-6.1-sol" to "list", "gpt-6-terra" to "list") }
 
     /** What ChatGPT streams back to a request with this body; "Hello" by default. */
     var reply: (JSONObject) -> Pair<Int, String> = { 200 to stream("Hel", "lo") }

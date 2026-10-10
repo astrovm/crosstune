@@ -43,6 +43,7 @@
     <string name="chatgpt_signing_in">ब्राउज़र में साइन इन पूरा करें।</string>
     <string name="chatgpt_signed_in">%1$s के रूप में साइन इन है</string>
     <string name="chatgpt_manage_usage">इस्तेमाल प्रबंधित करें</string>
+    <string name="chatgpt_model">मॉडल</string>
     <string name="chatgpt_sign_out">साइन आउट करें</string>
     <string name="chatgpt_declined">Crosstune को आपका ChatGPT प्लान इस्तेमाल करने की अनुमति नहीं मिली।</string>
     <string name="chatgpt_failed">ChatGPT से साइन इन नहीं हो सका। फिर से कोशिश करें।</string>

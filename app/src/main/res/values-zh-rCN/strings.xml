@@ -43,6 +43,7 @@
     <string name="chatgpt_signing_in">请在浏览器中完成登录。</string>
     <string name="chatgpt_signed_in">已登录为 %1$s</string>
     <string name="chatgpt_manage_usage">管理用量</string>
+    <string name="chatgpt_model">模型</string>
     <string name="chatgpt_sign_out">退出登录</string>
     <string name="chatgpt_declined">Crosstune 未获准使用你的 ChatGPT 套餐。</string>
     <string name="chatgpt_failed">无法使用 ChatGPT 登录，请重试。</string>
