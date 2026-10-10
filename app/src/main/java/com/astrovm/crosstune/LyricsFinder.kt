@@ -520,7 +520,7 @@ internal class LyricsFinder(
         const val APP_CLIENT_VERSION = "7.21.50"
 
         /** Bumped when words kept from before should be looked up again. */
-        const val CACHE_VERSION = 3
+        const val CACHE_VERSION = 4
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
