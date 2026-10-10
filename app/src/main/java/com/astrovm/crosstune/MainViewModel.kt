@@ -1658,7 +1658,7 @@ internal class MainViewModel(
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
                 val language = translateInto()
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
-                val translated = (if (usesChatGpt() && learning.chatGptTranslation) tutor?.translate(lines, language) else null) ?: translator.translate(lines, language)
+                val translated = (if (usesChatGpt() && learning.chatGptTranslation) tutor?.translate(lines, language, uiState.lyricsFor) else null) ?: translator.translate(lines, language)
                 uiState = uiState.copy(
                     learning = uiState.learning.copy(
                         translations = translated.orEmpty(), translating = false, translationFailed = translated == null

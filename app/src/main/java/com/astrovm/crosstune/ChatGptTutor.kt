@@ -16,11 +16,12 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      * [lines] in [language], translated together as the song they are, each line's translation, or
      * null where there's nothing to translate; null for all of them when it couldn't be done.
      */
-    suspend fun translate(lines: List<String>, language: String): List<String?>? {
+    suspend fun translate(lines: List<String>, language: String, song: MusicMetadata? = null): List<String?>? {
         val words = lines.filter { line -> line.any(Char::isLetter) }.distinct()
         // Each model's own, so picking another translates anew.
         val model = chatGpt.model() ?: return null
-        val key = { line: String -> "translation|$model|$language|$line" }
+        // Kept for [song]: the same line in another song may mean something else there.
+        val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val found = if (missing.isEmpty()) {
