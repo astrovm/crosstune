@@ -604,6 +604,12 @@ class LyricsFinderTest {
             if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}", code = 500) else FakeSpotify.html(request, "[$timedOnLrclib]")
         }
         assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Too slow to wait for.
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") Thread.sleep(2_000)
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[$timedOnLrclib]" else "{}")
+        }
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song, timeoutMs = 500) })
         // Nowhere has them: none. YouTube Music having none doesn't mean the song has none, so with
         // LRCLIB not answering, that's what's said.
         everywhere("[]", null, next = "{}")

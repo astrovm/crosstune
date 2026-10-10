@@ -97,7 +97,7 @@ internal class LyricsFinder(
     private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = coroutineScope {
         val official = async { fromYouTubeMusic(metadata, timeoutMs) }
         val elsewhere = anywhere(metadata, timeoutMs)
-        official.await().let { if (it is Lyrics.Found) better(it, elsewhere) else elsewhere }
+        official.await()?.let { better(it, elsewhere) } ?: elsewhere
     }
 
     /**
@@ -175,25 +175,25 @@ internal class LyricsFinder(
 
     /**
      * YouTube Music's words for the song, from the page its app shows them on. They come timed when
-     * its lyrics service has them so, and are otherwise the words alone.
+     * its lyrics service has them so, and are otherwise the words alone. Null when it has none, or
+     * doesn't answer in time.
      */
-    private suspend fun fromYouTubeMusic(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
-        val find = youTubeMusicSong ?: return Lyrics.Unavailable
+    private suspend fun fromYouTubeMusic(metadata: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
+        val find = youTubeMusicSong ?: return null
         return withTimeoutOrNull(timeoutMs) {
             try {
-                val videoId = find(metadata) ?: return@withTimeoutOrNull Lyrics.None
+                val videoId = find(metadata) ?: return@withTimeoutOrNull null
                 val watching = post(YOUTUBE_MUSIC_NEXT_URL, innertube(WEB_CLIENT, WEB_CLIENT_VERSION).put("videoId", videoId))
                 // A song without words has no page for them.
-                val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull Lyrics.None
+                val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull null
                 // Only YouTube Music's app is given them timed.
-                val lyrics = JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page)))
-                youTubeMusicWords(lyrics) ?: Lyrics.None
+                youTubeMusicWords(JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page))))
             } catch (_: IOException) {
-                Lyrics.Unavailable
+                null
             } catch (_: JSONException) {
-                Lyrics.Unavailable
+                null
             }
-        } ?: Lyrics.Unavailable
+        }
     }
 
     private fun innertube(name: String, version: String) =
