@@ -1,10 +1,12 @@
 package com.astrovm.crosstune
 
 import com.astrovm.crosstune.LyricsFinder.Lyrics
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -230,7 +232,8 @@ class LyricsFinderTest {
             FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
         }
         assertEquals(Lyrics.Found("Words"), found(MusicMetadata("Song", "Band")))
-        assertEquals(2, calls)
+        // The second try, then once more for a timed copy of the words to time them by.
+        assertEquals(3, calls)
     }
 
     /**
@@ -510,4 +513,260 @@ class LyricsFinderTest {
         assertEquals(1, fake.requestedUrls.size)
     }
 
+
+    /** YouTube Music's lyrics page: [lines] as text to start time, or untimed where the time is null. */
+    private fun youTubeMusicPage(vararg lines: Pair<String, Long?>): String {
+        val data = lines.joinToString(",") { (text, start) ->
+            val cue = start?.let { ""","cueRange":{"startTimeMilliseconds":"$it","endTimeMilliseconds":"0"}""" }.orEmpty()
+            """{"lyricLine":${quote(text)}$cue}"""
+        }
+        return """{"contents":{"elementRenderer":{"newElement":{"type":{"componentType":{"model":{"timedLyricsModel":{"lyricsData":{"timedLyricsData":[$data]}}}}}}}}}"""
+    }
+
+    /** LRCLIB answers [lrclib]; YouTube Music has the song with [page] for its words; nothing else has it. */
+    private fun everywhere(lrclib: String, page: String?, next: String = """{"tabs":[{"browseEndpoint":{"browseId":"MPLYt_words"}}]}""") {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, lrclib)
+                url.encodedPath == "/youtubei/v1/next" -> FakeSpotify.html(request, next)
+                url.encodedPath == "/youtubei/v1/browse" -> page?.let { FakeSpotify.html(request, it) } ?: throw IOException("offline")
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private fun withYouTubeMusic(videoId: String? = "vid1") =
+        LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, youTubeMusicSong = { videoId })
+
+    private val song = MusicMetadata("Song", "Band")
+    private val timedOnLrclib = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:10.00] Second")
+
+    @Test
+    fun youTubeMusicsTimedWordsWin() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("♪" to 0, "Erste" to 12_000, "Zweite" to 15_500))
+        assertEquals(
+            // The note at the start is a pause, as it's long enough.
+            Lyrics.Found("Erste\nZweite", listOf(LyricLine(0, ""), LyricLine(12_000, "Erste"), LyricLine(15_500, "Zweite"))),
+            runBlocking { withYouTubeMusic().lyricsOf(song) }
+        )
+        // The song's page is asked for by its video, and the words as YouTube Music's app, which gets them timed.
+        val next = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/next") }]
+        assertEquals(true, next.contains(""""videoId":"vid1"""") && next.contains("WEB_REMIX"))
+        val browse = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/browse") }]
+        assertEquals(true, browse.contains(""""browseId":"MPLYt_words"""") && browse.contains("ANDROID_MUSIC"))
+    }
+
+    @Test
+    fun youTubeMusicsUntimedWordsGiveWayToTimedOnes() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to null, "Zweite" to null))
+        assertEquals(Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second"))), runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // With none elsewhere, they're the words.
+        everywhere("[]", youTubeMusicPage("Erste" to null, "♪" to null, "Zweite" to null))
+        assertEquals(Lyrics.Found("Erste\nZweite"), runBlocking { withYouTubeMusic().lyricsOf(song) })
+    }
+
+    @Test
+    fun wordsTimedBadlyGiveWayToWordsTimedWell() {
+        // Two lines of eight syllables each, in about half a second.
+        val rushed = answer(
+            "Song", "Band", "",
+            synced = "[00:43.48] 金色のブレス\n[00:44.64] きらめいたピアス\n[00:45.20] Ah ブローした髪を\n[02:14.35] たそがれのワイン\n[02:14.99] Ah 振りまわす恋を\n[02:22.20] 楽しんで 罪さ"
+        )
+        everywhere("[$rushed]", youTubeMusicPage("街角のテレフォン" to 24_520, "流し目の彼女" to 28_160))
+        assertEquals(listOf(LyricLine(24_520, "街角のテレフォン"), LyricLine(28_160, "流し目の彼女")), (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).lines)
+        // Still timed, they beat untimed words: they mostly follow the song, and can be put in time by hand.
+        everywhere("[$rushed]", youTubeMusicPage("街角のテレフォン" to null))
+        assertEquals(6, (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).lines.size)
+        // Timed badly, LRCLIB's words don't stop other places from being asked for timed ones.
+        everywhere("[$rushed]", null)
+        runBlocking { withYouTubeMusic().lyricsOf(song) }
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/search/get") })
+    }
+
+    @Test
+    fun withoutYouTubeMusicsWordsTheOthersStillCount() {
+        val lrclibWords = Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")))
+        // Not on YouTube Music.
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to 1))
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic(videoId = null).lyricsOf(song) })
+        // On it, but with no lyrics page, or a page that says there are none.
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to 1), next = "{}")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", """{"contents":{"elementRenderer":{"newElement":{"type":{"componentType":{"model":{"musicMessageModel":{"text":"Lyrics not available"}}}}}}}}""")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("♪" to 0))
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Offline, an error, or something that isn't JSON.
+        everywhere("[$timedOnLrclib]", null)
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        everywhere("[$timedOnLrclib]", "not json")
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}", code = 500) else FakeSpotify.html(request, "[$timedOnLrclib]")
+        }
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Too slow to wait for.
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") Thread.sleep(2_000)
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[$timedOnLrclib]" else "{}")
+        }
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(song, timeoutMs = 500) })
+        // Nowhere has them: none. YouTube Music having none doesn't mean the song has none, so with
+        // LRCLIB not answering, that's what's said.
+        everywhere("[]", null, next = "{}")
+        assertEquals(Lyrics.None, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, "{}") else FakeSpotify.html(request, "busy", code = 503)
+        }
+        assertEquals(Lyrics.Unavailable, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Nothing answers at all.
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertEquals(Lyrics.Unavailable, runBlocking { withYouTubeMusic().lyricsOf(song) })
+    }
+
+    @Test
+    fun wordsKeptBeforeYouTubeMusicWasAskedAreAskedAgain() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val old = """{"words":"Old words","lines":[[1000,"Old words"]]}"""
+        runBlocking { cache.put("${SongNames.normalize("Song")}\u0000${SongNames.normalize("Band")}", old) }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+        respond("[$timedOnLrclib]")
+        assertEquals("First\nSecond", (runBlocking { kept.lyricsOf(song) } as Lyrics.Found).words)
+    }
+
+    /** Asphalt Lady's opening, timed by guesswork, as NetEase has it. */
+    private val guessed = "[00:24.52] 街角のテレフォン\n[00:28.16] 流し目の彼女\n[00:33.40] Ah　グラビアみたいな\n[00:34.00] 長い脚　めまいさ\n" +
+        "[00:43.48] 金色のブレス\n[00:44.64] きらめいたピアス\n[00:45.20] Ah　ブローした髪を\n[00:56.28] くびすじに跳ねた\n" +
+        "[00:59.80] 誘いの言葉には　ウィンク\n[01:04.08] つれなく返すだけ　シャクだね\n[01:07.24] Shock!　君はアスファルト・レディ"
+
+    /** The same, well timed in romaji, two lines at a time, under the song's bare name. */
+    private val romaji = "[00:24.33] Machikado no terefuon nagashime no kanojo\n[00:31.82] Aah gurabia mitaina nagai ashi memaisa\n" +
+        "[00:39.77] Kin'iro no buresu kirameita piasu\n[00:47.11] Aah buro- shita kami o ku Bisujini haneta\n" +
+        "[00:55.81] Sasoi no kotoba ni wa whinku\n[01:03.53] Tsurenaku kaesu dake shaku da ne\n[01:12.20] Shock! kimi wa asufuaruto redi"
+
+    private val remix = MusicMetadata("ASPHALT LADY (2018 Remix) (2024 Remaster)", "S.Kiyotaka & Omega Tribe")
+
+    /** LRCLIB has the remix's words timed by guesswork, and [bare] under the song's bare name. */
+    private fun remixWords(vararg bare: String) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = guessed)}]")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${bare.joinToString(",")}]")
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    @Test
+    fun wordsTimedByGuessworkTakeTheTimesOfTheSameWordsWellTimedElsewhere() {
+        remixWords(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji))
+        val found = found(remix) as Lyrics.Found
+        // When each line is really sung, to a second or two: the words stay as they were, in Japanese.
+        val sung = listOf(24_000L, 28_000L, 31_000L, 35_000L, 39_000L, 43_000L, 46_000L, 50_000L, 54_000L, 63_500L, 71_000L)
+        assertEquals(SyncedLyrics.parse(guessed).map { it.text }, found.lines.map { it.text })
+        found.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sung[index]) <= 2_500) }
+    }
+
+    @Test
+    fun anotherTakeUnderTheBareNameLendsNoTimes() {
+        // A live take, a minute later throughout.
+        val live = SyncedLyrics.parse(romaji).joinToString("\n") { "[${"%02d".format((it.timeMs + 60_000) / 60_000)}:${"%05.2f".format((it.timeMs + 60_000) % 60_000 / 1000.0)}] ${it.text}" }
+        remixWords(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = live))
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
+        // Nor does someone else's song of that name, another song, or words timed by guesswork too.
+        remixWords(
+            answer("Asphalt Lady", "Someone Else", "", synced = romaji),
+            answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = "[00:24.00] Yesterday all my troubles\n[00:31.00] Seemed so far away\n[00:39.00] Now it looks as though"),
+            answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = guessed)
+        )
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
+        // LRCLIB not answering for the bare name, the words are as found.
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = guessed)}]")
+                url.host == "lrclib.net" -> throw IOException("offline")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        assertEquals(SyncedLyrics.parse(guessed), (found(remix) as Lyrics.Found).lines)
+    }
+
+    /** [lrc]'s lines, each [byMs] later. */
+    private fun shifted(lrc: String, byMs: Long) = SyncedLyrics.parse(lrc).joinToString("\n") {
+        val at = it.timeMs + byMs
+        "[${"%02d".format(at / 60_000)}:${"%05.2f".format(at % 60_000 / 1000.0)}] ${it.text}"
+    }
+
+    /** [answer] saying how long its recording lasts. */
+    private fun lasting(answer: String, seconds: Double) = answer.dropLast(1) + ""","duration":$seconds}"""
+
+    /** Asphalt Lady's opening, evenly timed but for another edit, 9 seconds early, as NetEase's other copy has it. */
+    private val early = shifted(guessed.replace("[00:34.00]", "[00:35.60]").replace("[00:44.64]", "[00:42.80]"), -9_000)
+
+    /** LRCLIB has the remix's words timed [early] under its full name, the store knows it [storeSeconds] long, and [bare] under its bare name. */
+    private fun remixTimedEarly(vararg bare: String, storeSeconds: Double? = null) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == remix.title ->
+                    FakeSpotify.html(request, "[${answer(remix.title, remix.artist, "", synced = early)}]")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${bare.joinToString(",")}]")
+                url.encodedPath == "/search" && storeSeconds != null -> FakeSpotify.html(
+                    request,
+                    """{"results":[{"trackId":7,"trackName":"Asphalt Lady (2018 Remix) [2024 Remaster]","artistName":"S.Kiyotaka & Omega Tribe","trackTimeMillis":${(storeSeconds * 1000).toLong()}}]}"""
+                )
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val sungAt = listOf(24_000L, 28_000L, 31_000L, 35_000L, 39_000L, 43_000L, 46_000L, 50_000L, 54_000L, 63_500L, 71_000L)
+
+    @Test
+    fun wordsTimedForAnotherEditTakeTheTimesTwoCopiesAgreeOn() {
+        val copies = arrayOf(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0)
+        )
+        remixTimedEarly(*copies, storeSeconds = 318.483)
+        val found = found(remix) as Lyrics.Found
+        assertEquals(SyncedLyrics.parse(early).map { it.text }, found.lines.map { it.text })
+        found.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+    }
+
+    @Test
+    fun wordsTimedWellAreKeptWithoutTwoCopiesAgainstThem() {
+        // One copy alone.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two that agree with the words.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, -9_000)), answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, -8_500)))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two that disagree with each other.
+        remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 30_000)))
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // Two for a recording much shorter than the song: a radio edit, say.
+        val short = arrayOf(
+            lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 284.0),
+            lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 250.0)
+        )
+        remixTimedEarly(*short, storeSeconds = 318.483)
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+        // A song named without more has nothing under another name to check against.
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[${answer("Asphalt Lady", remix.artist, "", synced = early)}]" else """{"results":[]}""")
+        }
+        val before = fake.requestedUrls.size
+        assertEquals(SyncedLyrics.parse(early), (found(MusicMetadata("Asphalt Lady", remix.artist)) as Lyrics.Found).lines)
+        assertEquals(1, fake.requestedUrls.drop(before).count { it.startsWith("https://lrclib.net") })
+    }
 }

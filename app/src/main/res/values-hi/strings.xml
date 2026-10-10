@@ -191,7 +191,14 @@
     <string name="lyrics_sync_service">Crosstune बोल सिंक</string>
     <string name="lyrics_follow_allow">बोल को अपने म्यूज़िक ऐप में चल रहे गाने के साथ चलने दें।</string>
     <string name="lyrics_following_app">%1$s के साथ चल रहे हैं</string>
+    <string name="lyrics_play">चलाएं</string>
+    <string name="lyrics_pause">रोकें</string>
     <string name="lyrics_jump">यहाँ जाएँ</string>
+    <string name="lyrics_sync">समय ठीक करें</string>
+    <string name="lyrics_sync_hint">जो पंक्ति अभी सुन रहे हैं, उस पर टैप करें</string>
+    <string name="lyrics_sync_line">अभी गाई जा रही</string>
+    <string name="lyrics_sync_reset">रीसेट करें</string>
+    <string name="lyrics_sync_done">हो गया</string>
     <string name="lyrics_listen_along">साथ में सुनें</string>
     <string name="lyrics_stop_listening">सुनना बंद करें</string>
     <string name="visuals_show">विज़ुअल दिखाएँ</string>

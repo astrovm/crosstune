@@ -413,6 +413,79 @@ class ListeningTest {
     }
 
     @Test
+    fun aSongHeardByAnotherNameDoesntReplaceTheWordsOfTheOneAnAppPlays() {
+        val phone = FakePlayback().apply {
+            access = true
+            playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // Followed in the app, which shows instead of the microphone, still listening along.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_following_app, "Music")) }
+        // Shazam names it otherwise while the app plays it: the words stay.
+        hearing.song("Demo (Remix)", 5.0)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }
+        assertTrue(shown("Demo one"))
+        assertFalse(shown("Demo (Remix) one"))
+        // The app no longer plays it: the song heard takes over.
+        phone.playing.value = null
+        hearing.song("Other", 1.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+    }
+
+    @Test
+    fun wordsOutOfTimeArePutInTimeByTappingTheLineHeard() {
+        val synced = """[{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]"""
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
+        // The music app is paused 5 seconds in, where it's singing the second line, not the first as the words have it.
+        val demo = MusicMetadata("Demo", "Band")
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(demo, null, 5_000, SystemClock.elapsedRealtime())
+            playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        // Nothing to reset before a line is put in time.
+        assertFalse(shown(string(R.string.lyrics_sync_reset)))
+        composeRule.onNodeWithText("Demo two").performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        // Tapped while putting the words in time, the app isn't moved.
+        assertEquals(emptyList<Long>(), phone.seeks)
+        // Kept for the song, so it's in time next time too.
+        assertEquals(listOf(SyncPoint(10_000, 5_000)), LyricsSyncStore(prefs()).load(demo, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+
+        // Reset puts them back as found.
+        click(string(R.string.lyrics_sync_reset))
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        assertFalse(shown(string(R.string.lyrics_sync_reset)))
+
+        // Done, a line tapped moves the app again: to where it is now that the words are in time.
+        composeRule.onNodeWithText("Demo two").performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        click(string(R.string.lyrics_sync_done))
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_sync_hint)) }
+        composeRule.onNodeWithText("Demo three").performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
+        assertEquals(listOf(35_000L), phone.seeks)
+    }
+
+    @Test
     fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
         // YouTube plays the song's video, which opens with 45 seconds before the song.
         val phone = FakePlayback().apply {
@@ -524,6 +597,29 @@ class ListeningTest {
         launch(MainActivity.lyricsIntent(app))
         // No result to tap Lyrics on first: the words open as soon as the song is named, and keep listening.
         composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun theLyricsButtonOnTheMainScreenNamesTheSongAndShowsItsWords() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        // Named without a cover, the song gets Deezer's, which the words show too.
+        val words = fake.handler
+        val cover = "https://cdn.example/demo.jpg"
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com") {
+                FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"album":{"cover_big":"$cover"}}]}""")
+            } else {
+                words(request)
+            }
+        }
+        hearing.song("Demo", 2.0)
+        click(string(R.string.tile_lyrics_label))
+        // No result to tap Lyrics on first: the words open as soon as the song is named.
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(cover) }
     }
 
     @Test

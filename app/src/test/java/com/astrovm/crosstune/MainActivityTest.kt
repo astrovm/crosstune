@@ -2692,6 +2692,16 @@ class MainActivityTest {
         composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
         assertLit("Two")
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertDoesNotExist()
+        // Its icon plays the song, paused, and shows it would pause it once it plays.
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_play), useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).performClick()
+        assertEquals(listOf(true), playback.plays)
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_pause), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).performClick()
+        assertEquals(listOf(true, false), playback.plays)
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_play), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         // A line tapped moves the app there.
         composeRule.onNodeWithText("Three").performClick()
         assertEquals(listOf(40_000L), playback.seeks)

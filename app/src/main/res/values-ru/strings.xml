@@ -191,7 +191,14 @@
     <string name="lyrics_sync_service">Синхронизация текстов Crosstune</string>
     <string name="lyrics_follow_allow">Пусть текст следует за песней, которая играет в вашем музыкальном приложении.</string>
     <string name="lyrics_following_app">Следует за %1$s</string>
+    <string name="lyrics_play">Воспроизвести</string>
+    <string name="lyrics_pause">Пауза</string>
     <string name="lyrics_jump">Перейти сюда</string>
+    <string name="lyrics_sync">Исправить тайминг</string>
+    <string name="lyrics_sync_hint">Нажмите строку, которую слышите сейчас</string>
+    <string name="lyrics_sync_line">Звучит сейчас</string>
+    <string name="lyrics_sync_reset">Сбросить</string>
+    <string name="lyrics_sync_done">Готово</string>
     <string name="lyrics_listen_along">Слушать вместе</string>
     <string name="lyrics_stop_listening">Перестать слушать</string>
     <string name="visuals_show">Показать визуализацию</string>

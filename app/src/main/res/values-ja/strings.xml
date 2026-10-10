@@ -192,7 +192,14 @@
     <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>
     <string name="lyrics_follow_allow">音楽アプリで再生中の曲に歌詞を合わせます。</string>
     <string name="lyrics_following_app">%1$s に合わせています</string>
+    <string name="lyrics_play">再生</string>
+    <string name="lyrics_pause">一時停止</string>
     <string name="lyrics_jump">ここへ移動</string>
+    <string name="lyrics_sync">タイミングを直す</string>
+    <string name="lyrics_sync_hint">今聞こえている行をタップ</string>
+    <string name="lyrics_sync_line">今歌われている</string>
+    <string name="lyrics_sync_reset">リセット</string>
+    <string name="lyrics_sync_done">完了</string>
     <string name="lyrics_listen_along">一緒に聞く</string>
     <string name="lyrics_stop_listening">聞くのをやめる</string>
     <string name="visuals_show">ビジュアルを表示</string>

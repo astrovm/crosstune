@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -68,6 +69,22 @@ class ExactMatcherTest {
         fake.handler = { throw IOException("offline") }
         assertNull(runBlocking { matcher().cover(song) })
         assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Hollies")) })
+    }
+
+    @Test
+    fun aRemasterGetsTheCoverOfTheSongDeezerKnowsWithoutTheTag() {
+        val cover = "https://cdn-images.dzcdn.net/images/cover/9e87/500x500.jpg"
+        // Deezer finds nothing when the tag is asked for, as YouTube Music names the song.
+        fake.handler = { request ->
+            val query = request.url.queryParameter("q").orEmpty()
+            FakeSpotify.html(
+                request,
+                if ("Remaster" in query) """{"data":[]}"""
+                else """{"data":[{"title":"Asphalt Lady (2018 Remix)","artist":{"name":"S.Kiyotaka & Omega Tribe"},"album":{"cover_big":"$cover"}}]}"""
+            )
+        }
+        assertEquals(cover, runBlocking { matcher().cover(MusicMetadata("ASPHALT LADY (2018 Remix) (2024 Remaster)", "S.Kiyotaka & Omega Tribe")) })
+        assertEquals("ASPHALT LADY (2018 Remix) S.Kiyotaka & Omega Tribe", fake.requestedUrls.single().toHttpUrl().queryParameter("q"))
     }
 
     @Test
