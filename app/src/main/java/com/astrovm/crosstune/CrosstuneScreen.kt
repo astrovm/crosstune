@@ -206,6 +206,8 @@ internal data class ScreenActions(
     val onStopRepeating: () -> Unit = {},
     /** Sets where translations come from, by address and key; false when the address isn't one. */
     val onTranslationServerChange: (String, String) -> Boolean = { _, _ -> true },
+    /** One of the app's languages to translate into, or null for the app's own. */
+    val onTranslateIntoChange: (String?) -> Unit = {},
     /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */
     val onAllowFollowing: () -> Unit = {},
     /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */

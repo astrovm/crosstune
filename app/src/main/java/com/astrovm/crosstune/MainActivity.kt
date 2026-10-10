@@ -299,6 +299,7 @@ class MainActivity : ComponentActivity() {
                         onRepeatLine = viewModel::repeatLine,
                         onStopRepeating = viewModel::stopRepeating,
                         onTranslationServerChange = viewModel::setTranslationServer,
+                        onTranslateIntoChange = viewModel::setTranslateInto,
                         onListenAlong = { withMicrophone(viewModel::listenAlong) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },

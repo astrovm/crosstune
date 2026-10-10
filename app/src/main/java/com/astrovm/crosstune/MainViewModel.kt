@@ -256,6 +256,8 @@ internal data class Learning(
     val translation: Boolean = false,
     /** Where translations come from instead of MyMemory, when set. */
     val server: TranslationServer? = null,
+    /** The language picked to translate into, as Settings lists it; null for the app's own. */
+    val into: String? = null,
     /** The script the words are in, when it reads differently from how it looks. */
     val script: Script? = null,
     /** How each line reads, once worked out. */
@@ -263,12 +265,10 @@ internal data class Learning(
     /** Each line translated, or null where it needs none, once done. */
     val translations: List<String?> = emptyList(),
     val translating: Boolean = false,
-    val translationFailed: Boolean = false,
-    /** Every line came back as it was: the words are already in the app's language. */
-    val alreadyTranslated: Boolean = false
+    val translationFailed: Boolean = false
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, server, script)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, server, into, script)
 }
 
 /**
@@ -349,7 +349,8 @@ internal class MainViewModel(
                 readings = preferences.getBoolean(KEY_READINGS, false),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
-                server = preferences.getString(KEY_TRANSLATION_SERVER, null)?.let { TranslationServer(it, preferences.getString(KEY_TRANSLATION_KEY, null).orEmpty()) }
+                server = preferences.getString(KEY_TRANSLATION_SERVER, null)?.let { TranslationServer(it, preferences.getString(KEY_TRANSLATION_KEY, null).orEmpty()) },
+                into = preferences.getString(KEY_TRANSLATE_INTO, null)?.takeIf { it in AppLanguage.tags }
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -1362,7 +1363,7 @@ internal class MainViewModel(
         wordJob?.cancel()
         uiState = uiState.copy(word = WordMeaning(word, looking = true))
         wordJob = viewModelScope.launch {
-            val language = translationLanguage()
+            val language = translateInto()
             val translated = translator.translate(listOf(word.lookup), language, uiState.learning.server)
             // Already in the app's language, a word means what the dictionary says.
             val definition = if (translated != null && translated.firstOrNull() == null) translator.define(word.lookup, language) else null
@@ -1431,11 +1432,10 @@ internal class MainViewModel(
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
-                val translated = translator.translate(lines, translationLanguage(), learning.server)
+                val translated = translator.translate(lines, translateInto(), learning.server)
                 uiState = uiState.copy(
                     learning = uiState.learning.copy(
-                        translations = translated.orEmpty(), translating = false, translationFailed = translated == null,
-                        alreadyTranslated = translated != null && translated.all { it == null }
+                        translations = translated.orEmpty(), translating = false, translationFailed = translated == null
                     )
                 )
             }
@@ -1488,6 +1488,20 @@ internal class MainViewModel(
         uiState = uiState.copy(learning = uiState.learning.copy(server = server, translations = emptyList(), translating = false, translationFailed = false))
         learn()
         return true
+    }
+
+    /** The language lyrics and words are translated into: the one picked, or else the app's. */
+    private fun translateInto(): String =
+        uiState.learning.into?.let { Translator.languageOf(java.util.Locale.forLanguageTag(it)) } ?: translationLanguage()
+
+    /** Translates into [tag], one of the app's languages, from now on, or into the app's own with null. */
+    fun setTranslateInto(tag: String?) {
+        val into = tag?.takeIf { it in AppLanguage.tags }
+        preferences.edit { if (into == null) remove(KEY_TRANSLATE_INTO) else putString(KEY_TRANSLATE_INTO, into) }
+        // Lines translated into the last language are no use in this one.
+        translationJob?.cancel()
+        uiState = uiState.copy(word = null, learning = uiState.learning.copy(into = into, translations = emptyList(), translating = false, translationFailed = false))
+        learn()
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {
@@ -1880,6 +1894,7 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_SERVER = "translation_server"
         private const val KEY_TRANSLATION_KEY = "translation_key"
+        private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"
         private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"

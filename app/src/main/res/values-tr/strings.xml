@@ -249,6 +249,8 @@
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translating">Çevriliyor…</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
+    <string name="setting_translate_into">Şu dile çevir</string>
+    <string name="translate_into_app_language">Uygulama dili</string>
     <string name="setting_translation_server">Çeviriler</string>
     <string name="translation_server_address">LibreTranslate sunucusu</string>
     <string name="translation_server_key">Gerekirse API anahtarı</string>
@@ -261,6 +263,5 @@
     <string name="lyrics_line_saved">Kaydedildi</string>
     <string name="lyrics_saved_lines">Kaydedilen satırlar</string>
     <string name="lyrics_word_failed">Şu an anlamı bulunamadı.</string>
-    <string name="lyrics_already_translated">Bu sözler zaten senin dilinde.</string>
     <string name="lyrics_word_unknown">Bu kelime için sözlük kaydı yok.</string>
 </resources>

@@ -1135,7 +1135,7 @@ class ListeningTest {
     }
 
     @Test
-    fun wordsAlreadyInTheAppsLanguageSaySoAndTheirWordsMeanWhatTheDictionarySays() {
+    fun wordsAlreadyInTheAppsLanguageSayNothingAndTheirWordsMeanWhatTheDictionarySays() {
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
         fake.handler = { request ->
             when {
@@ -1150,8 +1150,9 @@ class ListeningTest {
         waitForText("Stars")
         learnMenu()
         click(string(R.string.lyrics_translation))
-        // Not an error: there's just nothing to translate them into.
-        waitForText(string(R.string.lyrics_already_translated))
+        // Not an error, and nothing worth saying: there's just nothing to translate them into.
+        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_translating)) }
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
@@ -1161,6 +1162,14 @@ class ListeningTest {
         waitForText("The time between sunset and sunrise.")
         line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "sky" }
         waitForText(string(R.string.lyrics_word_unknown))
+    }
+
+    @Test
+    fun wordsAreTranslatedIntoTheLanguagePicked() {
+        prefs().edit().putBoolean("lyrics_translation", true).putString("translate_into", "pt-BR").commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cpt-BR" in it })
     }
 
     @Test

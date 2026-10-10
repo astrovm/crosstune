@@ -267,6 +267,8 @@
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translating">Translating…</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
+    <string name="setting_translate_into">Translate into</string>
+    <string name="translate_into_app_language">App language</string>
     <string name="setting_translation_server">Translations from</string>
     <string name="translation_server_address">LibreTranslate server</string>
     <string name="translation_server_key">API key, if it needs one</string>
@@ -279,6 +281,5 @@
     <string name="lyrics_line_saved">Saved</string>
     <string name="lyrics_saved_lines">Saved lines</string>
     <string name="lyrics_word_failed">Couldn\'t find its meaning just now.</string>
-    <string name="lyrics_already_translated">These lyrics are already in your language.</string>
     <string name="lyrics_word_unknown">No dictionary entry for this word.</string>
 </resources>

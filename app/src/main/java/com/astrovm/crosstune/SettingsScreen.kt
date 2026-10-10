@@ -228,6 +228,8 @@ private fun SettingsList(
                 GroupDivider()
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+            TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
+            GroupDivider()
             TranslationServerRow(state.learning.server, actions.onTranslationServerChange)
             GroupDivider()
             SettingSwitch(
@@ -613,6 +615,43 @@ private val Palette.labelRes: Int
         Palette.SUNSET -> R.string.palette_sunset
         Palette.ROSE -> R.string.palette_rose
     }
+
+/** Picks the language lyrics are translated into, or the app's own. */
+@Composable
+private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
+    val appLanguage = stringResource(R.string.translate_into_app_language)
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = true }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_translate_into), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = into?.let(AppLanguage::displayName) ?: appLanguage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                (listOf(null) + AppLanguage.tags).forEach { tag ->
+                    DropdownMenuItem(
+                        text = { Text(tag?.let(AppLanguage::displayName) ?: appLanguage) },
+                        onClick = {
+                            expanded = false
+                            onSelect(tag)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 
 /** Picks the app's language, or the phone's with "System default". */
 @Composable

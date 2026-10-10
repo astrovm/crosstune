@@ -249,6 +249,8 @@
     <string name="lyrics_translation">Traduction</string>
     <string name="lyrics_translating">Traduction…</string>
     <string name="lyrics_translation_failed">Impossible de traduire pour le moment.</string>
+    <string name="setting_translate_into">Traduire en</string>
+    <string name="translate_into_app_language">Langue de l\'appli</string>
     <string name="setting_translation_server">Traductions par</string>
     <string name="translation_server_address">Serveur LibreTranslate</string>
     <string name="translation_server_key">Clé API, si nécessaire</string>
@@ -261,6 +263,5 @@
     <string name="lyrics_line_saved">Enregistrée</string>
     <string name="lyrics_saved_lines">Lignes enregistrées</string>
     <string name="lyrics_word_failed">Impossible de trouver son sens pour le moment.</string>
-    <string name="lyrics_already_translated">Ces paroles sont déjà dans ta langue.</string>
     <string name="lyrics_word_unknown">Aucune entrée de dictionnaire pour ce mot.</string>
 </resources>

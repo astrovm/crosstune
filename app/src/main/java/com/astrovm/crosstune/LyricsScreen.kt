@@ -81,6 +81,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -445,19 +447,15 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
     )
 }
 
-/** While the words are being translated, why they couldn't be, or that they needn't be. */
+/** While the words are being translated, or why they couldn't be. */
 @Composable
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
-    val shown = learning.translation && (learning.translating || learning.translationFailed || learning.alreadyTranslated)
+    val shown = learning.translation && (learning.translating || learning.translationFailed)
     AnimatedVisibility(visible = shown, enter = Motion.appear, exit = Motion.disappear) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             Text(
                 stringResource(
-                    when {
-                        learning.translationFailed -> R.string.lyrics_translation_failed
-                        learning.translating -> R.string.lyrics_translating
-                        else -> R.string.lyrics_already_translated
-                    }
+                    if (learning.translationFailed) R.string.lyrics_translation_failed else R.string.lyrics_translating
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -915,7 +913,9 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) WordCard(meaning)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            // Side by side, as wide and as tall as each other, however long their words are.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp).height(IntrinsicSize.Min)) {
+                val button = Modifier.weight(1f).fillMaxHeight()
                 // Only a music app the words follow, and that can be moved, can play a line again.
                 if (state.following?.canSeek == true && index < state.lyricLines.size) {
                     val repeating = state.repeating == index
@@ -925,12 +925,12 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     }
                     // Filled only while it repeats, like the Save button once saved looks done.
                     if (repeating) {
-                        FilledTonalButton(onClick = actions.onStopRepeating, content = content)
+                        FilledTonalButton(onClick = actions.onStopRepeating, modifier = button, content = content)
                     } else {
-                        OutlinedButton(onClick = { actions.onRepeatLine(index) }, content = content)
+                        OutlinedButton(onClick = { actions.onRepeatLine(index) }, modifier = button, content = content)
                     }
                 }
-                OutlinedButton(onClick = { actions.onToggleSavedLine(index) }) {
+                OutlinedButton(onClick = { actions.onToggleSavedLine(index) }, modifier = button) {
                     AppIcon(if (saved) R.drawable.ic_bookmark_added else R.drawable.ic_bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(stringResource(if (saved) R.string.lyrics_line_saved else R.string.lyrics_save_line), modifier = Modifier.padding(start = 8.dp))
                 }
