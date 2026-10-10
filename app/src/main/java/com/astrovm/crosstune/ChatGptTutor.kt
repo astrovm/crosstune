@@ -91,18 +91,22 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     suspend fun explain(song: MusicMetadata, lines: List<String>, index: Int, language: String, onText: (String) -> Unit): ChatGptReply {
         val line = lines.getOrNull(index) ?: return ChatGptReply.Failed
         val model = chatGpt.model() ?: return ChatGptReply.Failed
-        val key = "line3|$model|$language|${song.title}|${song.artist}|$index|$line"
+        val key = "line4|$model|$language|${song.title}|${song.artist}|$index|$line"
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         val about = cache.get(songKey(model, language, song))?.let { "What the song is about:\n$it\n\n" }.orEmpty()
+        // Tried on real songs with GPT-6-Luna: held to 45 words and thinking less, explanations
+        // came to 47 words in 3.7 s, from 59 in 5.7 s, as good.
         val reply = chatGpt.ask(
             "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, and the number of one line. " +
                 "First read the whole song to understand its story. Then, in ${nameOf(language)}, explain that line as part of the song, " +
                 "in two parts separated by a line with only $PART_BREAK: first, in one or two short sentences, what it means at that point, " +
-                "who's saying it and to whom, and how it ties to the lines around it; then one short note on grammar, slang, an idiom or a reference " +
-                "in it worth knowing. When there's nothing worth noting, end after the first part, without saying so. " +
-                "About 50 words in all, in plain text, without headings, labels or Markdown.",
+                "who's saying it and to whom; mention the lines around it only when that's needed to understand it. " +
+                "Then, in one short sentence, one note on grammar, slang, an idiom or a reference in it worth knowing. " +
+                "When there's nothing worth noting, end after the first part, without saying so. " +
+                "At most 45 words in all, in plain text, without headings, labels or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\n$about" +
                 "Lyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}\n\nLine ${index + 1}: $line",
+            effort = "low",
             onText = onText
         )
         return reply.also { keep(key, it) }

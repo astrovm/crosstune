@@ -425,6 +425,9 @@ class ChatGptTest {
         val asked = openAi.asked.single()
         val instructions = asked.getString("instructions")
         assertTrue(instructions.contains("in Spanish") && instructions.contains("read the whole song"))
+        // Short, and thinking little, as measured on real songs.
+        assertTrue(instructions.contains("At most 45 words"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
         // Numbered, so which of the lines is meant is clear.
         val input = asked.getJSONArray("input").getJSONObject(0).getString("content")
         assertTrue(input, input.contains("Asphalt Lady by S.Kiyotaka & Omega Tribe") && input.contains("1. Shock!\n2. 君はアスファルト・レディ\n3. Shock!") && input.endsWith("Line 2: 君はアスファルト・レディ"))
