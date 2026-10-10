@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 
 import androidx.compose.ui.test.hasClickAction
@@ -67,6 +68,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import java.io.IOException
 
 /** Crosstune naming a song playing nearby itself: asking for the microphone, listening, and what it finds. */
@@ -1148,12 +1150,15 @@ class ListeningTest {
         return FakeSpotify.html(request, """{"responseData":{"translatedText":"$rows"},"responseStatus":200}""", code = code)
     }
 
-    /** Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers [translations]. */
-    private fun wordsOf(synced: String?, plain: String, translations: Int = 200) {
+    /**
+     * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers
+     * [translations], and [openAi] for ChatGPT when signed in.
+     */
+    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null) {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
-            when (request.url.host) {
+            openAi?.answer(request) ?: when (request.url.host) {
                 "api.mymemory.translated.net" -> translation(request, translations)
                 else -> {
                     val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
@@ -1169,6 +1174,100 @@ class ListeningTest {
     }
 
     private fun learnMenu() = click(string(R.string.lyrics_learn))
+
+    /** Signed in with ChatGPT before Crosstune opens, which [openAi] answers for; it answers each feature as asked. */
+    private fun signedInWithChatGpt(): FakeOpenAi {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val file = File(app.noBackupFilesDir, "chatgpt.json").apply { delete() }
+        fake.handler = { request -> openAi.answer(request) ?: FakeSpotify.html(request, "") }
+        val result = runBlocking {
+            ChatGpt(fake.client(), file, app.packageName).signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                kotlin.concurrent.thread { openAi.comeBack() }
+            })
+        }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, result)
+        openAi.reply = { body ->
+            val instructions = body.getString("instructions")
+            val input = body.getJSONArray("input").getJSONObject(0).getString("content")
+            200 to when {
+                "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
+                "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.")
+                else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
+            }
+        }
+        return openAi
+    }
+
+    @Test
+    fun signedInWithChatGptTheSongIsTranslatedWholeLinesExplainedAndWordsLookedUpInThem() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        // The whole song at once, and MyMemory isn't asked.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        assertTrue(shown("«Night sky»"))
+        assertFalse(fake.requestedUrls.any { "mymemory" in it })
+
+        // A line opens to study; ChatGPT explains it as it writes, and keeps it with the line once saved.
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        click(string(R.string.lyrics_explain_line))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
+        click(string(R.string.lyrics_save_line))
+        assertEquals("Looking up at night.", SavedLinesStore(prefs()).load().single().explanation)
+
+        // A word in it means what it does in that line.
+        val line = hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
+        composeRule.waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        composeRule.waitUntil(TIMEOUT_MS) { shown("the heavens") }
+        val asked = openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content")
+        assertEquals("Night sky", org.json.JSONObject(asked).getString("line"))
+    }
+
+    @Test
+    fun signedInTranslationsComeFromChatGptOrMyMemoryAsPicked() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        // Back to the song, then to Settings, where ChatGPT is picked.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_translation_server)).performScrollTo()
+        click(string(R.string.setting_translation_server))
+        click("MyMemory")
+        assertFalse(prefs().getBoolean("translation_chatgpt", true))
+        assertTrue(shown("MyMemory"))
+        // The words are translated again, by MyMemory now.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+    }
+
+    @Test
+    fun aLineSavedFirstGetsItsExplanationAndAUsedUpPlanSaysSo() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        val explained = openAi.reply
+        openAi.reply = { 429 to "" }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        // ChatGPT can't translate with the plan used up, so MyMemory does, as before.
+        waitForText("[Stars]")
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
+        click(string(R.string.lyrics_save_line))
+        click(string(R.string.lyrics_explain_line))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.chatgpt_limit_reached)) }
+        assertTrue(shown(string(R.string.chatgpt_manage_usage)))
+        // Anything else failing says so, and it can be asked again.
+        openAi.reply = { 500 to "" }
+        click(string(R.string.lyrics_explain_line))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_explain_failed)) }
+        openAi.reply = explained
+        click(string(R.string.lyrics_explain_line))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
+        // Saved before it was explained, the line keeps the explanation too.
+        assertEquals("Looking up at night.", SavedLinesStore(prefs()).load().single().explanation)
+    }
 
     @Test
     fun theLineSheetShowsJapaneseWithItsReadingsOverItAndItsWordsToTap() {
@@ -1248,7 +1347,7 @@ class ListeningTest {
         click(string(R.string.lyrics_translation))
         // Not an error, and nothing worth saying: there's just nothing to translate them into.
         composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_translating)) }
+        composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }

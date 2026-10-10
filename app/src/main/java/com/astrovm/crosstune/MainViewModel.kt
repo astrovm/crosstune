@@ -265,12 +265,18 @@ internal data class ChatGptState(
     val welcome: Boolean = false
 )
 
+/** Line [index] explained by ChatGPT: [text] so far, until [done]; or why it couldn't be. */
+internal data class LineExplanation(val index: Int, val text: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
+    val writing get() = !done && !failed && !limitReached
+}
+
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
     val translation: Boolean = false,
     /** Where translations come from instead of MyMemory, when set. */
-    val server: TranslationServer? = null,
+    /** Signed in, whether ChatGPT translates, rather than MyMemory. */
+    val chatGptTranslation: Boolean = true,
     /** The language picked to translate into, as Settings lists it; null for the app's own. */
     val into: String? = null,
     /** The script the words are in, when it reads differently from how it looks. */
@@ -280,10 +286,12 @@ internal data class Learning(
     /** Each line translated, or null where it needs none, once done. */
     val translations: List<String?> = emptyList(),
     val translating: Boolean = false,
-    val translationFailed: Boolean = false
+    val translationFailed: Boolean = false,
+    /** A line ChatGPT is explaining, or has. */
+    val explanation: LineExplanation? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, server, into, script)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script)
 }
 
 /**
@@ -331,7 +339,9 @@ internal class MainViewModel(
     /** The language words are translated into: the app's. */
     private val translationLanguage: () -> String = { Translator.languageOf(java.util.Locale.getDefault()) },
     /** The ChatGPT account the AI features use; nullable so tests need none. */
-    private val chatGpt: ChatGpt? = null
+    private val chatGpt: ChatGpt? = null,
+    /** What the AI features ask ChatGPT, with that account. */
+    private val tutor: ChatGptTutor? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -371,7 +381,7 @@ internal class MainViewModel(
                 readings = preferences.getBoolean(KEY_READINGS, false),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
-                server = preferences.getString(KEY_TRANSLATION_SERVER, null)?.let { TranslationServer(it, preferences.getString(KEY_TRANSLATION_KEY, null).orEmpty()) },
+                chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.takeIf { it in AppLanguage.tags }
             ),
             floating = FloatingOptions(
@@ -1440,6 +1450,7 @@ internal class MainViewModel(
         readingsJob?.cancel()
         translationJob?.cancel()
         wordJob?.cancel()
+        explanationJob?.cancel()
         stopRepeating()
         uiState = uiState.copy(word = null)
     }
@@ -1456,7 +1467,8 @@ internal class MainViewModel(
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading },
             learning.translations.getOrNull(index),
             song.title,
-            song.artist
+            song.artist,
+            learning.explanation?.takeIf { it.index == index && it.done }?.text
         )
         uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
     }
@@ -1467,14 +1479,23 @@ internal class MainViewModel(
 
     private var wordJob: Job? = null
 
-    /** Finds what [word] means, in the app's language, the way the words are translated. */
-    fun lookUpWord(word: Word) {
+    /**
+     * Finds what [word], in line [index], means in the app's language: as used in that line, from
+     * ChatGPT when signed in, or else the way the words are translated.
+     */
+    fun lookUpWord(word: Word, index: Int) {
         val translator = translator ?: return
+        val line = wordLines().getOrNull(index)
         wordJob?.cancel()
         uiState = uiState.copy(word = WordMeaning(word, looking = true))
         wordJob = viewModelScope.launch {
             val language = translateInto()
-            val translated = translator.translate(listOf(word.lookup), language, uiState.learning.server)
+            val inLine = if (usesChatGpt() && line != null) tutor?.meaning(word.lookup, line, language) else null
+            if (inLine != null) {
+                uiState = uiState.copy(word = WordMeaning(word, inLine.meaning, type = inLine.type))
+                return@launch
+            }
+            val translated = translator.translate(listOf(word.lookup), language)
             // Already in the app's language, a word means what the dictionary says.
             val definition = if (translated != null && translated.firstOrNull() == null) translator.define(word.lookup, language) else null
             val meaning = translated?.firstOrNull() ?: definition?.meaning
@@ -1485,6 +1506,39 @@ internal class MainViewModel(
     fun dismissWord() {
         wordJob?.cancel()
         uiState = uiState.copy(word = null)
+    }
+
+    /** Signed in with ChatGPT, which the AI features ask. */
+    private fun usesChatGpt() = tutor != null && uiState.chatGpt.email != null
+
+    private var explanationJob: Job? = null
+
+    /** Has ChatGPT explain line [index]: what it means in the song, its grammar and references. */
+    fun explainLine(index: Int) {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val lines = wordLines()
+        val line = lines.getOrNull(index) ?: return
+        explanationJob?.cancel()
+        setExplanation(LineExplanation(index))
+        explanationJob = viewModelScope.launch {
+            val reply = tutor.explain(song, lines, line, translateInto()) { text ->
+                // Written as it comes, unless it's done by the time this is shown.
+                viewModelScope.launch { if (uiState.learning.explanation?.let { it.index == index && it.writing } == true) setExplanation(LineExplanation(index, text)) }
+            }
+            val explanation = when (reply) {
+                is ChatGptReply.Answer -> LineExplanation(index, reply.text.trim(), done = true)
+                ChatGptReply.LimitReached -> LineExplanation(index, limitReached = true)
+                ChatGptReply.Failed -> LineExplanation(index, failed = true)
+            }
+            setExplanation(explanation)
+            // A line kept already keeps its explanation too.
+            if (explanation.done) uiState = uiState.copy(savedLines = savedLinesStore.explain(line, song.title, song.artist, explanation.text))
+        }
+    }
+
+    private fun setExplanation(explanation: LineExplanation) {
+        uiState = uiState.copy(learning = uiState.learning.copy(explanation = explanation))
     }
 
     private var repeatJob: Job? = null
@@ -1542,7 +1596,9 @@ internal class MainViewModel(
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
-                val translated = translator.translate(lines, translateInto(), learning.server)
+                val language = translateInto()
+                // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
+                val translated = (if (usesChatGpt() && learning.chatGptTranslation) tutor?.translate(lines, language) else null) ?: translator.translate(lines, language)
                 uiState = uiState.copy(
                     learning = uiState.learning.copy(
                         translations = translated.orEmpty(), translating = false, translationFailed = translated == null
@@ -1576,28 +1632,13 @@ internal class MainViewModel(
         learn()
     }
 
-    /**
-     * Translates with the LibreTranslate server at [url] from now on, or with MyMemory again when
-     * it's blank. False, with nothing changed, when [url] isn't a web address.
-     */
-    fun setTranslationServer(url: String, key: String): Boolean {
-        val address = url.trim().trimEnd('/')
-        val server = if (address.isEmpty()) {
-            null
-        } else {
-            val parsed = address.toHttpUrlOrNull() ?: return false
-            if (!address.startsWith("http://") && !address.startsWith("https://")) return false
-            TranslationServer(parsed.toString().trimEnd('/'), key.trim())
-        }
-        preferences.edit {
-            if (server == null) remove(KEY_TRANSLATION_SERVER).remove(KEY_TRANSLATION_KEY)
-            else putString(KEY_TRANSLATION_SERVER, server.url).putString(KEY_TRANSLATION_KEY, server.key)
-        }
-        // What the last server said is no answer from this one.
+    /** Translates with ChatGPT, signed in, or with MyMemory, from now on. */
+    fun setChatGptTranslation(on: Boolean) {
+        preferences.edit { putBoolean(KEY_TRANSLATION_CHATGPT, on) }
+        // What the other said is no answer from this one.
         translationJob?.cancel()
-        uiState = uiState.copy(learning = uiState.learning.copy(server = server, translations = emptyList(), translating = false, translationFailed = false))
+        uiState = uiState.copy(learning = uiState.learning.copy(chatGptTranslation = on, translations = emptyList(), translating = false, translationFailed = false))
         learn()
-        return true
     }
 
     /** The language lyrics and words are translated into: the one picked, or else the app's. */
@@ -2002,8 +2043,7 @@ internal class MainViewModel(
         private const val KEY_READINGS = "lyrics_readings"
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
-        private const val KEY_TRANSLATION_SERVER = "translation_server"
-        private const val KEY_TRANSLATION_KEY = "translation_key"
+        private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"

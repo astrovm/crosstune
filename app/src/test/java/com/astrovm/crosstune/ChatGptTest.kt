@@ -306,4 +306,156 @@ class ChatGptTest {
         assertTrue(saved().getString("ext_agent_host_id").startsWith("urn:uuid:"))
     }
 
+    private fun signedIn(): ChatGpt = chatGpt().also { signIn(it) }
+
+    @Test
+    fun askedSignedInItStreamsTheAnswerFromASmallModel() {
+        val chatGpt = signedIn()
+        val written = mutableListOf<String>()
+        assertEquals(ChatGptReply.Answer("Hello"), runBlocking { chatGpt.ask("Be brief.", "Say hello") { written += it } })
+        assertEquals(listOf("Hel", "Hello"), written)
+        val body = openAi.asked.single()
+        assertEquals("gpt-6.1-sol-mini", body.getString("model"))
+        assertEquals("Be brief.", body.getString("instructions"))
+        assertEquals("Say hello", body.getJSONArray("input").getJSONObject(0).getString("content"))
+        // OpenAI asks for both on every request on the user's plan.
+        assertFalse(body.getBoolean("store"))
+        assertTrue(body.getBoolean("stream"))
+        // The models are asked for once.
+        runBlocking { chatGpt.ask("Be brief.", "Again") }
+        assertEquals(1, fake.requestedUrls.count { it == ChatGpt.MODELS_URL })
+    }
+
+    @Test
+    fun withoutASmallModelTheFirstListedIsAsked() {
+        openAi.models = { 200 to FakeOpenAi.modelsJson("gpt-6-hidden-mini" to "hide", "gpt-6.1-sol" to "list", "gpt-6.1-pro" to "list") }
+        val chatGpt = signedIn()
+        runBlocking { chatGpt.ask("", "Hi") }
+        assertEquals("gpt-6.1-sol", openAi.asked.single().getString("model"))
+    }
+
+    @Test
+    fun noModelSignedOutOrAnErrorIsNoAnswer() {
+        assertEquals(ChatGptReply.Failed, runBlocking { chatGpt().ask("", "Hi") })
+        val chatGpt = signedIn()
+        listOf<() -> Pair<Int, String>>({ 200 to FakeOpenAi.modelsJson("gpt-6.1-sol" to "hide") }, { 500 to "" }, { 200 to "not json" }, { throw IOException("offline") }).forEach { models ->
+            openAi.models = models
+            assertEquals(ChatGptReply.Failed, runBlocking { chatGpt.ask("", "Hi") })
+        }
+        assertTrue(openAi.asked.isEmpty())
+    }
+
+    @Test
+    fun aPlanUsedUpSaysSoAndAnyOtherFailureIsNoAnswer() {
+        val chatGpt = signedIn()
+        val limit = """{"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}}"""
+        val unavailable = """{"type":"error","code":"subscription_sharing_usage_unavailable"}"""
+        mapOf<() -> Pair<Int, String>, ChatGptReply>(
+            { 429 to "" } to ChatGptReply.LimitReached,
+            // It can run out partway through an answer.
+            { 200 to FakeOpenAi.stream("Half", end = limit) } to ChatGptReply.LimitReached,
+            { 200 to FakeOpenAi.stream(end = unavailable) } to ChatGptReply.LimitReached,
+            { 200 to FakeOpenAi.stream("Half", end = """{"type":"response.failed","response":{"error":{"code":"server_error"}}}""") } to ChatGptReply.Failed,
+            { 200 to FakeOpenAi.stream("Half", end = """{"type":"response.incomplete"}""") } to ChatGptReply.Failed,
+            // Only a completed answer is one.
+            { 200 to FakeOpenAi.stream("Cut off", end = null) } to ChatGptReply.Failed,
+            { 200 to FakeOpenAi.stream("x".repeat(20_001)) } to ChatGptReply.Failed,
+            { 500 to "" } to ChatGptReply.Failed,
+            { throw IOException("offline") } to ChatGptReply.Failed
+        ).forEach { (reply, expected) ->
+            openAi.reply = { reply() }
+            assertEquals(expected, runBlocking { chatGpt.ask("", "Hi") })
+        }
+        // Lines that aren't events, or events that aren't JSON, are skipped.
+        openAi.reply = { 200 to ": keep-alive\n\ndata: [not json]\n\n" + FakeOpenAi.stream("Fine") }
+        assertEquals(ChatGptReply.Answer("Fine"), runBlocking { chatGpt.ask("", "Hi") })
+    }
+
+    private fun tutor(chatGpt: ChatGpt = signedIn()) = ChatGptTutor(chatGpt, LookupCache(File(folder.root, "answers.json"), Dispatchers.Unconfined))
+
+    private fun answering(text: String) {
+        openAi.reply = { 200 to FakeOpenAi.stream(text) }
+    }
+
+    @Test
+    fun aSongIsTranslatedWholeAndEachLineKept() {
+        val tutor = tutor()
+        answering("Here you go:\n```json\n[\"Hello, friend\", \"Ciao\"]\n```")
+        val lines = listOf("Hola amigo", "", "♪", "Hola amigo", "Ciao")
+        // A line already in the language, or with no words, needs no translation.
+        assertEquals(listOf("Hello, friend", null, null, "Hello, friend", null), runBlocking { tutor.translate(lines, "en") })
+        val asked = openAi.asked.single()
+        assertEquals(JSONArray(listOf("Hola amigo", "Ciao")).toString(), asked.getJSONArray("input").getJSONObject(0).getString("content"))
+        assertTrue(asked.getString("instructions").contains("into English"))
+        // Read again, nothing is asked; a new line is, alone.
+        assertEquals(listOf("Hello, friend"), runBlocking { tutor.translate(listOf("Hola amigo"), "en") })
+        answering("[\"Goodbye\"]")
+        assertEquals(listOf("Hello, friend", "Goodbye"), runBlocking { tutor.translate(listOf("Hola amigo", "Adiós"), "en") })
+        assertEquals(JSONArray(listOf("Adiós")).toString(), openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content"))
+        assertTrue(openAi.asked.last().getString("instructions").contains("into Portuguese (Brazil)").not())
+        assertEquals(2, openAi.asked.size)
+    }
+
+    @Test
+    fun aTranslationThatDoesntFitTheLinesIsNone() {
+        val tutor = tutor()
+        listOf("[\"Just one\"]", "No JSON at all", "] backwards [", "[{\"a\": }]").forEach { text ->
+            answering(text)
+            assertNull(runBlocking { tutor.translate(listOf("Uno", "Dos"), "pt-BR") })
+        }
+        assertTrue(openAi.asked.last().getString("instructions").contains("into Portuguese (Brazil)"))
+        openAi.reply = { 429 to "" }
+        assertNull(runBlocking { tutor.translate(listOf("Uno"), "en") })
+        // Nothing to translate asks nothing.
+        val before = openAi.asked.size
+        assertEquals(listOf<String?>(null), runBlocking { tutor.translate(listOf("♪"), "en") })
+        assertEquals(before, openAi.asked.size)
+    }
+
+    @Test
+    fun aLineIsExplainedAsItsWrittenAndKept() {
+        val tutor = tutor()
+        val song = MusicMetadata("Asphalt Lady", "S.Kiyotaka & Omega Tribe")
+        answering("It means you're a city woman.")
+        val written = mutableListOf<String>()
+        val reply = runBlocking { tutor.explain(song, listOf("Shock!", "君はアスファルト・レディ"), "君はアスファルト・レディ", "es") { written += it } }
+        assertEquals(ChatGptReply.Answer("It means you're a city woman."), reply)
+        assertEquals("It means you're a city woman.", written.last())
+        val asked = openAi.asked.single()
+        assertTrue(asked.getString("instructions").contains("In Spanish"))
+        val input = asked.getJSONArray("input").getJSONObject(0).getString("content")
+        assertTrue(input, input.contains("Asphalt Lady by S.Kiyotaka & Omega Tribe") && input.contains("Line: 君はアスファルト・レディ"))
+        // Asked again, it's there already.
+        written.clear()
+        assertEquals(reply, runBlocking { tutor.explain(song, emptyList(), "君はアスファルト・レディ", "es") { written += it } })
+        assertEquals(1, openAi.asked.size)
+        assertTrue(written.isEmpty())
+        // What couldn't be explained isn't kept, so it's asked again.
+        openAi.reply = { 429 to "" }
+        assertEquals(ChatGptReply.LimitReached, runBlocking { tutor.explain(song, emptyList(), "Shock!", "es") {} })
+        answering("A cry.")
+        assertEquals(ChatGptReply.Answer("A cry."), runBlocking { tutor.explain(song, emptyList(), "Shock!", "es") {} })
+    }
+
+    @Test
+    fun aWordMeansWhatItDoesInItsLine() {
+        val tutor = tutor()
+        answering("""{"meaning": "you (to a lover)", "type": "pronoun"}""")
+        assertEquals(Definition("pronoun", "you (to a lover)"), runBlocking { tutor.meaning("君", "君はアスファルト・レディ", "en") })
+        val asked = JSONObject(openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("君", asked.getString("word"))
+        assertEquals("君はアスファルト・レディ", asked.getString("line"))
+        // Kept, and only for that line.
+        assertEquals(Definition("pronoun", "you (to a lover)"), runBlocking { tutor.meaning("君", "君はアスファルト・レディ", "en") })
+        assertEquals(1, openAi.asked.size)
+        answering("""{"meaning": "you", "type": " "}""")
+        assertEquals(Definition(null, "you"), runBlocking { tutor.meaning("君", "君の名は", "en") })
+        // An answer without a meaning, or not an answer at all, is none.
+        listOf("""{"type": "noun"}""", "no idea", "{broken").forEach { text ->
+            answering(text)
+            assertNull(runBlocking { tutor.meaning("愛", "愛してる", "en") })
+        }
+        openAi.reply = { 500 to "" }
+        assertNull(runBlocking { tutor.meaning("愛", "愛してる", "en") })
+    }
 }

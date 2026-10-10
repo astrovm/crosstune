@@ -18,12 +18,10 @@ import java.io.IOException
 import java.util.Locale
 
 /**
- * Lyrics, line by line, in another language. By default from MyMemory, which asks for no account
- * but only translates so much a day, or from the LibreTranslate server set in Settings. Each line
- * is kept once translated, so a chorus, or a song read again, costs nothing more.
+ * Lyrics, line by line, in another language, from MyMemory, which asks for no account but only
+ * translates so much a day. Each line is kept once translated, so a chorus, or a song read again,
+ * costs nothing more.
  */
-/** A LibreTranslate server to translate with instead, at [url], with the API [key] it may want. */
-internal data class TranslationServer(val url: String, val key: String = "")
 
 internal class Translator(
     private val client: OkHttpClient,
@@ -35,13 +33,13 @@ internal class Translator(
      * nothing to translate; null for all of them when it couldn't be done, maybe offline or out of
      * the day's translations.
      */
-    suspend fun translate(lines: List<String>, target: String, server: TranslationServer?): List<String?>? {
+    suspend fun translate(lines: List<String>, target: String): List<String?>? {
         val words = lines.filter(::worthTranslating).distinct()
-        val key = { line: String -> "${server?.url.orEmpty()}|$target|$line" }
+        val key = { line: String -> "|$target|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val found = try {
-            if (missing.isEmpty()) emptyMap() else if (server != null) libre(missing, target, server) else myMemory(missing, target)
+            if (missing.isEmpty()) emptyMap() else myMemory(missing, target)
         } catch (_: IOException) {
             return null
         } catch (_: JSONException) {
@@ -118,21 +116,6 @@ internal class Translator(
         } catch (_: JSONException) {
             null
         }
-    }
-
-    /** LibreTranslate takes every line at once, with an API key when the server wants one. */
-    private suspend fun libre(lines: List<String>, target: String, server: TranslationServer): Map<String, String>? {
-        val url = server.url.toHttpUrlOrNull()?.newBuilder()?.addPathSegment("translate")?.build() ?: return null
-        val body = JSONObject()
-            .put("q", JSONArray(lines))
-            .put("source", "auto")
-            .put("target", target.substringBefore('-').lowercase(Locale.ROOT))
-            .put("format", "text")
-            .apply { server.key.takeIf { it.isNotBlank() }?.let { put("api_key", it) } }
-        val json = JSONObject(call(Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()))
-        val translated = json.getJSONArray("translatedText")
-        if (translated.length() != lines.size) return null
-        return lines.indices.associate { lines[it] to translated.getString(it).trim() }
     }
 
     private suspend fun call(request: Request): String = client.newCall(request).executeAsync().use { response ->
