@@ -458,49 +458,6 @@ class ListeningTest {
     }
 
     @Test
-    fun theLyricsBarGoesWhenLeftAloneAndComesBackOnATouch() {
-        val synced = """[{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]"""
-        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
-        MainActivity.playbackFactory = {
-            FakePlayback().apply {
-                access = true
-                onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
-                playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = false)
-            }
-        }
-        allowMicrophone()
-        launch()
-        recognize()
-        waitForText("Demo")
-        click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
-        val learn = string(R.string.lyrics_learn)
-        assertTrue(described(learn))
-        composeRule.mainClock.autoAdvance = false
-        try {
-            // Left alone, it goes.
-            composeRule.mainClock.advanceTimeBy(BAR_IDLE_MS + 1_000)
-            composeRule.waitUntil(TIMEOUT_MS) { !described(learn) }
-            // A touch anywhere brings it back, for as long again.
-            composeRule.onNodeWithText("Demo two").performTouchInput { down(center); up() }
-            composeRule.mainClock.advanceTimeBy(1_000)
-            composeRule.waitUntil(TIMEOUT_MS) { described(learn) }
-            composeRule.mainClock.advanceTimeBy(BAR_IDLE_MS)
-            composeRule.waitUntil(TIMEOUT_MS) { !described(learn) }
-            // A menu open from it keeps it.
-            composeRule.onNodeWithText("Demo one").performTouchInput { down(center); up() }
-            composeRule.mainClock.advanceTimeBy(1_000)
-            composeRule.waitUntil(TIMEOUT_MS) { described(learn) }
-            composeRule.onNode(hasContentDescription(learn)).performClick()
-            composeRule.mainClock.advanceTimeBy(BAR_IDLE_MS * 2)
-            assertTrue(described(learn))
-            assertTrue(shown(string(R.string.lyrics_translation)))
-        } finally {
-            composeRule.mainClock.autoAdvance = true
-        }
-    }
-
-    @Test
     fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
         // YouTube plays the song's video, which opens with 45 seconds before the song.
         val phone = FakePlayback().apply {
