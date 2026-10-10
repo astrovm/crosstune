@@ -1029,7 +1029,11 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor?.artist }
     // Open all the way, so one back closes it rather than lowering it halfway first.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+        // Scrolled, so a long explanation is read to its end.
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+        ) {
             // The line, once: each of its words underlined, to tap for its meaning, with its readings
             // over the kanji, as in the lyrics.
             val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
@@ -1190,7 +1194,7 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
         ) {
             Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
             if (explanation == null || explanation.writing || explanation.done || explanation.limitReached) {
-                ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG))
+                ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG), SONG_PARTS)
             }
             if (explanation?.failed == true) {
                 Text(stringResource(R.string.lyrics_song_meaning_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -1204,7 +1208,7 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
 
 /** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */
 @Composable
-private fun ExplanationCard(explanation: LineExplanation) {
+private fun ExplanationCard(explanation: LineExplanation, labels: List<Int> = LINE_PARTS) {
     val uriHandler = LocalUriHandler.current
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1216,11 +1220,31 @@ private fun ExplanationCard(explanation: LineExplanation) {
                     }
                 }
                 explanation.text.isEmpty() -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-                else -> Text(explanation.text, style = MaterialTheme.typography.bodyLarge)
+                else -> ExplanationParts(explanation.text, labels)
             }
         }
     }
 }
+
+/** An explanation's parts, each under its label, in [labels]' order; a part left empty isn't shown. */
+@Composable
+private fun ExplanationParts(text: String, labels: List<Int>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        explanationParts(text).forEachIndexed { index, part ->
+            if (part.isEmpty()) return@forEachIndexed
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                labels.getOrNull(index)?.let { Text(stringResource(it), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+                Text(part, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** What a line's explanation says, in order: what it means in the song, then about its language. */
+private val LINE_PARTS = listOf(R.string.explanation_in_song, R.string.explanation_language)
+
+/** What a song's explanation says, in order. */
+private val SONG_PARTS = listOf(R.string.song_story, R.string.song_mood, R.string.song_references)
 
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable
@@ -1246,7 +1270,7 @@ private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: (
                                 Text(line.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 line.translation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
-                                line.explanation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
+                                line.explanation?.let { Box(modifier = Modifier.padding(top = 4.dp)) { ExplanationParts(it, LINE_PARTS) } }
                                 Text(
                                     line.title,
                                     style = MaterialTheme.typography.labelMedium,

@@ -55,9 +55,10 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         val reply = chatGpt.ask(
             "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics. " +
-                "In ${nameOf(language)}, explain what the song is about: its story, who's speaking and to whom, its mood, " +
-                "its main images and metaphors, and any cultural or historical references. Go by the lyrics, and say where you're unsure " +
-                "rather than inventing facts about the artist. Two or three short paragraphs of plain text, without Markdown.",
+                "In ${nameOf(language)}, explain what the song is about, going by the lyrics, without inventing facts about the artist. " +
+                "Reply in three parts, separated by a line with only $PART_BREAK: first its story, who's speaking, to whom and what happens; " +
+                "then its mood; then any cultural or historical references, left empty when there are none. " +
+                "One or two short sentences each, about 100 words in all, in plain text, without headings, labels or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
             onText
         )
@@ -73,15 +74,15 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     suspend fun explain(song: MusicMetadata, lines: List<String>, index: Int, language: String, onText: (String) -> Unit): ChatGptReply {
         val line = lines.getOrNull(index) ?: return ChatGptReply.Failed
         val model = chatGpt.model() ?: return ChatGptReply.Failed
-        val key = "line|$model|$language|${song.title}|${song.artist}|$index|$line"
+        val key = "line2|$model|$language|${song.title}|${song.artist}|$index|$line"
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         val about = cache.get(songKey(model, language, song))?.let { "What the song is about:\n$it\n\n" }.orEmpty()
         val reply = chatGpt.ask(
             "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, and the number of one line. " +
-                "First read the whole song to understand its story. Then, in ${nameOf(language)}, explain that line as part of the song: " +
-                "what it means at that point, who's saying it and to whom, and how it ties to the lines around it. " +
-                "After that, briefly note any grammar, slang, idioms or references in it worth knowing. " +
-                "A short paragraph or two of plain text, without Markdown.",
+                "First read the whole song to understand its story. Then, in ${nameOf(language)}, explain that line as part of the song, " +
+                "in two parts separated by a line with only $PART_BREAK: first, in one or two short sentences, what it means at that point, " +
+                "who's saying it and to whom, and how it ties to the lines around it; then one short note on grammar, slang, an idiom or a reference " +
+                "in it worth knowing, left empty when there's none. About 50 words in all, in plain text, without headings, labels or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\n$about" +
                 "Lyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}\n\nLine ${index + 1}: $line",
             onText
@@ -89,7 +90,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return reply.also { keep(key, it) }
     }
 
-    private fun songKey(model: String, language: String, song: MusicMetadata) = "song|$model|$language|${song.title}|${song.artist}"
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song2|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
@@ -139,3 +140,13 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     /** [language] as ChatGPT is told it, e.g. "Portuguese (Brazil)" for "pt-BR". */
     private fun nameOf(language: String): String = Locale.forLanguageTag(language).getDisplayName(Locale.ENGLISH)
 }
+
+/** What ChatGPT puts between the parts of an explanation. */
+internal const val PART_BREAK = "---"
+
+/**
+ * The parts of an explanation, in order, empty where it left one out; while it's still being
+ * written, those so far, without the start of a break that's only half there.
+ */
+internal fun explanationParts(text: String): List<String> =
+    text.split(Regex("""\n\s*-{3,}\s*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }

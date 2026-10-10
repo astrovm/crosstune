@@ -275,6 +275,11 @@
     <string name="lyrics_explain_failed">Не удалось объяснить строку.</string>
     <string name="lyrics_song_meaning">О чём песня</string>
     <string name="lyrics_song_meaning_failed">Не удалось объяснить песню.</string>
+    <string name="explanation_in_song">В песне</string>
+    <string name="explanation_language">Язык</string>
+    <string name="song_story">История</string>
+    <string name="song_mood">Настроение</string>
+    <string name="song_references">Отсылки</string>
     <string name="chatgpt_limit_reached">Лимит вашего плана ChatGPT пока исчерпан.</string>
     <string name="lyrics_repeat_line">Повторять эту строку</string>
     <string name="lyrics_stop_repeating">Больше не повторять</string>

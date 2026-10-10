@@ -275,6 +275,11 @@
     <string name="lyrics_explain_failed">Nie udało się wyjaśnić tego wersu.</string>
     <string name="lyrics_song_meaning">O czym jest piosenka</string>
     <string name="lyrics_song_meaning_failed">Nie udało się wyjaśnić piosenki.</string>
+    <string name="explanation_in_song">W piosence</string>
+    <string name="explanation_language">Język</string>
+    <string name="song_story">Historia</string>
+    <string name="song_mood">Nastrój</string>
+    <string name="song_references">Odniesienia</string>
     <string name="chatgpt_limit_reached">Twój plan ChatGPT na razie się wyczerpał.</string>
     <string name="lyrics_repeat_line">Powtarzaj ten wiersz</string>
     <string name="lyrics_stop_repeating">Przestań powtarzać</string>
