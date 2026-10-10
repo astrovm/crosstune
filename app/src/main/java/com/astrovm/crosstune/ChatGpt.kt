@@ -113,7 +113,7 @@ internal class ChatGpt(
      * What ChatGPT answers to [input], told how by [instructions], on the user's plan. [onText] gets
      * the answer so far as it's written.
      */
-    suspend fun ask(instructions: String, input: String, onText: (String) -> Unit = {}, webSearch: Boolean = false): ChatGptReply {
+    suspend fun ask(instructions: String, input: String, webSearch: Boolean = false, onText: (String) -> Unit = {}): ChatGptReply {
         val token = accessToken() ?: return ChatGptReply.Failed
         val reply = try {
             val model = model() ?: return ChatGptReply.Failed
@@ -146,7 +146,7 @@ internal class ChatGpt(
             ChatGptReply.Failed
         }
         // Not allowed to search the web, it answers from what it knows.
-        return reply ?: ask(instructions, input, onText, webSearch = false)
+        return reply ?: ask(instructions, input, webSearch = false, onText = onText)
     }
 
     /**

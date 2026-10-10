@@ -64,8 +64,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "One or two short sentences each, about 120 words in all. Never say that something is missing or absent. " +
                 "Plain text, without headings, labels, links or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
-            onText,
-            webSearch = true
+            webSearch = true,
+            onText = onText
         )
         return reply.also { keep(key, it) }
     }
@@ -91,7 +91,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "About 50 words in all, in plain text, without headings, labels or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\n$about" +
                 "Lyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}\n\nLine ${index + 1}: $line",
-            onText
+            onText = onText
         )
         return reply.also { keep(key, it) }
     }

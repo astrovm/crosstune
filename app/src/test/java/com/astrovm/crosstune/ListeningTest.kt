@@ -1194,7 +1194,7 @@ class ListeningTest {
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
-                "explain what the song is about" in instructions -> FakeOpenAi.stream("A night ", "under the stars.\n---\nCalm.\n---\n")
+                "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
                 else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
             }
         }
@@ -1274,7 +1274,7 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         val explained = openAi.reply
-        openAi.reply = { body -> if ("explain what the song is about" in body.getString("instructions")) 500 to "" else explained(body) }
+        openAi.reply = { body -> if ("explain the song in four parts" in body.getString("instructions")) 500 to "" else explained(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         learnMenu()
@@ -1284,17 +1284,17 @@ class ListeningTest {
         openAi.reply = explained
         click(string(R.string.retry_button))
         composeRule.waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
-        // Its story and mood; no key lines, so their label isn't shown.
-        assertTrue(shown("Calm.") && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
+        // What's known about it, its story and mood; no key lines, so their label isn't shown.
+        assertTrue(shown("From 1985.") && shown("Calm.") && shown(string(R.string.song_about)) && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
         assertFalse(shown(string(R.string.song_key_lines)))
-        val asked = openAi.asked.count { "explain what the song is about" in it.getString("instructions") }
+        val asked = openAi.asked.count { "explain the song in four parts" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown("A night under the stars.") }
         learnMenu()
         click(string(R.string.lyrics_song_meaning))
         waitForText("A night under the stars.")
-        assertEquals(asked, openAi.asked.count { "explain what the song is about" in it.getString("instructions") })
+        assertEquals(asked, openAi.asked.count { "explain the song in four parts" in it.getString("instructions") })
     }
 
     @Test
