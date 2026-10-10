@@ -769,4 +769,29 @@ class LyricsFinderTest {
         assertEquals(SyncedLyrics.parse(early), (found(MusicMetadata("Asphalt Lady", remix.artist)) as Lyrics.Found).lines)
         assertEquals(1, fake.requestedUrls.drop(before).count { it.startsWith("https://lrclib.net") })
     }
+
+    @Test
+    fun aRemixGetsTheWordsOfTheSameRemixNamedOtherwise() {
+        val lyric = "[00:16.53]シルク・グレイの風をすりぬけ\n[00:30.85]光りはじめた　街は横文字"
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == "Twilight Bay City (Remix)" -> FakeSpotify.html(request, "[]")
+                // LRCLIB has only the original, on an album that isn't the remix's.
+                url.host == "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Twilight Bay City","artistName":"S.Kiyotaka & Omega Tribe","albumName":"NEVER ENDING SUMMER","plainLyrics":"Original words"}]""")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(
+                    request,
+                    """{"result":{"songs":[
+                        {"id":1,"name":"Twilight Bay City","artists":[{"name":"S.Kiyotaka & Omega Tribe"}],"album":{"name":"NEVER ENDING SUMMER"}},
+                        {"id":2,"name":"Twilight Bay City (2022 Remix)","artists":[{"name":"S.Kiyotaka & Omega Tribe"}],"album":{"name":"Never Ending Summer Remix"}}
+                    ]}}"""
+                )
+                url.encodedPath == "/api/song/lyric" ->
+                    FakeSpotify.html(request, if (url.queryParameter("id") == "2") """{"lrc":{"lyric":"$lyric"}}""" else """{"lrc":{"lyric":"[00:10.00]Wrong one"}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val found = found(MusicMetadata("Twilight Bay City (Remix)", "S.Kiyotaka & Omega Tribe")) as Lyrics.Found
+        assertEquals(listOf(LyricLine(16_530, "シルク・グレイの風をすりぬけ"), LyricLine(30_850, "光りはじめた　街は横文字")), found.lines)
+    }
 }

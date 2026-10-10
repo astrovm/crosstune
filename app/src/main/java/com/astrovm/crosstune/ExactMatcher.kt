@@ -443,7 +443,9 @@ internal class ExactMatcher(
             // The second line is "Artist • Album • 4:46" for songs and "Album • Artist • 2012" for albums.
             val details = columns.getOrNull(1).orEmpty().split(" • ")
             val artist = if (isSong) details.firstOrNull().orEmpty() else details.getOrNull(1).orEmpty()
-            val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name })
+            // A song's album may say what version it is, "Song" on "… Remix".
+            val album = if (isSong) details.getOrNull(1).orEmpty() else ""
+            val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name }, album)
             if (!same) return null
             return when (metadata.type) {
                 ItemType.TRACK -> item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }
@@ -522,8 +524,8 @@ internal class ExactMatcher(
      * Requires the same name and at least one artist in common, so remixes, covers and deluxe
      * editions don't win by rank. Whole names are compared: "Sia" must not match "Asia".
      */
-    private fun matches(metadata: MusicMetadata, name: String, artist: String): Boolean {
-        if (!SongNames.same(name, metadata.title)) return false
+    private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = ""): Boolean {
+        if (!SongNames.sameVersion(metadata.title, name, album)) return false
         if (metadata.type == ItemType.ARTIST) return true
         val wanted = SongNames.artists(metadata.artist)
         return wanted.isEmpty() || SongNames.artists(artist).any(wanted::contains)
