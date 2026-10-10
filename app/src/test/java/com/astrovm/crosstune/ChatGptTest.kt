@@ -578,4 +578,25 @@ class ChatGptTest {
         assertEquals(listOf("Too vivid"), runBlocking { tutor.translate(listOf("鮮やかすぎる"), "en", one) })
         assertEquals(2, openAi.asked.size)
     }
+
+    @Test
+    fun aTranslationShowsLineByLineAsItComesThinkingLittle() {
+        val tutor = tutor()
+        // Streamed in pieces that cut lines in two.
+        openAi.reply = { 200 to FakeOpenAi.stream("[\"Charla urbana", " tras el cristal\", \"El vie", "nto trae rumores\"]") }
+        val shown = mutableListOf<List<String?>>()
+        val lines = listOf("ガラス越しの City Talk", "♪", "風が噂をはこんでく")
+        assertEquals(listOf("Charla urbana tras el cristal", null, "El viento trae rumores"), runBlocking { tutor.translate(lines, "es") { shown += it } })
+        assertEquals(
+            listOf(listOf(null, null, null), listOf("Charla urbana tras el cristal", null, null), listOf("Charla urbana tras el cristal", null, "El viento trae rumores")),
+            shown.distinct()
+        )
+        assertEquals("low", openAi.asked.single().getJSONObject("reasoning").getString("effort"))
+        // Lines kept already show from the start; only new ones are asked.
+        openAi.reply = { 200 to FakeOpenAi.stream("[\"Que llega", "ras tarde\"]") }
+        shown.clear()
+        runBlocking { tutor.translate(lines + "君が遅れたのは", "es") { shown += it } }
+        assertEquals(listOf("Charla urbana tras el cristal", null, "El viento trae rumores", null), shown.first())
+        assertEquals(JSONArray(listOf("君が遅れたのは")).toString(), openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content"))
+    }
 }

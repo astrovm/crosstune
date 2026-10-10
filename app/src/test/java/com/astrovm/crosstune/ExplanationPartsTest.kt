@@ -2,7 +2,11 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+/** Runs under Robolectric for the real org.json. */
+@RunWith(RobolectricTestRunner::class)
 class ExplanationPartsTest {
 
     @Test
@@ -48,5 +52,19 @@ class ExplanationPartsTest {
         assertEquals("5 * 3 = 15, 「君の瞳」*", plainText("5 * 3 = 15, 「君の瞳」*"))
         // Within parts, too.
         assertEquals(listOf("FIRST FINALE, 1985.", "Story."), explanationParts("*FIRST FINALE*, 1985. ([vap.co.jp](https://vap.co.jp))\n\nStory."))
+    }
+
+    @Test
+    fun translatedLinesAreReadAsTheyCome() {
+        // As GPT-6-Luna really streamed November Blue's, cut anywhere.
+        val answer = "[\"Charla urbana tras el cristal\", \"El viento trae rumores\", \"Que llegaras tarde\"]"
+        assertEquals(emptyList<String>(), finishedStrings(""))
+        assertEquals(emptyList<String>(), finishedStrings("[\"Charla urb"))
+        assertEquals(listOf("Charla urbana tras el cristal"), finishedStrings(answer.take(34)))
+        assertEquals(listOf("Charla urbana tras el cristal", "El viento trae rumores", "Que llegaras tarde"), finishedStrings(answer))
+        // In a code block, with quotes and slashes inside, and anything that isn't a string ends it.
+        assertEquals(listOf("Say \"hi\"", "a\\b"), finishedStrings("```json\n[\"Say \\\"hi\\\"\", \"a\\\\b\"]\n```"))
+        assertEquals(listOf("One"), finishedStrings("[\"One\", 2, \"Three\"]"))
+        assertEquals(emptyList<String>(), finishedStrings("No array here"))
     }
 }

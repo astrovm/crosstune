@@ -16,7 +16,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      * [lines] in [language], translated together as the song they are, each line's translation, or
      * null where there's nothing to translate; null for all of them when it couldn't be done.
      */
-    suspend fun translate(lines: List<String>, language: String, song: MusicMetadata? = null): List<String?>? {
+    suspend fun translate(lines: List<String>, language: String, song: MusicMetadata? = null, onLines: (List<String?>) -> Unit = {}): List<String?>? {
         val words = lines.filter { line -> line.any(Char::isLetter) }.distinct()
         // Each model's own, so picking another translates anew.
         val model = chatGpt.model() ?: return null
@@ -24,26 +24,33 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
+        val kept = known.filterValues { it != null }.mapValues { it.value!! }
+        // A line already in [language] comes back as it was, and is no use under itself.
+        fun shown(all: Map<String, String>) = lines.map { line -> all[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
         val found = if (missing.isEmpty()) {
             emptyMap()
         } else {
             val name = nameOf(language)
+            // Tried on real songs: thinking less, the first line comes in 1.5 s rather than 5, as good.
             val reply = chatGpt.ask(
                 "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " +
                     "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
                     "Reply with only a JSON array of strings, the same length and in the same order, one translation for each line. " +
                     "A line already in $name stays as it is.",
-                JSONArray(missing).toString()
-            )
+                JSONArray(missing).toString(),
+                effort = "low"
+            ) { text ->
+                // Each line shown as soon as it's translated.
+                val so = finishedStrings(text).take(missing.size)
+                onLines(shown(kept + missing.zip(so).toMap()))
+            }
             val translated = (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray) ?: return null
             if (translated.length() != missing.size) return null
             missing.indices.associate { missing[it] to translated.getString(it).trim() }
         }
         found.forEach { (line, translation) -> cache.put(key(line), translation) }
         cache.save()
-        val all = known.filterValues { it != null }.mapValues { it.value!! } + found
-        // A line already in [language] comes back as it was, and is no use under itself.
-        return lines.map { line -> all[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
+        return shown(kept + found)
     }
 
     /**
@@ -175,3 +182,26 @@ internal fun plainText(text: String): String = text
     .replace(Regex("""\[([^\]]+)]\(https?://[^)]*\)"""), "$1")
     .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
     .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+
+/**
+ * The strings of a JSON array finished so far in [text], an answer still being written: those
+ * whose closing quote has come, not the one still on its way.
+ */
+internal fun finishedStrings(text: String): List<String> {
+    val start = text.indexOf('[').takeIf { it >= 0 } ?: return emptyList()
+    val strings = mutableListOf<String>()
+    var at = start + 1
+    while (true) {
+        while (at < text.length && (text[at].isWhitespace() || text[at] == ',')) at++
+        if (at >= text.length || text[at] != '"') return strings
+        var end = at + 1
+        while (end < text.length && text[end] != '"') end += if (text[end] == '\\') 2 else 1
+        if (end >= text.length) return strings
+        strings += try {
+            JSONArray("[" + text.substring(at, end + 1) + "]").getString(0)
+        } catch (_: JSONException) {
+            return strings
+        }
+        at = end + 1
+    }
+}
