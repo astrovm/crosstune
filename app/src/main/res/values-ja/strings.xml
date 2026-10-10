@@ -274,6 +274,8 @@
     <string name="lyrics_study_line">この行を学ぶ</string>
     <string name="lyrics_explain_line">この行を解説</string>
     <string name="lyrics_explain_failed">この行を解説できませんでした。</string>
+    <string name="lyrics_song_meaning">この曲の意味</string>
+    <string name="lyrics_song_meaning_failed">この曲を解説できませんでした。</string>
     <string name="chatgpt_limit_reached">ChatGPT プランの上限に達しました。</string>
     <string name="lyrics_repeat_line">この行をくり返す</string>
     <string name="lyrics_stop_repeating">くり返しを止める</string>

@@ -273,6 +273,8 @@
     <string name="lyrics_study_line">Deze regel leren</string>
     <string name="lyrics_explain_line">Leg deze regel uit</string>
     <string name="lyrics_explain_failed">Kon deze regel niet uitleggen.</string>
+    <string name="lyrics_song_meaning">Waar het nummer over gaat</string>
+    <string name="lyrics_song_meaning_failed">Kon het nummer niet uitleggen.</string>
     <string name="chatgpt_limit_reached">Je ChatGPT-abonnement is voorlopig op.</string>
     <string name="lyrics_repeat_line">Deze regel herhalen</string>
     <string name="lyrics_stop_repeating">Stoppen met herhalen</string>

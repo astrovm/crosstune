@@ -273,6 +273,8 @@
     <string name="lyrics_study_line">यह लाइन सीखें</string>
     <string name="lyrics_explain_line">इस पंक्ति को समझाएं</string>
     <string name="lyrics_explain_failed">यह पंक्ति समझाई नहीं जा सकी।</string>
+    <string name="lyrics_song_meaning">गाने का मतलब</string>
+    <string name="lyrics_song_meaning_failed">गाना समझाया नहीं जा सका।</string>
     <string name="chatgpt_limit_reached">आपका ChatGPT प्लान अभी के लिए खत्म हो गया है।</string>
     <string name="lyrics_repeat_line">यह लाइन दोहराएं</string>
     <string name="lyrics_stop_repeating">दोहराना बंद करें</string>

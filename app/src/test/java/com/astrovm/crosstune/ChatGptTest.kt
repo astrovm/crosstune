@@ -413,28 +413,59 @@ class ChatGptTest {
     }
 
     @Test
-    fun aLineIsExplainedAsItsWrittenAndKept() {
+    fun aLineIsExplainedAsPartOfTheWholeSongAndKept() {
         val tutor = tutor()
         val song = MusicMetadata("Asphalt Lady", "S.Kiyotaka & Omega Tribe")
-        answering("It means you're a city woman.")
+        val lines = listOf("Shock!", "君はアスファルト・レディ", "Shock!")
+        answering("He calls her a city woman.")
         val written = mutableListOf<String>()
-        val reply = runBlocking { tutor.explain(song, listOf("Shock!", "君はアスファルト・レディ"), "君はアスファルト・レディ", "es") { written += it } }
-        assertEquals(ChatGptReply.Answer("It means you're a city woman."), reply)
-        assertEquals("It means you're a city woman.", written.last())
+        val reply = runBlocking { tutor.explain(song, lines, 1, "es") { written += it } }
+        assertEquals(ChatGptReply.Answer("He calls her a city woman."), reply)
+        assertEquals("He calls her a city woman.", written.last())
         val asked = openAi.asked.single()
-        assertTrue(asked.getString("instructions").contains("In Spanish"))
+        val instructions = asked.getString("instructions")
+        assertTrue(instructions.contains("in Spanish") && instructions.contains("read the whole song"))
+        // Numbered, so which of the lines is meant is clear.
         val input = asked.getJSONArray("input").getJSONObject(0).getString("content")
-        assertTrue(input, input.contains("Asphalt Lady by S.Kiyotaka & Omega Tribe") && input.contains("Line: 君はアスファルト・レディ"))
+        assertTrue(input, input.contains("Asphalt Lady by S.Kiyotaka & Omega Tribe") && input.contains("1. Shock!\n2. 君はアスファルト・レディ\n3. Shock!") && input.endsWith("Line 2: 君はアスファルト・レディ"))
         // Asked again, it's there already.
         written.clear()
-        assertEquals(reply, runBlocking { tutor.explain(song, emptyList(), "君はアスファルト・レディ", "es") { written += it } })
+        assertEquals(reply, runBlocking { tutor.explain(song, lines, 1, "es") { written += it } })
         assertEquals(1, openAi.asked.size)
         assertTrue(written.isEmpty())
-        // What couldn't be explained isn't kept, so it's asked again.
+        // The same words elsewhere in the song are another line, asked about on their own.
+        answering("A cry at the start.")
+        runBlocking { tutor.explain(song, lines, 0, "es") {} }
+        answering("A cry again at the end.")
+        assertEquals(ChatGptReply.Answer("A cry again at the end."), runBlocking { tutor.explain(song, lines, 2, "es") {} })
+        // What couldn't be explained isn't kept, so it's asked again; a line that isn't there isn't asked.
         openAi.reply = { 429 to "" }
-        assertEquals(ChatGptReply.LimitReached, runBlocking { tutor.explain(song, emptyList(), "Shock!", "es") {} })
-        answering("A cry.")
-        assertEquals(ChatGptReply.Answer("A cry."), runBlocking { tutor.explain(song, emptyList(), "Shock!", "es") {} })
+        assertEquals(ChatGptReply.LimitReached, runBlocking { tutor.explain(song.copy(title = "Other"), lines, 0, "es") {} })
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor.explain(song, lines, 9, "es") {} })
+    }
+
+    @Test
+    fun theWholeSongIsExplainedKeptAndToldToItsLines() {
+        val tutor = tutor()
+        val song = MusicMetadata("Asphalt Lady", "S.Kiyotaka & Omega Tribe")
+        val lines = listOf("Shock!", "君はアスファルト・レディ")
+        answering("A man dazzled by a woman of the city.")
+        val written = mutableListOf<String>()
+        assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor.explainSong(song, lines, "en") { written += it } })
+        assertEquals("A man dazzled by a woman of the city.", written.last())
+        val asked = openAi.asked.single()
+        assertTrue(asked.getString("instructions").contains("explain what the song is about"))
+        assertTrue(asked.getJSONArray("input").getJSONObject(0).getString("content").endsWith("Lyrics:\nShock!\n君はアスファルト・レディ"))
+        // Kept, and its lines are explained knowing it.
+        assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor.explainSong(song, lines, "en") {} })
+        assertEquals(1, openAi.asked.size)
+        answering("He calls her a city woman.")
+        runBlocking { tutor.explain(song, lines, 1, "en") {} }
+        assertTrue(openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What the song is about:\nA man dazzled by a woman of the city."))
+        // Without the models, there's no model to ask.
+        openAi.models = { 500 to "" }
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explainSong(song.copy(title = "Other"), lines, "en") {} })
+        assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explain(song.copy(title = "Other"), lines, 0, "en") {} })
     }
 
     @Test

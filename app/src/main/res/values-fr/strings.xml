@@ -273,6 +273,8 @@
     <string name="lyrics_study_line">Étudier cette ligne</string>
     <string name="lyrics_explain_line">Expliquer cette ligne</string>
     <string name="lyrics_explain_failed">Impossible d\'expliquer cette ligne.</string>
+    <string name="lyrics_song_meaning">Ce que veut dire la chanson</string>
+    <string name="lyrics_song_meaning_failed">Impossible d\'expliquer la chanson.</string>
     <string name="chatgpt_limit_reached">Votre forfait ChatGPT est épuisé pour le moment.</string>
     <string name="lyrics_repeat_line">Répéter cette ligne</string>
     <string name="lyrics_stop_repeating">Arrêter de répéter</string>

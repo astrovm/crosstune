@@ -273,6 +273,8 @@
     <string name="lyrics_study_line">이 줄 공부하기</string>
     <string name="lyrics_explain_line">이 줄 설명</string>
     <string name="lyrics_explain_failed">이 줄을 설명할 수 없어요.</string>
+    <string name="lyrics_song_meaning">이 노래의 의미</string>
+    <string name="lyrics_song_meaning_failed">이 노래를 설명할 수 없어요.</string>
     <string name="chatgpt_limit_reached">ChatGPT 요금제 사용량을 지금은 모두 썼어요.</string>
     <string name="lyrics_repeat_line">이 줄 반복</string>
     <string name="lyrics_stop_repeating">반복 중지</string>

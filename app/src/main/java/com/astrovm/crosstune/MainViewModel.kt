@@ -291,7 +291,9 @@ internal data class Learning(
     val translating: Boolean = false,
     val translationFailed: Boolean = false,
     /** A line ChatGPT is explaining, or has. */
-    val explanation: LineExplanation? = null
+    val explanation: LineExplanation? = null,
+    /** What the whole song is about, as ChatGPT is explaining it, or has. */
+    val songExplanation: LineExplanation? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script)
@@ -483,9 +485,10 @@ internal class MainViewModel(
         account.picked = slug
         translationJob?.cancel()
         explanationJob?.cancel()
+        songExplanationJob?.cancel()
         uiState = uiState.copy(
             chatGpt = uiState.chatGpt.copy(model = slug),
-            learning = uiState.learning.copy(translations = emptyList(), translating = false, translationFailed = false, explanation = null)
+            learning = uiState.learning.copy(translations = emptyList(), translating = false, translationFailed = false, explanation = null, songExplanation = null)
         )
         learn()
     }
@@ -1478,6 +1481,7 @@ internal class MainViewModel(
         translationJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
+        songExplanationJob?.cancel()
         stopRepeating()
         uiState = uiState.copy(word = null)
     }
@@ -1549,7 +1553,7 @@ internal class MainViewModel(
         explanationJob?.cancel()
         setExplanation(LineExplanation(index))
         explanationJob = viewModelScope.launch {
-            val reply = tutor.explain(song, lines, line, translateInto()) { text ->
+            val reply = tutor.explain(song, lines, index, translateInto()) { text ->
                 // Written as it comes, unless it's done by the time this is shown.
                 viewModelScope.launch { if (uiState.learning.explanation?.let { it.index == index && it.writing } == true) setExplanation(LineExplanation(index, text)) }
             }
@@ -1562,6 +1566,35 @@ internal class MainViewModel(
             // A line kept already keeps its explanation too.
             if (explanation.done) uiState = uiState.copy(savedLines = savedLinesStore.explain(line, song.title, song.artist, explanation.text))
         }
+    }
+
+    private var songExplanationJob: Job? = null
+
+    /** Has ChatGPT explain what the whole song is about. */
+    fun explainSong() {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
+        // Already explained, or on its way, it's just shown.
+        if (uiState.learning.songExplanation?.let { it.done || it.writing } == true) return
+        songExplanationJob?.cancel()
+        setSongExplanation(LineExplanation(SONG))
+        songExplanationJob = viewModelScope.launch {
+            val reply = tutor.explainSong(song, lines, translateInto()) { text ->
+                viewModelScope.launch { if (uiState.learning.songExplanation?.writing == true) setSongExplanation(LineExplanation(SONG, text)) }
+            }
+            setSongExplanation(
+                when (reply) {
+                    is ChatGptReply.Answer -> LineExplanation(SONG, reply.text.trim(), done = true)
+                    ChatGptReply.LimitReached -> LineExplanation(SONG, limitReached = true)
+                    ChatGptReply.Failed -> LineExplanation(SONG, failed = true)
+                }
+            )
+        }
+    }
+
+    private fun setSongExplanation(explanation: LineExplanation) {
+        uiState = uiState.copy(learning = uiState.learning.copy(songExplanation = explanation))
     }
 
     private fun setExplanation(explanation: LineExplanation) {
@@ -2072,6 +2105,9 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
+
+        /** Where a song's explanation, which is no line's, says it's from. */
+        const val SONG = -1
         private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"

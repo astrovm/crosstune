@@ -273,6 +273,8 @@
     <string name="lyrics_study_line">学习这一行</string>
     <string name="lyrics_explain_line">解释这一行</string>
     <string name="lyrics_explain_failed">无法解释这一行。</string>
+    <string name="lyrics_song_meaning">这首歌的含义</string>
+    <string name="lyrics_song_meaning_failed">无法解释这首歌。</string>
     <string name="chatgpt_limit_reached">你的 ChatGPT 套餐暂时用完了。</string>
     <string name="lyrics_repeat_line">重复这一行</string>
     <string name="lyrics_stop_repeating">停止重复</string>

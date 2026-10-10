@@ -4,6 +4,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 
 import androidx.compose.ui.test.hasClickAction
 
@@ -1193,6 +1194,7 @@ class ListeningTest {
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.")
+                "explain what the song is about" in instructions -> FakeOpenAi.stream("A night ", "under the stars.")
                 else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
             }
         }
@@ -1262,6 +1264,31 @@ class ListeningTest {
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
         composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
+    }
+
+    @Test
+    fun whatTheSongMeansIsInTheTranslateMenuSignedIn() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        val explained = openAi.reply
+        openAi.reply = { body -> if ("explain what the song is about" in body.getString("instructions")) 500 to "" else explained(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        learnMenu()
+        click(string(R.string.lyrics_song_meaning))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_song_meaning_failed)) }
+        // Asked again, it's explained.
+        openAi.reply = explained
+        click(string(R.string.retry_button))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
+        val asked = openAi.asked.count { "explain what the song is about" in it.getString("instructions") }
+        // Closed and opened again, it's there, not asked again.
+        composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
+        composeRule.waitUntil(TIMEOUT_MS) { !shown("A night under the stars.") }
+        learnMenu()
+        click(string(R.string.lyrics_song_meaning))
+        waitForText("A night under the stars.")
+        assertEquals(asked, openAi.asked.count { "explain what the song is about" in it.getString("instructions") })
     }
 
     @Test
@@ -1397,8 +1424,9 @@ class ListeningTest {
         click(string(R.string.retry_button))
         composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
-        // English has no readings to offer, only a translation.
+        // English has no readings to offer, only a translation; signed out, nothing says what the song means.
         learnMenu()
+        assertFalse(shown(string(R.string.lyrics_song_meaning)))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(shown(string(R.string.lyrics_romanized)))
     }
