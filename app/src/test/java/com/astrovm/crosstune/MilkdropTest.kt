@@ -210,6 +210,11 @@ class MilkdropTest {
             override fun getWaveForm(waveform: ByteArray) = AudioEffect.ERROR
         })
         assertEquals(0, tap.read(samples))
+        // Taken away meanwhile, it hears nothing rather than crashing.
+        visualizer.setSource(object : ShadowVisualizer.VisualizerSource {
+            override fun getWaveForm(waveform: ByteArray): Int = throw IllegalStateException("Visualizer not enabled")
+        })
+        assertEquals(0, tap.read(samples))
         tap.close()
     }
 
@@ -233,6 +238,21 @@ class MilkdropTest {
         assertTrue(released)
         // One that can't even be made is no tap either.
         assertNull(OutputMixTap.open { throw UnsupportedOperationException("No visualizer here") })
+    }
+
+    @Test
+    fun theSurfaceIsLetGoByTheThreadDrawingOnItOnceItsDone() {
+        val view = MilkdropView(ApplicationProvider.getApplicationContext(), MilkdropRenderer(FakeMilkdrop(), { emptyList() }, { null }))
+        // With nothing drawing, Android lets it go.
+        assertTrue(view.onSurfaceTextureDestroyed(android.graphics.SurfaceTexture(0)))
+        val released = java.util.concurrent.CountDownLatch(1)
+        val surface = object : android.graphics.SurfaceTexture(0) {
+            override fun release() = released.countDown()
+        }
+        view.onSurfaceTextureAvailable(surface, 100, 100)
+        // Drawing, the thread does, once it's stopped, without the screen waiting for it.
+        assertFalse(view.onSurfaceTextureDestroyed(surface))
+        assertTrue(released.await(5, java.util.concurrent.TimeUnit.SECONDS))
     }
 
     private fun visualizerOf(tap: OutputMixTap): Visualizer =

@@ -73,9 +73,12 @@ internal interface SoundTap {
  * hears the music through headphones too. Android only allows it with the microphone permission.
  */
 internal class OutputMixTap private constructor(private val visualizer: Visualizer) : SoundTap {
-    override fun read(into: ByteArray): Int {
-        if (into.size < visualizer.captureSize) return 0
-        return if (visualizer.getWaveForm(into) == Visualizer.SUCCESS) visualizer.captureSize else 0
+    override fun read(into: ByteArray): Int = try {
+        if (into.size < visualizer.captureSize) 0
+        else if (visualizer.getWaveForm(into) == Visualizer.SUCCESS) visualizer.captureSize else 0
+    } catch (_: IllegalStateException) {
+        // Taken away meanwhile, e.g. by another app's, it hears nothing.
+        0
     }
 
     override fun close() = visualizer.release()
@@ -237,10 +240,12 @@ internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : 
         const val SCALE = 2
     }
 
+    /** Drawing on, the thread lets the surface go once it's done, so the screen doesn't wait for it. */
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-        thread?.finish()
+        val drawing = thread ?: return true
+        drawing.finish()
         thread = null
-        return true
+        return false
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
@@ -274,16 +279,20 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
         lock.notifyAll()
     }
 
-    /** Stops, and waits for it, so nothing draws into the surface once it's gone. */
-    fun finish() {
-        synchronized(lock) {
-            done = true
-            lock.notifyAll()
-        }
-        join()
+    /** Stops after the frame it's on, then lets the surface go, so nothing draws into it once it's gone. */
+    fun finish() = synchronized(lock) {
+        done = true
+        lock.notifyAll()
     }
 
-    override fun run() {
+    override fun run() = try {
+        draw()
+    } finally {
+        // Its surface is this thread's to let go, once nothing draws into it.
+        surface.release()
+    }
+
+    private fun draw() {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         EGL14.eglInitialize(display, null, 0, null, 0)
         val configs = arrayOfNulls<EGLConfig>(1)
@@ -307,8 +316,8 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
         } else {
             EGL14.EGL_NO_SURFACE
         }
-        // Without OpenGL ES 3 there are just no visuals.
-        if (window != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, window, window, context)) {
+        // Without OpenGL ES 3, or with visuals that fail to start, there are just no visuals.
+        if (window != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, window, window, context)) try {
             renderer.created()
             while (true) {
                 val size = synchronized(lock) {
@@ -324,7 +333,10 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
                 renderer.frame()
                 EGL14.eglSwapBuffers(display, window)
             }
-            renderer.stop()
+        } catch (_: RuntimeException) {
+            // Failed partway, the visuals just stop.
+        } finally {
+            runCatching { renderer.stop() }
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         }
         if (window != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, window)
