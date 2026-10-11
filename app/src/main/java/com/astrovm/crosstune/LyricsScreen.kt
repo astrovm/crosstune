@@ -1265,14 +1265,15 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
  * the same way, once asked for.
  */
 @Composable
-private fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, onFindExamples: () -> Unit) {
+internal fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, onFindExamples: () -> Unit) {
     val word = meaning.word
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            // What doesn't fit goes on the next line, rather than squeezed a letter a line.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
                 listOfNotNull(word.reading, word.romanized?.takeIf { it != word.reading }).forEach {
-                    Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                 }
             }
             if (meaning.looking) {
