@@ -32,8 +32,16 @@
   "features_h2": "Qué hace",
   "cards": [
     [
+      "Una app por servicio",
+      "Los links de YouTube a YouTube Music, el resto a Apple Music, o como quieras."
+    ],
+    [
       "Playlists enteras",
       "Mirá todas las canciones y reproducilas de una."
+    ],
+    [
+      "¿Qué canción es?",
+      "Crosstune la escucha, la reconoce y la abre."
     ],
     [
       "Letras a tiempo",
@@ -44,28 +52,32 @@
       "Sobre cualquier app, transparentes, del tamaño que quieras."
     ],
     [
-      "Aprendé la letra",
-      "Kana, pinyin, romaji y traducciones, palabra por palabra."
-    ],
-    [
-      "¿Qué canción es?",
-      "Crosstune la escucha, la reconoce y la abre."
-    ],
-    [
-      "Privado",
-      "Sin cuenta ni rastreo. El historial se queda en tu celular."
-    ],
-    [
       "Visuales MilkDrop",
       "Detrás de la letra, al ritmo de lo que suena en tu teléfono."
     ],
     [
-      "Widgets",
-      "Canciones recientes y accesos rápidos en tu pantalla de inicio."
+      "Aprendé la letra",
+      "Kana, pinyin, romaji y traducciones, palabra por palabra."
+    ],
+    [
+      "ChatGPT, si lo tenés",
+      "Traducí canciones enteras, entendé cada línea y encontrá canciones describiéndolas."
+    ],
+    [
+      "Listo en un minuto",
+      "Una lista para tildar, o un toque con Shizuku."
+    ],
+    [
+      "Atajos",
+      "Widgets, mosaicos de Configuración rápida y pegar con un toque."
     ],
     [
       "Links limpios",
       "Sin rastreo como ?si= en cada link que compartís."
+    ],
+    [
+      "Privado",
+      "Sin cuenta de Crosstune ni rastreo. El historial se queda en tu celular."
     ]
   ],
   "play_button": "Google Play",

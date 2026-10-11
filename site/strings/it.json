@@ -32,8 +32,16 @@
   "features_h2": "Cosa fa",
   "cards": [
     [
+      "Un'app per servizio",
+      "I link di YouTube su YouTube Music, il resto su Apple Music, o come preferisci."
+    ],
+    [
       "Playlist intere",
       "Vedi tutti i brani e riproducili tutti insieme."
+    ],
+    [
+      "Che brano è?",
+      "Crosstune lo ascolta, lo riconosce e lo apre."
     ],
     [
       "Testi a tempo",
@@ -44,28 +52,32 @@
       "Sopra qualsiasi app, trasparenti, della dimensione che vuoi."
     ],
     [
-      "Impara il testo",
-      "Kana, pinyin, romaji e traduzioni, parola per parola."
-    ],
-    [
-      "Che brano è?",
-      "Crosstune lo ascolta, lo riconosce e lo apre."
-    ],
-    [
-      "Privata",
-      "Niente account né tracciamento. La cronologia resta sul tuo telefono."
-    ],
-    [
       "Effetti visivi MilkDrop",
       "Dietro al testo, a ritmo di ciò che suona sul telefono."
     ],
     [
-      "Widget",
-      "Brani recenti e azioni rapide nella schermata Home."
+      "Impara il testo",
+      "Kana, pinyin, romaji e traduzioni, parola per parola."
+    ],
+    [
+      "ChatGPT, se ce l'hai",
+      "Traduci brani interi, spiega le righe, trova brani descrivendoli."
+    ],
+    [
+      "Pronta in un minuto",
+      "Una lista da spuntare, o un tocco con Shizuku."
+    ],
+    [
+      "Scorciatoie",
+      "Widget, riquadri delle Impostazioni rapide e incolla con un tocco."
     ],
     [
       "Link puliti",
       "Via il tracciamento come ?si= da ogni link che condividi."
+    ],
+    [
+      "Privata",
+      "Niente account Crosstune né tracciamento. La cronologia resta sul tuo telefono."
     ]
   ],
   "play_button": "Google Play",

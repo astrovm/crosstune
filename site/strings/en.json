@@ -32,8 +32,16 @@
   "features_h2": "What it does",
   "cards": [
     [
+      "One app per service",
+      "YouTube links to YouTube Music, the rest to Apple Music, or any mix."
+    ],
+    [
       "Playlists too",
       "See every song and play them all at once."
+    ],
+    [
+      "Name that song",
+      "Crosstune listens, names it and opens it."
     ],
     [
       "Lyrics in time",
@@ -44,28 +52,32 @@
       "Over any app, see-through, at any size."
     ],
     [
-      "Learn the words",
-      "Kana, pinyin, romaji and translations, word by word."
-    ],
-    [
-      "Name that song",
-      "Crosstune listens, names it and opens it."
-    ],
-    [
-      "Private",
-      "No account, no tracking. History stays on your phone."
-    ],
-    [
       "MilkDrop visuals",
       "Behind the lyrics, moving to what your phone plays."
     ],
     [
-      "Widgets",
-      "Recent songs and quick actions on your home screen."
+      "Learn the words",
+      "Kana, pinyin, romaji and translations, word by word."
+    ],
+    [
+      "ChatGPT, if you have it",
+      "Translate whole songs, explain lines, find songs by describing them."
+    ],
+    [
+      "Set up in a minute",
+      "One checklist, or one tap with Shizuku."
+    ],
+    [
+      "Shortcuts",
+      "Widgets, Quick Settings tiles and one-tap paste."
     ],
     [
       "Clean links",
       "Tracking like ?si= gone from every link you share."
+    ],
+    [
+      "Private",
+      "No Crosstune account, no tracking. History stays on your phone."
     ]
   ],
   "play_button": "Google Play",

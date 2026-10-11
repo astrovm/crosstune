@@ -32,8 +32,16 @@
   "features_h2": "Was die App kann",
   "cards": [
     [
+      "Eine App pro Dienst",
+      "YouTube-Links zu YouTube Music, der Rest zu Apple Music, oder ganz wie du willst."
+    ],
+    [
       "Ganze Playlists",
       "Sieh alle Songs und spiel alle auf einmal ab."
+    ],
+    [
+      "Welcher Song ist das?",
+      "Crosstune hört zu, erkennt ihn und öffnet ihn."
     ],
     [
       "Songtexte im Takt",
@@ -44,28 +52,32 @@
       "Über jeder App, durchsichtig, in jeder Größe."
     ],
     [
-      "Lerne die Texte",
-      "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort."
-    ],
-    [
-      "Welcher Song ist das?",
-      "Crosstune hört zu, erkennt ihn und öffnet ihn."
-    ],
-    [
-      "Privat",
-      "Kein Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
-    ],
-    [
       "MilkDrop-Visuals",
       "Hinter dem Songtext, im Takt dessen, was dein Handy spielt."
     ],
     [
-      "Widgets",
-      "Letzte Songs und Schnellaktionen auf deinem Startbildschirm."
+      "Lerne die Texte",
+      "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort."
+    ],
+    [
+      "ChatGPT, wenn du es hast",
+      "Ganze Songs übersetzen, Zeilen erklären, Songs per Beschreibung finden."
+    ],
+    [
+      "In einer Minute eingerichtet",
+      "Eine Checkliste, oder ein Tipp mit Shizuku."
+    ],
+    [
+      "Shortcuts",
+      "Widgets, Schnelleinstellungen und Einfügen mit einem Tipp."
     ],
     [
       "Saubere Links",
       "Tracking wie ?si= verschwindet aus jedem Link, den du teilst."
+    ],
+    [
+      "Privat",
+      "Kein Crosstune-Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
     ]
   ],
   "play_button": "Google Play",

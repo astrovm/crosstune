@@ -32,8 +32,16 @@
   "features_h2": "Ce qu'elle fait",
   "cards": [
     [
+      "Une app par service",
+      "Les liens YouTube vers YouTube Music, le reste vers Apple Music, ou comme vous voulez."
+    ],
+    [
       "Playlists entières",
       "Voyez tous les titres et lisez-les d'un coup."
+    ],
+    [
+      "Quel est ce titre ?",
+      "Crosstune l'écoute, le reconnaît et l'ouvre."
     ],
     [
       "Paroles synchronisées",
@@ -44,28 +52,32 @@
       "Par-dessus n'importe quelle appli, transparentes, à la taille voulue."
     ],
     [
-      "Apprenez les paroles",
-      "Kana, pinyin, romaji et traductions, mot par mot."
-    ],
-    [
-      "Quel est ce titre ?",
-      "Crosstune l'écoute, le reconnaît et l'ouvre."
-    ],
-    [
-      "Privé",
-      "Sans compte ni pistage. L'historique reste sur votre téléphone."
-    ],
-    [
       "Visuels MilkDrop",
       "Derrière les paroles, au rythme de ce que joue votre téléphone."
     ],
     [
-      "Widgets",
-      "Chansons récentes et actions rapides sur votre écran d'accueil."
+      "Apprenez les paroles",
+      "Kana, pinyin, romaji et traductions, mot par mot."
+    ],
+    [
+      "ChatGPT, si vous l'avez",
+      "Traduisez des chansons entières, expliquez des lignes, trouvez des chansons en les décrivant."
+    ],
+    [
+      "Prêt en une minute",
+      "Une liste à cocher, ou un geste avec Shizuku."
+    ],
+    [
+      "Raccourcis",
+      "Widgets, tuiles des réglages rapides et coller en un geste."
     ],
     [
       "Liens propres",
       "Le pistage comme ?si= retiré de chaque lien que vous partagez."
+    ],
+    [
+      "Privé",
+      "Sans compte Crosstune ni pistage. L'historique reste sur votre téléphone."
     ]
   ],
   "play_button": "Google Play",

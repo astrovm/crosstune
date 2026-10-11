@@ -32,8 +32,16 @@
   "features_h2": "Co robi",
   "cards": [
     [
+      "Jedna aplikacja na serwis",
+      "Linki z YouTube do YouTube Music, reszta do Apple Music, albo jak chcesz."
+    ],
+    [
       "Całe playlisty",
       "Zobacz wszystkie utwory i odtwórz je naraz."
+    ],
+    [
+      "Co to za utwór?",
+      "Crosstune słucha, rozpoznaje i otwiera."
     ],
     [
       "Tekst w rytm",
@@ -44,28 +52,32 @@
       "Nad każdą aplikacją, przezroczysty, w dowolnym rozmiarze."
     ],
     [
-      "Ucz się tekstu",
-      "Kana, pinyin, romaji i tłumaczenia, słowo po słowie."
-    ],
-    [
-      "Co to za utwór?",
-      "Crosstune słucha, rozpoznaje i otwiera."
-    ],
-    [
-      "Prywatność",
-      "Bez konta i śledzenia. Historia zostaje na Twoim telefonie."
-    ],
-    [
       "Wizualizacje MilkDrop",
       "Za tekstem, w rytm tego, co gra telefon."
     ],
     [
-      "Widżety",
-      "Ostatnie utwory i szybkie akcje na ekranie głównym."
+      "Ucz się tekstu",
+      "Kana, pinyin, romaji i tłumaczenia, słowo po słowie."
+    ],
+    [
+      "ChatGPT, jeśli go masz",
+      "Tłumacz całe utwory, wyjaśniaj wiersze, szukaj utworów po opisie."
+    ],
+    [
+      "Gotowe w minutę",
+      "Jedna lista do odhaczenia albo jedno dotknięcie z Shizuku."
+    ],
+    [
+      "Skróty",
+      "Widżety, kafelki Szybkich ustawień i wklejanie jednym dotknięciem."
     ],
     [
       "Czyste linki",
       "Śledzenie typu ?si= znika z każdego udostępnianego linku."
+    ],
+    [
+      "Prywatność",
+      "Bez konta Crosstune i śledzenia. Historia zostaje na Twoim telefonie."
     ]
   ],
   "play_button": "Google Play",
