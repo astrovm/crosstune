@@ -7,9 +7,21 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +31,9 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class RubyLineTest {
+
+    @get:Rule
+    val compose = createComposeRule()
 
     private val measurer = TextMeasurer(createFontFamilyResolver(ApplicationProvider.getApplicationContext()), Density(1f), LayoutDirection.Ltr)
 
@@ -36,6 +51,9 @@ class RubyLineTest {
         assertEquals((5 * READING_SCALE - 1).toDouble(), spaced.item.letterSpacing.value.toDouble(), 1e-4)
         assertTrue(spaced.item.letterSpacing.isEm)
         assertEquals(0, rubyText(listOf(Ruby("夜空", "よぞら"), Ruby("に"))).spanStyles.size)
+        // Spread over each letter of a piece of two.
+        val two = rubyText(listOf(Ruby("今日", "きょうのひる"))).spanStyles.single().item.letterSpacing
+        assertEquals(((6 * READING_SCALE - 2) / 2).toDouble(), two.value.toDouble(), 1e-4)
     }
 
     @Test
@@ -53,6 +71,23 @@ class RubyLineTest {
         assertEquals((star.left + star.right) / 2, places[1].center, 0.5f)
         assertEquals(words.getLineTop(1), places[1].top)
         assertTrue(places[1].top > places[0].top)
+    }
+
+    @Test
+    fun readingsAreDrawnOverTheirKanjiOnly() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                Box(Modifier.width(400.dp)) {
+                    RubyLine(listOf(Ruby("あいう"), Ruby("夜空", "よぞら")), TextStyle(fontSize = 40.sp, lineHeight = 48.sp))
+                }
+            }
+        }
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        // The readings' row, over the words: drawn over 夜空, from 120 to 200, and not over あいう.
+        val ground = image.getPixel(image.width - 1, 0)
+        fun inked(from: Int, to: Int) = (from until to).any { x -> (0 until 16).any { y -> image.getPixel(x, y) != ground } }
+        assertTrue(inked(125, 195))
+        assertFalse(inked(0, 110))
     }
 
     @Test

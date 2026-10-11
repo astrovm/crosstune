@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Davranış</string>
     <string name="settings_listening_title">Tanıma ve sözler</string>
     <string name="settings_appearance_title">Görünüm</string>
-    <string name="chatgpt_use_plan">ChatGPT planını kullan</string>
+    <string name="chatgpt_use_plan">Ücretli ChatGPT planını kullan</string>
     <string name="chatgpt_continue">ChatGPT ile devam et</string>
     <string name="chatgpt_manage_usage">Kullanımı yönet</string>
     <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Çıkış yap</string>
-    <string name="chatgpt_declined">Crosstune\'un ChatGPT planını kullanmasına izin verilmedi.</string>
+    <string name="chatgpt_declined">Crosstune\'un bu ChatGPT planını kullanmasına izin verilmedi. Ücretli bir plan gerekiyor.</string>
     <string name="chatgpt_failed">ChatGPT ile giriş yapılamadı. Tekrar dene.</string>
     <string name="chatgpt_welcome_title">ChatGPT planını kullanıyorsun</string>
     <string name="chatgpt_welcome_message">Crosstune\'un yapay zekâ özellikleri artık ChatGPT planını kullanıyor. Kullanımı ChatGPT ayarlarından yönetebilirsin.</string>

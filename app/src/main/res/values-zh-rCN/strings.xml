@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">行为</string>
     <string name="settings_listening_title">识别与歌词</string>
     <string name="settings_appearance_title">外观</string>
-    <string name="chatgpt_use_plan">使用你的 ChatGPT 套餐</string>
+    <string name="chatgpt_use_plan">使用你的 ChatGPT 付费套餐</string>
     <string name="chatgpt_continue">继续使用 ChatGPT</string>
     <string name="chatgpt_manage_usage">管理用量</string>
     <string name="chatgpt_model">模型</string>
     <string name="chatgpt_sign_out">退出登录</string>
-    <string name="chatgpt_declined">Crosstune 未获准使用你的 ChatGPT 套餐。</string>
+    <string name="chatgpt_declined">Crosstune 未获准使用这个 ChatGPT 套餐。需要付费套餐。</string>
     <string name="chatgpt_failed">无法使用 ChatGPT 登录，请重试。</string>
     <string name="chatgpt_welcome_title">你正在使用你的 ChatGPT 套餐</string>
     <string name="chatgpt_welcome_message">Crosstune 的 AI 功能现在使用你的 ChatGPT 套餐。你可以在 ChatGPT 设置中管理用量。</string>

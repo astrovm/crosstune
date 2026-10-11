@@ -38,12 +38,12 @@
     <string name="settings_behaviour_title">動作</string>
     <string name="settings_listening_title">曲の認識と歌詞</string>
     <string name="settings_appearance_title">表示</string>
-    <string name="chatgpt_use_plan">ChatGPT のプランを使う</string>
+    <string name="chatgpt_use_plan">ChatGPT の有料プランを使う</string>
     <string name="chatgpt_continue">ChatGPT で続行</string>
     <string name="chatgpt_manage_usage">使用状況を管理</string>
     <string name="chatgpt_model">モデル</string>
     <string name="chatgpt_sign_out">ログアウト</string>
-    <string name="chatgpt_declined">Crosstune に ChatGPT のプランの使用が許可されませんでした。</string>
+    <string name="chatgpt_declined">Crosstune にこの ChatGPT プランの使用が許可されませんでした。有料プランが必要です。</string>
     <string name="chatgpt_failed">ChatGPT でログインできませんでした。もう一度お試しください。</string>
     <string name="chatgpt_welcome_title">ChatGPT のプランを使っています</string>
     <string name="chatgpt_welcome_message">Crosstune の AI 機能は ChatGPT のプランを使うようになりました。使用状況は ChatGPT の設定で管理できます。</string>

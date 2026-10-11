@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Perilaku</string>
     <string name="settings_listening_title">Pengenalan dan lirik</string>
     <string name="settings_appearance_title">Tampilan</string>
-    <string name="chatgpt_use_plan">Gunakan paket ChatGPT Anda</string>
+    <string name="chatgpt_use_plan">Gunakan paket ChatGPT berbayar Anda</string>
     <string name="chatgpt_continue">Lanjutkan dengan ChatGPT</string>
     <string name="chatgpt_manage_usage">Kelola penggunaan</string>
     <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Keluar</string>
-    <string name="chatgpt_declined">Crosstune tidak diizinkan menggunakan paket ChatGPT Anda.</string>
+    <string name="chatgpt_declined">Crosstune tidak diizinkan menggunakan paket ChatGPT ini. Perlu paket berbayar.</string>
     <string name="chatgpt_failed">Tidak dapat masuk dengan ChatGPT. Coba lagi.</string>
     <string name="chatgpt_welcome_title">Anda menggunakan paket ChatGPT Anda</string>
     <string name="chatgpt_welcome_message">Fitur AI Crosstune kini menggunakan paket ChatGPT Anda. Anda dapat mengelola penggunaannya di setelan ChatGPT.</string>

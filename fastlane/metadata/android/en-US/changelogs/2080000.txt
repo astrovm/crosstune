@@ -3,5 +3,6 @@ Chords over the words: turn them on in Readings and translation.
 Lyrics stop where the music app stops, instead of running on.
 Romaji as it's sung: sensee, not sensei.
 Lyrics you open stay that song's, not whatever's playing.
-Lyrics with readings over them show at once, and long lines break evenly, with no word left alone.
+Lyrics with readings show at once, and long lines break evenly.
 Faster the first time lyrics, readings and chords open after an update.
+ChatGPT sign-in says it needs a paid plan.

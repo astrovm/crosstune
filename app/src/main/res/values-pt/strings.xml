@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Comportamento</string>
     <string name="settings_listening_title">Reconhecimento e letras</string>
     <string name="settings_appearance_title">Aparência</string>
-    <string name="chatgpt_use_plan">Use seu plano do ChatGPT</string>
+    <string name="chatgpt_use_plan">Use seu plano pago do ChatGPT</string>
     <string name="chatgpt_continue">Continuar com o ChatGPT</string>
     <string name="chatgpt_manage_usage">Gerenciar uso</string>
     <string name="chatgpt_model">Modelo</string>
     <string name="chatgpt_sign_out">Sair</string>
-    <string name="chatgpt_declined">O Crosstune não tem permissão para usar seu plano do ChatGPT.</string>
+    <string name="chatgpt_declined">O Crosstune não tem permissão para usar este plano do ChatGPT. É preciso um plano pago.</string>
     <string name="chatgpt_failed">Não foi possível entrar com o ChatGPT. Tente de novo.</string>
     <string name="chatgpt_welcome_title">Você está usando seu plano do ChatGPT</string>
     <string name="chatgpt_welcome_message">Os recursos de IA do Crosstune agora usam seu plano do ChatGPT. Você pode gerenciar o uso nas configurações do ChatGPT.</string>

@@ -49,12 +49,12 @@
     <string name="settings_listening_title">Recognition and lyrics</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_chatgpt_title" translatable="false">ChatGPT</string>
-    <string name="chatgpt_use_plan">Use your ChatGPT plan</string>
+    <string name="chatgpt_use_plan">Use your paid ChatGPT plan</string>
     <string name="chatgpt_continue">Continue with ChatGPT</string>
     <string name="chatgpt_manage_usage">Manage usage</string>
     <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Sign out</string>
-    <string name="chatgpt_declined">Crosstune wasn\'t allowed to use your ChatGPT plan.</string>
+    <string name="chatgpt_declined">Crosstune wasn\'t allowed to use this ChatGPT plan. It needs a paid one.</string>
     <string name="chatgpt_failed">Couldn\'t sign in with ChatGPT. Try again.</string>
     <string name="chatgpt_welcome_title">You\'re using your ChatGPT plan</string>
     <string name="chatgpt_welcome_message">Crosstune\'s AI features now use your ChatGPT plan. You can manage their usage in ChatGPT\'s settings.</string>

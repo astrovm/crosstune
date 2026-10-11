@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Verhalten</string>
     <string name="settings_listening_title">Erkennung und Liedtexte</string>
     <string name="settings_appearance_title">Darstellung</string>
-    <string name="chatgpt_use_plan">Deinen ChatGPT-Plan nutzen</string>
+    <string name="chatgpt_use_plan">Deinen bezahlten ChatGPT-Plan nutzen</string>
     <string name="chatgpt_continue">Weiter mit ChatGPT</string>
     <string name="chatgpt_manage_usage">Nutzung verwalten</string>
     <string name="chatgpt_model">Modell</string>
     <string name="chatgpt_sign_out">Abmelden</string>
-    <string name="chatgpt_declined">Crosstune darf deinen ChatGPT-Plan nicht nutzen.</string>
+    <string name="chatgpt_declined">Crosstune darf diesen ChatGPT-Plan nicht nutzen. Es braucht einen bezahlten.</string>
     <string name="chatgpt_failed">Anmeldung mit ChatGPT fehlgeschlagen. Versuch es noch mal.</string>
     <string name="chatgpt_welcome_title">Du nutzt deinen ChatGPT-Plan</string>
     <string name="chatgpt_welcome_message">Die KI-Funktionen von Crosstune nutzen jetzt deinen ChatGPT-Plan. Die Nutzung kannst du in den ChatGPT-Einstellungen verwalten.</string>

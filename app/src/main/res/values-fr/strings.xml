@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Comportement</string>
     <string name="settings_listening_title">Reconnaissance et paroles</string>
     <string name="settings_appearance_title">Apparence</string>
-    <string name="chatgpt_use_plan">Utiliser votre forfait ChatGPT</string>
+    <string name="chatgpt_use_plan">Utiliser votre forfait ChatGPT payant</string>
     <string name="chatgpt_continue">Continuer avec ChatGPT</string>
     <string name="chatgpt_manage_usage">Gérer l\'utilisation</string>
     <string name="chatgpt_model">Modèle</string>
     <string name="chatgpt_sign_out">Se déconnecter</string>
-    <string name="chatgpt_declined">Crosstune n\'a pas été autorisé à utiliser votre forfait ChatGPT.</string>
+    <string name="chatgpt_declined">Crosstune n\'a pas été autorisé à utiliser ce forfait ChatGPT. Il faut un forfait payant.</string>
     <string name="chatgpt_failed">Impossible de se connecter avec ChatGPT. Réessayez.</string>
     <string name="chatgpt_welcome_title">Vous utilisez votre forfait ChatGPT</string>
     <string name="chatgpt_welcome_message">Les fonctions d\'IA de Crosstune utilisent désormais votre forfait ChatGPT. Vous pouvez gérer leur utilisation dans les paramètres de ChatGPT.</string>

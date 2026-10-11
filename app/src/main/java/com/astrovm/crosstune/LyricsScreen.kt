@@ -1176,7 +1176,7 @@ internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
  * once, and each reading is drawn over where its piece landed.
  */
 @Composable
-private fun RubyLine(parts: List<Ruby>, style: TextStyle) {
+internal fun RubyLine(parts: List<Ruby>, style: TextStyle) {
     val over = style.copy(
         fontSize = style.fontSize * READING_SCALE,
         lineHeight = style.fontSize * 0.5f,

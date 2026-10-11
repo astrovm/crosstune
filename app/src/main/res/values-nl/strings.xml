@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Gedrag</string>
     <string name="settings_listening_title">Herkenning en songteksten</string>
     <string name="settings_appearance_title">Weergave</string>
-    <string name="chatgpt_use_plan">Je ChatGPT-abonnement gebruiken</string>
+    <string name="chatgpt_use_plan">Je betaalde ChatGPT-abonnement gebruiken</string>
     <string name="chatgpt_continue">Doorgaan met ChatGPT</string>
     <string name="chatgpt_manage_usage">Gebruik beheren</string>
     <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Uitloggen</string>
-    <string name="chatgpt_declined">Crosstune mocht je ChatGPT-abonnement niet gebruiken.</string>
+    <string name="chatgpt_declined">Crosstune mocht dit ChatGPT-abonnement niet gebruiken. Er is een betaald abonnement nodig.</string>
     <string name="chatgpt_failed">Inloggen met ChatGPT is mislukt. Probeer het opnieuw.</string>
     <string name="chatgpt_welcome_title">Je gebruikt je ChatGPT-abonnement</string>
     <string name="chatgpt_welcome_message">De AI-functies van Crosstune gebruiken nu je ChatGPT-abonnement. Je kunt het gebruik beheren in de instellingen van ChatGPT.</string>

@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">동작</string>
     <string name="settings_listening_title">인식 및 가사</string>
     <string name="settings_appearance_title">화면 표시</string>
-    <string name="chatgpt_use_plan">ChatGPT 요금제 사용</string>
+    <string name="chatgpt_use_plan">ChatGPT 유료 요금제 사용</string>
     <string name="chatgpt_continue">ChatGPT로 계속하기</string>
     <string name="chatgpt_manage_usage">사용량 관리</string>
     <string name="chatgpt_model">모델</string>
     <string name="chatgpt_sign_out">로그아웃</string>
-    <string name="chatgpt_declined">Crosstune이 ChatGPT 요금제를 사용하도록 허용되지 않았습니다.</string>
+    <string name="chatgpt_declined">Crosstune이 이 ChatGPT 요금제를 사용하도록 허용되지 않았습니다. 유료 요금제가 필요합니다.</string>
     <string name="chatgpt_failed">ChatGPT로 로그인하지 못했습니다. 다시 시도하세요.</string>
     <string name="chatgpt_welcome_title">ChatGPT 요금제를 사용하고 있습니다</string>
     <string name="chatgpt_welcome_message">이제 Crosstune의 AI 기능이 ChatGPT 요금제를 사용합니다. 사용량은 ChatGPT 설정에서 관리할 수 있습니다.</string>

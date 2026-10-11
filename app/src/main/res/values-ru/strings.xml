@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Поведение</string>
     <string name="settings_listening_title">Распознавание и тексты</string>
     <string name="settings_appearance_title">Оформление</string>
-    <string name="chatgpt_use_plan">Использовать план ChatGPT</string>
+    <string name="chatgpt_use_plan">Использовать платный план ChatGPT</string>
     <string name="chatgpt_continue">Продолжить с ChatGPT</string>
     <string name="chatgpt_manage_usage">Управлять использованием</string>
     <string name="chatgpt_model">Модель</string>
     <string name="chatgpt_sign_out">Выйти</string>
-    <string name="chatgpt_declined">Crosstune не получил разрешения использовать ваш план ChatGPT.</string>
+    <string name="chatgpt_declined">Crosstune не получил разрешения использовать этот план ChatGPT. Нужен платный план.</string>
     <string name="chatgpt_failed">Не удалось войти через ChatGPT. Попробуйте ещё раз.</string>
     <string name="chatgpt_welcome_title">Вы используете свой план ChatGPT</string>
     <string name="chatgpt_welcome_message">ИИ-функции Crosstune теперь используют ваш план ChatGPT. Управлять использованием можно в настройках ChatGPT.</string>
