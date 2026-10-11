@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
                     PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
                     systemDispatcher,
                     listenAlongPauseMs,
+                    quietPauseMs = quietPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
                     translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
@@ -204,6 +205,10 @@ class MainActivity : ComponentActivity() {
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting
         internal var listenAlongPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
+
+        /** How long listening along first rests after hearing nothing; tests don't wait. */
+        @VisibleForTesting
+        internal var quietPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
 
         /** What hears songs nearby, when a test stands in for the microphone and Shazam both. */
         @VisibleForTesting

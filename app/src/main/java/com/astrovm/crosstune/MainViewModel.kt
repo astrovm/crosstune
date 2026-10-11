@@ -19,12 +19,15 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal data class UiState(
@@ -406,6 +409,11 @@ internal class MainViewModel(
     private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** How long listening along waits after naming a song before it listens again. */
     private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
+    /**
+     * How long listening along rests after hearing nothing, doubled each time it hears nothing again,
+     * up to [QUIET_PAUSE_DOUBLINGS] times, so a paused song doesn't keep the microphone on.
+     */
+    private val quietPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
     /** The clock a song's place is kept on, the one that counts since the phone started. */
     private val now: () -> Long = SystemClock::elapsedRealtime,
     /** Where a song's words are translated; nullable so tests need no translation service. */
@@ -1324,6 +1332,9 @@ internal class MainViewModel(
 
     private var alongJob: Job? = null
 
+    /** Told when the app playing the song shown starts playing it, e.g. after a pause, so listening along wakes. */
+    private val appPlaysAgain = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     /**
      * Keeps the microphone listening along with the words: every little while it asks what's
      * playing nearby and how far into it, so a pause, a skip or the next song is followed. Only
@@ -1333,16 +1344,24 @@ internal class MainViewModel(
         if (alongJob?.isActive == true) return
         uiState = uiState.copy(listeningAlong = true)
         alongJob = viewModelScope.launch {
+            var quiet = 0
             while (isActive) {
                 when (val heard = listener.listen()) {
                     is Heard.Song -> {
+                        quiet = 0
                         heardAlong(heard)
                         delay(listenAlongPauseMs)
                     }
-                    // Nothing heard, the music has most likely stopped, so the words stop where they are.
-                    Heard.Nothing -> heardClock?.takeIf { it.playing }?.let { clock ->
-                        heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
-                        keepInTime()
+                    // Nothing heard, the music has most likely stopped, so the words stop where they are,
+                    // and the microphone rests, longer each time, until the app playing it plays again.
+                    Heard.Nothing -> {
+                        heardClock?.takeIf { it.playing }?.let { clock ->
+                            heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
+                            keepInTime()
+                        }
+                        val rest = quietPauseMs * (1L shl minOf(quiet, QUIET_PAUSE_DOUBLINGS))
+                        quiet++
+                        withTimeoutOrNull(rest) { appPlaysAgain.first() }
                     }
                     is Heard.Failed -> {
                         // Without the microphone there's nothing to listen with; anything else, e.g. the
@@ -1485,6 +1504,7 @@ internal class MainViewModel(
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {
             source.follow(song).collect { playing ->
+                if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
@@ -2548,6 +2568,9 @@ internal class MainViewModel(
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
+
+        /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
+        const val QUIET_PAUSE_DOUBLINGS = 3
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L

@@ -113,6 +113,7 @@ class ListeningTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
+        MainActivity.quietPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
@@ -392,6 +393,7 @@ class ListeningTest {
      */
     private fun listeningAlong(hearing: FakeHearing) {
         MainActivity.listenAlongPauseMs = 0
+        MainActivity.quietPauseMs = 0
         MainActivity.hearingFactory = { hearing }
         fake.handler = { request ->
             val title = request.url.queryParameter("track_name")
@@ -414,6 +416,34 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun hearingNothingRestsTheMicrophoneUntilTheAppPlayingTheSongPlaysAgain() {
+        val hearing = FakeHearing()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        listeningAlong(hearing)
+        MainActivity.quietPauseMs = 60_000
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && hearing.listens == 2 }
+
+        // Nothing heard, the music has stopped: the microphone rests rather than listening on and on.
+        hearing.next.trySend(Heard.Nothing)
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertEquals(2, hearing.listens)
+        // The app playing it plays again, so it listens again straight away.
+        phone.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
+        composeRule.waitForIdle()
+        assertEquals(2, hearing.listens)
+        phone.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
     }
 
     @Test
