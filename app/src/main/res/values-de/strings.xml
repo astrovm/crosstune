@@ -57,7 +57,6 @@
     <string name="setup_finish">Fertig</string>
     <string name="setup_installed">Installiert</string>
     <string name="setup_step">Schritt %1$d von %2$d</string>
-    <string name="setup_sources_title">Welche Links soll Crosstune öffnen?</string>
     <string name="setup_sources_listening_note">Du hörst in %1$s, also öffnen sich dessen Links schon dort.</string>
     <string name="settings_listening_locked">Du hörst in %1$s, also öffnen sich dessen Links schon dort. Wähle unten eine andere App, um das einzuschalten.</string>
     <string name="setup_destination_title">Wo hörst du Musik?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">Tippe auf „Link hinzufügen“.</string>
     <string name="setup_allow_step_in_app">Wähle „In der App“.</string>
     <string name="setup_allow_step_tick">Wähle alle Links aus und tippe auf „Hinzufügen“.</string>
+    <string name="setup_links_title">Lass Crosstune deine Links öffnen</string>
+    <string name="setup_links_body">Tippe auf Beheben und komm zurück. Jeder Punkt hakt sich selbst ab.</string>
+    <string name="setup_check_app">Links in %1$s abschalten</string>
+    <string name="setup_check_allow">Links in Crosstune erlauben</string>
+    <string name="setup_one_tap">Alles einrichten</string>
+    <string name="setup_one_tap_note">Nutzt Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku hat nicht alles geschafft. Behebe den Rest unten.</string>
     <string name="setup_apps_title">Links anderer Apps abschalten</string>
     <string name="setup_still_opens">Öffnet noch Links</string>
     <string name="setup_done">Erledigt</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">In Crosstune öffnen</string>
     <string name="setting_only_music_videos">Nur Musikvideos</string>
     <string name="setting_only_music_videos_description">Andere Videos öffnen sich wie gewohnt.</string>
-    <string name="setup_sources_music">Musik</string>
-    <string name="setup_sources_videos">Videos</string>
-    <string name="setting_only_music_videos_note">Nur Musikvideos gehen an deine App. Andere öffnen sich wie gewohnt.</string>
     <string name="setup_apps_stop_body">Wähle „Im Browser“ oder deaktiviere „Unterstützte Links öffnen“.</string>
     <string name="setup_apps_progress">App %1$d von %2$d</string>
     <string name="setup_apps_all_done">Fertig. Keine andere App öffnet die Links jetzt.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Tippe auf den Schalter, dann auf Schließen.</string>
     <string name="follow_help_restricted">Tippe auf ⋮, dann auf Eingeschränkte Einstellungen zulassen.</string>
     <string name="follow_help_access">Schalte ihn jetzt ein und tippe auf Zulassen.</string>
-    <string name="setup_follow_body">Der Songtext läuft synchron zu deiner Musik-App. Crosstune sieht nur, was läuft, nie deine Benachrichtigungen.</string>
     <string name="follow_turn_on">Aktivieren</string>
     <string name="follow_help_simple">Schalte ihn ein und tippe auf Zulassen.</string>
     <string name="setting_lyrics_follow">Liedtext folgt deiner Musik-App</string>
@@ -261,12 +263,14 @@
     <string name="floating_notification">Songtext schwebt über deinen Apps</string>
     <string name="lyrics_learn">Lesungen und Übersetzung</string>
     <string name="lyrics_readings">Lesung über den Wörtern</string>
+    <string name="lyrics_reading_size">Größe der Lesung</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_translation">Übersetzung</string>
     <string name="lyrics_translation_failed">Konnte gerade nicht übersetzen.</string>
     <string name="lyrics_chords">Akkorde</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Übersetzen in</string>
+    <string name="setting_untranslated">Nicht übersetzen</string>
     <string name="translate_into_app_language">App-Sprache</string>
     <string name="setting_translation_server">Übersetzungen von</string>
     <string name="lyrics_study_line">Diese Zeile lernen</string>

@@ -57,7 +57,6 @@
     <string name="setup_finish">完成</string>
     <string name="setup_installed">已安裝</string>
     <string name="setup_step">第 %1$d 步，共 %2$d 步</string>
-    <string name="setup_sources_title">Crosstune 應開啟哪些連結？</string>
     <string name="setup_sources_listening_note">你在 %1$s 中收聽，所以它的連結已經會在那裡開啟。</string>
     <string name="settings_listening_locked">你在 %1$s 中收聽，所以它的連結已經會在那裡開啟。要開啟，請在下面選擇另一個應用程式。</string>
     <string name="setup_destination_title">你在哪裡聽歌？</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">輕觸「新增連結」。</string>
     <string name="setup_allow_step_in_app">選擇「在應用程式中開啟」。</string>
     <string name="setup_allow_step_tick">勾選所有連結，然後輕觸「新增」。</string>
+    <string name="setup_links_title">讓 Crosstune 開啟你的連結</string>
+    <string name="setup_links_body">輕觸「修正」，然後返回。完成後會自動打勾。</string>
+    <string name="setup_check_app">關閉 %1$s 中的連結</string>
+    <string name="setup_check_allow">允許在 Crosstune 中開啟連結</string>
+    <string name="setup_one_tap">一鍵設定</string>
+    <string name="setup_one_tap_note">使用 Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku 未能全部完成。請在下方修正剩下的項目。</string>
     <string name="setup_apps_title">阻止其他應用程式開啟連結</string>
     <string name="setup_still_opens">仍會開啟連結</string>
     <string name="setup_done">已完成</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">在 Crosstune 中開啟</string>
     <string name="setting_only_music_videos">僅音樂影片</string>
     <string name="setting_only_music_videos_description">其他影片照常開啟。</string>
-    <string name="setup_sources_music">音樂</string>
-    <string name="setup_sources_videos">影片</string>
-    <string name="setting_only_music_videos_note">只有音樂影片會傳送到你的應用程式，其他影片照常開啟。</string>
     <string name="setup_apps_stop_body">選擇「在瀏覽器中開啟」，或關閉「開啟支援的連結」。</string>
     <string name="setup_apps_progress">第 %1$d 個應用程式，共 %2$d 個</string>
     <string name="setup_apps_all_done">完成了。其他應用程式不會再開啟這些連結。</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">輕觸開關，然後輕觸「關閉」。</string>
     <string name="follow_help_restricted">輕觸 ⋮，然後輕觸「解除受限制的設定」。</string>
     <string name="follow_help_access">現在開啟它並輕觸「允許」。</string>
-    <string name="setup_follow_body">歌詞會跟隨你的音樂應用程式同步。Crosstune 只會看到正在播放的內容，絕不讀取你的通知。</string>
     <string name="follow_turn_on">開啟</string>
     <string name="follow_help_simple">開啟它並輕觸「允許」。</string>
     <string name="setting_lyrics_follow">歌詞跟隨音樂應用程式</string>
@@ -261,12 +263,14 @@
     <string name="floating_notification">歌詞正懸浮在應用程式上方</string>
     <string name="lyrics_learn">讀音和翻譯</string>
     <string name="lyrics_readings">在文字上方顯示讀音</string>
+    <string name="lyrics_reading_size">讀音大小</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
     <string name="lyrics_chords">和絃</string>
     <string name="lyrics_capo">移調夾 %1$d</string>
     <string name="setting_translate_into">翻譯成</string>
+    <string name="setting_untranslated">不翻譯</string>
     <string name="translate_into_app_language">應用程式語言</string>
     <string name="setting_translation_server">翻譯來源</string>
     <string name="lyrics_study_line">學習這一行</string>

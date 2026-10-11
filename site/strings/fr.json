@@ -32,8 +32,16 @@
   "features_h2": "Ce qu'elle fait",
   "cards": [
     [
+      "Une app par service",
+      "Les liens YouTube vers YouTube Music, le reste vers Apple Music, ou comme vous voulez."
+    ],
+    [
       "Playlists entières",
       "Voyez tous les titres et lisez-les d'un coup."
+    ],
+    [
+      "Quel est ce titre ?",
+      "Crosstune l'écoute, le reconnaît et l'ouvre."
     ],
     [
       "Paroles synchronisées",
@@ -44,28 +52,32 @@
       "Par-dessus n'importe quelle appli, transparentes, à la taille voulue."
     ],
     [
-      "Apprenez les paroles",
-      "Kana, pinyin, romaji et traductions, mot par mot."
-    ],
-    [
-      "Quel est ce titre ?",
-      "Crosstune l'écoute, le reconnaît et l'ouvre."
-    ],
-    [
-      "Privé",
-      "Sans compte ni pistage. L'historique reste sur votre téléphone."
-    ],
-    [
       "Visuels MilkDrop",
       "Derrière les paroles, au rythme de ce que joue votre téléphone."
     ],
     [
-      "Widgets",
-      "Chansons récentes et actions rapides sur votre écran d'accueil."
+      "Apprenez les paroles",
+      "Kana, pinyin, romaji et traductions, mot par mot."
+    ],
+    [
+      "ChatGPT, si vous l'avez",
+      "Traduisez des chansons entières, expliquez des lignes, trouvez des chansons en les décrivant."
+    ],
+    [
+      "Prêt en une minute",
+      "Une liste à cocher, ou un geste avec Shizuku."
+    ],
+    [
+      "Raccourcis",
+      "Widgets, tuiles des réglages rapides et coller en un geste."
     ],
     [
       "Liens propres",
       "Le pistage comme ?si= retiré de chaque lien que vous partagez."
+    ],
+    [
+      "Privé",
+      "Sans compte Crosstune ni pistage. L'historique reste sur votre téléphone."
     ]
   ],
   "play_button": "Google Play",
@@ -81,14 +93,15 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 9 octobre 2026",
+  "updated": "Dernière mise à jour : 11 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
     "Il n'y a pas de serveur Crosstune. Votre historique reste sur votre téléphone.",
     "Les liens que vous convertissez ne vont qu'aux services de musique concernés.",
     "Pour reconnaître un titre, Shazam reçoit seulement une empreinte du son, jamais l'audio.",
-    "Effacez l'historique à tout moment dans l'application."
+    "Effacez l'historique à tout moment dans l'application.",
+    "Les fonctions d'IA sont facultatives. Elles n'envoient des paroles à OpenAI qu'une fois connecté avec ChatGPT."
   ],
   "details_h2": "Détails",
   "privacy_body": [
@@ -130,7 +143,7 @@
     ],
     [
       "p",
-      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, ou au serveur LibreTranslate que vous indiquez dans les paramètres. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone."
+      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, sauf si ChatGPT les traduit, comme décrit plus bas. Android reconnaît la langue d'une chanson sur votre téléphone, et les paroles dans une langue que vous avez choisi de ne pas traduire ne sont pas envoyées. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone."
     ],
     [
       "p",
@@ -154,11 +167,23 @@
     ],
     [
       "h2",
+      "ChatGPT"
+    ],
+    [
+      "p",
+      "Les fonctions d'IA de Crosstune sont facultatives et ne marchent qu'une fois connecté avec votre propre abonnement ChatGPT payant. La connexion se fait sur le site d'OpenAI, dans votre navigateur. Crosstune garde la connexion sur votre téléphone, l'exclut des sauvegardes et ne l'envoie qu'à OpenAI. Se déconnecter l'efface."
+    ],
+    [
+      "p",
+      "Tant que vous êtes connecté, Crosstune envoie à OpenAI ce dont chaque fonction a besoin : le titre, l'artiste et les paroles d'une chanson pour les traduire ou les expliquer, corriger les lectures japonaises, écrire en japonais des paroles trouvées en romaji ou choisir les mots à apprendre ; un mot et sa ligne pour le chercher ; vos questions sur une ligne ou une chanson ; et une description que vous tapez, ou une chanson, pour trouver des chansons qui correspondent. OpenAI les traite selon sa propre politique de confidentialité, et elles comptent dans l'utilisation de votre abonnement."
+    ],
+    [
+      "h2",
       "Autorisations et sécurité"
     ],
     [
       "p",
-      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Il demande l'autorisation du micro la première fois que vous reconnaissez un titre, et n'utilise le micro que pendant l'écoute. Si vous faites flotter les paroles par-dessus d'autres applis, elle demande l'autorisation de s'afficher par-dessus les autres applis et, une seule fois, d'afficher une notification, qui les garde visibles et permet de les déverrouiller ou de les fermer. Il ne demande pas d'autorisation de localisation, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous ajoutez une destination personnalisée, choisissez une adresse HTTPS de confiance."
+      "Crosstune utilise l'autorisation Internet d'Android pour récupérer les informations musicales et les pochettes. Il demande l'autorisation du micro la première fois que vous reconnaissez un titre, et n'utilise le micro que pendant l'écoute. Si vous faites flotter les paroles par-dessus d'autres applis, elle demande l'autorisation de s'afficher par-dessus les autres applis et, une seule fois, d'afficher une notification, qui les garde visibles et permet de les déverrouiller ou de les fermer. Il ne demande pas d'autorisation de localisation, d'appareil photo, de contacts ni d'identifiant publicitaire. Les requêtes intégrées aux services de musique utilisent HTTPS. Si vous ajoutez une destination personnalisée, choisissez une adresse HTTPS de confiance. Les visuels MilkDrop utilisent aussi l'autorisation du micro pour lire le son que joue votre téléphone, via Android ; il n'est ni enregistré ni envoyé. Si vous utilisez Shizuku, toucher Tout configurer demande l'autorisation de Shizuku, que Crosstune utilise uniquement pour modifier à votre place les réglages de liens d'Android et l'accès des paroles."
     ],
     [
       "h2",

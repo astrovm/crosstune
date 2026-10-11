@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +60,7 @@ internal const val FLOATING_CUSTOMIZE_TAG = "floating-customize"
 /**
  * How the words floating over other apps look, as set on them: how much of a dark band they sit on,
  * from none, only the words, outlined, to almost solid; how big; which lines show around the one
- * sung; and where they are and how wide, in pixels, unset until first moved or resized.
+ * sung; and where they are, how wide and how tall at least, in pixels, unset until first moved or resized.
  */
 internal data class FloatingOptions(
     val background: Float = 0f,
@@ -69,6 +71,7 @@ internal data class FloatingOptions(
     val left: Int = -1,
     val top: Int = -1,
     val width: Int = -1,
+    val height: Int = -1,
     /** MilkDrop visuals behind the words, with [background] as how dark they're shaded. */
     val visuals: Boolean = false
 ) {
@@ -94,10 +97,13 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val outline = if (options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
     val lines = state.lyricLines
     val sung = rememberSungLine(lines, state.following)
+    // Made taller, the words stay in the middle; never shorter than they need.
+    val tallest = with(LocalDensity.current) { options.height.takeIf { it > 0 }?.toDp() } ?: 0.dp
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .testTag(FLOATING_LYRICS_TAG)
+            .heightIn(min = tallest)
             .clip(MaterialTheme.shapes.large)
             .then(if (options.visuals) Modifier else Modifier.background(shade))
     ) {
@@ -166,13 +172,15 @@ internal class FloatingActions(
     /** A slider let go: keeps how they are now. */
     val onSave: () -> Unit,
     /** Where, in the window, a drag is a slider's own rather than one moving the words; null when nowhere. */
-    val onSlidersAt: (android.graphics.Rect?) -> Unit = {}
+    val onSlidersAt: (android.graphics.Rect?) -> Unit = {},
+    /** Where, in the window, the words are while their sides show to be dragged; null while they don't. */
+    val onWordsAt: (android.graphics.Rect?) -> Unit = {}
 )
 
 /**
  * The words over other apps, tapped for what they can do, which hides again after a moment unless
  * they're being changed. Moving, resizing and pinching them are up to their window, which shows the
- * sides to drag while the buttons are out. Locked, touches go through to the app below, so none reach here.
+ * sides and bottom to drag while the buttons are out. Locked, touches go through to the app below, so none reach here.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -186,8 +194,19 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
         }
     }
     LaunchedEffect(customizing) { if (!customizing) actions.onSlidersAt(null) }
+    LaunchedEffect(controls) { if (!controls) actions.onWordsAt(null) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = if (controls) {
+                Modifier.onGloballyPositioned { area ->
+                    val bounds = area.boundsInWindow()
+                    actions.onWordsAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
+                }
+            } else {
+                Modifier
+            }
+        ) {
             FloatingLyrics(
                 state,
                 modifier = Modifier
@@ -199,10 +218,11 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
                         }
                     }
             )
-            // The sides to drag to make them wider or narrower.
+            // The sides to drag to make them wider or narrower, and the bottom, taller or shorter.
             if (controls) {
                 Handle(Modifier.align(Alignment.CenterStart))
                 Handle(Modifier.align(Alignment.CenterEnd))
+                Handle(Modifier.align(Alignment.BottomCenter), across = true)
             }
         }
         AnimatedVisibility(controls) {
@@ -285,8 +305,9 @@ private fun Customize(options: FloatingOptions, actions: FloatingActions) {
 }
 
 @Composable
-private fun Handle(modifier: Modifier) {
-    Box(modifier.padding(horizontal = 3.dp).size(width = 5.dp, height = 32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.7f)))
+private fun Handle(modifier: Modifier, across: Boolean = false) {
+    val size = if (across) Modifier.padding(vertical = 3.dp).size(width = 32.dp, height = 5.dp) else Modifier.padding(horizontal = 3.dp).size(width = 5.dp, height = 32.dp)
+    Box(modifier.then(size).clip(CircleShape).background(Color.White.copy(alpha = 0.7f)))
 }
 
 @Composable

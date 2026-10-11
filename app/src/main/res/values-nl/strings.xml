@@ -57,7 +57,6 @@
     <string name="setup_finish">Voltooien</string>
     <string name="setup_installed">Geïnstalleerd</string>
     <string name="setup_step">Stap %1$d van %2$d</string>
-    <string name="setup_sources_title">Welke links moet Crosstune openen?</string>
     <string name="setup_sources_listening_note">Je luistert in %1$s, dus de links ervan openen daar al.</string>
     <string name="settings_listening_locked">Je luistert in %1$s, dus de links ervan openen daar al. Kies hieronder een andere app om dit aan te zetten.</string>
     <string name="setup_destination_title">Waar luister je?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_in_app">Kies ‘In de app’.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
+    <string name="setup_links_title">Laat Crosstune je links openen</string>
+    <string name="setup_links_body">Tik op Oplossen en kom terug. Elk punt vinkt zichzelf af.</string>
+    <string name="setup_check_app">Links in %1$s uitzetten</string>
+    <string name="setup_check_allow">Links in Crosstune toestaan</string>
+    <string name="setup_one_tap">Alles instellen</string>
+    <string name="setup_one_tap_note">Via Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku kon niet alles doen. Los de rest hieronder op.</string>
     <string name="setup_apps_title">Links van andere apps uitzetten</string>
     <string name="setup_still_opens">Opent nog links</string>
     <string name="setup_done">Klaar</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Openen in Crosstune</string>
     <string name="setting_only_music_videos">Alleen muziekvideo\'s</string>
     <string name="setting_only_music_videos_description">Andere video\'s openen zoals altijd.</string>
-    <string name="setup_sources_music">Muziek</string>
-    <string name="setup_sources_videos">Video\'s</string>
-    <string name="setting_only_music_videos_note">Alleen muziekvideo\'s gaan naar je app. Andere openen zoals altijd.</string>
     <string name="setup_apps_stop_body">Kies ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
     <string name="setup_apps_all_done">Klaar. Geen andere app opent de links nog.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Tik op de schakelaar en dan op Sluiten.</string>
     <string name="follow_help_restricted">Tik op ⋮ en dan op Beperkte instellingen toestaan.</string>
     <string name="follow_help_access">Zet hem nu aan en tik op Toestaan.</string>
-    <string name="setup_follow_body">De songtekst loopt gelijk met je muziek-app. Crosstune ziet alleen wat er speelt, nooit je meldingen.</string>
     <string name="follow_turn_on">Aanzetten</string>
     <string name="follow_help_simple">Zet hem aan en tik op Toestaan.</string>
     <string name="setting_lyrics_follow">Songtekst volgt je muziek-app</string>
@@ -261,12 +263,14 @@
     <string name="floating_notification">Tekst zweeft over je apps</string>
     <string name="lyrics_learn">Uitspraak en vertaling</string>
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
+    <string name="lyrics_reading_size">Grootte van de uitspraak</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
     <string name="lyrics_chords">Akkoorden</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Vertalen naar</string>
+    <string name="setting_untranslated">Niet vertalen</string>
     <string name="translate_into_app_language">App-taal</string>
     <string name="setting_translation_server">Vertalingen van</string>
     <string name="lyrics_study_line">Deze regel leren</string>

@@ -57,7 +57,6 @@
     <string name="setup_finish">Concluir</string>
     <string name="setup_installed">Instalado</string>
     <string name="setup_step">Etapa %1$d de %2$d</string>
-    <string name="setup_sources_title">Quais links o Crosstune deve abrir?</string>
     <string name="setup_sources_listening_note">Você ouve no %1$s, então os links dele já abrem lá.</string>
     <string name="settings_listening_locked">Você ouve no %1$s, então os links dele já abrem lá. Escolha outro app abaixo para ativar.</string>
     <string name="setup_destination_title">Onde você ouve música?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">Toque em Adicionar link.</string>
     <string name="setup_allow_step_in_app">Escolha “No app”.</string>
     <string name="setup_allow_step_tick">Marque todos os links e toque em Adicionar.</string>
+    <string name="setup_links_title">Deixe o Crosstune abrir seus links</string>
+    <string name="setup_links_body">Toque em Corrigir e volte. Cada item se marca sozinho.</string>
+    <string name="setup_check_app">Desative os links no %1$s</string>
+    <string name="setup_check_allow">Permita os links no Crosstune</string>
+    <string name="setup_one_tap">Configurar tudo</string>
+    <string name="setup_one_tap_note">Usa o Shizuku</string>
+    <string name="setup_one_tap_failed">O Shizuku não conseguiu fazer tudo. Corrija o que falta abaixo.</string>
     <string name="setup_apps_title">Desative os links de outros apps</string>
     <string name="setup_still_opens">Ainda abre links</string>
     <string name="setup_done">Pronto</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Abrir no Crosstune</string>
     <string name="setting_only_music_videos">Só vídeos de música</string>
     <string name="setting_only_music_videos_description">Os outros vídeos abrem como sempre.</string>
-    <string name="setup_sources_music">Música</string>
-    <string name="setup_sources_videos">Vídeos</string>
-    <string name="setting_only_music_videos_note">Só vídeos de música vão para o seu app. Os outros abrem como sempre.</string>
     <string name="setup_apps_stop_body">Escolha “No navegador” ou desative “Abrir links compatíveis”.</string>
     <string name="setup_apps_progress">App %1$d de %2$d</string>
     <string name="setup_apps_all_done">Pronto. Nenhum outro app abre os links agora.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Toque no botão e depois em Fechar.</string>
     <string name="follow_help_restricted">Toque em ⋮ e depois em Permitir configurações restritas.</string>
     <string name="follow_help_access">Agora ative e toque em Permitir.</string>
-    <string name="setup_follow_body">A letra acompanha seu app de música. O Crosstune só vê o que está tocando, nunca suas notificações.</string>
     <string name="follow_turn_on">Ativar</string>
     <string name="follow_help_simple">Ative e toque em Permitir.</string>
     <string name="setting_lyrics_follow">A letra acompanha seu app de música</string>
@@ -261,12 +263,14 @@
     <string name="floating_notification">Letra flutuando sobre seus apps</string>
     <string name="lyrics_learn">Leituras e tradução</string>
     <string name="lyrics_readings">Leitura sobre as palavras</string>
+    <string name="lyrics_reading_size">Tamanho da leitura</string>
     <string name="lyrics_romanized">Em letras latinas</string>
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
     <string name="lyrics_chords">Acordes</string>
     <string name="lyrics_capo">Capotraste %1$d</string>
     <string name="setting_translate_into">Traduzir para</string>
+    <string name="setting_untranslated">Não traduzir</string>
     <string name="translate_into_app_language">Idioma do app</string>
     <string name="setting_translation_server">Traduções de</string>
     <string name="lyrics_study_line">Estudar esta linha</string>

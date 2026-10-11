@@ -57,7 +57,6 @@
     <string name="setup_finish">पूरा करें</string>
     <string name="setup_installed">इंस्टॉल है</string>
     <string name="setup_step">चरण %1$d/%2$d</string>
-    <string name="setup_sources_title">Crosstune कौन-से लिंक खोले?</string>
     <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
     <string name="settings_listening_locked">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं। इसे चालू करने के लिए नीचे कोई दूसरा ऐप चुनें।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
     <string name="setup_allow_step_in_app">“ऐप में” चुनें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
+    <string name="setup_links_title">Crosstune को अपने लिंक खोलने दें</string>
+    <string name="setup_links_body">ठीक करें पर टैप करें, फिर वापस आएं। हर एक अपने आप टिक हो जाता है।</string>
+    <string name="setup_check_app">%1$s में लिंक बंद करें</string>
+    <string name="setup_check_allow">Crosstune में लिंक की अनुमति दें</string>
+    <string name="setup_one_tap">सब कुछ सेट करें</string>
+    <string name="setup_one_tap_note">Shizuku से</string>
+    <string name="setup_one_tap_failed">Shizuku सब नहीं कर पाया। बाकी नीचे ठीक करें।</string>
     <string name="setup_apps_title">दूसरे ऐप के लिंक बंद करें</string>
     <string name="setup_still_opens">अब भी लिंक खोलता है</string>
     <string name="setup_done">हो गया</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Crosstune में खोलें</string>
     <string name="setting_only_music_videos">सिर्फ़ संगीत वीडियो</string>
     <string name="setting_only_music_videos_description">बाकी वीडियो पहले की तरह खुलते हैं।</string>
-    <string name="setup_sources_music">संगीत</string>
-    <string name="setup_sources_videos">वीडियो</string>
-    <string name="setting_only_music_videos_note">सिर्फ़ संगीत वीडियो आपके ऐप में जाते हैं। बाकी पहले की तरह खुलते हैं।</string>
     <string name="setup_apps_stop_body">“ब्राउज़र में” चुनें या “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="setup_apps_progress">ऐप %1$d / %2$d</string>
     <string name="setup_apps_all_done">हो गया। अब कोई दूसरा ऐप ये लिंक नहीं खोलता।</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">स्विच पर टैप करें, फिर बंद करें पर।</string>
     <string name="follow_help_restricted">⋮ पर टैप करें, फिर प्रतिबंधित सेटिंग की अनुमति दें पर।</string>
     <string name="follow_help_access">अब इसे चालू करें और अनुमति दें पर टैप करें।</string>
-    <string name="setup_follow_body">बोल आपके म्यूज़िक ऐप के साथ चलते हैं। Crosstune सिर्फ़ देखता है कि क्या बज रहा है, आपकी सूचनाएँ कभी नहीं।</string>
     <string name="follow_turn_on">चालू करें</string>
     <string name="follow_help_simple">इसे चालू करें और अनुमति दें पर टैप करें।</string>
     <string name="setting_lyrics_follow">बोल आपके म्यूज़िक ऐप के साथ चलें</string>
@@ -261,12 +263,14 @@
     <string name="floating_notification">बोल आपके ऐप्स के ऊपर तैर रहे हैं</string>
     <string name="lyrics_learn">उच्चारण और अनुवाद</string>
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
+    <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
     <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>
+    <string name="setting_untranslated">अनुवाद न करें</string>
     <string name="translate_into_app_language">ऐप की भाषा</string>
     <string name="setting_translation_server">अनुवाद यहां से</string>
     <string name="lyrics_study_line">यह लाइन सीखें</string>

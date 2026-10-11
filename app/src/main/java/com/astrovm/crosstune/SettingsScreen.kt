@@ -232,6 +232,8 @@ private fun SettingsList(
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
             TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
             GroupDivider()
+            UntranslatedRow(state.learning.untranslated, actions.onUntranslatedChange)
+            GroupDivider()
             // Signed in with ChatGPT, it or MyMemory; without, MyMemory is all there is.
             if (state.chatGpt.email != null) {
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
@@ -719,6 +721,46 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
                             expanded = false
                             onSelect(tag)
                         }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Picks the languages the user reads, whose songs aren't translated: as many as they like, so the list stays open. */
+@Composable
+private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = true }
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 160.dp)
+                )
+                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                AppLanguage.untranslatedTags.forEach { tag ->
+                    val picked = tag in untranslated
+                    DropdownMenuItem(
+                        text = { Text(AppLanguage.displayName(tag)) },
+                        leadingIcon = { LanguageMark(tag) },
+                        trailingIcon = { PickedMark(picked) },
+                        modifier = Modifier.semantics { selected = picked },
+                        onClick = { onChange(if (picked) untranslated - tag else untranslated + tag) }
                     )
                 }
             }

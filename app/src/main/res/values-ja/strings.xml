@@ -58,7 +58,6 @@
     <string name="setup_finish">完了</string>
     <string name="setup_installed">インストール済み</string>
     <string name="setup_step">ステップ %1$d/%2$d</string>
-    <string name="setup_sources_title">Crosstune で開くリンクは？</string>
     <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
     <string name="settings_listening_locked">%1$s で聴いているので、そのリンクはすでにそこで開きます。オンにするには、下で別のアプリを選んでください。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
@@ -67,6 +66,13 @@
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
     <string name="setup_allow_step_in_app">「アプリで開く」を選んでください。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
+    <string name="setup_links_title">Crosstune でリンクを開く</string>
+    <string name="setup_links_body">「修正」をタップして戻ってきてください。終わると自動でチェックが付きます。</string>
+    <string name="setup_check_app">%1$s のリンクをオフにする</string>
+    <string name="setup_check_allow">Crosstune のリンクを許可</string>
+    <string name="setup_one_tap">すべて設定</string>
+    <string name="setup_one_tap_note">Shizuku を使用</string>
+    <string name="setup_one_tap_failed">Shizuku ですべては設定できませんでした。残りは下で修正してください。</string>
     <string name="setup_apps_title">ほかのアプリのリンクをオフにする</string>
     <string name="setup_still_opens">まだリンクを開く</string>
     <string name="setup_done">完了</string>
@@ -179,9 +185,6 @@
     <string name="source_open_links">Crosstune で開く</string>
     <string name="setting_only_music_videos">音楽動画のみ</string>
     <string name="setting_only_music_videos_description">その他の動画はいつもどおり開きます。</string>
-    <string name="setup_sources_music">音楽</string>
-    <string name="setup_sources_videos">動画</string>
-    <string name="setting_only_music_videos_note">アプリに送られるのは音楽動画だけです。その他はいつもどおり開きます。</string>
     <string name="setup_apps_stop_body">「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_apps_progress">アプリ %1$d / %2$d</string>
     <string name="setup_apps_all_done">完了しました。ほかのアプリはもうリンクを開きません。</string>
@@ -235,7 +238,6 @@
     <string name="follow_help_try">スイッチをタップし、[閉じる] をタップします。</string>
     <string name="follow_help_restricted">⋮ をタップし、[制限付き設定を許可] をタップします。</string>
     <string name="follow_help_access">スイッチをオンにして [許可] をタップします。</string>
-    <string name="setup_follow_body">歌詞が音楽アプリの曲に合わせて流れます。見るのは再生中の曲だけで、通知は読み取りません。</string>
     <string name="follow_turn_on">オンにする</string>
     <string name="follow_help_simple">スイッチをオンにして [許可] をタップします。</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>
@@ -262,12 +264,14 @@
     <string name="floating_notification">歌詞をアプリの上に表示中</string>
     <string name="lyrics_learn">読みと翻訳</string>
     <string name="lyrics_readings">単語の上に読み</string>
+    <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
     <string name="lyrics_chords">コード</string>
     <string name="lyrics_capo">カポ %1$d</string>
     <string name="setting_translate_into">翻訳先</string>
+    <string name="setting_untranslated">翻訳しない</string>
     <string name="translate_into_app_language">アプリの言語</string>
     <string name="setting_translation_server">翻訳の提供元</string>
     <string name="lyrics_study_line">この行を学ぶ</string>

@@ -57,6 +57,14 @@ class RubyLineTest {
     }
 
     @Test
+    fun biggerReadingsSpaceTheirPiecesOutMore() {
+        assertEquals(0, rubyText(listOf(Ruby("夜空", "よぞら"))).spanStyles.size)
+        // Three kana at 0.8 are wider than two kanji.
+        val spaced = rubyText(listOf(Ruby("夜空", "よぞら")), scale = 0.8f).spanStyles.single().item.letterSpacing
+        assertEquals(((3 * 0.8 - 2) / 2), spaced.value.toDouble(), 1e-4)
+    }
+
+    @Test
     fun eachReadingSitsOverItsPieceOnItsRow() {
         val parts = listOf(Ruby("夜空", "よぞら"), Ruby("にきらめく"), Ruby("星", "ほし"))
         // Seven kanji and kana a row, at most: the last piece goes to the next row.

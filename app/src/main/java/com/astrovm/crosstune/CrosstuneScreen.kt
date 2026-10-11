@@ -158,6 +158,8 @@ internal data class ScreenActions(
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onPreselectSources: () -> Unit = {},
+    /** Does all of setup's fixing at once, through Shizuku. */
+    val onSetUpInOneTap: () -> Unit = {},
     val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
@@ -248,6 +250,10 @@ internal data class ScreenActions(
     val onChatGptModelChange: (String) -> Unit = {},
     /** One of the app's languages to translate into, or null for the app's own. */
     val onTranslateIntoChange: (String?) -> Unit = {},
+    /** The languages, by code, whose songs aren't translated. */
+    val onUntranslatedChange: (Set<String>) -> Unit = {},
+    /** How big readings are beside the words; kept when [save]d, once let go. */
+    val onReadingScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onSignInWithChatGpt: () -> Unit = {},
     val onCancelChatGptSignIn: () -> Unit = {},
     val onSignOutOfChatGpt: () -> Unit = {},
@@ -373,8 +379,8 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
         } else {
             val apps = appsToStop(state)
             Spacer(Modifier.height(8.dp))
-            StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
-            appsGuideDone(apps, state.blockingApps)
+            StopAppsGuide(apps, state.blockingApps.orEmpty(), actions.onOpenAppLinkSettings)
+            appsGuideDone(apps, state.blockingApps.orEmpty())
         }
         val press = rememberPress()
         FilledTonalButton(
