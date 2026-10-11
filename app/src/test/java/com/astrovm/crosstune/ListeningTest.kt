@@ -1674,9 +1674,13 @@ class ListeningTest {
         composeRule.waitUntil(TIMEOUT_MS) { shown("Late ____") }
         assertTrue(shown("_____") && shown("Night sky"))
         assertFalse(shown("Late song"))
+        // One to come shows its word once tapped.
+        composeRule.onNode(hasText("Late ____")).performClick()
+        waitForText("Late song")
+        assertTrue(shown("_____"))
         // Switched off, the words are whole again.
         click(string(R.string.lyrics_blanks))
-        waitForText("Late song")
+        waitForText("Stars")
         assertFalse(prefs().getBoolean("lyrics_blanks", true))
     }
 
@@ -1690,6 +1694,13 @@ class ListeningTest {
         // Its romaji would give the blank away.
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText("yoru", substring = true)).fetchSemanticsNodes().isEmpty())
+        // Tapped, a line shows its word, standing out, rather than opening to study; tapped again, it opens.
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { shown("I go") }
+        assertTrue(shown("夜の ＿＿＿"))
+        assertTrue(composeRule.onAllNodesWithTag(STUDY_LINE_TAG).fetchSemanticsNodes().isEmpty())
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(STUDY_LINE_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

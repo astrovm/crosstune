@@ -319,4 +319,5 @@
     <string name="songs_like_label">Nummers zoals</string>
     <string name="song_search_playlist">Playlist maken</string>
     <string name="error_no_songs_like">Geen vergelijkbare nummers gevonden.</string>
+    <string name="lyrics_show_blank">Woord tonen</string>
 </resources>

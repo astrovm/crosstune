@@ -163,6 +163,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var savedShown by rememberSaveable { mutableStateOf(false) }
     // What's open over the words about the whole song: what it means, its words to know, or its artist.
     var songSheet by rememberSaveable(song) { mutableStateOf<SongSheet?>(null) }
+    // The lines whose blank word was tapped to show it.
+    var revealed by rememberSaveable(song) { mutableStateOf(intArrayOf()) }
+    val reveal = { index: Int -> revealed += index }
     if (savedShown) {
         state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
@@ -258,10 +261,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     } else if (shown == LyricsShown.NONE) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
-                        TimedLyrics(state, actions, timedList, syncing, onStudy = { studying = it })
+                        TimedLyrics(state, actions, timedList, syncing, revealed, reveal, onStudy = { studying = it })
                     } else if (state.learning.shows) {
                         // Read line by line, each with what helps read it.
-                        LyricLines(state, onStudy = { studying = it })
+                        LyricLines(state, revealed, reveal, onStudy = { studying = it })
                     } else {
                         PlainLyrics(state.lyrics)
                     }
@@ -793,7 +796,15 @@ internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): In
  * the music app there when it can.
  */
 @Composable
-private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListState, syncing: Boolean, onStudy: (Int) -> Unit) {
+private fun TimedLyrics(
+    state: UiState,
+    actions: ScreenActions,
+    list: LazyListState,
+    syncing: Boolean,
+    revealed: IntArray,
+    onReveal: (Int) -> Unit,
+    onStudy: (Int) -> Unit
+) {
     val lines = state.lyricLines
     val following = state.following
     val active = rememberSungLine(lines, following)
@@ -821,7 +832,8 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListSt
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index)
+                help = state.learning.helpFor(index, index in revealed),
+                onReveal = { onReveal(index) }
             )
         }
     }
@@ -829,24 +841,32 @@ private fun TimedLyrics(state: UiState, actions: ScreenActions, list: LazyListSt
 
 /** Words with no timings, line by line, when each has something under it to help read it. */
 @Composable
-private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
+private fun LyricLines(state: UiState, revealed: IntArray, onReveal: (Int) -> Unit, onStudy: (Int) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(state.lyrics.lines()) { index, line ->
-            LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
+            LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index, index in revealed), onReveal = { onReveal(index) })
         }
     }
 }
 
 /** What helps read a line, as switched on. */
-internal class LineHelp(val reading: LineReading?, val readings: Boolean, val romanized: Boolean, val translation: String?, val blank: String? = null)
+internal class LineHelp(
+    val reading: LineReading?,
+    val readings: Boolean,
+    val romanized: Boolean,
+    val translation: String?,
+    val blank: String? = null,
+    /** Whether [blank] was tapped to show it. */
+    val blankShown: Boolean = false
+)
 
-internal fun Learning.helpFor(index: Int): LineHelp? {
+internal fun Learning.helpFor(index: Int, blankShown: Boolean = false): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, blankWords.getOrNull(index).takeIf { blanks })
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, blankWords.getOrNull(index).takeIf { blanks }, blankShown)
 }
 
 /**
@@ -917,9 +937,13 @@ private fun LyricLineText(
     onStudy: () -> Unit,
     help: LineHelp? = null,
     waiting: Boolean = false,
-    seekLabel: Int = R.string.lyrics_jump
+    seekLabel: Int = R.string.lyrics_jump,
+    onReveal: () -> Unit = {}
 ) {
     val lit = place == 0
+    // A word left blank shows once tapped, or once its line's sung.
+    val blank = help?.blank
+    val hidden = blank != null && help.blankShown != true && (place == null || place >= 0)
     val alpha by animateFloatAsState(
         if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
         spring(stiffness = Spring.StiffnessLow),
@@ -942,13 +966,13 @@ private fun LyricLineText(
                 scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
-            // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
-            // A gap, e.g. a solo, has no words to study, so it only moves the app there.
+            // Tapped, a word left blank shows; then the music app goes there when it can; held, or tapped when
+            // it can't, the line opens to study. A gap, e.g. a solo, has no words to study, so it only moves the app there.
             .then(
                 if (text.isNotBlank()) {
                     Modifier.combinedClickable(
-                        onClickLabel = stringResource(if (onSeek != null) seekLabel else R.string.lyrics_study_line),
-                        onClick = onSeek ?: onStudy,
+                        onClickLabel = stringResource(if (hidden) R.string.lyrics_show_blank else if (onSeek != null) seekLabel else R.string.lyrics_study_line),
+                        onClick = if (hidden) onReveal else onSeek ?: onStudy,
                         onLongClickLabel = stringResource(R.string.lyrics_study_line),
                         onLongClick = onStudy
                     )
@@ -959,9 +983,6 @@ private fun LyricLineText(
             .padding(vertical = 6.dp)
     ) {
         val reading = help?.reading
-        // A word left blank shows once its line's sung, or never while nothing says where the song is.
-        val blank = help?.blank
-        val hidden = blank != null && (place == null || place >= 0)
         if (blank != null) {
             Text(blanked(text, blank, !hidden, MaterialTheme.colorScheme.primary), style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {

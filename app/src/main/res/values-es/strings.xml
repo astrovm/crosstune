@@ -319,4 +319,5 @@
     <string name="songs_like_label">Canciones como</string>
     <string name="song_search_playlist">Armar una playlist</string>
     <string name="error_no_songs_like">No se encontraron canciones parecidas.</string>
+    <string name="lyrics_show_blank">Mostrar la palabra</string>
 </resources>

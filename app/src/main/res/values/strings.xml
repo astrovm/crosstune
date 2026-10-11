@@ -338,4 +338,5 @@
     <string name="songs_like_label">Songs like</string>
     <string name="song_search_playlist">Make a playlist</string>
     <string name="error_no_songs_like">Couldn\'t find songs like this one.</string>
+    <string name="lyrics_show_blank">Show the word</string>
 </resources>

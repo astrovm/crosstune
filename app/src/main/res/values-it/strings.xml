@@ -320,4 +320,5 @@
     <string name="songs_like_label">Brani come</string>
     <string name="song_search_playlist">Crea una playlist</string>
     <string name="error_no_songs_like">Nessun brano simile trovato.</string>
+    <string name="lyrics_show_blank">Mostra la parola</string>
 </resources>
