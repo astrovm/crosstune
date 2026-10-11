@@ -131,7 +131,7 @@
     <string name="search_copied_to_clipboard">已複製搜尋文字</string>
     <string name="link_copied_to_clipboard">已複製連結</string>
     <string name="link_settings_helper_title">允許開啟新連結</string>
-    <string name="open_app_link_settings_button">開啟%1$s設定</string>
+    <string name="open_app_link_settings_button">開啟 %1$s 設定</string>
     <string name="open_link_settings_button">開啟連結設定</string>
     <string name="dismiss_button">關閉</string>
     <string name="settings_version">版本</string>
@@ -144,8 +144,8 @@
     <string name="error_service_unavailable">服務沒有回應，請稍後再試。</string>
     <string name="error_no_app_to_open">沒有已安裝的應用程式可以開啟此連結。</string>
     <string name="error_metadata_unavailable">無法讀取此連結的詳細資訊。</string>
-    <string name="search_in_destination">在%1$s中搜尋</string>
-    <string name="history_open">開啟%1$s</string>
+    <string name="search_in_destination">在 %1$s 中搜尋</string>
+    <string name="history_open">開啟 %1$s</string>
     <string name="privacy_policy">隱私政策</string>
     <string name="privacy_policy_url">https://crosstune.4st.li/zh-tw/privacy/</string>
     <string name="handoff_opening">正在用 %1$s 開啟…</string>
