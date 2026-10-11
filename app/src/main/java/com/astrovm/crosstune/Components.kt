@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -222,15 +223,14 @@ internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): C
 internal fun rememberWebOpener(): (String) -> Unit {
     val handler = LocalUriHandler.current
     val context = LocalContext.current
-    return remember(handler, context) {
+    val noApp = stringResource(R.string.error_no_app_to_open)
+    return remember(handler, context, noApp) {
         { url ->
             try {
                 handler.openUri(url)
             } catch (_: IllegalArgumentException) {
-                // What Compose throws when no app can open it.
-                Toast.makeText(context, context.getString(R.string.error_no_app_to_open), Toast.LENGTH_SHORT).show()
-            } catch (_: android.content.ActivityNotFoundException) {
-                Toast.makeText(context, context.getString(R.string.error_no_app_to_open), Toast.LENGTH_SHORT).show()
+                // What Compose throws when no app can open it, in place of ActivityNotFoundException.
+                Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
             }
         }
     }
