@@ -33,6 +33,19 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun whatsReadIsKeptUntilAnotherWritesInstead() {
+        store.add(entry(1))
+        val first = store.load()
+        // Read again unchanged, it's the same list, not read anew.
+        assertTrue(first === store.load())
+        // Written elsewhere, e.g. undone from another screen, it's read anew.
+        HistoryStore(preferences).add(entry(2))
+        assertEquals(listOf(entry(2), entry(1)), store.load())
+        preferences.edit().clear().commit()
+        assertEquals(emptyList<HistoryEntry>(), store.load())
+    }
+
+    @Test
     fun theSameSongLinkedAnotherWayIsOneEntry() {
         val fromAlbum = HistoryEntry(
             MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "1060484510", "https://music.apple.com/us/album/dreams-come-true/1060484503?i=1060484510"),
