@@ -4985,6 +4985,128 @@ class MainActivityTest {
     }
 
     @Test
+    fun theAppsGuideTakesEachAppInTurnAndKeepsTheFixedOnesListed() {
+        val creator = "com.example.youtube.create"
+        shadowOf(app.packageManager).installPackage(installedApp(creator, "YouTube Create"))
+        installActivity(
+            ComponentName(creator, "$creator.LinkActivity"),
+            IntentFilter(Intent.ACTION_VIEW).apply {
+                addCategory(Intent.CATEGORY_DEFAULT)
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addDataScheme("https")
+                addDataAuthority("youtube.com", null)
+            }
+        )
+        val youtube = MusicService.YOUTUBE.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
+        var creatorAllowsLinks = true
+        var youtubeAllowsLinks = true
+        FakeDomainVerification.installPerPackage(
+            app,
+            linkHandlingAllowed = { (it != creator || creatorAllowsLinks) && (it != youtube || youtubeAllowsLinks) }
+        ) { packageName ->
+            if (packageName == app.packageName) emptyMap() else mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+        assertTextShown(string(R.string.notice_apps_still_open, "YouTube, YouTube Create"))
+        click(string(R.string.fix_button))
+
+        // One app at a time, in name order, with both listed below.
+        assertTextShown(string(R.string.setup_apps_progress, 1, 2))
+        assertTextShown(string(R.string.open_app_link_settings_button, "YouTube"))
+        assertEquals(2, composeRule.onAllNodesWithText(string(R.string.setup_still_opens)).fetchSemanticsNodes().size)
+        youtubeAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+
+        // Fixed, it stays listed, marked, so the list doesn't move under the user's finger.
+        assertTextShown(string(R.string.setup_apps_progress, 2, 2))
+        assertTextShown(string(R.string.setup_fixed))
+        assertTextShown(string(R.string.setup_still_opens))
+        click(string(R.string.open_app_link_settings_button, "YouTube Create"))
+        assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
+
+        creatorAllowsLinks = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_apps_all_done))
+        assertEquals(2, composeRule.onAllNodesWithText(string(R.string.setup_fixed)).fetchSemanticsNodes().size)
+        clickDoneButton()
+        assertTextAbsent(string(R.string.notice_apps_still_open, "YouTube, YouTube Create"))
+    }
+
+    @Test
+    fun theAllowGuideSaysAnAppStillTakesTheLinksOnceTheyreAllAllowed() {
+        val hosts = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY)
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        var allowed = false
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            when {
+                packageName != app.packageName -> hosts.associateWith { DomainVerificationUserState.DOMAIN_STATE_VERIFIED }
+                allowed -> hosts.associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+                else -> emptyMap()
+            }
+        }
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+        click(string(R.string.allow_button))
+        assertTextShown(string(R.string.setup_allow_step_add))
+
+        allowed = true
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        // Every link is allowed, but none open in Crosstune while Spotify's app takes them, so it's not all set.
+        assertTextShown(string(R.string.notice_app_still_opens, "Spotify"))
+        assertTextAbsent(string(R.string.setup_allow_all_done))
+        assertTextAbsent(string(R.string.setup_allow_step_add))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12TheAllowGuideListsEveryFrontendSite() {
+        LinkInterception(app).setEnabled(Frontend.INVIDIOUS, true)
+        launch()
+        click(string(R.string.allow_button))
+        // Android can't say which are allowed, so all of them are listed.
+        assertTextShown(Frontend.INVIDIOUS.label)
+        assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
+    }
+
+    @Test
+    fun setupSaysToSwitchCrosstunesLinksBackFromTheBrowserAndShowsHeldBackLyricsStepsOnFix() {
+        // Installed from a file, Android holds the lyrics access back.
+        MainActivity.playbackFactory = { FakePlayback().apply { restricted = true } }
+        var ownLinksOn = false
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != app.packageName || ownLinksOn }) {
+            (LinkInterception.HOSTS.values.flatten() + Frontend.SOURCES.flatMap { it.sites }).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+        }
+        freshInstall()
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.next_button))
+
+        // Set to open in the browser, Android hides the links to tick, so switching back is the step.
+        assertTextShown(string(R.string.setup_allow_step_in_app))
+        assertTextAbsent(string(R.string.setup_allow_step_add))
+        ownLinksOn = true
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+
+        // Lyrics are next, and held back, so Fix shows the steps instead of a screenshot.
+        assertEquals(1, checkedOff())
+        assertTextAbsent(string(R.string.setup_allow_step_in_app))
+        assertTextAbsent(string(R.string.follow_help_simple))
+        click(string(R.string.fix_button))
+        assertTextShown(string(R.string.follow_help_app_info))
+    }
+
+    @Test
     fun settingsKeepsAppsWithTheLinksListedSoTheirChoiceCanBeUndone() {
         val youtube = MusicService.YOUTUBE.packageName
         shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
@@ -5092,6 +5214,7 @@ class MainActivityTest {
     @Config(sdk = [30])
     fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
+        MainActivity.shellFactory = { FakeShell() }
         shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
@@ -5108,12 +5231,28 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_allow_step_add))
         // Nor are they known to be left, so leaving isn't skipping them.
         assertTextShown(string(R.string.setup_finish))
-        // Nor can Shizuku do them.
+        // Nor can Shizuku do them, though it runs.
+        assertTextAbsent(string(R.string.setup_one_tap))
+    }
+
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroid12ShizukuIsntOfferedThoughLyricsAreLeft() {
+        MainActivity.shellFactory = { FakeShell() }
+        freshInstall()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.target_deezer))
+        click(string(R.string.next_button))
+        // Android 11's commands can't allow links, and nothing tells Crosstune Shizuku's there to do lyrics alone.
+        assertTextShown(string(R.string.setup_skip_for_now))
         assertTextAbsent(string(R.string.setup_one_tap))
     }
 
     @Test
     fun setupCanGoBackAndSaysWhenNoLinksAreOpened() {
+        val shell = FakeShell()
+        MainActivity.shellFactory = { shell }
         freshInstall()
         // As when every source was turned off in settings before setup was finished.
         prefs().edit().putBoolean("sources_preselected", true).commit()
@@ -5127,8 +5266,10 @@ class MainActivityTest {
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_allow_none))
         assertTextAbsent(string(R.string.setup_check_allow))
-        // Lyrics are still there to let follow.
+        // Lyrics are still there to let follow, which is all Shizuku is asked.
         assertTextShown(string(R.string.follow_help_title))
+        click(string(R.string.setup_one_tap))
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.single().take(3))
     }
 
     @Test
@@ -5171,6 +5312,25 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         assertTextShown(string(R.string.setup_destination_title))
         composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun setupKeepsToTheListWhenTheOnlyMusicAppIsInstalledMeanwhile() {
+        freshInstall()
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.target_deezer))
+        click(string(R.string.next_button))
+        assertTextShown(string(R.string.setup_step, 2, 2))
+
+        // One step fewer now, so the list is the first and only one.
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.setup_links_title))
+        assertTextAbsent(string(R.string.setup_step, 2, 2))
+        // The user's pick stays.
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
     }
 
     @Test
@@ -5247,6 +5407,17 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.setup_one_tap))
         click(string(R.string.setup_finish))
         assertTrue(prefs().getBoolean("setup_complete", false))
+    }
+
+    @Test
+    fun oneTapSetupLeavesAloneWhatsAlreadyDone() {
+        val shell = oneTapSetup { playback, unblock, allow -> playback.access = true; doingShell(playback, unblock, allow) }
+        launch()
+        click(string(R.string.setup_get_started))
+        click(string(R.string.setup_one_tap))
+        assertEquals(3, shell.ran.size)
+        assertTrue(shell.ran.none { "allow_listener" in it })
+        assertEquals(3, checkedOff())
     }
 
     @Test

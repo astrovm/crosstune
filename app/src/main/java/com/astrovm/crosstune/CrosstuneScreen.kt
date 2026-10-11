@@ -379,8 +379,8 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
         } else {
             val apps = appsToStop(state)
             Spacer(Modifier.height(8.dp))
-            StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
-            appsGuideDone(apps, state.blockingApps)
+            StopAppsGuide(apps, state.blockingApps.orEmpty(), actions.onOpenAppLinkSettings)
+            appsGuideDone(apps, state.blockingApps.orEmpty())
         }
         val press = rememberPress()
         FilledTonalButton(
