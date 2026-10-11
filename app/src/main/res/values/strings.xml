@@ -338,4 +338,5 @@
     <string name="artist_known_for">Known for</string>
     <string name="songs_like_label">Songs like</string>
     <string name="song_search_playlist">Make a playlist</string>
+    <string name="error_no_songs_like">Couldn\'t find songs like this one.</string>
 </resources>

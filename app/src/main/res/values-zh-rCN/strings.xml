@@ -319,4 +319,5 @@
     <string name="artist_known_for">代表作</string>
     <string name="songs_like_label">相似歌曲：</string>
     <string name="song_search_playlist">生成歌单</string>
+    <string name="error_no_songs_like">找不到相似的歌曲。</string>
 </resources>

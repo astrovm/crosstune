@@ -320,4 +320,5 @@
     <string name="artist_known_for">Noto per</string>
     <string name="songs_like_label">Brani come</string>
     <string name="song_search_playlist">Crea una playlist</string>
+    <string name="error_no_songs_like">Nessun brano simile trovato.</string>
 </resources>

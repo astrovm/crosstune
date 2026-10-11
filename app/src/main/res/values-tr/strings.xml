@@ -319,4 +319,5 @@
     <string name="artist_known_for">Bilinen eserleri</string>
     <string name="songs_like_label">Benzeri:</string>
     <string name="song_search_playlist">Çalma listesi yap</string>
+    <string name="error_no_songs_like">Benzer şarkı bulunamadı.</string>
 </resources>

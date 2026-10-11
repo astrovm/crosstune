@@ -292,12 +292,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     }
     val closeSheet = { songSheet = null }
-    when (songSheet) {
-        SongSheet.MEANING -> SongMeaningSheet(state, actions, onDismiss = closeSheet)
-        SongSheet.WORDS -> WordsToKnowSheet(state, actions, onDismiss = closeSheet)
-        SongSheet.ARTIST -> ArtistSheet(state, actions, onDismiss = closeSheet)
-        null -> Unit
-    }
+    if (songSheet == SongSheet.MEANING) SongMeaningSheet(state, actions, onDismiss = closeSheet)
+    if (songSheet == SongSheet.WORDS) WordsToKnowSheet(state, actions, onDismiss = closeSheet)
+    if (songSheet == SongSheet.ARTIST) ArtistSheet(state, actions, onDismiss = closeSheet)
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null

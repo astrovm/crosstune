@@ -319,4 +319,5 @@
     <string name="artist_known_for">Dikenal lewat</string>
     <string name="songs_like_label">Lagu seperti</string>
     <string name="song_search_playlist">Buat playlist</string>
+    <string name="error_no_songs_like">Tidak menemukan lagu serupa.</string>
 </resources>

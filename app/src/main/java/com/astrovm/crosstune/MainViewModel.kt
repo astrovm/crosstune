@@ -734,7 +734,7 @@ internal class MainViewModel(
         job = viewModelScope.launch {
             val songs = tutor.songsLike(song)?.let { found(searcher, it) }.orEmpty()
             uiState = uiState.copy(isLoading = false)
-            if (songs.isEmpty()) return@launch showError(AppError.NOT_FOUND)
+            if (songs.isEmpty()) return@launch showError(AppError.NO_SONGS_LIKE)
             showSongList(song.title, songs, like = true)
         }
     }

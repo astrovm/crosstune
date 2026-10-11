@@ -3151,6 +3151,8 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodesWithText("Plastic Love").fetchSemanticsNodes().isNotEmpty() }
         assertTrue(composeRule.onAllNodesWithContentDescription(string(R.string.song_search_chatgpt), useUnmergedTree = true).fetchSemanticsNodes().size == 1)
         assertTextAbsent("Something Else")
+        // One song is no playlist.
+        assertTextAbsent(string(R.string.song_search_playlist))
         val plastic = composeRule.onNodeWithText("Plastic Love").fetchSemanticsNode().boundsInRoot.top
         val city = composeRule.onNodeWithText("City Pop Night").fetchSemanticsNode().boundsInRoot.top
         assertTrue(plastic < city)

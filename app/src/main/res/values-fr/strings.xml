@@ -319,4 +319,5 @@
     <string name="artist_known_for">Connu pour</string>
     <string name="songs_like_label">Chansons comme</string>
     <string name="song_search_playlist">Créer une playlist</string>
+    <string name="error_no_songs_like">Aucune chanson similaire trouvée.</string>
 </resources>

@@ -27,7 +27,9 @@ internal enum class AppError(@StringRes val messageRes: Int, val canRetry: Boole
     /** The microphone can't record, most likely without the permission. */
     MICROPHONE(R.string.error_microphone),
     /** Shazam is busy or failing; another song recognition app may still work. */
-    RECOGNITION_UNAVAILABLE(R.string.error_recognition_unavailable, canRetry = true)
+    RECOGNITION_UNAVAILABLE(R.string.error_recognition_unavailable, canRetry = true),
+    /** ChatGPT named no songs like the one asked about that could be found. */
+    NO_SONGS_LIKE(R.string.error_no_songs_like)
 }
 
 internal sealed interface Resolution {
