@@ -61,6 +61,18 @@ class LyricsLanguageTest {
     }
 
     @Test
+    fun chineseIsToldBySimplifiedOrTraditionalCharacters() = runBlocking {
+        val chinese = language { told("zh" to 0.95f) }
+        assertEquals("zh-CN", chinese.of(listOf("我们说过这些话")))
+        assertEquals("zh-TW", chinese.of(listOf("我們說過這些話")))
+        // Nothing written its own way either way is taken as simplified, the more written.
+        assertEquals("zh-CN", chinese.of(listOf("月亮")))
+        // Told how it's written, that's how.
+        assertEquals("zh-TW", language { told("zh-Hant" to 0.95f) }.of(listOf("我们")))
+        assertEquals("zh-CN", language { told("zh-Hans" to 0.95f) }.of(listOf("我們")))
+    }
+
+    @Test
     fun withNoAnswerOrNoOneToAskItCantBeTold() = runBlocking {
         assertNull(language { told() }.of(listOf("Night sky")))
         assertNull(language { throw IllegalStateException("Android's classifier is gone") }.of(listOf("Night sky")))

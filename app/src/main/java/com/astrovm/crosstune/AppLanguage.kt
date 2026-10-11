@@ -28,8 +28,8 @@ internal object AppLanguage {
         "id", "hi", "ja", "ko", "zh-CN", "zh-TW"
     )
 
-    /** The languages, one each, whose songs can be left untranslated: the app's. */
-    val untranslatedTags = listOf("en", "es", "pt", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh")
+    /** The languages whose songs can be left untranslated: the app's, Chinese as written in each way. */
+    val untranslatedTags = listOf("en", "es", "pt", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-CN", "zh-TW")
 
     /** What lyrics are translated into for [tag]: itself, or its language's first, e.g. "es-AR" for one saved as "es"; null for none. */
     fun translationTag(tag: String): String? {

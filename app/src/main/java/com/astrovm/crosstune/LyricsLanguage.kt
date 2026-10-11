@@ -9,7 +9,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The language a song's words are in, by its code, e.g. "en"; null when it can't be told. */
+/** The language a song's words are in, as [AppLanguage.untranslatedTags] has it, e.g. "en"; null when it can't be told. */
 internal fun interface LyricsLanguage {
     suspend fun of(lines: List<String>): String?
 }
@@ -34,7 +34,7 @@ internal class AndroidLyricsLanguage(
                 val told = (classifier() ?: return@withContext null).detectLanguage(TextLanguage.Request.Builder(text).build())
                 if (told.localeHypothesisCount == 0) return@withContext null
                 val locale = told.getLocale(0)
-                code(locale.language).takeIf { told.getConfidenceScore(locale) >= SURE }
+                tagOf(locale.language, locale.script, text).takeIf { told.getConfidenceScore(locale) >= SURE }
             } catch (_: RuntimeException) {
                 null
             }
@@ -48,8 +48,23 @@ internal class AndroidLyricsLanguage(
     }
 }
 
-/** [language] as [AppLanguage.untranslatedTags] has it, rather than Java's old code for it, e.g. "in" for Indonesian. */
-internal fun code(language: String): String = when (language) {
+/**
+ * [language], written in [script] when told, as [AppLanguage.untranslatedTags] has it: by its own
+ * code rather than Java's old one, e.g. "in" for Indonesian, and Chinese by how [text] is written.
+ */
+internal fun tagOf(language: String, script: String, text: String): String = when (language) {
     "in" -> "id"
+    "zh" -> if (script == "Hant" || script.isEmpty() && traditional(text)) "zh-TW" else "zh-CN"
     else -> language
 }
+
+/**
+ * Whether Chinese [text] is written in traditional characters, as in Taiwan and Hong Kong, rather
+ * than simplified ones: by the common characters each writes its own way, e.g. 這 rather than 这.
+ */
+private fun traditional(text: String): Boolean =
+    text.count { it in TRADITIONAL } > text.count { it in SIMPLIFIED }
+
+/** Common characters written one way in simplified Chinese and another in traditional, each beside its other. */
+private const val SIMPLIFIED = "们这说时国来对会过还发么问为门开关见长东车书学买卖听话语网电写飞爱经现让应头员边气马鸟龙梦泪恋"
+private const val TRADITIONAL = "們這說時國來對會過還發麼問為門開關見長東車書學買賣聽話語網電寫飛愛經現讓應頭員邊氣馬鳥龍夢淚戀"

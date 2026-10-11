@@ -1862,8 +1862,7 @@ class ListeningTest {
     fun theLineSheetShowsJapaneseWithItsReadingsOverItAndItsWordsToTap() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")
-        learnMenu()
-        click(string(R.string.lyrics_readings))
+        // Readings are on from the start.
         waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
         composeRule.onAllNodes(hasText("夜空に星が")).onFirst().performTouchInput { longClick() }
         composeRule.waitForIdle()
@@ -2075,12 +2074,11 @@ class ListeningTest {
     fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")
-        learnMenu()
-        click(string(R.string.lyrics_readings))
+        // Readings are on from the start.
         waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
         // Each line laid out as a whole, the kana after a kanji as written.
         assertTrue(shown("食べる") && readingShown("た"))
-        assertTrue(prefs().getBoolean("lyrics_readings", false))
+        learnMenu()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
         click(string(R.string.lyrics_translation))
@@ -2105,6 +2103,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(readingShown("よぞら"))
         assertFalse(shown("[食べる]"))
+        assertFalse(prefs().getBoolean("lyrics_readings", true))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
     }
 
