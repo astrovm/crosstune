@@ -3057,9 +3057,9 @@ class MainActivityTest {
         assertTextShown(string(R.string.chatgpt_continue))
         waitUntil { ChatGpt.REVOKE_URL in fake.requestedUrls }
 
-        // Signed in again, it isn't said again.
+        // Signed in again, afresh, it isn't said again.
         startSigningIn()
-        thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}") }
+        thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}&client_id=oaiapp_1") }
         waitUntil { composeRule.onAllNodesWithText(FakeOpenAi.EMAIL).fetchSemanticsNodes().isNotEmpty() }
         assertTextAbsent(string(R.string.chatgpt_welcome_title))
     }

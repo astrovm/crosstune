@@ -768,8 +768,10 @@ internal class ExactMatcher(
     private fun matches(metadata: MusicMetadata, name: String, artist: String, album: String = ""): Boolean {
         if (!SongNames.sameVersion(metadata.title, name, album)) return false
         if (metadata.type == ItemType.ARTIST) return true
+        // With no artist to check, e.g. a Google link that only names the song, any song of that name
+        // would do, so none is taken for it: it's searched for instead.
         val wanted = SongNames.artists(metadata.artist)
-        return wanted.isEmpty() || SongNames.artists(artist).any(wanted::contains)
+        return SongNames.artists(artist).any(wanted::contains)
     }
 
     private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean =

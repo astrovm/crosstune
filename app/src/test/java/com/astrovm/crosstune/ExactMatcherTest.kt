@@ -183,12 +183,13 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
         assertNull(runBlocking { matcher().find(MusicService.DEEZER, song) })
 
-        // Titles alone are enough when Spotify gave no artist.
+        // A title alone, e.g. from a Google link that names only the song, could be anyone's song of
+        // that name, so it's searched for instead.
         respond("""{"data":[{"title":"Beyoncé Song","artist":{"name":"Anyone"},"link":"https://www.deezer.com/track/9"}]}""")
-        assertEquals(
-            "https://www.deezer.com/track/9",
-            runBlocking { matcher().find(MusicService.DEEZER, song.copy(artist = "")) }
-        )
+        assertNull(runBlocking { matcher().find(MusicService.DEEZER, song.copy(artist = "")) })
+        // An artist is still found by name alone.
+        respond("""{"data":[{"name":"Beyoncé Song","link":"https://www.deezer.com/artist/9"}]}""")
+        assertEquals("https://www.deezer.com/artist/9", runBlocking { matcher().find(MusicService.DEEZER, MusicMetadata("Beyoncé Song", "", ItemType.ARTIST)) })
     }
 
     @Test
