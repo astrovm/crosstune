@@ -306,7 +306,6 @@
     <string name="lyrics_about_artist">O wykonawcy</string>
     <string name="lyrics_about_artist_failed">Nie udało się dowiedzieć niczego o wykonawcy.</string>
     <string name="lyrics_songs_like">Podobne utwory</string>
-    <string name="lyrics_literal">Słowo w słowo</string>
     <string name="lyrics_blanks">Uzupełnij luki</string>
     <string name="lyrics_examples">Przykłady</string>
     <string name="lyrics_examples_failed">Nie udało się napisać przykładów.</string>

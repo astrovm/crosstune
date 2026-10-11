@@ -16,20 +16,12 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      * [lines] in [language], translated together as the song they are, each line's translation, or
      * null where there's nothing to translate; null for all of them when it couldn't be done.
      */
-    suspend fun translate(
-        lines: List<String>,
-        language: String,
-        song: MusicMetadata? = null,
-        /** Word for word, keeping the original's order, rather than as it would naturally be said. */
-        literal: Boolean = false,
-        onLines: (List<String?>) -> Unit = {}
-    ): List<String?>? {
+    suspend fun translate(lines: List<String>, language: String, song: MusicMetadata? = null, onLines: (List<String?>) -> Unit = {}): List<String?>? {
         val words = lines.filter { line -> line.any(Char::isLetter) }.distinct()
         // Each model's own, so picking another translates anew.
         val model = chatGpt.model() ?: return null
         // Kept for [song]: the same line in another song may mean something else there.
-        val kind = if (literal) "literal" else "translation"
-        val key = { line: String -> "$kind|$model|$language|${song?.title}|${song?.artist}|$line" }
+        val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val kept = known.filterValues { it != null }.mapValues { it.value!! }
@@ -40,15 +32,9 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         } else {
             val name = nameOf(language)
             // Tried on real songs: thinking less, the first line comes in 1.5 s rather than 5, as good.
-            // Tried on real songs with GPT-6-Luna: word for word, Plastic Love's 恋のプログラムを 狂わせないでね
-            // came as "No me hagas fallar el programa del amor", against "No desarmes mi plan para el amor".
-            val how = if (literal) {
-                "Translate each line as literally as reads in $name: keep the original's word order and each word's own meaning, even where it reads awkwardly, rather than a natural rewording. "
-            } else {
-                "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. "
-            }
             val reply = chatGpt.ask(
-                "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " + how +
+                "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " +
+                    "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
                     "Reply with only a JSON array of strings, the same length and in the same order, one translation for each line. " +
                     "A line already in $name stays as it is.",
                 JSONArray(missing).toString(),

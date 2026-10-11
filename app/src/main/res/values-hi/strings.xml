@@ -306,7 +306,6 @@
     <string name="lyrics_about_artist">कलाकार के बारे में</string>
     <string name="lyrics_about_artist_failed">कलाकार के बारे में पता नहीं चला।</string>
     <string name="lyrics_songs_like">ऐसे ही गाने</string>
-    <string name="lyrics_literal">शब्दशः</string>
     <string name="lyrics_blanks">खाली जगह भरें</string>
     <string name="lyrics_examples">उदाहरण</string>
     <string name="lyrics_examples_failed">उदाहरण नहीं लिखे जा सके।</string>

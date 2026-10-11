@@ -1201,7 +1201,6 @@ class ListeningTest {
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
                 "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
-                "word order" in instructions -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "‹${lines.getString(it)}›" }) }.toString())
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
                 "You make a quiz" in instructions -> FakeOpenAi.stream("[\"Day sky\", \"Night rain\"]")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
@@ -1710,19 +1709,6 @@ class ListeningTest {
         assertTrue(shown("El cielo es azul."))
     }
 
-    @Test
-    fun wordForWordIsAChatGptTranslationOfItsOwn() {
-        prefs().edit().putBoolean("lyrics_translation", true).commit()
-        val openAi = signedInWithChatGpt()
-        wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
-        learnMenu()
-        click(string(R.string.lyrics_literal))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("‹Stars›") }
-        assertTrue(prefs().getBoolean("translation_literal", false))
-        click(string(R.string.lyrics_literal))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
-    }
 
     @Test
     fun songsLikeOneAreAPlaylistOfThoseInTheCatalogue() {

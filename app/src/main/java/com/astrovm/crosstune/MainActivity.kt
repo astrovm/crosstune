@@ -317,7 +317,6 @@ class MainActivity : ComponentActivity() {
                         onAskAboutLine = viewModel::askAboutLine,
                         onExplainSong = viewModel::explainSong,
                         onAskAboutSong = viewModel::askAboutSong,
-                        onLiteralChange = viewModel::setLiteral,
                         onBlanksChange = viewModel::setBlanks,
                         onFindWordsToKnow = viewModel::findWordsToKnow,
                         onToggleSavedWord = viewModel::toggleSavedWord,

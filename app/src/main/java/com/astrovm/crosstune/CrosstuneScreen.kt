@@ -222,8 +222,6 @@ internal data class ScreenActions(
     val onExplainSong: () -> Unit = {},
     /** Asks ChatGPT a question about the whole song. */
     val onAskAboutSong: (String) -> Unit = {},
-    /** ChatGPT translates word for word, or as it would naturally be said. */
-    val onLiteralChange: (Boolean) -> Unit = {},
     /** A word of each line left blank to listen for, or none. */
     val onBlanksChange: (Boolean) -> Unit = {},
     val onFindWordsToKnow: () -> Unit = {},

@@ -324,8 +324,6 @@ internal data class Learning(
     /** Questions asked about line [questionsAbout], in order, with their answers. */
     val questionsAbout: Int? = null,
     val questions: List<LineQuestion> = emptyList(),
-    /** Translated word for word by ChatGPT, rather than as it would naturally be said. */
-    val literal: Boolean = false,
     /** Signed in, one word of each line left blank, to listen for, until it's sung. */
     val blanks: Boolean = false,
     /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
@@ -342,7 +340,7 @@ internal data class Learning(
     val examples: LineExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, literal = literal, blanks = blanks)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, blanks = blanks)
 }
 
 /** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
@@ -444,7 +442,6 @@ internal class MainViewModel(
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
-                literal = preferences.getBoolean(KEY_TRANSLATION_LITERAL, false),
                 blanks = preferences.getBoolean(KEY_BLANKS, false)
             ),
             floating = FloatingOptions(
@@ -1989,7 +1986,7 @@ internal class MainViewModel(
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
                     if (usesChatGpt() && learning.chatGptTranslation) {
-                        tutor?.translate(lines, language, uiState.lyricsFor, learning.literal) { so ->
+                        tutor?.translate(lines, language, uiState.lyricsFor) { so ->
                             // Shown line by line as they come, while it's still translating these words.
                             viewModelScope.launch {
                                 if (uiState.learning.translating && wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(translations = so))
@@ -2023,15 +2020,6 @@ internal class MainViewModel(
     fun setTranslation(on: Boolean) {
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
-        learn()
-    }
-
-    /** Translates word for word with ChatGPT, or as it would naturally be said, from now on. */
-    fun setLiteral(on: Boolean) {
-        preferences.edit { putBoolean(KEY_TRANSLATION_LITERAL, on) }
-        // One kind of translation is no answer for the other.
-        translationJob?.cancel()
-        uiState = uiState.copy(learning = uiState.learning.copy(literal = on, translations = emptyList(), translating = false, translationFailed = false))
         learn()
     }
 
@@ -2460,7 +2448,6 @@ internal class MainViewModel(
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
-        private const val KEY_TRANSLATION_LITERAL = "translation_literal"
         private const val KEY_BLANKS = "lyrics_blanks"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
 

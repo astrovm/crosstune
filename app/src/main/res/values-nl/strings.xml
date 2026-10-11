@@ -306,7 +306,6 @@
     <string name="lyrics_about_artist">Over de artiest</string>
     <string name="lyrics_about_artist_failed">Kon niets over de artiest vinden.</string>
     <string name="lyrics_songs_like">Vergelijkbare nummers</string>
-    <string name="lyrics_literal">Woord voor woord</string>
     <string name="lyrics_blanks">Vul de gaten in</string>
     <string name="lyrics_examples">Voorbeelden</string>
     <string name="lyrics_examples_failed">Kon geen voorbeelden schrijven.</string>

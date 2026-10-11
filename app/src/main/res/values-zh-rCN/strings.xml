@@ -306,7 +306,6 @@
     <string name="lyrics_about_artist">关于艺人</string>
     <string name="lyrics_about_artist_failed">查不到这位艺人的资料。</string>
     <string name="lyrics_songs_like">相似歌曲</string>
-    <string name="lyrics_literal">逐字翻译</string>
     <string name="lyrics_blanks">填空</string>
     <string name="lyrics_examples">例句</string>
     <string name="lyrics_examples_failed">写不出例句。</string>

@@ -306,7 +306,6 @@
     <string name="lyrics_about_artist">아티스트 정보</string>
     <string name="lyrics_about_artist_failed">아티스트 정보를 찾지 못했어요.</string>
     <string name="lyrics_songs_like">비슷한 노래</string>
-    <string name="lyrics_literal">직역</string>
     <string name="lyrics_blanks">빈칸 채우기</string>
     <string name="lyrics_examples">예문</string>
     <string name="lyrics_examples_failed">예문을 쓰지 못했어요.</string>

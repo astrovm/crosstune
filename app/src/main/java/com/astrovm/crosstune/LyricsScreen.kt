@@ -508,8 +508,7 @@ private fun LearnMenu(
         }
         if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-        // Only ChatGPT translates word for word, and picks the words to leave blank.
-        if (signedIn && learning.translation && learning.chatGptTranslation) LearnItem(R.string.lyrics_literal, learning.literal, actions.onLiteralChange)
+        // Only ChatGPT picks the words to leave blank.
         if (signedIn) LearnItem(R.string.lyrics_blanks, learning.blanks, actions.onBlanksChange)
         if (anySaved) {
             HorizontalDivider()

@@ -874,17 +874,4 @@ class ChatGptTest {
         assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
     }
 
-    @Test
-    fun wordForWordIsAskedAndKeptApartFromTheNaturalTranslation() {
-        val tutor = tutor()
-        answering("[\"Me hagas fallar el programa del amor\"]")
-        assertEquals(listOf("Me hagas fallar el programa del amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es", literal = true) })
-        assertTrue(openAi.asked.single().getString("instructions").contains("keep the original's word order"))
-        // The natural one is another answer, asked for on its own.
-        answering("[\"No desarmes mi plan para el amor\"]")
-        assertEquals(listOf("No desarmes mi plan para el amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es") })
-        assertTrue(openAi.asked.last().getString("instructions").contains("reads naturally"))
-        assertEquals(listOf("Me hagas fallar el programa del amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es", literal = true) })
-        assertEquals(2, openAi.asked.size)
-    }
 }
