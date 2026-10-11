@@ -283,7 +283,7 @@ internal class LyricsFinder(
                 try {
                     // No list at all means it wouldn't answer, which is not a song without words.
                     val answers = answersFor(metadata) ?: return@withTimeoutOrNull Lyrics.Unavailable
-                    wordsOf(answers, metadata) ?: Lyrics.None
+                    wordsOf(answers, metadata, timeoutMs) ?: Lyrics.None
                 } catch (_: IOException) {
                     Lyrics.Unavailable
                 } catch (_: JSONException) {
@@ -295,10 +295,17 @@ internal class LyricsFinder(
         return Lyrics.Unavailable
     }
 
-    private fun wordsOf(answers: List<Answer>, metadata: MusicMetadata): Lyrics.Found? {
+    private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
-        val songs = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        // Timed copies of different lengths are different takes, e.g. a live one named the same, so
+        // the one as long as the song comes first: as the app playing it or its service says, or
+        // else the iTunes Store, asked only then.
+        val lengths = named.filter { it.synced().isNotEmpty() }.mapNotNull { it.lengthMs() }
+        val takes = lengths.isNotEmpty() && lengths.max() - lengths.min() > SAME_LENGTH_MS
+        val lengthMs = metadata.lengthMs ?: if (takes) withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs else null
+        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length) > SAME_LENGTH_MS } ?: true } } ?: named
         val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
@@ -520,6 +527,9 @@ internal class LyricsFinder(
 
         /** How much longer or shorter another copy's recording can be and still be the same take, remastered or not. */
         const val SAME_TAKE_LENGTH_MS = 15_000L
+
+        /** How far apart two copies of the same take of a song may be in length. */
+        const val SAME_LENGTH_MS = 3_000L
 
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L

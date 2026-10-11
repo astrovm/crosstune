@@ -151,10 +151,11 @@ internal class MediaSessionPlayback(
         if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
         // With no album it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is. A music app's "Song - Remastered" stays whole.
+        // A song's length tells its versions apart; a video's is the video's, which may open with more.
         val named = if (metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()) {
             MetadataParsers.youtubeVideo(title, artist) ?: return null
         } else {
-            MusicMetadata(title, artist)
+            MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }

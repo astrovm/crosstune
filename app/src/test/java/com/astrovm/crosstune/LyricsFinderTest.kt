@@ -47,6 +47,36 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsTheSongIsTaken() {
+        fun copy(words: String, seconds: Int) =
+            """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""
+        val copies = "[${copy("Live", 312)},${copy("Studio", 245)}]"
+        var storeLength = 0
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com") {
+                FakeSpotify.html(request, """{"results":[{"trackId":1,"trackName":"Song","artistName":"Band","trackTimeMillis":$storeLength}]}""")
+            } else {
+                FakeSpotify.html(request, copies)
+            }
+        }
+        // As long as the app playing it says, give or take.
+        assertEquals("Studio", words(MusicMetadata("Song", "Band", lengthMs = 246_500)))
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 311_000)))
+        // Not said, the iTunes Store is asked how long it is, only because the copies differ.
+        storeLength = 245_300
+        fake.requestedUrls.clear()
+        assertEquals("Studio", words(MusicMetadata("Song", "Band")))
+        assertTrue(fake.requestedUrls.any { "itunes.apple.com" in it })
+        // None that long, the first timed one is taken, as before.
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 100_000)))
+        // Copies about as long as each other are the same take, so nothing's asked.
+        fake.handler = { request -> FakeSpotify.html(request, "[${copy("One", 245)},${copy("Two", 247)}]") }
+        fake.requestedUrls.clear()
+        assertEquals("One", words(MusicMetadata("Song", "Band")))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
+    }
+
+    @Test
     fun theWordsOfAnotherSongAreNeverTaken() {
         // Someone else's song of the same name is no use at all.
         val namesakes = listOf(

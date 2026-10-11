@@ -17,7 +17,9 @@ internal data class MusicMetadata(
     /** A playlist's song on its own service, which some covers are looked up by. */
     val url: String? = null,
     /** How many songs a playlist has, when its service says and lists fewer of them. */
-    val trackCount: Int? = null
+    val trackCount: Int? = null,
+    /** How long a song lasts, when its service or the app playing it says, to tell its versions apart. */
+    val lengthMs: Long? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
@@ -156,7 +158,7 @@ internal object MetadataParsers {
         // The lookup only offers small sizes, but the image server renders any size in the path.
         val artwork = result.optString("artworkUrl100").replace("/100x100bb.", "/600x600bb.").ifBlank { null }
         return when (type) {
-            ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type, artwork)
+            ItemType.TRACK -> MusicMetadata(result.optString("trackName"), artist, type, artwork, lengthMs = result.optLong("trackTimeMillis").takeIf { it > 0 })
             // Albums are looked up with their songs, which follow the album in the results.
             ItemType.ALBUM -> MusicMetadata(
                 result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork,
@@ -233,7 +235,8 @@ internal object MetadataParsers {
         // An album's or playlist's object lists its songs, up to a few hundred.
         val tracks = json.optJSONObject("tracks")?.optJSONArray("data")?.let(::deezerTracks).orEmpty()
         val count = json.optInt("nb_tracks").takeIf { it > tracks.size }
-        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count).takeIf { title.isNotBlank() }
+        val lengthMs = json.optLong("duration").takeIf { type == ItemType.TRACK && it > 0 }?.times(1000)
+        return MusicMetadata(title, artist, type, artwork, tracks, trackCount = count, lengthMs = lengthMs).takeIf { title.isNotBlank() }
     }
 
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->

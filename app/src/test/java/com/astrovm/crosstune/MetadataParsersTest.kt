@@ -116,6 +116,8 @@ class MetadataParsersTest {
             """{"results":[{"trackName":"Cut To The Feeling","collectionName":"Cut To The Feeling - Single","artistName":"Carly Rae Jepsen"}]}"""
         )
         assertEquals(MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen"), MetadataParsers.appleMusic(lookup, ItemType.TRACK))
+        val timed = json("""{"results":[{"trackName":"Cut To The Feeling","artistName":"Carly Rae Jepsen","trackTimeMillis":207959}]}""")
+        assertEquals(207_959L, MetadataParsers.appleMusic(timed, ItemType.TRACK)?.lengthMs)
         assertEquals(
             MusicMetadata("Cut To The Feeling", "Carly Rae Jepsen", ItemType.ALBUM),
             MetadataParsers.appleMusic(lookup, ItemType.ALBUM)
@@ -142,6 +144,9 @@ class MetadataParsersTest {
     fun deezerObjectsAndErrors() {
         val track = json("""{"title":"Blinding Lights","artist":{"name":"The Weeknd"}}""")
         assertEquals(MusicMetadata("Blinding Lights", "The Weeknd"), MetadataParsers.deezer(track, ItemType.TRACK))
+        // A song says how long it is, in seconds; an album's length isn't a song's.
+        assertEquals(200_000L, MetadataParsers.deezer(json("""{"title":"Blinding Lights","duration":200,"artist":{"name":"The Weeknd"}}"""), ItemType.TRACK)?.lengthMs)
+        assertNull(MetadataParsers.deezer(json("""{"title":"After Hours","duration":3360,"artist":{"name":"The Weeknd"}}"""), ItemType.ALBUM)?.lengthMs)
         assertEquals(
             MusicMetadata("The Weeknd", "", ItemType.ARTIST),
             MetadataParsers.deezer(json("""{"name":"The Weeknd"}"""), ItemType.ARTIST)
