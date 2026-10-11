@@ -1799,6 +1799,44 @@ class ListeningTest {
     }
 
     @Test
+    fun theNextSongsChordsAreLookedUpThoughTheLastOneHadNone() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        val words = fake.handler
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "")
+                // Only Other has chords.
+                "www.ultimate-guitar.com" -> FakeSpotify.html(
+                    request,
+                    if ("Other" in request.url.queryParameter("value").orEmpty()) {
+                        page("""{"results":[{"song_name":"Other","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/other-1"}]}""")
+                    } else {
+                        page("""{"results":[]}""")
+                    }
+                )
+                "tabs.ultimate-guitar.com" -> FakeSpotify.html(request, page("""{"tab_view":{"wiki_tab":{"content":"[ch]G[/ch]\nOther one\n[ch]C[/ch]\nOther two\n[ch]D[/ch]\nOther three"}}}"""))
+                else -> words(request)
+            }
+        }
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitForText(string(R.string.lyrics_chords_none))
+        hearing.song("Other", 3.0)
+        waitUntil(TIMEOUT_MS) { chordsOver("Other one") == listOf("G") }
+        assertFalse(shown(string(R.string.lyrics_chords_none)))
+    }
+
+    @Test
     fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")

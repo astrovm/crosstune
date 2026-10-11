@@ -73,6 +73,18 @@ class ChordSheetsTest {
             ),
             ChordSheets.place(sheet, texts)
         )
+        // A line the sheet splits in two: chords played between the halves go before the line, not into the gap filled already.
+        val split = sheet(
+            SheetLine("Walk down the river road", emptyList()),
+            SheetLine("", listOf(Chord(0, "Am"))),
+            SheetLine("Singing to the", emptyList()),
+            SheetLine("", listOf(Chord(0, "F"))),
+            SheetLine("morning light", listOf(Chord(0, "C")))
+        )
+        assertEquals(
+            listOf(LineChords(), LineChords(listOf("Am")), LineChords(listOf("F"), listOf(Chord(15, "C")))),
+            ChordSheets.place(split, listOf("Walk down the river road", "", "Singing to the morning light"))
+        )
         assertEquals(true, LineChords().isEmpty)
         assertEquals(false, LineChords(listOf("Am")).isEmpty)
         assertEquals(false, LineChords(over = listOf(Chord(0, "Am"))).isEmpty)
@@ -86,12 +98,20 @@ class ChordSheetsTest {
         // Full-width letters are the same letters.
         val wide = sheet(SheetLine("Ｗａｌｋｉｎｇ ｈｏｍｅ ａｇａｉｎ", listOf(Chord(8, "C"))))
         assertEquals(listOf(LineChords(over = listOf(Chord(8, "C")))), ChordSheets.place(wide, listOf("walking home again")))
+        // Letters the words shown don't have at the end of a line: its chord stays on that line, on its last letter.
+        val extra = sheet(SheetLine("Walking home xyzqv", listOf(Chord(17, "G"))))
+        assertEquals(
+            listOf(LineChords(over = listOf(Chord(11, "G"))), LineChords()),
+            ChordSheets.place(extra, listOf("Walking home", "Big fat cat"))
+        )
     }
 
     @Test
     fun aSheetForOtherWordsIsntPlaced() {
         val sheet = sheet(SheetLine("Walking down the river road", listOf(Chord(0, "G"))))
         assertNull(ChordSheets.place(sheet, listOf("Nothing like it at all, honestly")))
+        // Ten letters are enough to tell.
+        assertEquals(listOf(LineChords(over = listOf(Chord(0, "G")))), ChordSheets.place(sheet(SheetLine("Hello world", listOf(Chord(0, "G")))), listOf("Hello world")))
         // Too few letters to tell, no words shown, or too many to line up.
         assertNull(ChordSheets.place(sheet(SheetLine("Hi you", listOf(Chord(0, "G")))), listOf("Hi you")))
         assertNull(ChordSheets.place(sheet, emptyList()))
@@ -107,6 +127,8 @@ class ChordSheetsTest {
         // Two letters into the last word, two fifths of the way to the next line.
         assertEquals(11_800L, ChordSheets.timeOf(byWord, 6, 13_000))
         assertEquals(13_000L, ChordSheets.timeOf(byWord, 99, 13_000))
+        // Past the words timed, as for a mark after the last one: at the end of the last word.
+        assertEquals(13_000L, ChordSheets.timeOf(byWord.copy(text = "Two words!"), 9, 13_000))
         // A line timed as a whole: that far through it, up to the next line, or a moment a letter.
         val whole = LyricLine(10_000, "abcd")
         assertEquals(12_000L, ChordSheets.timeOf(whole, 2, 14_000))
@@ -115,6 +137,7 @@ class ChordSheetsTest {
 
         val chords = listOf(Chord(0, "G"), Chord(4, "D"))
         assertEquals(-1, ChordSheets.playing(byWord, chords, 13_000, 9_000))
+        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_000))
         assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_500))
         assertEquals(1, ChordSheets.playing(byWord, chords, 13_000, 11_500))
     }

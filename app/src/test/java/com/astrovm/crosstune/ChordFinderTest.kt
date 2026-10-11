@@ -88,6 +88,8 @@ class ChordFinderTest {
         val search = fake.requestedUrls.first()
         assertTrue(search, search.startsWith("https://www.ultimate-guitar.com/search.php?search_type=title&value=River%20Road%20The%20Walkers"))
         assertTrue(fake.requestHeaders.any { (name, value) -> name == "User-Agent" && "Macintosh" in value })
+        // The most voted for was looked at first.
+        assertEquals(listOf("https://tabs.ultimate-guitar.com/tab/most-1", "https://tabs.ultimate-guitar.com/tab/few-1"), fake.requestedUrls.filter { "/tab/" in it })
         // A page saying no capo is played without one.
         fake.handler = { request ->
             answer(
