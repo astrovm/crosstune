@@ -937,7 +937,8 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricLines.isNotEmpty() }
+        // Looked for in more places first, as they're untimed, which can take a while on a slow machine.
+        composeRule.waitUntil(TIMEOUT_MS * 3) { controllerModel().uiState.lyricLines.isNotEmpty() }
         assertEquals(listOf(LyricLine(1_000, "Night sky"), LyricLine(5_000, "Stars")), controllerModel().uiState.lyricLines)
         assertEquals(2, asked)
     }

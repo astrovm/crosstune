@@ -782,9 +782,13 @@ class LyricsFinderTest {
         remixTimedEarly(*copies, storeSeconds = 318.483)
         val file = File.createTempFile("lyrics", ".json").apply { delete() }
         val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
-        // First as found, to show at once, not yet kept.
+        // First as found, to show at once.
         val first = runBlocking { finder.firstLook(remix) }
         assertEquals(LyricsFinder.FirstLook(Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early)), final = false), first)
+        // Kept at once as they are, so they show again with no lookup, still to be timed.
+        val asked = fake.requestedUrls.size
+        assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) })
+        assertEquals(asked, fake.requestedUrls.size)
         // Then timed as the copies agree, and kept that way.
         val better = runBlocking { finder.retimed(remix, first.lyrics) } as Lyrics.Found
         better.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }

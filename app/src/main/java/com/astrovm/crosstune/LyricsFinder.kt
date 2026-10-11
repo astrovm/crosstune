@@ -84,8 +84,14 @@ internal class LyricsFinder(
     suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { return FirstLook(it, final = true) } }
-        return FirstLook(withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable, final = false)
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(words, final = !provisional) } }
+        val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
+        // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
+        cache?.let { cache ->
+            toCache(found, provisional = true)?.let { cache.put(cacheKey(metadata), it) }
+            cache.save()
+        }
+        return FirstLook(found, final = false)
     }
 
     /**
@@ -188,22 +194,24 @@ internal class LyricsFinder(
         else -> Lyrics.Unavailable
     }
 
-    /** Words as kept: the plain words and each timed line. */
-    private fun toCache(answer: Lyrics): String? = (answer as? Lyrics.Found)?.let { found ->
+    /** Words as kept: the plain words and each timed line, and whether they're still to be timed better. */
+    private fun toCache(answer: Lyrics, provisional: Boolean = false): String? = (answer as? Lyrics.Found)?.let { found ->
         JSONObject()
             .put("words", found.words)
+            .apply { if (provisional) put("provisional", true) }
             .put("lines", JSONArray().apply { found.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
             .toString()
     }
 
-    private fun fromCache(kept: String): Lyrics? {
+    /** Words kept, and whether they're still to be timed better. */
+    private fun fromCache(kept: String): Pair<Lyrics.Found, Boolean>? {
         // "None", as earlier versions kept, isn't words, so it's asked again.
         return try {
             val json = JSONObject(kept)
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> list.getJSONArray(index).let { LyricLine(it.getLong(0), it.getString(1)) } }
             }
-            Lyrics.Found(json.getString("words"), lines)
+            Lyrics.Found(json.getString("words"), lines) to json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }
