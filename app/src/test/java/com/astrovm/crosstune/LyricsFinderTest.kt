@@ -38,8 +38,8 @@ class LyricsFinderTest {
     fun aSongGetsItsOwnWords() {
         respond("""[${answer("Dakare Ni Kita Onna", "Kingo Hamada", "夜が灯りを\n投げるBedで")}]""")
         assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで"), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
-        // LRCLIB first; the words have no timings, so other places are asked after.
-        val asked = fake.requestedUrls.first()
+        // LRCLIB is asked by title and artist; NetEase, asked at the same time, may come first.
+        val asked = fake.requestedUrls.first { it.startsWith("https://lrclib.net/") }
         assertEquals("https://lrclib.net/api/search?track_name=Dakare%20Ni%20Kita%20Onna&artist_name=Kingo%20Hamada", asked)
         // LRCLIB turns away a request that doesn't name itself, so it must say who and which version.
         val agent = fake.requestHeaders.first { it.first == "User-Agent" }.second
@@ -195,7 +195,7 @@ class LyricsFinderTest {
         // Busy for a few tries, then answering: the words still come.
         var busy = 3
         fake.handler = { request: Request ->
-            if (busy-- > 0) FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
+            if (request.url.host == "lrclib.net" && busy-- > 0) FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
             else FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
         }
         assertEquals("Words", words(MusicMetadata("Song", "Band")))
@@ -223,12 +223,12 @@ class LyricsFinderTest {
         // Asked again, in another case, it comes from what was kept, timings and all.
         fake.handler = { throw IOException("offline") }
         assertEquals(first, runBlocking { kept.lyricsOf(MusicMetadata("song", "BAND")) })
-        assertEquals(1, fake.requestedUrls.size)
+        assertEquals(1, askedBesidesNetEase())
 
         // Kept on disk too, so they're there after the app starts again.
         val again = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
         assertEquals(first, runBlocking { again.lyricsOf(MusicMetadata("Song", "Band")) })
-        assertEquals(1, fake.requestedUrls.size)
+        assertEquals(1, askedBesidesNetEase())
 
         // Neither a song without words nor one that couldn't be looked up is kept, so both are asked again.
         respond("[]")
@@ -311,6 +311,52 @@ class LyricsFinderTest {
         // The words of its own singer's recording, not the namesake's.
         assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") })
         assertEquals("https://music.163.com/", fake.requestHeaders.last { it.first == "Referer" }.second)
+    }
+
+    @Test
+    fun wordsNetEaseTimesWordByWordBeatOnesTimedALineAtATime() {
+        val timed = "[00:16.00] 五月雨は緑色\n[00:23.08] 悲しくさせたよ"
+        val byWord = "{\"t\":0,\"c\":[{\"tx\":\"作词: \"}]}\n[00:00.000] 作曲 : 村下孝蔵\n[16100,2000](16100,900,0)五月雨は(17000,800,0)緑色\n[23200,2000](23200,2000,0)悲しくさせたよ"
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${answer("Hatsukoi", "Hiroko Mita", "五月雨は緑色\n悲しくさせたよ", timed)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(timed)}},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val found = found(hatsukoi) as Lyrics.Found
+        assertEquals("五月雨は緑色\n悲しくさせたよ", found.words)
+        assertEquals(
+            listOf(
+                LyricLine(16_100, "五月雨は緑色", listOf(TimedWord(16_100, "五月雨は"), TimedWord(17_000, "緑色"))),
+                LyricLine(23_200, "悲しくさせたよ", listOf(TimedWord(23_200, "悲しくさせたよ")))
+            ),
+            found.lines
+        )
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") && "yv=1" in it })
+        // Without them, the line-timed words from LRCLIB are the ones.
+        val noWords = fake.handler
+        fake.handler = { request -> if (request.url.encodedPath == "/api/song/lyric") FakeSpotify.html(request, """{"lrc":{"lyric":${quote(timed)}}}""") else noWords(request) }
+        assertEquals(listOf(LyricLine(16_000, "五月雨は緑色"), LyricLine(23_080, "悲しくさせたよ")), (found(hatsukoi) as Lyrics.Found).lines)
+    }
+
+    @Test
+    fun wordsTimedWordByWordAreKeptSo() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val byWord = "[1000,900](1000,400,0)Hello (1400,500,0)world"
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"Song","artists":[{"name":"Band"}]}]}}""")
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        val first = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).lyricsOf(MusicMetadata("Song", "Band")) }
+        assertEquals(listOf(TimedWord(1_000, "Hello "), TimedWord(1_400, "world")), (first as Lyrics.Found).lines.single().words)
+        fake.handler = { throw IOException("offline") }
+        assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).lyricsOf(MusicMetadata("Song", "Band")) })
     }
 
     @Test
@@ -540,11 +586,14 @@ class LyricsFinderTest {
         fake.requestedUrls.clear()
         betterElsewhere(answer("Song", "Band", "First line", "[00:01.00] First line"), "[00:02.00]Other")
         assertEquals("First line", words(MusicMetadata("Song", "Band")))
-        assertEquals(1, fake.requestedUrls.size)
+        assertEquals(1, askedBesidesNetEase())
     }
 
 
     /** YouTube Music's lyrics page: [lines] as text to start time, or untimed where the time is null. */
+    /** Requests made, besides the NetEase ones asked for words timed word by word. */
+    private fun askedBesidesNetEase() = fake.requestedUrls.count { !it.startsWith("https://music.163.com/") }
+
     private fun youTubeMusicPage(vararg lines: Pair<String, Long?>): String {
         val data = lines.joinToString(",") { (text, start) ->
             val cue = start?.let { ""","cueRange":{"startTimeMilliseconds":"$it","endTimeMilliseconds":"0"}""" }.orEmpty()

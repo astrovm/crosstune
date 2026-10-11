@@ -199,7 +199,6 @@
     <string name="lyrics_title">बोल</string>
     <string name="lyrics_loading">बोल खोजे जा रहे हैं…</string>
     <string name="lyrics_none">इस गाने के बोल नहीं मिले।</string>
-    <string name="lyrics_failed">अभी बोल नहीं लाए जा सके।</string>
     <string name="lyrics_sync_service">Crosstune बोल सिंक</string>
     <string name="lyrics_follow_allow">बोल को अपने म्यूज़िक ऐप में चल रहे गाने के साथ चलने दें।</string>
     <string name="lyrics_following_app">%1$s के साथ चल रहे हैं</string>
@@ -267,6 +266,8 @@
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
+    <string name="lyrics_chords">कॉर्ड्स</string>
+    <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>
     <string name="translate_into_app_language">ऐप की भाषा</string>
     <string name="setting_translation_server">अनुवाद यहां से</string>

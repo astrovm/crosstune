@@ -105,7 +105,9 @@ class MainActivity : ComponentActivity() {
                         Translator.languageOf(AppLanguage.current(applicationContext)?.let(Locale::forLanguageTag) ?: Locale.getDefault())
                     },
                     chatGpt = chatGpt,
-                    tutor = tutor
+                    tutor = tutor,
+                    // Each song's chords are kept, so a song played again needs no lookup.
+                    chordFinder = ChordFinder(client, cache = LookupCache(File(cacheDir, "chords.json"), lookupDispatcher, maxEntries = 300))
                 )
             }
         }
@@ -350,6 +352,7 @@ class MainActivity : ComponentActivity() {
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
                         onTranslationChange = viewModel::setTranslation,
+                        onChordsChange = viewModel::setChords,
                         onRetryTranslation = viewModel::retryTranslation,
                         onToggleSavedLine = viewModel::toggleSavedLine,
                         onRemoveSavedLine = viewModel::removeSavedLine,

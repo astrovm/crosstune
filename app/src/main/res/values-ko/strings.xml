@@ -199,7 +199,6 @@
     <string name="lyrics_title">가사</string>
     <string name="lyrics_loading">가사를 찾는 중…</string>
     <string name="lyrics_none">이 노래의 가사를 찾지 못했습니다.</string>
-    <string name="lyrics_failed">지금은 가사를 가져올 수 없어요.</string>
     <string name="lyrics_sync_service">Crosstune 가사 동기화</string>
     <string name="lyrics_follow_allow">음악 앱에서 재생 중인 곡에 맞춰 가사가 흐르게 합니다.</string>
     <string name="lyrics_following_app">%1$s에 맞추는 중</string>
@@ -267,6 +266,8 @@
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
+    <string name="lyrics_chords">코드</string>
+    <string name="lyrics_capo">카포 %1$d</string>
     <string name="setting_translate_into">번역할 언어</string>
     <string name="translate_into_app_language">앱 언어</string>
     <string name="setting_translation_server">번역 제공</string>

@@ -1,0 +1,268 @@
+package com.astrovm.crosstune
+
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.coroutines.executeAsync
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.IOException
+
+/** A song in U-FRET's results: whether it's the easier version, its number, title and artist. */
+private val uFretResult = Regex(
+    """c-list__item (normal|beginner)-chord">\s*<a href="/song\.php\?data=(\d+)".*?c-list__title">(.*?)</p>\s*<p class="c-list__artist">(.*?)</p>""",
+    RegexOption.DOT_MATCHES_ALL
+)
+private val tags = Regex("<[^>]*>[^<]*</[^>]*>|<[^>]*>")
+private val uFretSheet = Regex("""var ufret_chord_datas = (\[.*?]);""")
+private val titleBreak = Regex(""" [-–—/] |／""")
+private val ugData = Regex("""class="js-store" data-content="([^"]*)"""")
+
+/**
+ * A song's chords, from the sites guitarists share them on: U-FRET, which has most Japanese songs,
+ * and Ultimate Guitar, which has most others. A sheet only counts when its words are the song's.
+ */
+internal class ChordFinder(
+    private val client: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Sheets found, so a song played again needs no lookup. */
+    private val cache: LookupCache? = null
+) {
+    /** A song's chords, or why there are none to show. */
+    sealed interface Chords {
+        data class Found(val sheet: ChordSheet) : Chords
+
+        /** Neither site has chords whose words are these. */
+        data object None : Chords
+
+        /** A site wouldn't answer, so there may still be some. */
+        data object Unavailable : Chords
+    }
+
+    /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
+    suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
+        val key = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return@withContext Chords.Found(it) } }
+        // Japanese words are likelier on U-FRET; any song may be on either.
+        val sites = if (texts.any(::japanese)) {
+            listOf(::fromUFret, ::fromUltimateGuitar)
+        } else {
+            listOf(::fromUltimateGuitar, ::fromUFret)
+        }
+        var unavailable = false
+        for (site in sites) {
+            val sheet = withTimeoutOrNull(timeoutMs) {
+                try {
+                    Result.success(site(song) { ChordSheets.place(it, texts) != null })
+                } catch (e: IOException) {
+                    Result.failure(e)
+                } catch (e: JSONException) {
+                    Result.failure(e)
+                }
+            }
+            if (sheet == null || sheet.isFailure) {
+                unavailable = true
+                continue
+            }
+            sheet.getOrNull()?.let { found ->
+                cache?.let {
+                    it.put(key, toCache(found))
+                    it.save()
+                }
+                return@withContext Chords.Found(found)
+            }
+        }
+        if (unavailable) Chords.Unavailable else Chords.None
+    }
+
+    /**
+     * U-FRET's first sheet for the song that [fits]. It only knows songs by their Japanese names, so
+     * a title in two, "プラスティック・ラブ - Plastic Love", is looked up by its Japanese one, and a
+     * song named in Latin letters by the names NetEase knows it by: "君は1000%" for "Kimi ha 1000%",
+     * "Lemon" by "米津玄師" for Kenshi Yonezu.
+     */
+    private suspend fun fromUFret(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        var netEase: OtherNames? = null
+        val otherNames = suspend { netEase ?: otherNames(song).also { netEase = it } }
+        val parts = titleParts(song.title).filter(::japanese)
+        searchUFret(song, "${song.title} ${song.artist}", song.title, otherNames, fits)?.let { return it }
+        for (name in parts) searchUFret(song, name, name, otherNames, fits)?.let { return it }
+        if (japanese(song.title) && japanese(song.artist)) return null
+        val names = otherNames()
+        val artist = names.artists.firstOrNull(::japanese)
+        for (name in (names.titles + song.title + parts).distinct().take(MAX_NAMES + 1)) {
+            searchUFret(song, listOfNotNull(name, artist).joinToString(" "), name, otherNames, fits)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * U-FRET's first sheet for [title] that [fits], searched for by [key]: by the artist first, then
+     * by others, and the song's own before one made easier to play. U-FRET may name the artist
+     * otherwise, in Japanese, so then by the names [otherNames] has for them.
+     */
+    private suspend fun searchUFret(song: MusicMetadata, key: String, title: String, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val search = U_FRET_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("key", key).build()
+        val found = uFretResult.findAll(fetch(search.toString())).map { it.destructured }
+            .filter { (_, _, named) -> SongNames.same(named.replace(tags, "").trim(), title) }.toList()
+        val artists = if (found.any { (_, _, _, artist) -> SongNames.sameArtist(artist.trim(), song.artist) } || japanese(song.artist)) {
+            listOf(song.artist)
+        } else {
+            listOf(song.artist) + otherNames().artists
+        }
+        val ids = found.map { (kind, id, _, artist) -> Triple(artists.none { SongNames.sameArtist(artist.trim(), it) }, kind == "beginner", id) }
+            .sortedWith(compareBy({ it.first }, { it.second })).map { it.third }.take(MAX_SHEETS)
+        for (id in ids) {
+            val url = "$U_FRET_SONG_URL$id"
+            val lines = uFretSheet.find(fetch(url))?.groupValues?.get(1) ?: continue
+            ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Ultimate Guitar's first chord sheet for the song that [fits]; a title in two, "プラスティック・ラブ
+     * - Plastic Love", is also looked up by its name in Latin letters.
+     */
+    private suspend fun fromUltimateGuitar(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        searchUltimateGuitar(song, song.title, fits)?.let { return it }
+        for (name in titleParts(song.title).filterNot(::japanese)) searchUltimateGuitar(song, name, fits)?.let { return it }
+        return null
+    }
+
+    /** Ultimate Guitar's first chord sheet for [title] that [fits]: by the artist first, those most voted for first. */
+    private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val search = UG_SEARCH_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("search_type", "title")
+            .addQueryParameter("value", "$title ${song.artist}")
+            .build()
+        val results = ugStore(fetch(search.toString()))?.optJSONObject("data")?.optJSONArray("results") ?: return null
+        val urls = (0 until results.length()).mapNotNull { results.optJSONObject(it) }
+            .filter { it.optString("type") == "Chords" && SongNames.wordsMatch(it.optString("song_name"), title) }
+            .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
+            .map { it.optString("tab_url") }.take(MAX_SHEETS)
+        for (url in urls) {
+            val view = ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: continue
+            val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
+                .takeIf(fits)?.let { return it }
+        }
+        return null
+    }
+
+    /** The other names [title] is in, when it's two put together, "プラスティック・ラブ - Plastic Love". */
+    private fun titleParts(title: String): List<String> =
+        title.split(titleBreak).map { it.trim() }.filter { it.length >= 2 && it != title }.distinct()
+
+    /** A song's names in Japanese, and its artists' names, as NetEase has them. */
+    private class OtherNames(val titles: List<String>, val artists: List<String>)
+
+    /**
+     * The names NetEase has [song] by: in Japanese, "君は1000%" for "Kimi ha 1000%", and of the
+     * artists of a song of its name, "竹内まりや" for Mariya Takeuchi, as it knows many by both.
+     */
+    private suspend fun otherNames(song: MusicMetadata): OtherNames {
+        val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("s", "${song.title} ${song.artist}")
+            .addQueryParameter("type", "1")
+            .addQueryParameter("limit", "10")
+            .build()
+        val list = JSONObject(fetch(search.toString(), NETEASE_REFERER)).optJSONObject("result")?.optJSONArray("songs")
+        val songs = (0 until (list?.length() ?: 0)).mapNotNull { list?.optJSONObject(it) }
+        val titles = songs.map { it.optString("name") }.filter(::japanese).distinct().take(MAX_NAMES)
+        val names = listOf(song.title) + titleParts(song.title)
+        val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
+            found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it)?.optString("name") } }.orEmpty()
+        }.distinct()
+        return OtherNames(titles, artists)
+    }
+
+    /** Whether [text] is written in Japanese, kana or kanji. */
+    private fun japanese(text: String) = text.any { it in '぀'..'ヿ' || it in '一'..'鿿' }
+
+    /** What Ultimate Guitar's page has for its app to show, written into the page. */
+    private fun ugStore(page: String): JSONObject? =
+        ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
+
+    private suspend fun fetch(url: String, referer: String? = null): String {
+        // Ultimate Guitar shows its search results only to a computer's browser.
+        val request = Request.Builder().url(url).header("User-Agent", BROWSER).apply { referer?.let { header("Referer", it) } }.get().build()
+        return client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) throw IOException("Chord site returned ${response.code}")
+            response.body.stringAtMost()
+        }
+    }
+
+    private fun toCache(sheet: ChordSheet): String = JSONObject()
+        .put("site", sheet.site.name)
+        .put("url", sheet.url)
+        .put("capo", sheet.capo)
+        .put("lines", JSONArray().apply {
+            sheet.lines.forEach { line ->
+                put(JSONArray().put(line.text).put(JSONArray().apply { line.chords.forEach { put(JSONArray().put(it.at).put(it.name)) } }))
+            }
+        })
+        .toString()
+
+    private fun fromCache(kept: String): ChordSheet? = try {
+        val json = JSONObject(kept)
+        val lines = json.getJSONArray("lines").let { list ->
+            (0 until list.length()).map { index ->
+                val line = list.getJSONArray(index)
+                val chords = line.getJSONArray(1).let { all -> (0 until all.length()).map { all.getJSONArray(it).let { chord -> Chord(chord.getInt(0), chord.getString(1)) } } }
+                SheetLine(line.getString(0), chords)
+            }
+        }
+        ChordSheet(lines, json.getInt("capo"), ChordSite.valueOf(json.getString("site")), json.getString("url"))
+    } catch (_: JSONException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    private companion object {
+        /** Per site; looking a song up by its other names takes a few more requests. */
+        const val TIMEOUT_MS = 20_000L
+
+        /** Sheets tried per site, as the first may be for another take of the song. */
+        const val MAX_SHEETS = 3
+
+        /** Japanese names tried for a song named in Latin letters. */
+        const val MAX_NAMES = 2
+
+        const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
+        const val NETEASE_REFERER = "https://music.163.com/"
+
+        const val U_FRET_SEARCH_URL = "https://www.ufret.jp/search.php"
+        const val U_FRET_SONG_URL = "https://www.ufret.jp/song.php?data="
+        const val UG_SEARCH_URL = "https://www.ultimate-guitar.com/search.php"
+        const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+        val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
+        val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ")
+
+        /** An HTML attribute's text as written, spaces and all, which [android.text.Html] would run together. */
+        fun unescape(text: String): String = entity.replace(text) { match ->
+            val name = match.groupValues[1]
+            when {
+                name.startsWith("#x") -> name.substring(2).toInt(16).let { String(Character.toChars(it)) }
+                name.startsWith("#") -> name.substring(1).toInt().let { String(Character.toChars(it)) }
+                else -> named[name] ?: htmlLetters[name] ?: match.value
+            }
+        }
+
+        /** The accented letters Ultimate Guitar writes by name, as in "Beyonc&eacute;". */
+        val htmlLetters: Map<String, String> = buildMap {
+            val accents = mapOf("acute" to '́', "grave" to '̀', "circ" to '̂', "tilde" to '̃', "uml" to '̈', "ring" to '̊', "cedil" to '̧')
+            for (letter in "aeiouyncAEIOUYNC") for ((accent, mark) in accents) {
+                val composed = java.text.Normalizer.normalize("$letter$mark", java.text.Normalizer.Form.NFC)
+                if (composed.length == 1) put("$letter$accent", composed)
+            }
+        }
+    }
+}

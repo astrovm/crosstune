@@ -199,7 +199,6 @@
     <string name="lyrics_title">歌词</string>
     <string name="lyrics_loading">正在查找歌词…</string>
     <string name="lyrics_none">没有找到这首歌的歌词。</string>
-    <string name="lyrics_failed">暂时无法获取歌词。</string>
     <string name="lyrics_sync_service">Crosstune 歌词同步</string>
     <string name="lyrics_follow_allow">让歌词跟随音乐应用中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟随 %1$s</string>
@@ -267,6 +266,8 @@
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_translation">翻译</string>
     <string name="lyrics_translation_failed">暂时无法翻译。</string>
+    <string name="lyrics_chords">和弦</string>
+    <string name="lyrics_capo">变调夹 %1$d</string>
     <string name="setting_translate_into">翻译成</string>
     <string name="translate_into_app_language">应用语言</string>
     <string name="setting_translation_server">翻译来源</string>

@@ -37,11 +37,11 @@ internal object BorrowedTimings {
     fun retime(lines: List<String>, sounds: List<String>, other: List<LyricLine>, otherSounds: List<String>): List<LyricLine>? {
         val a = sounds.joinToString("")
         val b = otherSounds.joinToString("")
-        if (a.isEmpty() || b.isEmpty() || a.length.toLong() * b.length > MAX_CELLS) return null
+        if (a.isEmpty() || b.isEmpty()) return null
         val starts = sounds.runningFold(0) { at, sound -> at + sound.length }
         val otherStarts = otherSounds.runningFold(0) { at, sound -> at + sound.length }
         // Where in the words each letter of the other copy lines up, where it does.
-        val matchedAt = lineUp(a, b)
+        val matchedAt = lineUp(a, b) ?: return null
         val anchors = mutableListOf<Pair<Int, Long>>()
         var good = 0
         other.indices.forEach { line ->
@@ -89,9 +89,10 @@ internal object BorrowedTimings {
 
     /**
      * For each letter of [b], the letter of [a] it lines up with when both are lined up as closely as
-     * they go, or -1 where it doesn't.
+     * they go, or -1 where it doesn't; null for words too long to line up.
      */
-    private fun lineUp(a: String, b: String): IntArray {
+    fun lineUp(a: String, b: String): IntArray? {
+        if (a.length.toLong() * b.length > MAX_CELLS) return null
         val n = a.length
         val m = b.length
         // How each cell was reached: 0 both letters, 1 a letter of [a] alone, 2 one of [b] alone.

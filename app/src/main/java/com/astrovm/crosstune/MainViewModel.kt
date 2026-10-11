@@ -115,6 +115,8 @@ internal data class UiState(
     val visualsSkips: Int = 0,
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
+    /** A song's chords over its words, while switched on. */
+    val chords: ChordsState = ChordsState(),
     /** Lines kept to study later, newest first. */
     val savedLines: List<SavedLine> = emptyList(),
     /** Saved lines being practised, while they are. */
@@ -300,6 +302,17 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val writing get() = !done && !failed && !limitReached
 }
 
+/** A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were found. */
+internal data class ChordsState(
+    val on: Boolean = false,
+    val loading: Boolean = false,
+    val tried: Boolean = false,
+    val sheet: ChordSheet? = null
+) {
+    /** For another song's words, or the same words written otherwise: switched on as it was, nothing looked up yet. */
+    fun fresh() = ChordsState(on = on)
+}
+
 /**
  * What's switched on to help read a song's words in another language: [readings] over them, kana
  * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
@@ -429,7 +442,9 @@ internal class MainViewModel(
     /** What the AI features ask ChatGPT, with that account. */
     private val tutor: ChatGptTutor? = null,
     /** The time of day, for when saved lines are next practised. */
-    private val wallClock: () -> Long = System::currentTimeMillis
+    private val wallClock: () -> Long = System::currentTimeMillis,
+    /** Where a song's chords come from; nullable so tests need no chord sites. */
+    private val chordFinder: ChordFinder? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -444,7 +459,8 @@ internal class MainViewModel(
 
     /** [lines] as they show: in Japanese when found in romaji and written so, timed as found. */
     private fun shown(lines: List<LyricLine>): List<LyricLine> =
-        japanese?.let { written -> lines.mapIndexed { index, line -> line.copy(text = written.getOrElse(index) { line.text }) } } ?: lines
+        // Written otherwise, the line's words are no longer the ones timed.
+        japanese?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
@@ -472,6 +488,7 @@ internal class MainViewModel(
             canFollowApps = playback?.hasAccess() == true,
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
+            chords = ChordsState(on = preferences.getBoolean(KEY_CHORDS, false)),
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, false),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
@@ -1301,7 +1318,7 @@ internal class MainViewModel(
         lyricsJob = viewModelScope.launch {
             var first: LyricsFinder.FirstLook? = null
             uiState = uiState.copy(
-                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
+                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
@@ -1317,6 +1334,7 @@ internal class MainViewModel(
                         )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
                         learn()
+                        chords()
                         // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
                         if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                     }
@@ -1526,6 +1544,13 @@ internal class MainViewModel(
         followJob = viewModelScope.launch {
             source.follow(song).collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
+                // The app stopped it, was closed or went on to another song: the words stop where it left
+                // them, rather than run on from where the song was heard before, until it's heard again.
+                val left = inSong(appFollowing)?.clock
+                if (playing == null && left != null) {
+                    heardSong = song
+                    heardClock = PlaybackClock(left.positionAt(now()), now(), playing = false)
+                }
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
@@ -1690,9 +1715,11 @@ internal class MainViewModel(
             uiState = uiState.copy(
                 lyrics = written.joinToString("\n"),
                 lyricLines = shown(uiState.lyricLines),
-                learning = uiState.learning.fresh(Readings.scriptOf(written)).copy(fromRomaji = true)
+                learning = uiState.learning.fresh(Readings.scriptOf(written)).copy(fromRomaji = true),
+                chords = uiState.chords.fresh()
             )
             learn()
+            chords()
         }
     }
 
@@ -1706,7 +1733,7 @@ internal class MainViewModel(
         askedForAccess = false
         uiState = uiState.copy(
             lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
-            learning = uiState.learning.fresh()
+            learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
     }
 
@@ -1715,6 +1742,7 @@ internal class MainViewModel(
 
     /** What was being worked out is for words no longer shown. */
     private fun stopLearning() {
+        chordsJob?.cancel()
         readingsJob?.cancel()
         translationJob?.cancel()
         romajiJob?.cancel()
@@ -2089,6 +2117,34 @@ internal class MainViewModel(
                 )
             }
         }
+    }
+
+    private var chordsJob: Job? = null
+
+    /** Looks up the song's chords, while they're switched on and haven't been. */
+    private fun chords() {
+        val finder = chordFinder ?: return
+        val song = uiState.lyricsFor ?: return
+        val chords = uiState.chords
+        val lines = wordLines()
+        if (!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.tried) return
+        chordsJob = viewModelScope.launch {
+            uiState = uiState.copy(chords = uiState.chords.copy(loading = true))
+            val answer = finder.chordsOf(song, lines)
+            uiState = uiState.copy(chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet))
+        }
+    }
+
+    /**
+     * Shows the song's chords over its words, from now on, or stops, and stops looking them up.
+     * Switched on again, a song with none found is looked up again.
+     */
+    fun setChords(on: Boolean) {
+        preferences.edit { putBoolean(KEY_CHORDS, on) }
+        if (!on) chordsJob?.cancel()
+        val chords = uiState.chords
+        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.tried && chords.sheet != null))
+        chords()
     }
 
     fun setReadings(on: Boolean) {
@@ -2539,6 +2595,7 @@ internal class MainViewModel(
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"
+        private const val KEY_CHORDS = "lyrics_chords"
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"

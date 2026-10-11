@@ -199,7 +199,6 @@
     <string name="lyrics_title">Sözler</string>
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
-    <string name="lyrics_failed">Sözler şu anda alınamadı.</string>
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>
     <string name="lyrics_follow_allow">Sözler müzik uygulamanda çalan şarkıyı takip etsin.</string>
     <string name="lyrics_following_app">%1$s takip ediliyor</string>
@@ -267,6 +266,8 @@
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
+    <string name="lyrics_chords">Akorlar</string>
+    <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>
     <string name="translate_into_app_language">Uygulama dili</string>
     <string name="setting_translation_server">Çeviriler</string>

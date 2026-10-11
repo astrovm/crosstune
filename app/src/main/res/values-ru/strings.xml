@@ -199,7 +199,6 @@
     <string name="lyrics_title">Текст</string>
     <string name="lyrics_loading">Ищем текст…</string>
     <string name="lyrics_none">Для этого трека текст не найден.</string>
-    <string name="lyrics_failed">Не удалось получить текст.</string>
     <string name="lyrics_sync_service">Синхронизация текстов Crosstune</string>
     <string name="lyrics_follow_allow">Пусть текст следует за песней, которая играет в вашем музыкальном приложении.</string>
     <string name="lyrics_following_app">Следует за %1$s</string>
@@ -267,6 +266,8 @@
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
+    <string name="lyrics_chords">Аккорды</string>
+    <string name="lyrics_capo">Каподастр %1$d</string>
     <string name="setting_translate_into">Переводить на</string>
     <string name="translate_into_app_language">Язык приложения</string>
     <string name="setting_translation_server">Переводы от</string>
