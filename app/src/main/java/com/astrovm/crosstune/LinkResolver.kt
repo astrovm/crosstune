@@ -92,6 +92,9 @@ internal class LinkResolver(
     }
 
     private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {
+        if (link.service == MusicService.YOUTUBE_MUSIC && (link.type == ItemType.ALBUM || link.type == ItemType.ARTIST)) {
+            return@guarded youTubeMusicPage(link)?.let { Resolution.Resolved(link, it) } ?: Resolution.Failed(AppError.METADATA_UNAVAILABLE, link)
+        }
         val (response, body) = fetch(metadataUrl(link))
         // A video its owner keeps from being embedded elsewhere, as many labels' are, has no oEmbed,
         // but YouTube Music still says what it is.
@@ -203,14 +206,22 @@ internal class LinkResolver(
         (service == MusicService.YOUTUBE || service == MusicService.YOUTUBE_MUSIC) && type == ItemType.TRACK
 
     /** The video [id] as YouTube Music names it, or null when it can't. */
-    private suspend fun youTubeMusicVideo(id: String): MusicMetadata? = try {
+    private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
+        youTubeMusic(YOUTUBE_MUSIC_NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
+
+    /** An album's or artist's page on YouTube Music, as its header names it, with an album's songs. */
+    private suspend fun youTubeMusicPage(link: MusicLink): MusicMetadata? =
+        youTubeMusic(YOUTUBE_MUSIC_BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
+
+    /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
+    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = try {
         val body = JSONObject()
             .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
-            .put("videoId", id)
-        val request = Request.Builder().url(YOUTUBE_MUSIC_NEXT_URL).post(body.toString().toRequestBody("application/json".toMediaType())).build()
+            .put(key, id)
+        val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).executeAsync().use { response ->
             if (!response.isSuccessful) return@use null
-            MetadataParsers.youtubeMusicVideo(JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() }), id)
+            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
         }
     } catch (_: IOException) {
         null
@@ -248,6 +259,7 @@ internal class LinkResolver(
 
     private companion object {
         const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
+        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
         const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
     }
 }

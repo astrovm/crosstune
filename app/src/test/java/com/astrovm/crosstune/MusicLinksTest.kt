@@ -192,6 +192,8 @@ class MusicLinksTest {
 
         assertLink("https://tidal.com/browse/track/134858527", MusicService.TIDAL, ItemType.TRACK, "134858527", "https://tidal.com/track/134858527")
         assertLink("https://listen.tidal.com/album/134858522", MusicService.TIDAL, ItemType.ALBUM, "134858522", "https://tidal.com/album/134858522")
+        // A song's link under its album's is the song.
+        assertLink("https://tidal.com/browse/album/134858522/track/134858527", MusicService.TIDAL, ItemType.TRACK, "134858527", "https://tidal.com/track/134858527")
         assertLink(
             "https://www.tidal.com/playlist/0a1b-2c3d",
             MusicService.TIDAL, ItemType.PLAYLIST, "0a1b-2c3d", "https://tidal.com/playlist/0a1b-2c3d"
@@ -349,6 +351,11 @@ class MusicLinksTest {
         assertLink("https://music.youtube.com/playlist?list=$list&si=x", MusicService.YOUTUBE_MUSIC, ItemType.PLAYLIST, list, "https://music.youtube.com/playlist?list=$list")
         assertNull(link("https://www.youtube.com/playlist?list=short"))
         assertNull(link("https://www.youtube.com/playlist"))
+        // YouTube Music's album and artist pages, but not YouTube's channels or other pages.
+        assertLink("https://music.youtube.com/browse/MPREb_yB069tmn6yf?si=x", MusicService.YOUTUBE_MUSIC, ItemType.ALBUM, "MPREb_yB069tmn6yf", "https://music.youtube.com/browse/MPREb_yB069tmn6yf")
+        assertLink("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ", MusicService.YOUTUBE_MUSIC, ItemType.ARTIST, "UCT77P4HLpV7B2sbmuxa_djQ", "https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ")
+        assertNull(link("https://music.youtube.com/browse/FEmusic_home"))
+        assertNull(link("https://www.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ"))
 
         val playlist = link("https://www.youtube.com/playlist?list=$list")!!
         assertEquals("https://music.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))

@@ -198,6 +198,28 @@ class LinkResolverTest {
     }
 
     @Test
+    fun youTubeMusicsAlbumAndArtistPagesAreNamedByTheirHeaders() {
+        val song = { title: String -> """{"musicResponsiveListItemRenderer":{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}}]}}""" }
+        respond(
+            """{"header":{"musicResponsiveHeaderRenderer":{"title":{"runs":[{"text":"Pocket Park"}]},"straplineTextOne":{"runs":[{"text":"Miki Matsubara"}]},
+            "thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://yt3/small"},{"url":"https://yt3/big"}]}}}}},
+            "contents":{"shelf":{"contents":[${song("真夜中のドア")},${song("Cross My Heart")}]}}}"""
+        )
+        assertEquals(
+            MusicMetadata("Pocket Park", "Miki Matsubara", ItemType.ALBUM, "https://yt3/big", listOf(MusicMetadata("真夜中のドア", "Miki Matsubara"), MusicMetadata("Cross My Heart", "Miki Matsubara"))),
+            (resolve("https://music.youtube.com/browse/MPREb_yB069tmn6yf") as Resolution.Resolved).metadata
+        )
+        assertTrue(fake.requestBodies.last().contains("\"browseId\":\"MPREb_yB069tmn6yf\""))
+        respond("""{"header":{"musicImmersiveHeaderRenderer":{"title":{"runs":[{"text":"Miki Matsubara"}]}}}}""")
+        assertEquals(MusicMetadata("Miki Matsubara", "", ItemType.ARTIST), (resolve("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ") as Resolution.Resolved).metadata)
+        // No header, or no answer, can't be named.
+        respond("""{"contents":{}}""")
+        assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ") as Resolution.Failed).error)
+        respond("", code = 500)
+        assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://music.youtube.com/browse/MPREb_yB069tmn6yf") as Resolution.Failed).error)
+    }
+
+    @Test
     fun shortLinksFromOtherServicesFollowRedirects() {
         fake.handler = { request ->
             when (request.url.host) {

@@ -245,6 +245,11 @@ internal object MusicLinks {
             val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
             MusicLink(service, ItemType.PLAYLIST, list, "$base/playlist?list=$list")
         }
+        // YouTube Music's own pages for an album and an artist.
+        service == MusicService.YOUTUBE_MUSIC && segments.size == 2 && segments[0] == "browse" && segments[1].startsWith("MPREb_") ->
+            MusicLink(service, ItemType.ALBUM, segments[1], "https://music.youtube.com/browse/${segments[1]}")
+        service == MusicService.YOUTUBE_MUSIC && segments.size == 2 && segments[0] == "channel" && segments[1].startsWith("UC") ->
+            MusicLink(service, ItemType.ARTIST, segments[1], "https://music.youtube.com/channel/${segments[1]}")
         else -> null
     }
 
@@ -336,7 +341,8 @@ internal object MusicLinks {
         MusicLink(MusicService.DEEZER, type, id, "https://www.deezer.com/$path/$id").takeIf { numericIdRegex.matches(id) }
     }
 
-    private fun tidal(segments: List<String>): MusicLink? = typedItem(segments) { type, id ->
+    /** A song's link may be under its album's, "album/123/track/456": the song is what's meant. */
+    private fun tidal(segments: List<String>): MusicLink? = typedItem(segments.subList(segments.indexOfLast { it.lowercase() in itemPaths }.coerceAtLeast(0), segments.size)) { type, id ->
         val path = itemPaths.entries.first { it.value == type }.key
         MusicLink(MusicService.TIDAL, type, id, "https://tidal.com/$path/$id").takeIf { tidalIdRegex.matches(id) }
     }

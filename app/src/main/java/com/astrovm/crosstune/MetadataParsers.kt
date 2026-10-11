@@ -120,6 +120,33 @@ internal object MetadataParsers {
         return named.copy(artworkUrl = artwork, lengthMs = lengthMs)
     }
 
+    /**
+     * An album's or an artist's page on YouTube Music, by its header: an album's title, its artist
+     * and cover, and its songs below; an artist's name.
+     */
+    fun youtubeMusicPage(json: JSONObject, type: ItemType): MusicMetadata? {
+        fun text(value: JSONObject?) = value?.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.optJSONObject(it)?.optString("text").orEmpty() } }.orEmpty()
+        val header = findObject(json) { it.optJSONObject("musicResponsiveHeaderRenderer") ?: it.optJSONObject("musicDetailHeaderRenderer") }
+            ?: findObject(json) { it.optJSONObject("musicImmersiveHeaderRenderer") ?: it.optJSONObject("musicVisualHeaderRenderer") }
+            ?: return null
+        val title = text(header.optJSONObject("title")).trim().ifEmpty { return null }
+        if (type == ItemType.ARTIST) return MusicMetadata(title, "", ItemType.ARTIST)
+        val artist = text(header.optJSONObject("straplineTextOne")).trim()
+        val thumbnails = findObject(header) { it.optJSONArray("thumbnails")?.let { list -> list.optJSONObject(list.length() - 1) } }
+        val songs = mutableListOf<MusicMetadata>()
+        fun collect(value: Any?) {
+            when (value) {
+                is JSONObject -> value.optJSONObject("musicResponsiveListItemRenderer")?.let { row ->
+                    val name = row.optJSONArray("flexColumns")?.optJSONObject(0)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.let { text(it.optJSONObject("text")) }.orEmpty().trim()
+                    if (name.isNotEmpty()) songs += MusicMetadata(name, artist)
+                } ?: value.keys().forEach { collect(value.opt(it)) }
+                is JSONArray -> (0 until value.length()).forEach { collect(value.opt(it)) }
+            }
+        }
+        collect(json)
+        return MusicMetadata(title, artist, ItemType.ALBUM, thumbnails?.optString("url")?.ifBlank { null }, songs)
+    }
+
     private val musicVideoType = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
 
     /** The first object anywhere in [value] that [pick] picks. */
