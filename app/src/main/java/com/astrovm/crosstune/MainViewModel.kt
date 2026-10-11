@@ -1399,11 +1399,15 @@ internal class MainViewModel(
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
-        // Named by an app that gave no cover, it's found by its name, so Recent shows one.
+        // Named by an app that gave no cover, it's found by its name, so Recent and its words show one.
         if (heard.metadata.artworkUrl != null) return
         viewModelScope.launch {
             val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
-            uiState = uiState.copy(history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)))
+            val shown = uiState.lyricsFor?.takeIf { it == heard.metadata }
+            uiState = uiState.copy(
+                history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)),
+                lyricsFor = shown?.copy(artworkUrl = cover) ?: uiState.lyricsFor
+            )
         }
     }
 

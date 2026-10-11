@@ -448,7 +448,7 @@ class ListeningTest {
     }
 
     @Test
-    fun aSongHeardAlongWithNoCoverGetsOneInRecentByItsName() {
+    fun aSongHeardAlongWithNoCoverGetsOneByItsNameInRecentAndItsWords() {
         val hearing = FakeHearing()
         demoWords(hearing)
         val lyrics = fake.handler
@@ -463,6 +463,8 @@ class ListeningTest {
         composeRule.waitUntil(TIMEOUT_MS) { lit("Kite one") }
         composeRule.waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().firstOrNull()?.metadata?.artworkUrl == "https://cdn/kite.jpg" }
         assertEquals("Kite", HistoryStore(prefs()).load().first().metadata.title)
+        // Its words show it too.
+        composeRule.waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.artworkUrl == "https://cdn/kite.jpg" }
         // One the app named with a cover keeps it, and none is looked for.
         val asked = fake.requestedUrls.size
         hearing.next.trySend(Heard.Song(MusicMetadata("Third", "Band", artworkUrl = "https://cdn/third.jpg"), null, 0, SystemClock.elapsedRealtime()))
