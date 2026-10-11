@@ -300,4 +300,24 @@
     <string name="lyrics_saved_lines">Righe salvate</string>
     <string name="lyrics_word_failed">Impossibile trovare il significato ora.</string>
     <string name="lyrics_word_unknown">Nessuna voce di dizionario per questa parola.</string>
+    <string name="lyrics_words_to_know">Parole da sapere</string>
+    <string name="lyrics_words_to_know_failed">Impossibile trovare le parole da sapere.</string>
+    <string name="lyrics_save_word">Salva %1$s</string>
+    <string name="lyrics_word_saved">%1$s salvata</string>
+    <string name="lyrics_about_artist">Sull\'artista</string>
+    <string name="lyrics_about_artist_failed">Impossibile sapere di più sull\'artista.</string>
+    <string name="lyrics_songs_like">Brani simili</string>
+    <string name="lyrics_literal">Parola per parola</string>
+    <string name="lyrics_blanks">Riempi gli spazi</string>
+    <string name="lyrics_examples">Esempi</string>
+    <string name="lyrics_examples_failed">Impossibile scrivere esempi.</string>
+    <string name="lyrics_ask_song">Chiedi sulla canzone</string>
+    <string name="song_level">Livello %1$s</string>
+    <string name="song_original">Cover di</string>
+    <string name="song_samples">Campiona</string>
+    <string name="artist_who">Chi è</string>
+    <string name="artist_style">Stile</string>
+    <string name="artist_known_for">Noto per</string>
+    <string name="songs_like_label">Brani come</string>
+    <string name="song_search_playlist">Crea una playlist</string>
 </resources>

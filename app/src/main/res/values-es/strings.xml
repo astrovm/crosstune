@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">Líneas guardadas</string>
     <string name="lyrics_word_failed">No se encontró su significado ahora.</string>
     <string name="lyrics_word_unknown">No hay entrada de diccionario para esta palabra.</string>
+    <string name="lyrics_words_to_know">Palabras para saber</string>
+    <string name="lyrics_words_to_know_failed">No se encontraron las palabras para saber.</string>
+    <string name="lyrics_save_word">Guardar %1$s</string>
+    <string name="lyrics_word_saved">%1$s guardada</string>
+    <string name="lyrics_about_artist">Sobre el artista</string>
+    <string name="lyrics_about_artist_failed">No se pudo saber sobre el artista.</string>
+    <string name="lyrics_songs_like">Canciones parecidas</string>
+    <string name="lyrics_literal">Palabra por palabra</string>
+    <string name="lyrics_blanks">Completá los huecos</string>
+    <string name="lyrics_examples">Ejemplos</string>
+    <string name="lyrics_examples_failed">No se pudieron escribir ejemplos.</string>
+    <string name="lyrics_ask_song">Preguntá sobre la canción</string>
+    <string name="song_level">Nivel %1$s</string>
+    <string name="song_original">Versión de</string>
+    <string name="song_samples">Samplea</string>
+    <string name="artist_who">Quién es</string>
+    <string name="artist_style">Estilo</string>
+    <string name="artist_known_for">Conocido por</string>
+    <string name="songs_like_label">Canciones como</string>
+    <string name="song_search_playlist">Armar una playlist</string>
 </resources>

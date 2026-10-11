@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">已保存的行</string>
     <string name="lyrics_word_failed">暂时找不到它的意思。</string>
     <string name="lyrics_word_unknown">词典中没有这个词。</string>
+    <string name="lyrics_words_to_know">要学的词</string>
+    <string name="lyrics_words_to_know_failed">找不到要学的词。</string>
+    <string name="lyrics_save_word">保存%1$s</string>
+    <string name="lyrics_word_saved">已保存%1$s</string>
+    <string name="lyrics_about_artist">关于艺人</string>
+    <string name="lyrics_about_artist_failed">查不到这位艺人的资料。</string>
+    <string name="lyrics_songs_like">相似歌曲</string>
+    <string name="lyrics_literal">逐字翻译</string>
+    <string name="lyrics_blanks">填空</string>
+    <string name="lyrics_examples">例句</string>
+    <string name="lyrics_examples_failed">写不出例句。</string>
+    <string name="lyrics_ask_song">问问这首歌</string>
+    <string name="song_level">级别 %1$s</string>
+    <string name="song_original">翻唱自</string>
+    <string name="song_samples">采样</string>
+    <string name="artist_who">是谁</string>
+    <string name="artist_style">风格</string>
+    <string name="artist_known_for">代表作</string>
+    <string name="songs_like_label">相似歌曲：</string>
+    <string name="song_search_playlist">生成歌单</string>
 </resources>

@@ -24,6 +24,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.items
@@ -158,7 +161,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // The line open to study, and whether the lines kept are shown, over the words.
     var studying by rememberSaveable(song) { mutableStateOf<Int?>(null) }
     var savedShown by rememberSaveable { mutableStateOf(false) }
-    var songMeaningShown by rememberSaveable(song) { mutableStateOf(false) }
+    // What's open over the words about the whole song: what it means, its words to know, or its artist.
+    var songSheet by rememberSaveable(song) { mutableStateOf<SongSheet?>(null) }
     if (savedShown) {
         state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
@@ -273,16 +277,27 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             LyricsActions(
                 state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
-                onSongMeaning = {
-                    songMeaningShown = true
-                    actions.onExplainSong()
-                }
+                onSong = { sheet ->
+                    songSheet = sheet
+                    when (sheet) {
+                        SongSheet.MEANING -> actions.onExplainSong()
+                        SongSheet.WORDS -> actions.onFindWordsToKnow()
+                        SongSheet.ARTIST -> actions.onAboutArtist()
+                    }
+                },
+                onSongsLike = { actions.onSongsLike(song) }
             )
         }
     }
     }
     }
-    if (songMeaningShown) SongMeaningSheet(state, actions, onDismiss = { songMeaningShown = false })
+    val closeSheet = { songSheet = null }
+    when (songSheet) {
+        SongSheet.MEANING -> SongMeaningSheet(state, actions, onDismiss = closeSheet)
+        SongSheet.WORDS -> WordsToKnowSheet(state, actions, onDismiss = closeSheet)
+        SongSheet.ARTIST -> ArtistSheet(state, actions, onDismiss = closeSheet)
+        null -> Unit
+    }
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -384,7 +399,8 @@ private fun LyricsActions(
     onOpenSaved: () -> Unit,
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
-    onSongMeaning: () -> Unit,
+    onSong: (SongSheet) -> Unit,
+    onSongsLike: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
@@ -415,14 +431,17 @@ private fun LyricsActions(
         val close = { menu = null }
         LearnMenu(
             menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.savedLines.isNotEmpty(), actions, onOpenSaved, close,
-            // Signed in with ChatGPT, it can say what the song's about.
-            onSongMeaning = onSongMeaning.takeIf { state.chatGpt.email != null }
+            // Signed in with ChatGPT, it can say what the song's about, and more.
+            signedIn = state.chatGpt.email != null, onSong = onSong, onSongsLike = onSongsLike
         )
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
 
 private enum class BarMenu { LEARN, VISUALS }
+
+/** A sheet about the whole song, opened from the Learn menu. */
+private enum class SongSheet { MEANING, WORDS, ARTIST }
 
 /**
  * The words fade out at the top and bottom, rather than being cut off mid-line under the song or
@@ -451,7 +470,7 @@ private const val BAR_BACK_MS = 1_200L
 private val BAR_ROOM = 112.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
-private val Learning.shows get() = translation || (script != null && (readings || romanized))
+private val Learning.shows get() = translation || (script != null && (readings || romanized)) || (blanks && blankWords.any { it != null })
 
 /**
  * What helps read the words in another language, switched on and off here: readings over them for
@@ -466,18 +485,25 @@ private fun LearnMenu(
     actions: ScreenActions,
     onOpenSaved: () -> Unit,
     onClose: () -> Unit,
-    onSongMeaning: (() -> Unit)? = null
+    signedIn: Boolean = false,
+    onSong: (SongSheet) -> Unit = {},
+    onSongsLike: () -> Unit = {}
 ) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        onSongMeaning?.let { open ->
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.lyrics_song_meaning)) },
-                leadingIcon = { AppIcon(R.drawable.ic_info, contentDescription = null) },
+        if (signedIn) {
+            @Composable
+            fun Item(@StringRes label: Int, @DrawableRes icon: Int, onClick: () -> Unit) = DropdownMenuItem(
+                text = { Text(stringResource(label)) },
+                leadingIcon = { AppIcon(icon, contentDescription = null) },
                 onClick = {
                     onClose()
-                    open()
+                    onClick()
                 }
             )
+            Item(R.string.lyrics_song_meaning, R.drawable.ic_info) { onSong(SongSheet.MEANING) }
+            Item(R.string.lyrics_words_to_know, R.drawable.ic_playlist_add) { onSong(SongSheet.WORDS) }
+            Item(R.string.lyrics_about_artist, R.drawable.ic_person) { onSong(SongSheet.ARTIST) }
+            Item(R.string.lyrics_songs_like, R.drawable.ic_queue_music, onSongsLike)
             HorizontalDivider()
         }
         if (learning.script == Script.JAPANESE || learning.script == Script.CHINESE) {
@@ -485,6 +511,9 @@ private fun LearnMenu(
         }
         if (learning.script != null) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        // Only ChatGPT translates word for word, and picks the words to leave blank.
+        if (signedIn && learning.translation && learning.chatGptTranslation) LearnItem(R.string.lyrics_literal, learning.literal, actions.onLiteralChange)
+        if (signedIn) LearnItem(R.string.lyrics_blanks, learning.blanks, actions.onBlanksChange)
         if (anySaved) {
             HorizontalDivider()
             DropdownMenuItem(
@@ -817,12 +846,31 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
 }
 
 /** What helps read a line, as switched on. */
-internal class LineHelp(val reading: LineReading?, val readings: Boolean, val romanized: Boolean, val translation: String?)
+internal class LineHelp(val reading: LineReading?, val readings: Boolean, val romanized: Boolean, val translation: String?, val blank: String? = null)
 
 internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation })
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, blankWords.getOrNull(index).takeIf { blanks })
 }
+
+/**
+ * [text] with [word] left blank, as long as the word is, or with it standing out in [color] once
+ * [shown].
+ */
+internal fun blanked(text: String, word: String, shown: Boolean, color: Color): AnnotatedString = buildAnnotatedString {
+    val at = text.indexOf(word)
+    append(text.substring(0, at))
+    if (shown) {
+        withStyle(SpanStyle(color = color)) { append(word) }
+    } else {
+        // Wide letters, like kana, get wide blanks, so the gap's as long as the word.
+        append((if (word.any { it.code >= WIDE_LETTERS }) "＿" else "_").repeat(maxOf(word.length, 3)))
+    }
+    append(text.substring(at + word.length))
+}
+
+/** Where wide letters, like CJK's, start. */
+private const val WIDE_LETTERS = 0x2E80
 
 /**
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
@@ -915,14 +963,20 @@ private fun LyricLineText(
             .padding(vertical = 6.dp)
     ) {
         val reading = help?.reading
-        if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
+        // A word left blank shows once its line's sung, or never while nothing says where the song is.
+        val blank = help?.blank
+        val hidden = blank != null && (place == null || place >= 0)
+        if (blank != null) {
+            Text(blanked(text, blank, !hidden, MaterialTheme.colorScheme.primary), style = style, color = MaterialTheme.colorScheme.onSurface)
+        } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
             RubyLine(reading.parts, style)
         } else {
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
         val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
-        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() }?.let {
+        // The blank word's letters would give it away.
+        if (help?.romanized == true && !hidden) reading?.romanized?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
@@ -1069,6 +1123,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                         Text(stringResource(R.string.lyrics_explain_line), modifier = Modifier.padding(start = 8.dp))
                     }
                 }
+                LineExamplesCard(learning.examples?.takeIf { it.index == index }, onFind = { actions.onFindExamples(index) })
             }
             // Side by side, as wide and as tall as each other, however long their words are.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp).height(IntrinsicSize.Min)) {
@@ -1187,6 +1242,101 @@ private fun WordCard(meaning: WordMeaning) {
     }
 }
 
+/** Sentences using a line's words, once asked for: on their way, each with its meaning, or that they couldn't be had. */
+@Composable
+private fun LineExamplesCard(examples: LineExamples?, onFind: () -> Unit) {
+    val asking = examples?.asking
+    val found = asking?.value
+    if (asking == null || asking.failed) {
+        if (asking?.failed == true) Text(stringResource(R.string.lyrics_examples_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick = onFind, modifier = Modifier.fillMaxWidth()) {
+            AppIcon(R.drawable.ic_language, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(stringResource(R.string.lyrics_examples), modifier = Modifier.padding(start = 8.dp))
+        }
+        return
+    }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.lyrics_examples), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            if (found == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            found?.forEach { example ->
+                Column {
+                    Text(example.sentence, style = MaterialTheme.typography.bodyLarge)
+                    Text(example.meaning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The song's words most worth learning before listening, as ChatGPT picks them, each with how it
+ * reads and what it means there, to save and practise like a line.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WordsToKnowSheet(state: UiState, actions: ScreenActions, onDismiss: () -> Unit) {
+    val asking = state.learning.wordsToKnow
+    val song = state.lyricsFor
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 12.dp, bottom = 24.dp)
+        ) {
+            Text(stringResource(R.string.lyrics_words_to_know), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
+            when {
+                asking == null || asking.loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(end = 12.dp, top = 8.dp, bottom = 8.dp))
+                asking.failed -> {
+                    Text(stringResource(R.string.lyrics_words_to_know_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = actions.onFindWordsToKnow, modifier = Modifier.fillMaxWidth().padding(end = 12.dp)) { Text(stringResource(R.string.retry_button)) }
+                }
+                else -> asking.value.orEmpty().forEach { word ->
+                    val saved = state.savedLines.any { it.text == word.word && it.title == song?.title && it.artist == song?.artist }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(word.word, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                word.reading?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                            Text(word.meaning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = { actions.onToggleSavedWord(word) }) {
+                            AppIcon(
+                                if (saved) R.drawable.ic_bookmark_added else R.drawable.ic_bookmark,
+                                contentDescription = stringResource(if (saved) R.string.lyrics_word_saved else R.string.lyrics_save_word, word.word)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Who the song's artist is, as ChatGPT writes it from the web; or that it couldn't, with a way to ask again. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArtistSheet(state: UiState, actions: ScreenActions, onDismiss: () -> Unit) {
+    val about = state.learning.artist
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+        ) {
+            Text(state.lyricsFor?.artist.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            if (about == null || about.writing || about.done || about.limitReached) {
+                ExplanationCard(about ?: LineExplanation(MainViewModel.SONG), ARTIST_PARTS)
+            }
+            if (about?.failed == true) {
+                Text(stringResource(R.string.lyrics_about_artist_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+            if (about?.failed == true || about?.limitReached == true) {
+                OutlinedButton(onClick = actions.onAboutArtist, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
+            }
+        }
+    }
+}
+
 /**
  * What ChatGPT says the whole song is about, as it writes it; or that the plan's used up, or it
  * couldn't, with a way to ask again.
@@ -1200,7 +1350,18 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
-            Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            val facts = state.learning.songFacts
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f, fill = false))
+                // How hard its words are, at a glance.
+                facts?.level?.let { level ->
+                    val said = stringResource(R.string.song_level, level)
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.clearAndSetSemantics { contentDescription = said }) {
+                        Text(level, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
+            }
+            facts?.why?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (explanation == null || explanation.writing || explanation.done || explanation.limitReached) {
                 ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG), SONG_PARTS)
             }
@@ -1210,6 +1371,33 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
             if (explanation?.failed == true || explanation?.limitReached == true) {
                 OutlinedButton(onClick = actions.onExplainSong, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
             }
+            // The song it covers and those it samples, each a tap from opening.
+            facts?.original?.let { SongsNamed(R.string.song_original, listOf(it), actions) }
+            facts?.samples?.takeIf { it.isNotEmpty() }?.let { SongsNamed(R.string.song_samples, it, actions) }
+            // Explained, more can be asked about it.
+            if (explanation?.done == true) {
+                Questions(state.learning.songQuestions, R.string.lyrics_ask_song, key = state.lyricsFor, onAsk = actions.onAskAboutSong)
+            }
+        }
+    }
+}
+
+/** Songs named by ChatGPT under [label], each a tap from opening it. */
+@Composable
+private fun SongsNamed(@StringRes label: Int, songs: List<Pair<String, String>>, actions: ScreenActions) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        songs.forEach { (title, artist) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { actions.onOpenNamedSong(title, artist) }.padding(vertical = 8.dp)
+            ) {
+                AppIcon(R.drawable.ic_music_note, contentDescription = null, modifier = Modifier.size(20.dp))
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.bodyLarge)
+                    Text(artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
@@ -1217,7 +1405,12 @@ private fun SongMeaningSheet(state: UiState, actions: ScreenActions, onDismiss: 
 /** The questions asked about line [index] with their answers, and a field to ask another. */
 @Composable
 private fun LineQuestions(index: Int, learning: Learning, actions: ScreenActions) {
-    val questions = learning.questions.takeIf { learning.questionsAbout == index }.orEmpty()
+    Questions(learning.questions.takeIf { learning.questionsAbout == index }.orEmpty(), R.string.lyrics_ask_line, key = index) { actions.onAskAboutLine(index, it) }
+}
+
+/** [questions] asked, with their answers, and a field, [hint], to ask another about what [key] is. */
+@Composable
+private fun Questions(questions: List<LineQuestion>, @StringRes hint: Int, key: Any?, onAsk: (String) -> Unit) {
     questions.forEach { asked ->
         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 8.dp)) {
             Text(asked.question, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -1229,16 +1422,16 @@ private fun LineQuestions(index: Int, learning: Learning, actions: ScreenActions
             }
         }
     }
-    var question by rememberSaveable(index) { mutableStateOf("") }
+    var question by rememberSaveable(key) { mutableStateOf("") }
     val send = {
-        actions.onAskAboutLine(index, question)
+        onAsk(question)
         question = ""
     }
     val asking = questions.lastOrNull()?.writing == true
     OutlinedTextField(
         value = question,
         onValueChange = { question = it },
-        placeholder = { Text(stringResource(R.string.lyrics_ask_line)) },
+        placeholder = { Text(stringResource(hint)) },
         trailingIcon = {
             IconButton(onClick = send, enabled = question.isNotBlank() && !asking) {
                 AppIcon(R.drawable.ic_send, contentDescription = stringResource(R.string.lyrics_ask_send))
@@ -1287,6 +1480,9 @@ private fun ExplanationParts(text: String, labels: List<Int>) {
 
 /** What a line's explanation says, in order: what it means in the song, then about its language. */
 private val LINE_PARTS = listOf(R.string.explanation_in_song, R.string.explanation_language)
+
+/** What's said about an artist, in order. */
+private val ARTIST_PARTS = listOf(R.string.artist_who, R.string.artist_style, R.string.artist_known_for)
 
 /** What a song's explanation says, in order. */
 private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)

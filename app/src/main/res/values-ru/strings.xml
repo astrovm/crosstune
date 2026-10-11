@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">Сохранённые строки</string>
     <string name="lyrics_word_failed">Сейчас не удалось найти значение.</string>
     <string name="lyrics_word_unknown">Для этого слова нет словарной статьи.</string>
+    <string name="lyrics_words_to_know">Слова, которые стоит знать</string>
+    <string name="lyrics_words_to_know_failed">Не удалось найти слова.</string>
+    <string name="lyrics_save_word">Сохранить %1$s</string>
+    <string name="lyrics_word_saved">%1$s сохранено</string>
+    <string name="lyrics_about_artist">Об исполнителе</string>
+    <string name="lyrics_about_artist_failed">Не удалось узнать об исполнителе.</string>
+    <string name="lyrics_songs_like">Похожие песни</string>
+    <string name="lyrics_literal">Дословно</string>
+    <string name="lyrics_blanks">Заполни пропуски</string>
+    <string name="lyrics_examples">Примеры</string>
+    <string name="lyrics_examples_failed">Не удалось написать примеры.</string>
+    <string name="lyrics_ask_song">Спроси о песне</string>
+    <string name="song_level">Уровень %1$s</string>
+    <string name="song_original">Кавер на</string>
+    <string name="song_samples">Семплы</string>
+    <string name="artist_who">Кто</string>
+    <string name="artist_style">Стиль</string>
+    <string name="artist_known_for">Известен по</string>
+    <string name="songs_like_label">Песни как</string>
+    <string name="song_search_playlist">Создать плейлист</string>
 </resources>

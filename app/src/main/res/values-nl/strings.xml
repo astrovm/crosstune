@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">Bewaarde regels</string>
     <string name="lyrics_word_failed">Kon de betekenis nu niet vinden.</string>
     <string name="lyrics_word_unknown">Geen woordenboekvermelding voor dit woord.</string>
+    <string name="lyrics_words_to_know">Woorden om te kennen</string>
+    <string name="lyrics_words_to_know_failed">Kon de woorden om te kennen niet vinden.</string>
+    <string name="lyrics_save_word">%1$s bewaren</string>
+    <string name="lyrics_word_saved">%1$s bewaard</string>
+    <string name="lyrics_about_artist">Over de artiest</string>
+    <string name="lyrics_about_artist_failed">Kon niets over de artiest vinden.</string>
+    <string name="lyrics_songs_like">Vergelijkbare nummers</string>
+    <string name="lyrics_literal">Woord voor woord</string>
+    <string name="lyrics_blanks">Vul de gaten in</string>
+    <string name="lyrics_examples">Voorbeelden</string>
+    <string name="lyrics_examples_failed">Kon geen voorbeelden schrijven.</string>
+    <string name="lyrics_ask_song">Vraag over het nummer</string>
+    <string name="song_level">Niveau %1$s</string>
+    <string name="song_original">Cover van</string>
+    <string name="song_samples">Samples</string>
+    <string name="artist_who">Wie</string>
+    <string name="artist_style">Stijl</string>
+    <string name="artist_known_for">Bekend van</string>
+    <string name="songs_like_label">Nummers zoals</string>
+    <string name="song_search_playlist">Playlist maken</string>
 </resources>

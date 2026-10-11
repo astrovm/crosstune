@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">Kaydedilen satırlar</string>
     <string name="lyrics_word_failed">Şu an anlamı bulunamadı.</string>
     <string name="lyrics_word_unknown">Bu kelime için sözlük kaydı yok.</string>
+    <string name="lyrics_words_to_know">Bilinmesi gereken kelimeler</string>
+    <string name="lyrics_words_to_know_failed">Bilinmesi gereken kelimeler bulunamadı.</string>
+    <string name="lyrics_save_word">%1$s kaydet</string>
+    <string name="lyrics_word_saved">%1$s kaydedildi</string>
+    <string name="lyrics_about_artist">Sanatçı hakkında</string>
+    <string name="lyrics_about_artist_failed">Sanatçı hakkında bilgi bulunamadı.</string>
+    <string name="lyrics_songs_like">Benzer şarkılar</string>
+    <string name="lyrics_literal">Kelimesi kelimesine</string>
+    <string name="lyrics_blanks">Boşlukları doldur</string>
+    <string name="lyrics_examples">Örnekler</string>
+    <string name="lyrics_examples_failed">Örnek yazılamadı.</string>
+    <string name="lyrics_ask_song">Şarkı hakkında sor</string>
+    <string name="song_level">Seviye %1$s</string>
+    <string name="song_original">Cover:</string>
+    <string name="song_samples">Sample\'lar</string>
+    <string name="artist_who">Kim</string>
+    <string name="artist_style">Tarz</string>
+    <string name="artist_known_for">Bilinen eserleri</string>
+    <string name="songs_like_label">Benzeri:</string>
+    <string name="song_search_playlist">Çalma listesi yap</string>
 </resources>

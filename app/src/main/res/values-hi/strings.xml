@@ -299,4 +299,24 @@
     <string name="lyrics_saved_lines">सेव की गई लाइनें</string>
     <string name="lyrics_word_failed">अभी इसका मतलब नहीं मिला।</string>
     <string name="lyrics_word_unknown">इस शब्द के लिए कोई शब्दकोश प्रविष्टि नहीं है।</string>
+    <string name="lyrics_words_to_know">जानने लायक शब्द</string>
+    <string name="lyrics_words_to_know_failed">जानने लायक शब्द नहीं मिले।</string>
+    <string name="lyrics_save_word">%1$s सेव करें</string>
+    <string name="lyrics_word_saved">%1$s सेव हो गया</string>
+    <string name="lyrics_about_artist">कलाकार के बारे में</string>
+    <string name="lyrics_about_artist_failed">कलाकार के बारे में पता नहीं चला।</string>
+    <string name="lyrics_songs_like">ऐसे ही गाने</string>
+    <string name="lyrics_literal">शब्दशः</string>
+    <string name="lyrics_blanks">खाली जगह भरें</string>
+    <string name="lyrics_examples">उदाहरण</string>
+    <string name="lyrics_examples_failed">उदाहरण नहीं लिखे जा सके।</string>
+    <string name="lyrics_ask_song">गाने के बारे में पूछें</string>
+    <string name="song_level">स्तर %1$s</string>
+    <string name="song_original">इसका कवर</string>
+    <string name="song_samples">सैंपल</string>
+    <string name="artist_who">कौन</string>
+    <string name="artist_style">शैली</string>
+    <string name="artist_known_for">किस लिए मशहूर</string>
+    <string name="songs_like_label">ऐसे गाने</string>
+    <string name="song_search_playlist">प्लेलिस्ट बनाएं</string>
 </resources>
