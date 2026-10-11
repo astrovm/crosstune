@@ -110,7 +110,34 @@ internal class ChordFinder(
         for (name in (names.titles + song.title + parts).distinct().take(MAX_NAMES + 1)) {
             searchUFret(song, listOfNotNull(name, artist).joinToString(" "), name, otherNames, fits)?.let { return it }
         }
+        // Known only by its name in katakana, it's among the artist's songs.
+        val japaneseArtist = song.artist.takeIf(::japanese) ?: artist ?: return null
+        return if (japanese(song.title)) null else soundAlikeOnUFret(song, japaneseArtist, fits)
+    }
+
+    /**
+     * The first sheet that [fits] of [artist]'s songs on U-FRET whose name in katakana sounds like
+     * [song]'s, "プラスティック・ラブ" for "Plastic Love", as no search finds it by the other.
+     * U-FRET lists them a page at a time, so only until the last page.
+     */
+    private suspend fun soundAlikeOnUFret(song: MusicMetadata, artist: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        for (page in 1..MAX_ARTIST_PAGES) {
+            val search = U_FRET_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("key", artist).addQueryParameter("p", "$page").build()
+            val listed = uFretResult.findAll(fetch(search.toString())).map { it.destructured }.toList()
+            val ids = listed.filter { (_, _, named, by) ->
+                SongNames.sameArtist(unescape(by.trim()), artist) && SongNames.soundsAlike(song.title, unescape(named.replace(tags, "").trim()))
+            }.sortedBy { (kind) -> kind == "beginner" }.map { (_, id) -> id }.take(MAX_SHEETS)
+            for (id in ids) sheetOnUFret(id, fits)?.let { return it }
+            if (listed.size < U_FRET_PAGE) return null
+        }
         return null
+    }
+
+    /** U-FRET's sheet [id], if it [fits]. */
+    private suspend fun sheetOnUFret(id: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val url = "$U_FRET_SONG_URL$id"
+        val lines = uFretSheet.find(fetch(url))?.groupValues?.get(1) ?: return null
+        return ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)
     }
 
     /**
@@ -129,11 +156,7 @@ internal class ChordFinder(
         }
         val ids = found.map { (kind, id, _, artist) -> Triple(artists.none { SongNames.sameArtist(artist.trim(), it) }, kind == "beginner", id) }
             .sortedWith(compareBy({ it.first }, { it.second })).map { it.third }.take(MAX_SHEETS)
-        for (id in ids) {
-            val url = "$U_FRET_SONG_URL$id"
-            val lines = uFretSheet.find(fetch(url))?.groupValues?.get(1) ?: continue
-            ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)?.let { return it }
-        }
+        for (id in ids) sheetOnUFret(id, fits)?.let { return it }
         return null
     }
 
@@ -287,6 +310,9 @@ internal class ChordFinder(
 
         /** Japanese names tried for a song named in Latin letters. */
         const val MAX_NAMES = 2
+        /** How many songs U-FRET lists a page, and how many pages of an artist's are looked through. */
+        const val U_FRET_PAGE = 30
+        const val MAX_ARTIST_PAGES = 8
 
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_REFERER = "https://music.163.com/"

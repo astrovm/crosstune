@@ -506,6 +506,45 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aSongUFretHasOnlyInKatakanaIsFoundAmongTheArtistsSongsByHowItSounds() {
+        // No search finds "Plastic Love": U-FRET lists it as "プラスティック・ラブ", on the second page of the singer's.
+        val plastic = MusicMetadata("Plastic Love", "Mariya Takeuchi")
+        val pages = mapOf(
+            "1" to (1..30).joinToString("") { uFretResult(100 + it, "曲$it", "竹内まりや") },
+            "2" to uFretResult(7, "プラスチック・ドール", "竹内まりや") + uFretResult(8, "プラスティック・ラブ", "竹内まりや", beginner = true) +
+                uFretResult(10, "プラスティック・ラブ", "他の人") + uFretResult(9, "プラスティック・ラブ", "山下達郎 &amp; 竹内まりや")
+        )
+        val sheets = mapOf(
+            "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("Night Tempo", "竹内まりや")),
+            "https://www.ufret.jp/song.php?data=8" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている"),
+            "https://www.ufret.jp/song.php?data=9" to uFretSong("[G]川の道を歩いていく", "朝の光に歌っている"),
+            "https://www.ultimate-guitar.com/search.php" to ugSearch()
+        )
+        fake.handler = { request ->
+            val url = request.url
+            if (url.encodedPath == "/search.php" && url.host == "www.ufret.jp") {
+                FakeSpotify.html(request, if (url.queryParameter("key") == "竹内まりや") pages[url.queryParameter("p")].orEmpty() else "")
+            } else {
+                answer(request, sheets)
+            }
+        }
+        // The singer's own, not the easier one, nor one by someone else.
+        assertEquals("https://www.ufret.jp/song.php?data=9", (chords(plastic, japanese) as ChordFinder.Chords.Found).sheet.url)
+        val listed = fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl() }.filter { it.queryParameter("key") == "竹内まりや" }
+        assertEquals(listOf("1", "2"), listed.map { it.queryParameter("p") })
+        assertTrue(fake.requestedUrls.none { it.endsWith("data=7") || it.endsWith("data=10") })
+
+        // Not there, the last page, one not full, is the last asked; no sound-alike is asked for a title in Japanese.
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Lonely Hearts", "竹内まりや"), japanese))
+        assertEquals(listOf("1", "2"), fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl() }
+            .filter { it.queryParameter("p") != null }.map { it.queryParameter("p") })
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道", "Mariya Takeuchi"), japanese))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("p") != null })
+    }
+
+    @Test
     fun aTitleIsSplitOnlyWhereItsTwoNames() {
         // Split by a slash too; a letter on its own isn't a name.
         fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
