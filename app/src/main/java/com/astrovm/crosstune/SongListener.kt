@@ -240,7 +240,11 @@ internal class SongListener(
                 if (tried == 0) Heard.Failed(AppError.MICROPHONE) else Heard.Nothing
             } else {
                 tried = now.recorded
-                shazam.recognize(audio.copyOf(tried), tried).takeIf { it !is Heard.Nothing || tried == audio.size }
+                // Not named yet, or the network failing for a moment, it's asked again with more, and
+                // what the last ask says is the answer; Shazam saying it's busy is believed at once.
+                shazam.recognize(audio.copyOf(tried), tried).takeIf { answer ->
+                    answer is Heard.Song || (answer is Heard.Failed && answer.error != AppError.NETWORK) || tried == audio.size
+                }
             }
         }
         recorder.cancelAndJoin()

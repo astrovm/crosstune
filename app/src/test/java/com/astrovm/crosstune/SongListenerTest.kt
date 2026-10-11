@@ -178,6 +178,18 @@ class SongListenerTest {
     }
 
     @Test
+    fun theNetworkFailingForAMomentIsAskedAgainWithMore() {
+        microphone.play(3.0)
+        answers({ microphone.play(3.0); throw java.io.IOException("timed out") }, { MATCH })
+        assertTrue(runBlocking { listener.listen() } is Heard.Song)
+        assertEquals(2, fake.requestedUrls.size)
+        // Failing to the end, it says so.
+        microphone.play(3.0)
+        fake.handler = { microphone.play(3.0); throw java.io.IOException("offline") }
+        assertEquals(Heard.Failed(AppError.NETWORK), runBlocking { listener.listen() })
+    }
+
+    @Test
     fun aMicrophoneThatDoesntWorkSendsNothing() {
         assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { SongListener(FakeMicrophone(works = false), shazam).listen() })
         // One that gives no sound at all.
