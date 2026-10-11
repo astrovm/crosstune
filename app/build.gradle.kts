@@ -121,6 +121,8 @@ kover {
                 // The MilkDrop visuals' native library and GL thread need a GPU, which unit tests
                 // don't have; they're checked on a phone. What they're told to do is tested.
                 classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*")
+                // Shizuku runs on a phone, where it's checked; what it's told to run is tested.
+                classes("com.astrovm.crosstune.ShizukuShell*")
             }
         }
         variant("debug") {
@@ -156,6 +158,10 @@ dependencies {
 
     // Reads Japanese lyrics' kanji, for the kana over them; its dictionary is in the jar, so it works offline.
     implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+
+    // Sets everything up in one tap for people who run Shizuku, which can do what otherwise only the user can.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.0")

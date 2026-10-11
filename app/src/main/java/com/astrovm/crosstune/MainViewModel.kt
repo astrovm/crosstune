@@ -178,6 +178,12 @@ internal data class UiState(
      * Until then the fields above don't flag anything, so nothing is shown as a problem before it's known.
      */
     val systemStateKnown: Boolean = true,
+    /** Whether setup can be done in one tap, through Shizuku, which the user runs. */
+    val canSetUpInOneTap: Boolean = false,
+    /** Set while setup is being done in one tap. */
+    val settingUpInOneTap: Boolean = false,
+    /** Set when setup in one tap didn't do it all, left to the user to finish. */
+    val oneTapFailed: Boolean = false,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
     /**
@@ -465,7 +471,9 @@ internal class MainViewModel(
     /** Where a song's chords come from; nullable so tests need no chord sites. */
     private val chordFinder: ChordFinder? = null,
     /** Which language a song's words are in; nullable so tests need none. */
-    private val lyricsLanguage: LyricsLanguage? = null
+    private val lyricsLanguage: LyricsLanguage? = null,
+    /** Setup in one tap, for people who run Shizuku; nullable so tests need none. */
+    private val oneTap: OneTapSetup? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -540,10 +548,39 @@ internal class MainViewModel(
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
-            systemStateKnown = false
+            systemStateKnown = false,
+            canSetUpInOneTap = oneTap?.available() == true
         ).withDestinations()
     )
         private set
+
+    /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
+    private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.copy(canSetUpInOneTap = oneTap.available()) }
+
+    override fun onCleared() {
+        stopWatchingOneTap?.invoke()
+    }
+
+    /**
+     * Does what setup asks of the user, through Shizuku: stops the apps in the way, allows the
+     * links and lets lyrics follow music apps. What it couldn't do is still there to fix by hand.
+     */
+    fun setUpInOneTap() {
+        val setup = oneTap ?: return
+        if (uiState.settingUpInOneTap) return
+        val state = uiState
+        uiState = uiState.copy(settingUpInOneTap = true, oneTapFailed = false)
+        viewModelScope.launch {
+            val follow = !state.canFollowApps
+            val worked = setup.setUp(apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything, follow = follow)
+            // Android lets Crosstune follow music apps a moment after it's told to.
+            var waits = 0
+            while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)
+            uiState = uiState.copy(settingUpInOneTap = false, oneTapFailed = !worked)
+            refreshSystemState()
+            refreshFollowing()
+        }
+    }
 
     /**
      * Versions before first-run setup always intercepted Spotify links. People updating from one
@@ -682,7 +719,7 @@ internal class MainViewModel(
      */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations()
+        uiState = uiState.withDestinations().copy(canSetUpInOneTap = oneTap?.available() == true)
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
         loadSystemState()
     }
@@ -2563,16 +2600,17 @@ internal class MainViewModel(
     }
 
     /**
-     * Ticks every music service the first time setup lists them, but the one the user listens in;
-     * video sources stay off, since most videos aren't music. Changing them later is up to the user.
+     * Opens every source's links the first time setup asks for them, but the one the user listens
+     * in, whose links already open there; videos too, since only music videos are opened elsewhere.
+     * Changing them later is up to the user, in settings.
      */
     fun preselectSources() {
         if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false)) return
         preferences.edit { putBoolean(KEY_SOURCES_PRESELECTED, true) }
         if (uiState.interceptsAnything) return
         val listening = uiState.listeningService()
-        MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
-            .forEach { interception.setEnabled(it, true) }
+        MusicService.entries.filter { it.canBeSource && it != listening }.forEach { interception.setEnabled(it, true) }
+        Frontend.SOURCES.forEach { interception.setEnabled(it, true) }
         uiState = uiState.withDestinations().copy(showLinkSettingsHelper = true)
         loadSystemState()
     }
@@ -2751,6 +2789,10 @@ internal class MainViewModel(
         private const val MAX_COVER_LOOKUPS = 100
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
+
+        /** How many times, and how long apart, setup in one tap looks for lyrics being let follow music apps. */
+        private const val FOLLOW_WAITS = 10
+        private const val FOLLOW_WAIT_MS = 100L
         private const val KEY_SETUP_COMPLETE = "setup_complete"
 
         /** Preferences only an install from before first-run setup can have. */

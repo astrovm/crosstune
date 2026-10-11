@@ -57,7 +57,6 @@
     <string name="setup_finish">Bitir</string>
     <string name="setup_installed">Yüklü</string>
     <string name="setup_step">Adım %1$d / %2$d</string>
-    <string name="setup_sources_title">Crosstune hangi bağlantıları açsın?</string>
     <string name="setup_sources_listening_note">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor.</string>
     <string name="settings_listening_locked">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor. Açmak için aşağıdan başka bir uygulama seç.</string>
     <string name="setup_destination_title">Nerede dinliyorsunuz?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
     <string name="setup_allow_step_in_app">“Uygulamada” seçeneğini seç.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
+    <string name="setup_links_title">Bağlantılarınızı Crosstune açsın</string>
+    <string name="setup_links_body">Düzelt\'e dokunun, sonra geri gelin. Her biri kendiliğinden işaretlenir.</string>
+    <string name="setup_check_app">%1$s içinde bağlantıları kapat</string>
+    <string name="setup_check_allow">Crosstune\'da bağlantılara izin ver</string>
+    <string name="setup_one_tap">Her şeyi ayarla</string>
+    <string name="setup_one_tap_note">Shizuku ile</string>
+    <string name="setup_one_tap_failed">Shizuku her şeyi yapamadı. Kalanları aşağıdan düzeltin.</string>
     <string name="setup_apps_title">Diğer uygulamaların bağlantılarını kapat</string>
     <string name="setup_still_opens">Hâlâ bağlantıları açıyor</string>
     <string name="setup_done">Tamam</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Crosstune\'da aç</string>
     <string name="setting_only_music_videos">Yalnızca müzik videoları</string>
     <string name="setting_only_music_videos_description">Diğer videolar her zamanki gibi açılır.</string>
-    <string name="setup_sources_music">Müzik</string>
-    <string name="setup_sources_videos">Videolar</string>
-    <string name="setting_only_music_videos_note">Yalnızca müzik videoları uygulamana gider. Diğerleri her zamanki gibi açılır.</string>
     <string name="setup_apps_stop_body">“Tarayıcıda” seçeneğini seç veya “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="setup_apps_progress">Uygulama %1$d / %2$d</string>
     <string name="setup_apps_all_done">Tamam. Artık başka hiçbir uygulama bağlantıları açmıyor.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Düğmeye, sonra Kapat\'a dokun.</string>
     <string name="follow_help_restricted">⋮ simgesine, sonra Kısıtlanmış ayarlara izin ver\'e dokun.</string>
     <string name="follow_help_access">Şimdi aç ve İzin ver\'e dokun.</string>
-    <string name="setup_follow_body">Şarkı sözleri müzik uygulamanla senkron ilerler. Crosstune yalnızca çalanı görür, bildirimlerini asla.</string>
     <string name="follow_turn_on">Aç</string>
     <string name="follow_help_simple">Aç ve İzin ver\'e dokun.</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>

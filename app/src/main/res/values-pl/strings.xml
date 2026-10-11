@@ -57,7 +57,6 @@
     <string name="setup_finish">Zakończ</string>
     <string name="setup_installed">Zainstalowana</string>
     <string name="setup_step">Krok %1$d z %2$d</string>
-    <string name="setup_sources_title">Które linki ma otwierać Crosstune?</string>
     <string name="setup_sources_listening_note">Słuchasz w %1$s, więc jego linki i tak się tam otwierają.</string>
     <string name="settings_listening_locked">Słuchasz w %1$s, więc jego linki i tak się tam otwierają. Wybierz poniżej inną aplikację, aby to włączyć.</string>
     <string name="setup_destination_title">Gdzie słuchasz?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">Kliknij „Dodaj link”.</string>
     <string name="setup_allow_step_in_app">Wybierz „W aplikacji”.</string>
     <string name="setup_allow_step_tick">Zaznacz wszystkie linki, a potem kliknij „Dodaj”.</string>
+    <string name="setup_links_title">Niech Crosstune otwiera Twoje linki</string>
+    <string name="setup_links_body">Dotknij Napraw i wróć. Każdy punkt odhaczy się sam.</string>
+    <string name="setup_check_app">Wyłącz linki w %1$s</string>
+    <string name="setup_check_allow">Zezwól na linki w Crosstune</string>
+    <string name="setup_one_tap">Skonfiguruj wszystko</string>
+    <string name="setup_one_tap_note">Przez Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku nie zrobiło wszystkiego. Napraw resztę poniżej.</string>
     <string name="setup_apps_title">Wyłącz linki w innych aplikacjach</string>
     <string name="setup_still_opens">Nadal otwiera linki</string>
     <string name="setup_done">Gotowe</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Otwieraj w Crosstune</string>
     <string name="setting_only_music_videos">Tylko teledyski</string>
     <string name="setting_only_music_videos_description">Inne filmy otwierają się jak zwykle.</string>
-    <string name="setup_sources_music">Muzyka</string>
-    <string name="setup_sources_videos">Filmy</string>
-    <string name="setting_only_music_videos_note">Do Twojej aplikacji trafiają tylko teledyski. Inne filmy otwierają się jak zwykle.</string>
     <string name="setup_apps_stop_body">Wybierz „W przeglądarce” albo wyłącz „Otwieraj obsługiwane linki”.</string>
     <string name="setup_apps_progress">Aplikacja %1$d z %2$d</string>
     <string name="setup_apps_all_done">Gotowe. Żadna inna aplikacja nie otwiera już linków.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Kliknij przełącznik, a potem Zamknij.</string>
     <string name="follow_help_restricted">Kliknij ⋮, a potem Zezwól na ustawienia z ograniczonym dostępem.</string>
     <string name="follow_help_access">Teraz go włącz i kliknij Zezwól.</string>
-    <string name="setup_follow_body">Tekst nadąża za aplikacją muzyczną. Crosstune widzi tylko to, co gra, nigdy Twoich powiadomień.</string>
     <string name="follow_turn_on">Włącz</string>
     <string name="follow_help_simple">Włącz go i kliknij Zezwól.</string>
     <string name="setting_lyrics_follow">Tekst podąża za aplikacją muzyczną</string>

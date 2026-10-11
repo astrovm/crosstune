@@ -158,6 +158,8 @@ internal data class ScreenActions(
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onPreselectSources: () -> Unit = {},
+    /** Does all of setup's fixing at once, through Shizuku. */
+    val onSetUpInOneTap: () -> Unit = {},
     val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},

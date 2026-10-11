@@ -110,7 +110,8 @@ class MainActivity : ComponentActivity() {
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
                     chordFinder = ChordFinder(client, cache = LookupCache(File(cacheDir, "chords.json"), lookupDispatcher, maxEntries = 300)),
-                    lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext)
+                    lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
+                    oneTap = OneTapSetup(applicationContext, shellFactory())
                 )
             }
         }
@@ -268,6 +269,10 @@ class MainActivity : ComponentActivity() {
         /** What tells which language a song's words are in, when a test stands in for Android. */
         @VisibleForTesting
         internal var lyricsLanguageFactory: (() -> LyricsLanguage)? = null
+
+        /** Where setup in one tap runs its commands: Shizuku, unless a test stands in for it. */
+        @VisibleForTesting
+        internal var shellFactory: () -> Shell = ::ShizukuShell
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -443,6 +448,7 @@ class MainActivity : ComponentActivity() {
                         onFrontendInstanceChange = viewModel::setFrontendInstance,
                         onCompleteSetup = viewModel::completeSetup,
                         onPreselectSources = viewModel::preselectSources,
+                        onSetUpInOneTap = viewModel::setUpInOneTap,
                         onLinkModeChange = viewModel::setLinkMode,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,

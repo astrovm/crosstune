@@ -57,7 +57,6 @@
     <string name="setup_finish">完成</string>
     <string name="setup_installed">已安装</string>
     <string name="setup_step">第 %1$d 步，共 %2$d 步</string>
-    <string name="setup_sources_title">Crosstune 应打开哪些链接？</string>
     <string name="setup_sources_listening_note">你在 %1$s 中收听，所以它的链接已经会在那里打开。</string>
     <string name="settings_listening_locked">你在 %1$s 中收听，所以它的链接已经会在那里打开。要开启，请在下面选择另一个应用。</string>
     <string name="setup_destination_title">你在哪里听歌？</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">点按“添加链接”。</string>
     <string name="setup_allow_step_in_app">选择“在应用中”。</string>
     <string name="setup_allow_step_tick">勾选所有链接，然后点按“添加”。</string>
+    <string name="setup_links_title">让 Crosstune 打开你的链接</string>
+    <string name="setup_links_body">点按“修复”，然后返回。完成后会自动打勾。</string>
+    <string name="setup_check_app">关闭 %1$s 中的链接</string>
+    <string name="setup_check_allow">允许在 Crosstune 中打开链接</string>
+    <string name="setup_one_tap">一键设置</string>
+    <string name="setup_one_tap_note">使用 Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku 未能全部完成。请在下方修复剩下的项目。</string>
     <string name="setup_apps_title">阻止其他应用打开链接</string>
     <string name="setup_still_opens">仍会打开链接</string>
     <string name="setup_done">已完成</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">在 Crosstune 中打开</string>
     <string name="setting_only_music_videos">仅音乐视频</string>
     <string name="setting_only_music_videos_description">其他视频照常打开。</string>
-    <string name="setup_sources_music">音乐</string>
-    <string name="setup_sources_videos">视频</string>
-    <string name="setting_only_music_videos_note">只有音乐视频会发送到你的应用，其他视频照常打开。</string>
     <string name="setup_apps_stop_body">选择“在浏览器中”，或关闭“打开支持的链接”。</string>
     <string name="setup_apps_progress">第 %1$d 个应用，共 %2$d 个</string>
     <string name="setup_apps_all_done">完成了。其他应用不会再打开这些链接。</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">点按开关，然后点按“关闭”。</string>
     <string name="follow_help_restricted">点按 ⋮，然后点按“允许受限制的设置”。</string>
     <string name="follow_help_access">现在开启它并点按“允许”。</string>
-    <string name="setup_follow_body">歌词会跟随你的音乐应用同步。Crosstune 只会看到正在播放的内容，绝不读取你的通知。</string>
     <string name="follow_turn_on">开启</string>
     <string name="follow_help_simple">开启它并点按“允许”。</string>
     <string name="setting_lyrics_follow">歌词跟随音乐应用</string>

@@ -69,7 +69,6 @@
     <string name="setup_finish">Finish</string>
     <string name="setup_installed">Installed</string>
     <string name="setup_step">Step %1$d of %2$d</string>
-    <string name="setup_sources_title">Which links should Crosstune open?</string>
     <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
     <string name="settings_listening_locked">You listen in %1$s, so its links already open there. Pick another app below to turn this on.</string>
     <string name="setup_destination_title">Where do you listen?</string>
@@ -78,6 +77,13 @@
     <string name="setup_allow_step_add">Tap Add link.</string>
     <string name="setup_allow_step_in_app">Pick “In the app”.</string>
     <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
+    <string name="setup_links_title">Let Crosstune open your links</string>
+    <string name="setup_links_body">Tap Fix, then come back. Each one checks itself off.</string>
+    <string name="setup_check_app">Turn off links in %1$s</string>
+    <string name="setup_check_allow">Allow links in Crosstune</string>
+    <string name="setup_one_tap">Set everything up</string>
+    <string name="setup_one_tap_note">Uses Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku couldn\'t do it all. Fix what\'s left below.</string>
     <string name="setup_apps_title">Turn off other apps\' links</string>
     <string name="setup_still_opens">Still opens links</string>
     <string name="setup_done">Done</string>
@@ -170,7 +176,6 @@
     <string name="follow_help_try">Tap the switch, then Close.</string>
     <string name="follow_help_restricted">Tap ⋮, then Allow restricted settings.</string>
     <string name="follow_help_access">Now turn on the switch and tap Allow.</string>
-    <string name="setup_follow_body">Lyrics keep time with your music app. Crosstune only sees what\'s playing, never your notifications.</string>
     <string name="follow_turn_on">Turn on</string>
     <string name="follow_help_simple">Turn on the switch and tap Allow.</string>
     <string name="setting_lyrics_follow">Lyrics follow your music app</string>
@@ -245,9 +250,6 @@
     <string name="source_open_links">Open in Crosstune</string>
     <string name="setting_only_music_videos">Only music videos</string>
     <string name="setting_only_music_videos_description">Other videos open as usual.</string>
-    <string name="setup_sources_music">Music</string>
-    <string name="setup_sources_videos">Videos</string>
-    <string name="setting_only_music_videos_note">Only music videos go to your app. Others open as usual.</string>
     <string name="setup_apps_stop_body">Pick “In your browser”, or turn off “Open supported links”.</string>
     <string name="setup_apps_progress">App %1$d of %2$d</string>
     <string name="setup_apps_all_done">Done. No other app opens the links now.</string>

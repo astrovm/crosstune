@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -24,11 +25,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -63,13 +63,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 
-private enum class SetupStep { DESTINATION, SOURCES, APPS, ALLOW, FOLLOW }
+private enum class SetupStep { DESTINATION, LINKS }
 
 /**
- * First-run setup: where the user listens, which other services' links to open, stopping the
- * services' own installed apps from taking them, allowing the links in Android, and letting lyrics
- * follow the music apps. Stopping the
- * apps comes first because Android won't let Crosstune take links another app has verified.
+ * First-run setup: where the user listens, unless there's just one music app to pick, then one
+ * list of what Android needs changed for links to open in Crosstune and lyrics to follow music
+ * apps, each with a button to its page and checked off once done. Every source's links start on.
  * Choices apply as they're made, so leaving halfway keeps them; setup shows again until finished.
  */
 @Composable
@@ -77,16 +76,18 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
     // 0 is the welcome page; after that, a position in [steps].
     var position by rememberSaveable { mutableIntStateOf(0) }
     val appsToFix = appsToStop(state)
-    // Every step is counted, so the total doesn't change as sources are picked, but stopping the
-    // apps is skipped when no installed app is in the way.
-    val steps = SetupStep.entries
-    val skipped = { position: Int -> steps.getOrNull(position - 1) == SetupStep.APPS && appsToFix.isEmpty() }
-    val current = position
+    val only = onlyMusicApp(state)
+    // With just one music app installed, that's most likely where the user listens, so it's picked
+    // and not asked, and can be changed in settings.
+    LaunchedEffect(only) { if (only != null && !state.hasDefault) actions.onTargetChange(only) }
+    val steps = if (only != null) listOf(SetupStep.LINKS) else SetupStep.entries
+    // Installing or removing a music app meanwhile can leave one step fewer.
+    val current = position.coerceAtMost(steps.size)
     val step = if (current == 0) null else steps[current - 1]
-    // Which steps are skipped, and what they show, depends on what Android says about other apps
-    // and links, so a step restored before that's known waits for it.
+    // Which steps show, and what they show, depends on what Android says about other apps and
+    // links, so a step restored before that's known waits for it.
     val ready = step == null || state.systemStateKnown
-    val back = { if (ready) position = (current - 1).let { if (skipped(it)) it - 1 else it } }
+    val back = { if (ready) position = current - 1 }
     // System back steps back like the Back button instead of leaving setup.
     BackHandler(enabled = current > 0, onBack = back)
 
@@ -115,20 +116,12 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
                 val isLast = current == steps.size
-                val onNext = {
-                    if (isLast) actions.onCompleteSetup() else position = (current + 1).let { if (skipped(it)) it + 1 else it }
-                }
+                val onNext = { if (isLast) actions.onCompleteSetup() else position = current + 1 }
                 // There's no built-in default any more, so one has to be picked.
                 val enabled = ready && (step != SetupStep.DESTINATION || state.hasDefault)
-                // Leaving with links still to allow, or an app still taking them, is skipping that,
-                // so the button says so and the guide's own button stays the main one.
-                val skipping = when (step) {
-                    SetupStep.APPS -> !appsGuideDone(appsToFix, state.blockingApps)
-                    SetupStep.ALLOW -> state.someLinksNotAllowed || state.blockingApps.orEmpty().isNotEmpty()
-                    SetupStep.FOLLOW -> !state.canFollowApps
-                    else -> false
-                }
-                if (skipping) {
+                // Leaving with something still to fix is skipping it, so the button says so and
+                // the list's own buttons stay the main ones. What Android can't tell about isn't known to be left.
+                if (step == SetupStep.LINKS && checks(appsToFix, state).any { it.done == false }) {
                     FilledTonalButton(onClick = onNext, enabled = enabled, interactionSource = nextPress.source, modifier = buttonModifier.then(nextPress.modifier)) {
                         Text(stringResource(R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
                     }
@@ -157,19 +150,18 @@ internal fun SetupScreen(state: UiState, actions: ScreenActions) {
         ) { shown ->
             Column {
                 if (shown == null) return@Column Welcome()
-                StepProgress(steps.indexOf(shown) + 1, steps.size)
+                // A single step needs no counting.
+                if (steps.size > 1) StepProgress(steps.indexOf(shown) + 1, steps.size)
                 if (!state.systemStateKnown) return@Column
-                when (shown) {
-                    SetupStep.DESTINATION -> DestinationStep(state, actions)
-                    SetupStep.SOURCES -> SourcesStep(state, actions)
-                    SetupStep.APPS -> AppsStep(appsToFix, state, actions)
-                    SetupStep.ALLOW -> AllowStep(state, actions)
-                    SetupStep.FOLLOW -> FollowSetupStep(state, actions)
-                }
+                if (shown == SetupStep.DESTINATION) DestinationStep(state, actions) else LinksStep(appsToFix, state, actions)
             }
         }
     }
 }
+
+/** The one music app installed, but YouTube, which comes with most phones and is mostly videos. */
+private fun onlyMusicApp(state: UiState): Destination? =
+    (state.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)?.takeIf { it in state.destinations }
 
 @Composable
 private fun StepProgress(step: Int, lastStep: Int) {
@@ -284,91 +276,8 @@ internal fun UiState.listeningService(): MusicService? =
     // Asking or showing first, links don't go to one app by themselves, so none is the one listened in.
     if (hasDefault && linkMode == LinkMode.OPEN) (defaultDestination as? Destination.Service)?.service else null
 
-/**
- * The services the user gets links from. The one they listen in isn't offered: its links already
- * open there, and stopping its app from taking them would only get in the way.
- */
-@Composable
-private fun SourcesStep(state: UiState, actions: ScreenActions) {
-    // Music services start ticked; it's what most people want.
-    LaunchedEffect(Unit) { actions.onPreselectSources() }
-    StepHeader(R.string.setup_sources_title, null)
-    val listening = state.listeningService()
-    SetupGroupTitle(R.string.setup_sources_music)
-    Group {
-        // Links usually come from the services the user doesn't use, so installed apps aren't put first.
-        MusicService.entries.filter { it.canBeSource && it != MusicService.YOUTUBE && it != listening }
-            .forEachIndexed { index, source ->
-                if (index > 0) GroupDivider()
-                SourceChoice(stringResource(source.labelRes), Destination.Service(source), state.installed, source in state.intercepted) {
-                    actions.onInterceptChange(source, it)
-                }
-            }
-    }
-    if (listening != null && listening.canBeSource) {
-        Text(
-            text = stringResource(R.string.setup_sources_listening_note, stringResource(listening.labelRes)),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)
-        )
-    }
-    // Most videos aren't music, so these start off; YouTube's own frontends are sources of their own.
-    SetupGroupTitle(R.string.setup_sources_videos)
-    Group {
-        if (listening != MusicService.YOUTUBE) {
-            SourceChoice(
-                stringResource(R.string.target_youtube), Destination.Service(MusicService.YOUTUBE), state.installed,
-                MusicService.YOUTUBE in state.intercepted
-            ) {
-                actions.onInterceptChange(MusicService.YOUTUBE, it)
-            }
-            GroupDivider()
-        }
-        Frontend.SOURCES.forEachIndexed { index, frontend ->
-            if (index > 0) GroupDivider()
-            SourceChoice(frontend.label, Destination.Alternative(frontend), state.installed, frontend in state.frontendSources) {
-                actions.onFrontendInterceptChange(frontend, it)
-            }
-        }
-    }
-    Text(
-        text = stringResource(R.string.setting_only_music_videos_note),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp)
-    )
-}
-
-@Composable
-private fun SetupGroupTitle(title: Int) {
-    Text(
-        text = stringResource(title),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
-private fun SourceChoice(label: String, icon: Destination, installed: Set<MusicService>, checked: Boolean, onChange: (Boolean) -> Unit) {
-    ChoiceRow(
-        modifier = Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange),
-        control = { Checkbox(checked = checked, onCheckedChange = null) },
-        label = label,
-        icon = { DestinationIcon(icon, installed) }
-    )
-}
-
 @Composable
 private fun DestinationStep(state: UiState, actions: ScreenActions) {
-    // With just one music app installed, that's most likely where the user listens. YouTube
-    // doesn't count: it comes with most phones and is mostly videos.
-    LaunchedEffect(state.installed) {
-        if (state.hasDefault) return@LaunchedEffect
-        val only = (state.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)
-        if (only != null && only in state.destinations) actions.onTargetChange(only)
-    }
     StepHeader(R.string.setup_destination_title, null)
     Group {
         state.destinations.installedFirst(state.installed) { (it as? Destination.Service)?.service }
@@ -384,6 +293,152 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
                     icon = { DestinationIcon(destination, state.installed) }
                 )
             }
+    }
+}
+
+/** One thing setup has the user change in Android, and whether it's [done]: null when Android can't tell. */
+private data class Check(val kind: Kind, val done: Boolean?, val app: LinkApp? = null) {
+    enum class Kind { APP, ALLOW, FOLLOW }
+}
+
+/**
+ * What's left to change, in the order it's done: the apps in the way first, since Android won't
+ * let Crosstune take links another app verified, then allowing the links, then lyrics. Before
+ * Android 12, which can't tell, the links' are never marked either way.
+ */
+private fun checks(apps: List<LinkApp>, state: UiState): List<Check> = buildList {
+    if (state.interceptsAnything) {
+        apps.forEach { app -> add(Check(Check.Kind.APP, state.blockingApps?.let { app !in it }, app)) }
+        add(Check(Check.Kind.ALLOW, state.unapprovedHosts?.let { !state.someLinksNotAllowed }))
+    }
+    add(Check(Check.Kind.FOLLOW, state.canFollowApps))
+}
+
+/** Every source's links start on, so all that's left is what Android needs changed, in one list. */
+@Composable
+private fun LinksStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
+    LaunchedEffect(Unit) { actions.onPreselectSources() }
+    StepHeader(R.string.setup_links_title, R.string.setup_links_body)
+    val checks = checks(apps, state)
+    if (state.canSetUpInOneTap && checks.any { it.done == false }) OneTap(state, actions)
+    if (!state.interceptsAnything) {
+        Text(
+            text = stringResource(R.string.setup_allow_none),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+        )
+    }
+    // The first thing left shows how it's done; the rest wait their turn. What Android can't
+    // tell about is never checked off, so it always shows how.
+    val next = checks.firstOrNull { it.done != true }
+    Group {
+        checks.forEachIndexed { index, check ->
+            if (index > 0) GroupDivider()
+            CheckRow(check, state, actions, howTo = check == next || check.done == null)
+        }
+    }
+}
+
+/** Shizuku does it all, for people who run it; what it can't is left in the list below. */
+@Composable
+private fun OneTap(state: UiState, actions: ScreenActions) {
+    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+        val press = rememberPress()
+        Button(
+            onClick = actions.onSetUpInOneTap,
+            enabled = !state.settingUpInOneTap,
+            interactionSource = press.source,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .then(press.modifier)
+        ) {
+            if (state.settingUpInOneTap) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+            }
+            Text(stringResource(R.string.setup_one_tap), style = MaterialTheme.typography.labelLarge)
+        }
+        Text(
+            text = stringResource(if (state.oneTapFailed) R.string.setup_one_tap_failed else R.string.setup_one_tap_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.oneTapFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .align(Alignment.CenterHorizontally)
+        )
+    }
+}
+
+/** A thing to change, with a button to Android's page for it until it's checked off, and how when [howTo]. */
+@Composable
+private fun CheckRow(check: Check, state: UiState, actions: ScreenActions, howTo: Boolean) {
+    Column(modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                when (check.kind) {
+                    Check.Kind.APP -> PackageIcon(check.app!!.packageName)
+                    Check.Kind.ALLOW -> AppLogo(size = 28.dp)
+                    Check.Kind.FOLLOW -> AppIcon(R.drawable.ic_lyrics, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Text(
+                text = when (check.kind) {
+                    Check.Kind.APP -> stringResource(R.string.setup_check_app, check.app!!.label)
+                    Check.Kind.ALLOW -> stringResource(R.string.setup_check_allow)
+                    Check.Kind.FOLLOW -> stringResource(R.string.follow_help_title)
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            )
+            AnimatedContent(targetState = check.done == true, transitionSpec = { fade() }, label = "check") { done ->
+                if (done) {
+                    AppIcon(
+                        R.drawable.ic_check,
+                        contentDescription = stringResource(R.string.setup_done),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                } else {
+                    FilledTonalButton(
+                        onClick = when (check.kind) {
+                            Check.Kind.APP -> { { actions.onOpenAppLinkSettings(check.app!!) } }
+                            Check.Kind.ALLOW -> actions.onOpenLinkSettings
+                            Check.Kind.FOLLOW -> actions.onAllowFollowing
+                        }
+                    ) {
+                        Text(stringResource(R.string.fix_button))
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(visible = howTo && check.done != true, enter = Motion.appear, exit = Motion.disappear) {
+            Column(modifier = Modifier.padding(top = 12.dp)) { HowTo(check.kind, state) }
+        }
+    }
+}
+
+/** What to do on Android's page, shown, with what to tap circled. */
+@Composable
+private fun HowTo(kind: Check.Kind, state: UiState) {
+    when (kind) {
+        Check.Kind.APP -> GuideShot(R.drawable.guide_stop_app, caption = stringResource(R.string.setup_apps_stop_body))
+        // Set to open in the browser, Android hides the links to tick, so switching back comes first.
+        Check.Kind.ALLOW -> if (state.ownLinksOff) {
+            NumberedStep(1, stringResource(R.string.setup_allow_step_in_app))
+        } else {
+            NumberedStep(1, stringResource(R.string.setup_allow_step_add))
+            GuideShot(R.drawable.guide_add_link, Modifier.padding(vertical = 12.dp))
+            NumberedStep(2, stringResource(R.string.setup_allow_step_tick))
+            GuideShot(R.drawable.guide_tick_links, Modifier.padding(top = 12.dp))
+        }
+        // Held back, Fix shows the steps there are to it instead.
+        Check.Kind.FOLLOW -> if (!state.followRestricted) {
+            GuideShot(R.drawable.guide_access_switch, caption = stringResource(R.string.follow_help_simple))
+        }
     }
 }
 
@@ -438,33 +493,6 @@ private fun AllowRow(label: String, hosts: List<String>) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp)
         )
-    }
-}
-
-@Composable
-private fun AllowStep(state: UiState, actions: ScreenActions) {
-    if (!state.interceptsAnything) {
-        StepHeader(R.string.setup_allow_title, R.string.setup_allow_none)
-        return
-    }
-    Text(
-        text = stringResource(R.string.setup_allow_title),
-        style = MaterialTheme.typography.headlineMedium,
-        modifier = Modifier.padding(top = 28.dp, bottom = 16.dp)
-    )
-    AllowLinksGuide(state, actions)
-}
-
-/** Letting Crosstune see what music apps play, with the steps to it until it's allowed. */
-@Composable
-private fun FollowSetupStep(state: UiState, actions: ScreenActions) {
-    StepHeader(R.string.follow_help_title, R.string.setup_follow_body)
-    AnimatedContent(targetState = state.canFollowApps, transitionSpec = { fade() }, label = "follow allowed") { allowed ->
-        if (allowed) {
-            Tag(stringResource(R.string.setup_done), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
-        } else {
-            FollowSteps(state.followRestricted, actions)
-        }
     }
 }
 
@@ -563,12 +591,6 @@ internal fun AllowLinksGuide(state: UiState, actions: ScreenActions) {
             }
         }
     }
-}
-
-@Composable
-private fun AppsStep(apps: List<LinkApp>, state: UiState, actions: ScreenActions) {
-    StepHeader(R.string.setup_apps_title, null)
-    StopAppsGuide(apps, state.blockingApps, actions.onOpenAppLinkSettings)
 }
 
 /** Whether a guide is finished, so its button can say Done rather than Skip for now. */

@@ -57,7 +57,6 @@
     <string name="setup_finish">Selesai</string>
     <string name="setup_installed">Terinstal</string>
     <string name="setup_step">Langkah %1$d dari %2$d</string>
-    <string name="setup_sources_title">Link mana yang harus dibuka Crosstune?</string>
     <string name="setup_sources_listening_note">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana.</string>
     <string name="settings_listening_locked">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana. Pilih aplikasi lain di bawah untuk menyalakannya.</string>
     <string name="setup_destination_title">Kamu dengar musik di mana?</string>
@@ -66,6 +65,13 @@
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
     <string name="setup_allow_step_in_app">Pilih “Di aplikasi”.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
+    <string name="setup_links_title">Biarkan Crosstune membuka link kamu</string>
+    <string name="setup_links_body">Ketuk Perbaiki, lalu kembali. Tiap langkah tercentang sendiri.</string>
+    <string name="setup_check_app">Matikan link di %1$s</string>
+    <string name="setup_check_allow">Izinkan link di Crosstune</string>
+    <string name="setup_one_tap">Atur semuanya</string>
+    <string name="setup_one_tap_note">Pakai Shizuku</string>
+    <string name="setup_one_tap_failed">Shizuku tidak bisa melakukan semuanya. Perbaiki sisanya di bawah.</string>
     <string name="setup_apps_title">Matikan link aplikasi lain</string>
     <string name="setup_still_opens">Masih membuka link</string>
     <string name="setup_done">Selesai</string>
@@ -178,9 +184,6 @@
     <string name="source_open_links">Buka di Crosstune</string>
     <string name="setting_only_music_videos">Hanya video musik</string>
     <string name="setting_only_music_videos_description">Video lain terbuka seperti biasa.</string>
-    <string name="setup_sources_music">Musik</string>
-    <string name="setup_sources_videos">Video</string>
-    <string name="setting_only_music_videos_note">Hanya video musik yang masuk ke aplikasimu. Video lain terbuka seperti biasa.</string>
     <string name="setup_apps_stop_body">Pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
     <string name="setup_apps_all_done">Beres. Sekarang tidak ada aplikasi lain yang membuka link itu.</string>
@@ -234,7 +237,6 @@
     <string name="follow_help_try">Ketuk tombolnya, lalu Tutup.</string>
     <string name="follow_help_restricted">Ketuk ⋮, lalu Izinkan setelan terbatas.</string>
     <string name="follow_help_access">Sekarang aktifkan dan ketuk Izinkan.</string>
-    <string name="setup_follow_body">Lirik mengikuti aplikasi musikmu. Crosstune hanya melihat apa yang diputar, tidak pernah notifikasimu.</string>
     <string name="follow_turn_on">Aktifkan</string>
     <string name="follow_help_simple">Aktifkan dan ketuk Izinkan.</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>
