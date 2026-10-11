@@ -46,6 +46,29 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongDeezerDoesntHaveGetsApplesCover() {
+        val cover = "https://is1-ssl.mzstatic.com/image/thumb/Music/100x100bb.jpg"
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Owaranai Uta","artistName":"Kukki","artworkUrl100":"https://other.jpg"},{"trackName":"Owaranai Uta","artistName":"THE BLUE HEARTS","artworkUrl100":"$cover"}]}"""
+                } else {
+                    """{"data":[{"title":"終わらない歌","artist":{"name":"Kukki"},"album":{"cover_big":"https://kukki.jpg"}}]}"""
+                }
+            )
+        }
+        // As large as Apple makes them.
+        assertEquals("https://is1-ssl.mzstatic.com/image/thumb/Music/600x600bb.jpg", runBlocking { matcher().cover(MusicMetadata("Owaranai Uta", "The Blue Hearts")) })
+        assertTrue(fake.requestedUrls.last(), fake.requestedUrls.last().contains("country=AR"))
+        // Neither having it, or a cover with no picture, is none.
+        assertNull(runBlocking { matcher().cover(MusicMetadata("Linda Linda", "The Blue Hearts")) })
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "itunes.apple.com") """{"results":[{"trackName":"Linda Linda","artistName":"THE BLUE HEARTS","artworkUrl100":""}]}""" else "{}") }
+        assertNull(runBlocking { matcher().cover(MusicMetadata("Linda Linda", "The Blue Hearts")) })
+        assertNull(runBlocking { matcher("").cover(MusicMetadata("Linda Linda", "The Blue Hearts")) })
+    }
+
+    @Test
     fun aNowPlayingSongGetsTheCoverOfTheClosestDeezerSong() {
         val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         respond(
@@ -296,26 +319,30 @@ class ExactMatcherTest {
         val asked = mutableListOf<List<String>>()
         var answer: Int? = 1
         val matcher = ExactMatcher(fake.client(), "AR", pick = { metadata, rows ->
-            assertEquals("Stay With Me", metadata.title)
+            assertEquals("Miki Matsubara", metadata.artist)
             asked += rows
             answer
         })
         val rows = (0..7).map { youTubeMusicRow("真夜中のドア$it", "松原みき • Pocket Park • 5:26", videoId = "door00000$it") }
-        respond(youTubeMusicPage(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x"), *rows.toTypedArray()))
+        val video = youTubeMusicRow("松原みき - 真夜中のドア (歌詞付き)", "Fan • 1M views • 5:26", videoId = "video000000")
+        youTubeMusicTabs(songs = listOf(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")) + rows, videos = listOf(video))
         val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
         assertEquals("https://music.youtube.com/watch?v=door000001", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        // Picked among the first six songs, as "title | details".
-        assertEquals(listOf((0..5).map { "真夜中のドア$it | 松原みき • Pocket Park • 5:26" }), asked)
+        // Picked among the first six songs and the videos, as "title | details", all at once.
+        assertEquals(listOf((0..5).map { "真夜中のドア$it | 松原みき • Pocket Park • 5:26" } + "松原みき - 真夜中のドア (歌詞付き) | Fan • 1M views • 5:26"), asked)
+        // A video put up by someone else is picked too, for a song only there that way.
+        answer = 6
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe.copy(title = "Mayonaka no Door")) })
         // No answer, or one past the songs, is no match.
         answer = -1
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
         answer = null
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        answer = 6
+        answer = 7
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        // Not asked when there's no song to pick from, or a song matches by name.
+        // Not asked when there's no song or video to pick from, or a song matches by name.
         asked.clear()
-        respond(youTubeMusicPage(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")))
+        youTubeMusicTabs(songs = listOf(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")), videos = emptyList())
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
         respond(youTubeMusicPage(youTubeMusicRow("Stay With Me", "Miki Matsubara • Album • 5:26", videoId = "named000000")))
         assertEquals("https://music.youtube.com/watch?v=named000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
@@ -752,7 +779,8 @@ class ExactMatcherTest {
         found.clear()
         restarted.covers(tracks) { index, cover -> found[index] = cover }
         assertEquals(2, found.size)
-        assertEquals(1, fake.requestedUrls.size)
+        // Asked of Deezer, then of Apple.
+        assertEquals(2, fake.requestedUrls.size)
         assertEquals("https://cdn/named.jpg", restarted.cover(tracks[1]))
 
         // A song matched once is found again the same way.

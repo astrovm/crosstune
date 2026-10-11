@@ -304,7 +304,6 @@
     <string name="lyrics_word_saved">%1$s salvata</string>
     <string name="lyrics_about_artist_failed">Impossibile sapere di più sull\'artista.</string>
     <string name="lyrics_songs_like">Brani simili</string>
-    <string name="lyrics_blanks">Riempi gli spazi</string>
     <string name="lyrics_examples">Esempi</string>
     <string name="lyrics_examples_failed">Impossibile scrivere esempi.</string>
     <string name="lyrics_ask_song">Chiedi sulla canzone</string>
@@ -317,14 +316,12 @@
     <string name="songs_like_label">Brani come</string>
     <string name="song_search_playlist">Crea una playlist</string>
     <string name="error_no_songs_like">Nessun brano simile trovato.</string>
-    <string name="lyrics_show_blank">Mostra la parola</string>
     <string name="lyrics_about_song">Sulla canzone</string>
     <string name="lyrics_study">Studia</string>
     <string name="practice_due">%1$d da ripassare</string>
     <string name="song_tab_meaning">Significato</string>
     <string name="song_tab_words">Parole</string>
     <string name="song_tab_artist">Artista</string>
-    <string name="lyrics_blanks_hint">Tocca una riga per vedere la sua parola</string>
     <string name="lyrics_as_written">Come è scritto</string>
     <string name="lyrics_only_kana">Solo kana</string>
     <string name="lyrics_only_latin">Solo lettere latine</string>

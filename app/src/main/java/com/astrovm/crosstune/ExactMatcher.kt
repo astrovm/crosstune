@@ -254,7 +254,8 @@ internal class ExactMatcher(
                 } else {
                     null
                 }
-                own ?: deezerCover(metadata)
+                // Apple has some Deezer doesn't, e.g. The Blue Hearts'.
+                own ?: deezerCover(metadata) ?: itunesCover(metadata)
             } catch (_: IOException) {
                 null
             } catch (_: JSONException) {
@@ -271,6 +272,26 @@ internal class ExactMatcher(
     /** Deezer's cover for the song, under any of its names. */
     private suspend fun deezerCover(metadata: MusicMetadata): String? =
         SongNames.titleNames(metadata.title).firstNotNullOfOrNull { title -> deezerCoverNamed(metadata.copy(title = title)) }
+
+    /** Apple's cover for the song, under any of its names, as large as it makes them. */
+    private suspend fun itunesCover(metadata: MusicMetadata): String? =
+        SongNames.titleNames(metadata.title).firstNotNullOfOrNull { title -> itunesCoverNamed(metadata.copy(title = title)) }
+
+    private suspend fun itunesCoverNamed(metadata: MusicMetadata): String? {
+        val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
+        val artists = SongNames.artists(metadata.artist)
+        val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("term", searchQuery(metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)))
+            .addQueryParameter("entity", "song")
+            .addQueryParameter("limit", "10")
+            .apply { if (country.length == 2) addQueryParameter("country", country) }
+            .build()
+        return fetchJson(url.toString()).optJSONArray("results")?.objects()?.firstOrNull { result ->
+            val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
+            val credit = SongNames.normalize(result.optString("artistName"))
+            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+        }?.optString("artworkUrl100")?.ifBlank { null }?.replace("100x100bb", "600x600bb")
+    }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
@@ -461,21 +482,26 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        return items.firstNotNullOfOrNull { found(it, loose = false) }
-            ?: (if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) } else null)
-            // A song that was never released, e.g. one only on SoundCloud, may still be uploaded as a video.
-            ?: (if (isSong) findVideoOnYouTubeMusic(metadata, watchUrl, client) else null)
-            // Last, a song named otherwise there, e.g. in Japanese, is picked from the results.
-            ?: if (isSong) pickedFrom(metadata, items, watchUrl) else null
+        items.firstNotNullOfOrNull { found(it, loose = false) }?.let { return it }
+        if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) }?.let { return it }
+        if (!isSong) return null
+        // A song that was never released, e.g. one only on SoundCloud, may still be uploaded as a video.
+        val videos = searchVideosOnYouTubeMusic(metadata, client)
+        theSongsVideo(metadata, videos, watchUrl)?.let { return it }
+        // Last, a song named otherwise there, e.g. in Japanese, is picked from the songs, or from the
+        // videos for one that's only been put up by others, e.g. The Blue Hearts', all at once.
+        return pickedFrom(metadata, playable(items).take(PICK_FROM) + playable(videos).take(PICK_FROM), watchUrl)
     }
 
-    /** The song among a YouTube Music search's song [items] that [pick] says it is. */
-    private suspend fun pickedFrom(metadata: MusicMetadata, items: List<JSONObject>, watchUrl: String): String? {
-        val songs = items.mapNotNull { item ->
-            val id = item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null } ?: return@mapNotNull null
-            val columns = item.optJSONArray("flexColumns")?.objects()?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
-            id to "${columns.getOrNull(0).orEmpty()} | ${columns.getOrNull(1).orEmpty()}"
-        }.take(PICK_FROM)
+    /** The songs or videos among [items] that play, by their id, with their "title | details". */
+    private fun playable(items: List<JSONObject>): List<Pair<String, String>> = items.mapNotNull { item ->
+        val id = item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null } ?: return@mapNotNull null
+        val columns = item.optJSONArray("flexColumns")?.objects()?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
+        id to "${columns.getOrNull(0).orEmpty()} | ${columns.getOrNull(1).orEmpty()}"
+    }
+
+    /** The one among [songs], as [playable] has them, that [pick] says the song is. */
+    private suspend fun pickedFrom(metadata: MusicMetadata, songs: List<Pair<String, String>>, watchUrl: String): String? {
         if (songs.isEmpty()) return null
         val index = pick(metadata, songs.map { it.second }) ?: return null
         return songs.getOrNull(index)?.let { watchUrl + it.first }
@@ -487,12 +513,17 @@ internal class ExactMatcher(
      * it's the song's words, its artist's and nothing else but such tags; a remix or a live take has
      * words of its own and stays out.
      */
-    private suspend fun findVideoOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, client: JSONObject): String? {
+    private suspend fun searchVideosOnYouTubeMusic(metadata: MusicMetadata, client: JSONObject): List<JSONObject> {
         val body = JSONObject()
             .put("context", JSONObject().put("client", client))
             .put("query", searchQuery(metadata))
             .put("params", YOUTUBE_MUSIC_VIDEOS)
-        return fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems().firstNotNullOfOrNull { item ->
+        return fetchJson(YOUTUBE_MUSIC_SEARCH_URL, body).listItems()
+    }
+
+    /** The song's own video among [videos], as [isTheSongsVideo] tells it. */
+    private fun theSongsVideo(metadata: MusicMetadata, videos: List<JSONObject>, watchUrl: String): String? =
+        videos.firstNotNullOfOrNull { item ->
             val columns = item.optJSONArray("flexColumns")?.objects()
                 ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }
                 ?: return@firstNotNullOfOrNull null
@@ -501,7 +532,6 @@ internal class ExactMatcher(
             if (!isTheSongsVideo(metadata, columns.firstOrNull().orEmpty(), channel)) return@firstNotNullOfOrNull null
             item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }?.let { watchUrl + it }
         }
-    }
 
     private fun isTheSongsVideo(metadata: MusicMetadata, name: String, channel: String): Boolean {
         val title = SongNames.words(SongNames.withoutEditionTag(metadata.title))

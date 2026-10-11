@@ -172,12 +172,6 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         if (tab == SongTab.WORDS) actions.onFindWordsToKnow()
         if (tab == SongTab.ARTIST) actions.onAboutArtist()
     }
-    // The lines whose blank word was tapped to show it.
-    var revealed by rememberSaveable(song) { mutableStateOf(intArrayOf()) }
-    val reveal = { index: Int ->
-        revealed += index
-        actions.onBlankShown()
-    }
     if (savedShown) {
         state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
@@ -250,9 +244,6 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // Signed in with ChatGPT, the song opens to what it's about.
             LyricsHeader(song.copy(artworkUrl = cover), actions, onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null })
             TranslationStatus(state.learning, actions)
-            AnimatedVisibility(visible = state.blanksHint && state.learning.blanks && state.learning.blankWords.any { it != null }) {
-                BlanksHint(onDismiss = actions.onBlankShown)
-            }
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
             AnimatedVisibility(
@@ -277,10 +268,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     } else if (shown == LyricsShown.NONE) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
-                        TimedLyrics(state, actions, timedList, syncing, revealed, reveal, onStudy = { studying = it })
+                        TimedLyrics(state, actions, timedList, syncing, onStudy = { studying = it })
                     } else if (state.learning.shows) {
                         // Read line by line, each with what helps read it.
-                        LyricLines(state, revealed, reveal, onStudy = { studying = it })
+                        LyricLines(state, onStudy = { studying = it })
                     } else {
                         PlainLyrics(state.lyrics)
                     }
@@ -429,9 +420,8 @@ private fun LyricsActions(
                 if (state.lyrics.isNotEmpty()) {
                     LearnButton(state.learning.translating, onClick = { menu = BarMenu.LEARN })
                 }
-                // Studying needs ChatGPT for the blanks, or lines kept.
-                val signedIn = state.chatGpt.email != null
-                if (state.lyrics.isNotEmpty() && (signedIn || state.savedLines.isNotEmpty())) {
+                // Lines kept are studied.
+                if (state.lyrics.isNotEmpty() && state.savedLines.isNotEmpty()) {
                     IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
@@ -450,7 +440,7 @@ private fun LyricsActions(
         // keep off the screen's edge.
         val close = { menu = null }
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions, close)
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onOpenSaved, onPractise, close)
+        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, onOpenSaved, onPractise, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
@@ -491,7 +481,7 @@ private const val BAR_BACK_MS = 1_200L
 private val BAR_ROOM = 112.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
-private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN)) || (blanks && blankWords.any { it != null })
+private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN))
 
 /**
  * What helps read the words in another language, switched on and off here: readings over them for
@@ -518,27 +508,20 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions,
     }
 }
 
-/**
- * Studying the words: signed in, a word of each line left blank to listen for; and the lines kept,
- * to see or practise, with how many are due.
- */
+/** The lines kept, to see or practise, with how many are due. */
 @Composable
-private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onOpenSaved: () -> Unit, onPractise: () -> Unit, onClose: () -> Unit) {
+private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, onPractise: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        // Only ChatGPT picks the words to leave blank.
-        if (state.chatGpt.email != null) LearnItem(R.string.lyrics_blanks, state.learning.blanks, actions.onBlanksChange)
         val saved = state.savedLines
-        if (saved.isNotEmpty()) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.lyrics_saved_lines)) },
-                leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
-                trailingIcon = { Text(saved.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = {
-                    onClose()
-                    onOpenSaved()
-                }
-            )
-        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.lyrics_saved_lines)) },
+            leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
+            trailingIcon = { Text(saved.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            onClick = {
+                onClose()
+                onOpenSaved()
+            }
+        )
         // Only lines with their meaning can be practised.
         val practisable = saved.filter { it.translation != null }
         if (practisable.isNotEmpty()) {
@@ -583,22 +566,6 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
         onClick = { onChange(!on) },
         modifier = Modifier.semantics { toggleableState = ToggleableState(on) }
     )
-}
-
-/** How to see a word left blank, until one's seen or it's put away. */
-@Composable
-private fun BlanksHint(onDismiss: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.lyrics_blanks_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
-        }
-    }
 }
 
 /** While the words are being translated, or why they couldn't be. */
@@ -864,8 +831,6 @@ private fun TimedLyrics(
     actions: ScreenActions,
     list: LazyListState,
     syncing: Boolean,
-    revealed: IntArray,
-    onReveal: (Int) -> Unit,
     onStudy: (Int) -> Unit
 ) {
     val lines = state.lyricLines
@@ -895,8 +860,7 @@ private fun TimedLyrics(
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index, index in revealed),
-                onReveal = { onReveal(index) }
+                help = state.learning.helpFor(index)
             )
         }
     }
@@ -904,14 +868,14 @@ private fun TimedLyrics(
 
 /** Words with no timings, line by line, when each has something under it to help read it. */
 @Composable
-private fun LyricLines(state: UiState, revealed: IntArray, onReveal: (Int) -> Unit, onStudy: (Int) -> Unit) {
+private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(state.lyrics.lines()) { index, line ->
-            LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index, index in revealed), onReveal = { onReveal(index) })
+            LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
         }
     }
 }
@@ -922,36 +886,15 @@ internal class LineHelp(
     val readings: Boolean,
     val romanized: Boolean,
     val translation: String?,
-    val blank: String? = null,
-    /** Whether [blank] was tapped to show it. */
-    val blankShown: Boolean = false,
     /** What shows instead of the line: its kana, or its Latin letters. */
     val instead: String? = null
 )
 
-internal fun Learning.helpFor(index: Int, blankShown: Boolean = false): LineHelp? {
+internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, blankWords.getOrNull(index).takeIf { blanks }, blankShown, insteadOf(index))
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index))
 }
 
-/**
- * [text] with [word] left blank, as long as the word is, or with it standing out in [color] once
- * [shown].
- */
-internal fun blanked(text: String, word: String, shown: Boolean, color: Color): AnnotatedString = buildAnnotatedString {
-    val at = text.indexOf(word)
-    append(text.substring(0, at))
-    if (shown) {
-        withStyle(SpanStyle(color = color)) { append(word) }
-    } else {
-        // Wide letters, like kana, get wide blanks, so the gap's as long as the word.
-        append((if (word.any { it.code >= WIDE_LETTERS }) "＿" else "_").repeat(maxOf(word.length, 3)))
-    }
-    append(text.substring(at + word.length))
-}
-
-/** Where wide letters, like CJK's, start. */
-private const val WIDE_LETTERS = 0x2E80
 
 /**
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
@@ -1002,15 +945,11 @@ private fun LyricLineText(
     onStudy: () -> Unit,
     help: LineHelp? = null,
     waiting: Boolean = false,
-    seekLabel: Int = R.string.lyrics_jump,
-    onReveal: () -> Unit
+    seekLabel: Int = R.string.lyrics_jump
 ) {
     val lit = place == 0
-    // Shown in kana or Latin letters, the line has no words of its own to leave blank.
+    // Shown in kana or Latin letters instead, as set.
     val instead = help?.instead
-    // A word left blank shows once tapped, or once its line's sung.
-    val blank = help?.blank?.takeIf { instead == null }
-    val hidden = blank != null && help.blankShown != true && (place == null || place >= 0)
     val alpha by animateFloatAsState(
         if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
         spring(stiffness = Spring.StiffnessLow),
@@ -1033,13 +972,13 @@ private fun LyricLineText(
                 scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0.5f)
             }
-            // Tapped, a word left blank shows; then the music app goes there when it can; held, or tapped when
-            // it can't, the line opens to study. A gap, e.g. a solo, has no words to study, so it only moves the app there.
+            // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
+            // A gap, e.g. a solo, has no words to study, so it only moves the app there.
             .then(
                 if (text.isNotBlank()) {
                     Modifier.combinedClickable(
-                        onClickLabel = stringResource(if (hidden) R.string.lyrics_show_blank else if (onSeek != null) seekLabel else R.string.lyrics_study_line),
-                        onClick = if (hidden) onReveal else onSeek ?: onStudy,
+                        onClickLabel = stringResource(if (onSeek != null) seekLabel else R.string.lyrics_study_line),
+                        onClick = onSeek ?: onStudy,
                         onLongClickLabel = stringResource(R.string.lyrics_study_line),
                         onLongClick = onStudy
                     )
@@ -1052,8 +991,6 @@ private fun LyricLineText(
         val reading = help?.reading
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
-        } else if (blank != null) {
-            Text(blanked(text, blank, !hidden, MaterialTheme.colorScheme.primary), style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
             RubyLine(reading.parts, style)
         } else {
@@ -1061,8 +998,8 @@ private fun LyricLineText(
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
         val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
-        // The blank word's letters would give it away, and shown in them already they'd say it twice.
-        if (help?.romanized == true && !hidden) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
+        // Shown in them already, they'd say it twice.
+        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }

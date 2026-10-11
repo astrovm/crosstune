@@ -749,28 +749,6 @@ class ChatGptTest {
         assertNull(runBlocking { tutor(chatGpt()).wordsToKnow(song.copy(title = "Other"), lines, "es") })
     }
 
-    @Test
-    fun aWordOfEachLineIsLeftBlankOnlyWhenItsThere() {
-        val tutor = tutor()
-        val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
-        val lines = listOf("突然のキスや", "", "I'm just playing games")
-        answering("[\"突然\", \"\", \"games\"]")
-        assertEquals(listOf("突然", null, "games"), runBlocking { tutor.blanks(song, lines) })
-        assertEquals(JSONArray(lines).toString(), openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
-        assertEquals("low", openAi.asked.single().getJSONObject("reasoning").getString("effort"))
-        runBlocking { tutor.blanks(song, lines) }
-        assertEquals(1, openAi.asked.size)
-        // A word that isn't in its line can't be left out of it.
-        answering("[\"キス\", \"\", \"love\"]")
-        assertEquals(listOf("キス", null, null), runBlocking { tutor.blanks(song.copy(title = "Other"), lines) })
-        // Too few, or no answer, is none.
-        listOf("[\"突然\"]", "No JSON").forEachIndexed { index, text ->
-            answering(text)
-            assertNull(runBlocking { tutor.blanks(song.copy(title = "Song $index"), lines) })
-        }
-        openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).blanks(song.copy(title = "Third"), lines) })
-    }
 
     @Test
     fun aSongsLevelAndWhatItCoversOrSamplesAreFoundOnTheWeb() {

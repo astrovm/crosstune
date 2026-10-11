@@ -417,6 +417,31 @@ class ListeningTest {
     }
 
     @Test
+    fun aSongHeardAlongWithNoCoverGetsOneInRecentByItsName() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        val lyrics = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && "Kite" in request.url.queryParameter("q").orEmpty()) {
+                FakeSpotify.html(request, """{"data":[{"title":"Kite","artist":{"name":"Band"},"album":{"cover_big":"https://cdn/kite.jpg"}}]}""")
+            } else {
+                lyrics(request)
+            }
+        }
+        hearing.song("Kite", 0.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Kite one") }
+        composeRule.waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().firstOrNull()?.metadata?.artworkUrl == "https://cdn/kite.jpg" }
+        assertEquals("Kite", HistoryStore(prefs()).load().first().metadata.title)
+        // One the app named with a cover keeps it, and none is looked for.
+        val asked = fake.requestedUrls.size
+        hearing.next.trySend(Heard.Song(MusicMetadata("Third", "Band", artworkUrl = "https://cdn/third.jpg"), null, 0, SystemClock.elapsedRealtime()))
+        composeRule.waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.title == "Third" }
+        composeRule.waitForIdle()
+        assertEquals("https://cdn/third.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
+        assertTrue(fake.requestedUrls.drop(asked).none { "deezer" in it && "Third" in it })
+    }
+
+    @Test
     fun aSongHeardByAnotherNameDoesntReplaceTheWordsOfTheOneAnAppPlays() {
         val phone = FakePlayback().apply {
             access = true
@@ -1204,7 +1229,6 @@ class ListeningTest {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "restore song lyrics written in romaji" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMAJI_JAPANESE[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
-                "listening exercise" in instructions -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { lines.getString(it).substringAfterLast(' ') }) }.toString())
                 "CEFR" in instructions -> FakeOpenAi.stream("""{"level": "B1", "why": "Easy words.", "original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
                 "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
@@ -1708,54 +1732,7 @@ class ListeningTest {
         composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.song_original)) && shown("First Demo") && shown("Old Band") }
     }
 
-    @Test
-    fun aWordOfEachLineIsBlankUntilItsSung() {
-        val openAi = signedInWithChatGpt()
-        wordsOf("[00:00.00] Night sky\\n[00:01.00] Stars\\n[09:00.00] Late song", "Night sky\\nStars\\nLate song", openAi = openAi)
-        waitForText("Late song")
-        studyMenu()
-        click(string(R.string.lyrics_blanks))
-        assertTrue(prefs().getBoolean("lyrics_blanks", false))
-        // Said how to see a word, until one's seen.
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_blanks_hint)) }
-        // The line sung already shows its word; the one being sung and those to come don't.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Late ____") }
-        assertTrue(shown("_____") && shown("Night sky"))
-        assertFalse(shown("Late song"))
-        // One to come shows its word once tapped, and then how needn't be said.
-        composeRule.onNode(hasText("Late ____")).performClick()
-        waitForText("Late song")
-        assertTrue(shown("_____"))
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_blanks_hint)) }
-        assertTrue(prefs().getBoolean("lyrics_blank_seen", false))
-        // Switched off, the words are whole again.
-        click(string(R.string.lyrics_blanks))
-        waitForText("Stars")
-        assertFalse(prefs().getBoolean("lyrics_blanks", true))
-    }
 
-    @Test
-    fun wordsWithNoTimingsKeepTheirBlanksAndWideWordsGetWideOnes() {
-        prefs().edit().putBoolean("lyrics_blanks", true).putBoolean("lyrics_romanized", true).commit()
-        val openAi = signedInWithChatGpt()
-        wordsOf(null, "夜の 雨\\nI go", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("夜の ＿＿＿") }
-        assertTrue(shown("I ___"))
-        // How to see a word can be put away, for good.
-        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button)) and androidx.compose.ui.test.hasAnySibling(hasText(string(R.string.lyrics_blanks_hint)))).performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_blanks_hint)) }
-        assertTrue(prefs().getBoolean("lyrics_blank_seen", false))
-        // Its romaji would give the blank away.
-        composeRule.waitForIdle()
-        assertTrue(composeRule.onAllNodes(hasText("yoru", substring = true)).fetchSemanticsNodes().isEmpty())
-        // Tapped, a line shows its word, standing out, rather than opening to study; tapped again, it opens.
-        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { shown("I go") }
-        assertTrue(shown("夜の ＿＿＿"))
-        assertTrue(composeRule.onAllNodesWithTag(STUDY_LINE_TAG).fetchSemanticsNodes().isEmpty())
-        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(STUDY_LINE_TAG).fetchSemanticsNodes().isNotEmpty() }
-    }
 
     @Test
     fun aLineCanBeSeenInExamplesAndSaysSoWhenItCant() {

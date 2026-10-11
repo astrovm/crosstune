@@ -295,33 +295,6 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * For each of [song]'s [lines], the word most worth listening for, as written in it, to leave
-     * blank; null for a line with none. Null when it couldn't say.
-     */
-    suspend fun blanks(song: MusicMetadata, lines: List<String>): List<String?>? {
-        val model = chatGpt.model() ?: return null
-        val key = "blanks|$model|${song.title}|${song.artist}|${lines.size}"
-        val kept = cache.get(key) ?: run {
-            // Tried on real songs with GPT-6-Luna: Plastic Love's 31 lines came in about 7 s, a useful
-            // word from each, 突然, 出逢い, 孤独な, none for its blank lines.
-            val reply = chatGpt.ask(
-                "You make a listening exercise from a song for someone learning its language. The user sends the song's lyrics as a JSON array of lines. " +
-                    "For each line, pick the one word most worth listening for: a useful word, not a name or a word repeated from the line before. " +
-                    "Reply with only a JSON array of strings, the same length and in the same order, each the word exactly as written in its line, or an empty string for a line with no words.",
-                JSONArray(lines).toString(),
-                effort = "low"
-            )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
-        }
-        val words = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it).trim() } }
-        if (words.size != lines.size) return null
-        cache.put(key, kept)
-        cache.save()
-        // Only a word that's in its line can be left out of it.
-        return words.mapIndexed { index, word -> word.takeIf { it.isNotEmpty() && it in lines[index] } }
-    }
-
-    /**
      * How hard [song]'s words, [lines], are for a learner, and why, in [language]; the song it
      * covers, when it's a cover; and the songs it samples, from the web. Null when it couldn't say.
      */

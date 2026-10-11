@@ -34,8 +34,6 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
-    /** Whether to say how to see a word left blank, until one's been seen. */
-    val blanksHint: Boolean = true,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
@@ -326,14 +324,10 @@ internal data class Learning(
     /** Questions asked about line [questionsAbout], in order, with their answers. */
     val questionsAbout: Int? = null,
     val questions: List<LineQuestion> = emptyList(),
-    /** Signed in, one word of each line left blank, to listen for, until it's sung. */
-    val blanks: Boolean = false,
     /** How the words show: as written, or in kana or Latin letters for a script that reads otherwise. */
     val wordsAs: WordsAs = WordsAs.WRITTEN,
     /** Set when the words were found in romaji, and ChatGPT wrote them in Japanese. */
     val fromRomaji: Boolean = false,
-    /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
-    val blankWords: List<String?> = emptyList(),
     /** The words most worth learning from the song, as ChatGPT finds them. */
     val wordsToKnow: Asking<List<KeyWord>>? = null,
     /** How hard the song's words are, and what it covers or samples, once ChatGPT found out. */
@@ -346,7 +340,7 @@ internal data class Learning(
     val examples: LineExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, blanks = blanks, wordsAs = wordsAs)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, wordsAs = wordsAs)
 }
 
 /** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
@@ -472,7 +466,6 @@ internal class MainViewModel(
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
-                blanks = preferences.getBoolean(KEY_BLANKS, false),
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
             ),
             floating = FloatingOptions(
@@ -488,7 +481,6 @@ internal class MainViewModel(
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
-            blanksHint = !preferences.getBoolean(KEY_BLANK_SEEN, false),
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
             systemStateKnown = false
@@ -1389,12 +1381,18 @@ internal class MainViewModel(
 
     /**
      * A song heard along the way joins Recent, as one Crosstune listened for does: by its Apple Music
-     * link when Shazam knows it, or else by its name. Nothing needs looking up to keep it.
+     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none.
      */
     private fun remember(heard: Heard.Song) {
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
+        // Named by an app that gave no cover, it's found by its name, so Recent shows one.
+        if (heard.metadata.artworkUrl != null) return
+        viewModelScope.launch {
+            val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
+            uiState = uiState.copy(history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)))
+        }
     }
 
     /**
@@ -1657,13 +1655,11 @@ internal class MainViewModel(
 
     private var readingsJob: Job? = null
     private var translationJob: Job? = null
-    private var blanksJob: Job? = null
 
     /** What was being worked out is for words no longer shown. */
     private fun stopLearning() {
         readingsJob?.cancel()
         translationJob?.cancel()
-        blanksJob?.cancel()
         romajiJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
@@ -2030,13 +2026,6 @@ internal class MainViewModel(
                 }
             }
         }
-        val song = uiState.lyricsFor
-        if (learning.blanks && usesChatGpt() && song != null && lines.isNotEmpty() && learning.blankWords.isEmpty() && blanksJob?.isActive != true) {
-            blanksJob = viewModelScope.launch {
-                val blanks = tutor?.blanks(song, lines) ?: return@launch
-                if (wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(blankWords = blanks))
-            }
-        }
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
@@ -2082,25 +2071,11 @@ internal class MainViewModel(
         learn()
     }
 
-    /** Leaves a word of each line blank to listen for, or shows them whole, from now on. */
-    fun setBlanks(on: Boolean) {
-        preferences.edit { putBoolean(KEY_BLANKS, on) }
-        uiState = uiState.copy(learning = uiState.learning.copy(blanks = on))
-        learn()
-    }
-
     /** Shows the words as written, or only in kana or Latin letters, from now on. */
     fun setWordsAs(wordsAs: WordsAs) {
         preferences.edit { putString(KEY_WORDS_AS, wordsAs.name) }
         uiState = uiState.copy(learning = uiState.learning.copy(wordsAs = wordsAs))
         learn()
-    }
-
-    /** A word left blank was seen, or how to see them put away: it isn't said again. */
-    fun blankShown() {
-        if (!uiState.blanksHint) return
-        preferences.edit { putBoolean(KEY_BLANK_SEEN, true) }
-        uiState = uiState.copy(blanksHint = false)
     }
 
     /** Asks for the translation again, after it couldn't be done. */
@@ -2521,9 +2496,7 @@ internal class MainViewModel(
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
-        private const val KEY_BLANKS = "lyrics_blanks"
         private const val KEY_WORDS_AS = "lyrics_words_as"
-        private const val KEY_BLANK_SEEN = "lyrics_blank_seen"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
 
         /** Typed text of this many words or more may describe a song rather than name it. */

@@ -303,7 +303,6 @@
     <string name="lyrics_word_saved">%1$s सेव हो गया</string>
     <string name="lyrics_about_artist_failed">कलाकार के बारे में पता नहीं चला।</string>
     <string name="lyrics_songs_like">ऐसे ही गाने</string>
-    <string name="lyrics_blanks">खाली जगह भरें</string>
     <string name="lyrics_examples">उदाहरण</string>
     <string name="lyrics_examples_failed">उदाहरण नहीं लिखे जा सके।</string>
     <string name="lyrics_ask_song">गाने के बारे में पूछें</string>
@@ -316,14 +315,12 @@
     <string name="songs_like_label">ऐसे गाने</string>
     <string name="song_search_playlist">प्लेलिस्ट बनाएं</string>
     <string name="error_no_songs_like">ऐसे गाने नहीं मिले।</string>
-    <string name="lyrics_show_blank">शब्द दिखाएं</string>
     <string name="lyrics_about_song">गाने के बारे में</string>
     <string name="lyrics_study">पढ़ाई</string>
     <string name="practice_due">%1$d बाकी</string>
     <string name="song_tab_meaning">मतलब</string>
     <string name="song_tab_words">शब्द</string>
     <string name="song_tab_artist">कलाकार</string>
-    <string name="lyrics_blanks_hint">शब्द देखने के लिए लाइन पर टैप करें</string>
     <string name="lyrics_as_written">जैसा लिखा है</string>
     <string name="lyrics_only_kana">सिर्फ़ काना</string>
     <string name="lyrics_only_latin">सिर्फ़ लैटिन अक्षर</string>

@@ -304,7 +304,6 @@
     <string name="lyrics_word_saved">%1$sを保存済み</string>
     <string name="lyrics_about_artist_failed">アーティストについて調べられませんでした。</string>
     <string name="lyrics_songs_like">似た曲</string>
-    <string name="lyrics_blanks">穴埋め</string>
     <string name="lyrics_examples">例文</string>
     <string name="lyrics_examples_failed">例文を作れませんでした。</string>
     <string name="lyrics_ask_song">この曲について質問</string>
@@ -317,14 +316,12 @@
     <string name="songs_like_label">似た曲：</string>
     <string name="song_search_playlist">プレイリストを作る</string>
     <string name="error_no_songs_like">似た曲が見つかりませんでした。</string>
-    <string name="lyrics_show_blank">言葉を表示</string>
     <string name="lyrics_about_song">この曲について</string>
     <string name="lyrics_study">学習</string>
     <string name="practice_due">%1$d件の復習</string>
     <string name="song_tab_meaning">意味</string>
     <string name="song_tab_words">言葉</string>
     <string name="song_tab_artist">アーティスト</string>
-    <string name="lyrics_blanks_hint">行をタップすると言葉が表示されます</string>
     <string name="lyrics_as_written">表記どおり</string>
     <string name="lyrics_only_kana">かなのみ</string>
     <string name="lyrics_only_latin">ローマ字のみ</string>
