@@ -20,6 +20,7 @@ import androidx.glance.appwidget.updateAll
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -67,13 +68,17 @@ class MainActivity : ComponentActivity() {
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
                 // What ChatGPT said is kept, so a song read again asks nothing.
-                val tutor = ChatGptTutor(chatGpt, LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000))
+                val tutor = ChatGptTutor(
+                    chatGpt,
+                    LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
+                    lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000)
+                )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 val playback = playbackFactory(applicationContext)
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
-                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong)
+                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     matcher,
@@ -92,9 +97,13 @@ class MainActivity : ComponentActivity() {
                     PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
                     systemDispatcher,
                     listenAlongPauseMs,
+                    quietPauseMs = quietPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
-                    translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
+                    // Read each time, from the app rather than this screen, which a language change replaces.
+                    translationLanguage = {
+                        Translator.languageOf(AppLanguage.current(applicationContext)?.let(Locale::forLanguageTag) ?: Locale.getDefault())
+                    },
                     chatGpt = chatGpt,
                     tutor = tutor
                 )
@@ -116,10 +125,17 @@ class MainActivity : ComponentActivity() {
         override fun toggleListening() = when {
             viewModel.uiState.listeningAlong -> viewModel.stopListeningAlong()
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> viewModel.listenAlong()
-            // The microphone is asked for here, in sight.
-            else -> startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            // The microphone is asked for here, in sight, once back.
+            else -> {
+                listenAlongWhenBack = true
+                startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            }
         }
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
+        override fun closed() {
+            floatingOverApps = false
+            viewModel.pauseListeningAlong()
+        }
     }
 
     /** Set while saying why Android's about to be asked to let the words float over other apps. */
@@ -141,12 +157,18 @@ class MainActivity : ComponentActivity() {
      */
     private val signInNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { signInWithChatGpt() }
 
-    /** What asked for the microphone: listening for a song, or listening along with the words. */
-    private var afterMicrophone: () -> Unit = { viewModel.listen() }
+    /** Set when the floating words' microphone was tapped without it allowed, to ask once back in sight. */
+    private var listenAlongWhenBack = false
+
+    /** What the microphone is for: listening for a song, maybe for its words, listening along with the words, or visuals that move with what plays. */
+    private enum class MicrophoneFor { LISTEN, LISTEN_FOR_LYRICS, LISTEN_ALONG, VISUALS }
+
+    /** What asked for the microphone, kept should the screen be made again while Android asks, e.g. turned. */
+    private var afterMicrophone = MicrophoneFor.LISTEN
 
     /** Asked on the first listen; without it, the error offers Android's settings for Crosstune. */
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) afterMicrophone() else viewModel.showError(AppError.MICROPHONE)
+        if (granted) listenFor(afterMicrophone) else viewModel.showError(AppError.MICROPHONE)
     }
 
     /** Set when launched to read the clipboard, which Android only allows once the window has focus. */
@@ -175,7 +197,17 @@ class MainActivity : ComponentActivity() {
 
         /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
         private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
+
+        /** Where the widget is drawn again, outliving the screen that asked. */
+        private val widgetUpdates = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+        /** How long an app may wait to be opened, while Crosstune is out of sight, before it's not. */
+        private const val STALE_OPEN_MS = 60_000L
+
+        /** How long a song not found somewhere stays not found there, before it's looked for again. */
+        private const val MISSING_FOR_MS = 30 * 60 * 1000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
+        private const val STATE_MICROPHONE_FOR = "microphone_for"
         private const val STATE_INCOMING_LINK = "incoming_link"
 
         /** The navigation bar's scrims, as Android's own edge-to-edge default draws them. */
@@ -205,6 +237,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var listenAlongPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
 
+        /** How long listening along first rests after hearing nothing; tests don't wait. */
+        @VisibleForTesting
+        internal var quietPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
+
         /** What hears songs nearby, when a test stands in for the microphone and Shazam both. */
         @VisibleForTesting
         internal var hearingFactory: (() -> SongHearing)? = null
@@ -225,6 +261,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingClipboardRead = savedInstanceState?.getBoolean(STATE_PENDING_CLIPBOARD_READ) == true
+        savedInstanceState?.getString(STATE_MICROPHONE_FOR)?.let { kept -> MicrophoneFor.entries.firstOrNull { it.name == kept } }?.let { afterMicrophone = it }
         val incomingLink = savedInstanceState?.getString(STATE_INCOMING_LINK)
         when {
             savedInstanceState == null -> handleIntent(intent)
@@ -249,8 +286,9 @@ class MainActivity : ComponentActivity() {
                     .distinctUntilChanged()
                     .collectLatest { (recent, entries, app) ->
                         shortcuts.update(recent, entries, app)
-                        // The widget shows Recent too.
-                        CrosstuneWidget().updateAll(applicationContext)
+                        // The widget shows Recent too, drawn again even once Crosstune closes, e.g.
+                        // right after opening a link shared from another app.
+                        widgetUpdates.launch { CrosstuneWidget().updateAll(applicationContext) }
                     }
             }
         }
@@ -258,7 +296,8 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.effects.collect { effect ->
                     when (effect) {
-                        is Effect.Open -> open(effect)
+                        // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
+                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
                         is Effect.Share -> {
                             startActivity(shareChooser(effect.url))
                             finish()
@@ -288,7 +327,7 @@ class MainActivity : ComponentActivity() {
                         recognizers = recognizers,
                         recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
                         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
-                        onLyricsNow = { withMicrophone { viewModel.listen(lyrics = true) } },
+                        onLyricsNow = { withMicrophone(MicrophoneFor.LISTEN_FOR_LYRICS) },
                         onStopListening = viewModel::stopListening,
                         onOpenMicrophoneSettings = ::openAppInfo,
                         onRecognizerChange = { picked ->
@@ -317,8 +356,7 @@ class MainActivity : ComponentActivity() {
                         onLookUpWord = viewModel::lookUpWord,
                         onExplainLine = viewModel::explainLine,
                         onStartPractice = viewModel::startPractice,
-                        onAnswerPractice = viewModel::answerPractice,
-                        onRevealPractice = viewModel::revealPractice,
+                        onTurnPractice = viewModel::turnPractice,
                         onGradePractice = viewModel::gradePractice,
                         onStopPractice = viewModel::stopPractice,
                         onAskAboutLine = viewModel::askAboutLine,
@@ -350,7 +388,7 @@ class MainActivity : ComponentActivity() {
                         onCancelChatGptSignIn = viewModel::cancelChatGptSignIn,
                         onSignOutOfChatGpt = viewModel::signOutOfChatGpt,
                         onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
-                        onListenAlong = { withMicrophone(viewModel::listenAlong) },
+                        onListenAlong = { withMicrophone(MicrophoneFor.LISTEN_ALONG) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
                         onOpenFollowAccess = {
@@ -373,7 +411,7 @@ class MainActivity : ComponentActivity() {
                         onFloat = ::float,
                         onVisualsShadeChange = viewModel::setVisualsShade,
                         onNextVisual = viewModel::nextVisual,
-                        onVisualsChange = { on -> if (on) withMicrophone { viewModel.setVisuals(true) } else viewModel.setVisuals(false) },
+                        onVisualsChange = { on -> if (on) withMicrophone(MicrophoneFor.VISUALS) else viewModel.setVisuals(false) },
                         onDismissLyrics = viewModel::dismissLyrics,
                         onPickSong = viewModel::chooseSong,
                         onDismissSongSearch = viewModel::dismissSongSearch,
@@ -490,6 +528,10 @@ class MainActivity : ComponentActivity() {
         if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
         floatingOverApps = false
         viewModel.resumeListeningAlong()
+        if (listenAlongWhenBack) {
+            listenAlongWhenBack = false
+            withMicrophone(MicrophoneFor.LISTEN_ALONG)
+        }
     }
 
     /**
@@ -509,16 +551,23 @@ class MainActivity : ComponentActivity() {
         if (!isChangingConfigurations && FloatingLyricsService.host === floatingHost) FloatingLyricsService.stop(this)
     }
 
-    private fun listen() = withMicrophone { viewModel.listen() }
+    private fun listen() = withMicrophone(MicrophoneFor.LISTEN)
 
-    /** Does [action], asking for the microphone first if it hasn't been allowed. */
-    private fun withMicrophone(action: () -> Unit) {
+    /** Listens as [purpose] says, asking for the microphone first if it hasn't been allowed. */
+    private fun withMicrophone(purpose: MicrophoneFor) {
+        afterMicrophone = purpose
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            action()
+            listenFor(purpose)
         } else {
-            afterMicrophone = action
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private fun listenFor(purpose: MicrophoneFor) = when (purpose) {
+        MicrophoneFor.LISTEN -> viewModel.listen()
+        MicrophoneFor.LISTEN_FOR_LYRICS -> viewModel.listen(lyrics = true)
+        MicrophoneFor.LISTEN_ALONG -> viewModel.listenAlong()
+        MicrophoneFor.VISUALS -> viewModel.setVisuals(true)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -530,6 +579,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_PENDING_CLIPBOARD_READ, pendingClipboardRead)
+        outState.putString(STATE_MICROPHONE_FOR, afterMicrophone.name)
         val state = viewModel.uiState
         if (state.handlingIncomingLink) outState.putString(STATE_INCOMING_LINK, state.linkText)
     }
@@ -557,7 +607,9 @@ class MainActivity : ComponentActivity() {
                 show = viewModel.uiState.showSongFirst
             )
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
-            ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) withMicrophone { viewModel.listen(lyrics = intent.getBooleanExtra(EXTRA_LYRICS, false)) }
+            ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) {
+                withMicrophone(if (intent.getBooleanExtra(EXTRA_LYRICS, false)) MicrophoneFor.LISTEN_FOR_LYRICS else MicrophoneFor.LISTEN)
+            }
         }
     }
 

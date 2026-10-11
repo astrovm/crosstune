@@ -105,7 +105,7 @@ class ChatGptTest {
     }
 
     @Test
-    fun signedOutTheSessionEndsAndSigningInAgainReusesTheRegistration() {
+    fun signedOutTheSessionEndsAndAnotherAccountCanSignIn() {
         val chatGpt = chatGpt()
         signIn(chatGpt)
         val host = openAi.authorize.queryParameter("ext_agent_host_id")
@@ -114,20 +114,24 @@ class ChatGptTest {
         assertEquals("token=refresh-1&token_type_hint=refresh_token&client_id=oaiapp_1", fake.requestBodies[revoke])
         assertNull(runBlocking { chatGpt.email() })
         assertNull(runBlocking { chatGpt.accessToken() })
+        assertFalse(saved().has("client_id"))
 
-        // The browser may not say the registration again; it's the one kept.
-        assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}" })
-        assertEquals("oaiapp_1", openAi.authorize.queryParameter("client_id"))
-        assertNull(openAi.authorize.queryParameter("agent_name_hint"))
+        // Signing in again starts afresh, hinting at no account, so another one can sign in, with a
+        // registration of its own; this phone is still the same one.
+        openAi.tokenAnswer = { form -> 200 to openAi.tokens(openAi.idToken(audience = form.getValue("client_id"), subject = "user-2"), access = "access-2") }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}&client_id=oaiapp_2" })
+        assertEquals("dynamic_agent_client", openAi.authorize.queryParameter("client_id"))
+        assertTrue(openAi.authorize.queryParameter("agent_name_hint")!!.isNotEmpty())
         assertEquals(host, openAi.authorize.queryParameter("ext_agent_host_id"))
-        assertEquals("ana@example.com", openAi.authorize.queryParameter("login_hint"))
-        // Signed out, the account's free to change, so it isn't hinted at.
+        assertNull(openAi.authorize.queryParameter("login_hint"))
         assertNull(openAi.authorize.queryParameter("id_token_hint"))
-        assertEquals("oaiapp_1", tokenForms().last()["client_id"])
+        assertEquals("oaiapp_2", saved().getString("client_id"))
+        assertEquals("access-2", runBlocking { chatGpt.accessToken() })
 
-        // Signed in again without signing out, it is.
+        // Signed in again without signing out, the account is hinted at, and kept to.
         signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}" }
         assertTrue(openAi.authorize.queryParameter("id_token_hint")!!.isNotEmpty())
+        assertEquals("oaiapp_2", openAi.authorize.queryParameter("client_id"))
     }
 
     @Test
@@ -299,6 +303,31 @@ class ChatGptTest {
     }
 
     @Test
+    fun aRenewalThatLeavesTheRefreshTokenKeepsIt() {
+        val chatGpt = chatGpt()
+        signIn(chatGpt)
+        clock += 60 * 60 * 1000
+        openAi.tokenAnswer = { 200 to """{"access_token":"access-3","expires_in":3600}""" }
+        assertEquals("access-3", runBlocking { chatGpt.accessToken() })
+        assertEquals("refresh-1", saved().getString("refresh_token"))
+    }
+
+    @Test
+    fun aTokenTurnedDownIsRenewedAndAskedWithOnceMore() {
+        val chatGpt = signedIn()
+        var turnedDown = 1
+        openAi.reply = { if (turnedDown-- > 0) 401 to "" else 200 to FakeOpenAi.stream("Hello") }
+        assertEquals(ChatGptReply.Answer("Hello"), runBlocking { chatGpt.ask("Be brief.", "Say hello") })
+        assertEquals("refresh_token", tokenForms().last()["grant_type"])
+        assertEquals("access-2", runBlocking { chatGpt.accessToken() })
+        // Turned down again with the new one, it's no answer, not asked on and on.
+        val renewals = tokenForms().size
+        openAi.reply = { 401 to "" }
+        assertEquals(ChatGptReply.Failed, runBlocking { chatGpt.ask("Be brief.", "Say hello") })
+        assertEquals(renewals + 1, tokenForms().size)
+    }
+
+    @Test
     fun aDamagedFileStartsOver() {
         file.writeText("{not json")
         val chatGpt = chatGpt()
@@ -465,8 +494,15 @@ class ChatGptTest {
         answering("He calls her a city woman.")
         runBlocking { tutor.explain(song, lines, 1, "en") {} }
         assertTrue(openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What the song is about:\nA man dazzled by a woman of the city."))
-        // Without the models, there's no model to ask.
+        // Opened again with the models not listed, e.g. offline, what the model asked last answered is
+        // still there, with nothing asked.
         openAi.models = { 500 to "" }
+        val askedBefore = openAi.asked.size
+        assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor(chatGpt()).explainSong(song, lines, "en") {} })
+        assertEquals(askedBefore, openAi.asked.size)
+        // Signed in afresh, no model's been asked, so there's none to ask.
+        runBlocking { chatGpt().signOut() }
+        signIn(chatGpt())
         assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explainSong(song.copy(title = "Other"), lines, "en") {} })
         assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explain(song.copy(title = "Other"), lines, 0, "en") {} })
     }
@@ -544,9 +580,10 @@ class ChatGptTest {
         answering("[\"Hi\"]")
         assertEquals(listOf("Hi"), runBlocking { tutor.translate(listOf("Hola"), "en") })
         assertEquals(listOf("gpt-6.1-sol", "gpt-6-terra"), openAi.asked.map { it.getString("model") })
-        // Without the models, there's no model to ask.
+        // Without the models listed, the one asked last is asked again.
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+        assertEquals(listOf("Hi"), runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+        assertEquals("gpt-6-terra", openAi.asked.last().getString("model"))
     }
 
     @Test
@@ -642,9 +679,11 @@ class ChatGptTest {
         val sent = JSONArray(asked.getJSONArray("input").getJSONObject(0).getString("content")).getJSONObject(0)
         assertEquals(1, sent.getInt("line"))
         assertEquals("君=くん", sent.getJSONArray("readings").getString(0))
-        // Kept for the song.
+        // Kept for the song's words; another copy of its words is checked anew.
         assertEquals(checked, runBlocking { tutor.checkReadings(song, lines, read) })
         assertEquals(1, openAi.asked.size)
+        runBlocking { tutor.checkReadings(song, lines + "もう一度", read) }
+        assertEquals(2, openAi.asked.size)
         // Nothing wrong, or no answer.
         answering("[]")
         assertEquals(read, runBlocking { tutor.checkReadings(song.copy(title = "Other"), lines, read) })
@@ -657,26 +696,28 @@ class ChatGptTest {
     }
 
     @Test
-    fun aQuizHasTwoWrongMeaningsKeptForTheLine() {
+    fun eachLineTranslatedIsKeptApartFromTheOtherAnswers() {
+        val answers = LookupCache(File(folder.root, "answers.json"), Dispatchers.Unconfined)
+        val lines = LookupCache(File(folder.root, "lines.json"), Dispatchers.Unconfined)
+        val tutor = ChatGptTutor(signedIn(), answers, lines)
+        answering("[\"Hello\"]")
+        assertEquals(listOf("Hello"), runBlocking { tutor.translate(listOf("Hola"), "en") })
+        assertTrue(File(folder.root, "lines.json").readText().contains("Hello"))
+        assertFalse(File(folder.root, "answers.json").exists())
+    }
+
+    @Test
+    fun aQuestionIsAskedWithOnlyTheLastFewBeforeIt() {
         val tutor = tutor()
-        answering("[\"La lluvia se lleva los rumores\", \"Los rumores traen el viento\"]")
-        assertEquals(listOf("La lluvia se lleva los rumores", "Los rumores traen el viento"), runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") })
-        val asked = openAi.asked.single()
-        assertEquals("El viento trae rumores", JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content")).getString("meaning"))
-        assertTrue(asked.getString("instructions").contains("Never a paraphrase"))
-        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
-        // Kept for the line.
-        runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") }
-        assertEquals(1, openAi.asked.size)
-        // Fewer than two wrong ones, once the right one, blanks and repeats are left out, are none.
-        listOf("[\"El viento trae rumores\", \"Otra\"]", "[\"Una\", \"Una\", \" \"]", "[\"Una\"]", "No JSON").forEachIndexed { index, text ->
-            answering(text)
-            assertNull(text, runBlocking { tutor.quizChoices("Line $index", "El viento trae rumores") })
+        val song = MusicMetadata("Song", "Band")
+        val earlier = (1..10).map { "Question $it?" to "Answer $it." }
+        runBlocking { tutor.askAboutSong(song, listOf("A line"), null, earlier, "Last?", "en") {} }
+        runBlocking { tutor.askAboutLine(song, listOf("A line"), 0, null, earlier, "Last?", "en") {} }
+        openAi.asked.map { it.getJSONArray("input").getJSONObject(0).getString("content") }.forEach { sent ->
+            assertFalse(sent.contains("Question 4?"))
+            assertTrue(sent.contains("Question: Question 5?\nAnswer: Answer 5."))
+            assertTrue(sent.endsWith("Question: Question 10?\nAnswer: Answer 10.\n\nQuestion: Last?"))
         }
-        openAi.reply = { 500 to "" }
-        assertNull(runBlocking { tutor.quizChoices("Line 9", "El viento trae rumores") })
-        openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).quizChoices("Line 10", "El viento trae rumores") })
     }
 
     @Test
@@ -690,6 +731,9 @@ class ChatGptTest {
         assertEquals(1, openAi.asked.size)
         answering("[]")
         assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("nothing like it") })
+        // None found isn't kept: asked again, it may find some.
+        runBlocking { tutor.songsFor("nothing like it") }
+        assertEquals(3, openAi.asked.size)
         answering("No idea")
         assertNull(runBlocking { tutor.songsFor("something else") })
         openAi.models = { 500 to "" }
@@ -772,31 +816,31 @@ class ChatGptTest {
 
 
     @Test
-    fun aSongsLevelAndWhatItCoversOrSamplesAreFoundOnTheWeb() {
+    fun whatASongCoversOrSamplesIsFoundOnTheWebByItsName() {
         val tutor = tutor()
         val song = MusicMetadata("Hurt", "Johnny Cash")
-        answering("{\"level\": \"b1\", \"why\": \"Vocabulario común.\", \"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}, \"samples\": [{\"title\": \"I Got a Woman\", \"artist\": \"Ray Charles\"}, {\"title\": \"\"}]}")
-        assertEquals(
-            SongFacts("B1", "Vocabulario común.", "Hurt" to "Nine Inch Nails", listOf("I Got a Woman" to "Ray Charles")),
-            runBlocking { tutor.songFacts(song, listOf("I hurt myself today"), "es") }
-        )
+        answering("{\"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}, \"samples\": [{\"title\": \"I Got a Woman\", \"artist\": \"Ray Charles\"}, {\"title\": \"\"}]}")
+        assertEquals(SongFacts("Hurt" to "Nine Inch Nails", listOf("I Got a Woman" to "Ray Charles")), runBlocking { tutor.songFacts(song) })
         val asked = openAi.asked.single()
         assertEquals("web_search", asked.getJSONArray("tools").getJSONObject(0).getString("type"))
-        assertTrue(asked.getString("instructions").contains("written in Spanish") && asked.getString("instructions").contains("CEFR"))
-        runBlocking { tutor.songFacts(song, listOf("I hurt myself today"), "es") }
+        assertEquals("Song: Hurt by Johnny Cash", asked.getJSONArray("input").getJSONObject(0).getString("content"))
+        runBlocking { tutor.songFacts(song) }
         assertEquals(1, openAi.asked.size)
-        // An original with no samples still has its level; a level that isn't one is none, and so is its reason.
-        answering("{\"level\": \"A2\", \"why\": \"\", \"original\": null, \"samples\": []}")
-        assertEquals(SongFacts("A2", null, null, emptyList()), runBlocking { tutor.songFacts(song.copy(title = "Other"), emptyList(), "es") })
-        answering("{\"level\": \"Hard\", \"why\": \"Fast.\", \"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}}")
-        assertEquals(SongFacts(null, null, "Hurt" to "Nine Inch Nails", emptyList()), runBlocking { tutor.songFacts(song.copy(title = "Third"), emptyList(), "es") })
-        // Nothing at all, or no answer, is none.
-        listOf("{\"level\": \"Z9\"}", "No JSON").forEachIndexed { index, text ->
+        answering("{\"original\": null, \"samples\": [{\"title\": \"Beat\", \"artist\": \"Drummer\"}]}")
+        assertEquals(SongFacts(null, listOf("Beat" to "Drummer")), runBlocking { tutor.songFacts(song.copy(title = "Other")) })
+        // Neither, or no answer, is none.
+        listOf("{\"original\": null, \"samples\": []}", "No JSON").forEachIndexed { index, text ->
             answering(text)
-            assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song $index"), emptyList(), "es") })
+            assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song $index")) })
         }
+        // Nothing to say is kept, so the web isn't searched again for it; no answer isn't.
+        val askedBefore = openAi.asked.size
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 0")) })
+        assertEquals(askedBefore, openAi.asked.size)
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 1")) })
+        assertEquals(askedBefore + 1, openAi.asked.size)
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).songFacts(song.copy(title = "Fourth"), emptyList(), "es") })
+        assertNull(runBlocking { tutor(chatGpt()).songFacts(song.copy(title = "Fourth")) })
     }
 
     @Test
@@ -814,27 +858,35 @@ class ChatGptTest {
         // Kept for the artist, whichever of their songs.
         assertEquals(reply, runBlocking { tutor.aboutArtist(song.copy(title = "Septentrion"), "en") {} })
         assertEquals(1, openAi.asked.size)
+        // Without the models listed, the one asked last is asked again.
         openAi.models = { 500 to "" }
-        assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).aboutArtist(song.copy(artist = "Other"), "en") {} })
+        runBlocking { tutor(chatGpt()).aboutArtist(song.copy(artist = "Other"), "en") {} }
+        assertEquals(2, openAi.asked.size)
+        assertEquals(asked.getString("model"), openAi.asked.last().getString("model"))
     }
 
     @Test
-    fun aLinesWordsAreUsedInExamplesKeptForTheLine() {
+    fun aWordIsUsedInExamplesTheWayItsLineDoesKeptForIt() {
         val tutor = tutor()
         val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
         answering("[{\"sentence\": \"予定を狂わせないでね。\", \"meaning\": \"No me cambies los planes.\"}, {\"sentence\": \"ペース\", \"meaning\": \"\"}]")
-        assertEquals(listOf(Example("予定を狂わせないでね。", "No me cambies los planes.")), runBlocking { tutor.examples("恋のプログラムを 狂わせないでね", song, "es") })
+        assertEquals(listOf(Example("予定を狂わせないでね。", "No me cambies los planes.")), runBlocking { tutor.examples("狂わせ", "恋のプログラムを 狂わせないでね", song, "es") })
         val sent = JSONObject(openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("狂わせ", sent.getString("word"))
         assertEquals("恋のプログラムを 狂わせないでね", sent.getString("line"))
         assertEquals("Plastic Love by Mariya Takeuchi", sent.getString("song"))
-        runBlocking { tutor.examples("恋のプログラムを 狂わせないでね", song, "es") }
+        runBlocking { tutor.examples("狂わせ", "恋のプログラムを 狂わせないでね", song, "es") }
         assertEquals(1, openAi.asked.size)
+        // Another word in the same line is asked anew.
+        answering("[{\"sentence\": \"恋をした。\", \"meaning\": \"Me enamoré.\"}]")
+        assertEquals(listOf(Example("恋をした。", "Me enamoré.")), runBlocking { tutor.examples("恋", "恋のプログラムを 狂わせないでね", song, "es") })
+        assertEquals(2, openAi.asked.size)
         listOf("[]", "No JSON").forEachIndexed { index, text ->
             answering(text)
-            assertNull(runBlocking { tutor.examples("Line $index", song, "es") })
+            assertNull(runBlocking { tutor.examples("Word", "Line $index", song, "es") })
         }
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).examples("Line 9", song, "es") })
+        assertNull(runBlocking { tutor(chatGpt()).examples("Word", "Line 9", song, "es") })
     }
 
     @Test

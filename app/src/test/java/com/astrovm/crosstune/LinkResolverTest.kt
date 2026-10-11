@@ -160,6 +160,63 @@ class LinkResolverTest {
 
         respond("Unauthorized", code = 401)
         assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+        // A page turned away, as a bot would be, says nothing about the song: the service is what failed.
+        respond("Forbidden", code = 403)
+        assertEquals(AppError.SERVICE_UNAVAILABLE, (resolve("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT") as Resolution.Failed).error)
+        assertEquals(AppError.SERVICE_UNAVAILABLE, (resolve("https://band.bandcamp.com/track/song") as Resolution.Failed).error)
+        assertEquals(AppError.NOT_FOUND, (resolve("https://soundcloud.com/band/song") as Resolution.Failed).error)
+    }
+
+    /** YouTube Music's answer about video [id], as its next song list has it. */
+    private fun nextFor(id: String, title: String, byline: String, length: String, type: String) =
+        """{"contents":{"panel":{"contents":[{"playlistPanelVideoRenderer":{"videoId":"other","title":{"runs":[{"text":"Another"}]}}},
+            {"playlistPanelVideoRenderer":{"videoId":"$id","title":{"runs":[{"text":"$title"}]},"longBylineText":{"runs":[{"text":"$byline"}]},
+            "lengthText":{"runs":[{"text":"$length"}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/small.jpg"},{"url":"https://i.ytimg.com/big.jpg"}]},
+            "navigationEndpoint":{"watchEndpoint":{"watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}}}]}}}"""
+
+    @Test
+    fun aVideoKeptFromBeingEmbeddedIsNamedByYouTubeMusic() {
+        var next = nextFor("4NRXx6U8ABQ", "プラスティック・ラブ - Plastic Love (Official Video)", "Mariya Takeuchi • 79M views", "5:09", "OMV")
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, next) else FakeSpotify.html(request, "Unauthorized", code = 401)
+        }
+        // A label's official video is named as its channel names it, without what the title adds.
+        val official = resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved
+        assertEquals(MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi", artworkUrl = "https://i.ytimg.com/big.jpg"), official.metadata)
+        assertTrue(fake.requestBodies.last().contains("\"videoId\":\"4NRXx6U8ABQ\""))
+        // A song says how long it is.
+        next = nextFor("4NRXx6U8ABQ", "夜に駆ける", "YOASOBI • 夜に駆ける • 2019", "4:22", "ATV")
+        assertEquals(MusicMetadata("夜に駆ける", "YOASOBI", artworkUrl = "https://i.ytimg.com/big.jpg", lengthMs = 262_000), (resolve("https://music.youtube.com/watch?v=4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        // Anyone else's upload is read from its title.
+        next = nextFor("4NRXx6U8ABQ", "The Blue Hearts - Owaranai Uta (with lyrics)", "Fan • 195K views", "3:04", "UGC")
+        assertEquals(MusicMetadata("Owaranai Uta", "The Blue Hearts", artworkUrl = "https://i.ytimg.com/big.jpg"), (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        // Not in its answer, or no answer, it's not found, as before.
+        next = """{"contents":{}}"""
+        assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+        fake.handler = { request -> if (request.url.host == "music.youtube.com") throw java.io.IOException("offline") else FakeSpotify.html(request, "Forbidden", code = 403) }
+        assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+    }
+
+    @Test
+    fun youTubeMusicsAlbumAndArtistPagesAreNamedByTheirHeaders() {
+        val song = { title: String -> """{"musicResponsiveListItemRenderer":{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}}]}}""" }
+        respond(
+            """{"header":{"musicResponsiveHeaderRenderer":{"title":{"runs":[{"text":"Pocket Park"}]},"straplineTextOne":{"runs":[{"text":"Miki Matsubara"}]},
+            "thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://yt3/small"},{"url":"https://yt3/big"}]}}}}},
+            "contents":{"shelf":{"contents":[${song("真夜中のドア")},${song("Cross My Heart")}]}}}"""
+        )
+        assertEquals(
+            MusicMetadata("Pocket Park", "Miki Matsubara", ItemType.ALBUM, "https://yt3/big", listOf(MusicMetadata("真夜中のドア", "Miki Matsubara"), MusicMetadata("Cross My Heart", "Miki Matsubara"))),
+            (resolve("https://music.youtube.com/browse/MPREb_yB069tmn6yf") as Resolution.Resolved).metadata
+        )
+        assertTrue(fake.requestBodies.last().contains("\"browseId\":\"MPREb_yB069tmn6yf\""))
+        respond("""{"header":{"musicImmersiveHeaderRenderer":{"title":{"runs":[{"text":"Miki Matsubara"}]}}}}""")
+        assertEquals(MusicMetadata("Miki Matsubara", "", ItemType.ARTIST), (resolve("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ") as Resolution.Resolved).metadata)
+        // No header, or no answer, can't be named.
+        respond("""{"contents":{}}""")
+        assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ") as Resolution.Failed).error)
+        respond("", code = 500)
+        assertEquals(AppError.METADATA_UNAVAILABLE, (resolve("https://music.youtube.com/browse/MPREb_yB069tmn6yf") as Resolution.Failed).error)
     }
 
     @Test

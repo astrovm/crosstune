@@ -111,10 +111,18 @@ internal object Readings {
                 (reading.length - 1 downTo 1).firstOrNull { cut -> after.startsWith(reading.substring(cut)) }?.let { reading.substring(0, it) } ?: reading
             }
             if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return@fold fixed
+            // Only where those kanji are: another word read the same, e.g. a く of 君 in くん, stays.
+            val fixing = fixed.parts.indices.filter { fixed.parts[it].text == fix.kanji && fixed.parts[it].reading == old }
+            val starts = fixed.parts.runningFold(0) { at, part -> at + (part.reading ?: part.text).length }
+            val inReading = fixing.map { starts[it] }.filter { fixed.reading.startsWith(old, it) }
+            // Which times the old reading comes in the line, counted as romaji counts them, are these.
+            val times = Regex(Regex.escape(old)).findAll(fixed.reading).map { it.range.first }.toList()
+            val nth = inReading.map(times::indexOf).filter { it >= 0 }.toSet()
+            var seen = -1
             LineReading(
-                fixed.parts.map { if (it.text == fix.kanji && it.reading == old) it.copy(reading = wanted) else it },
-                fixed.reading.replace(old, wanted),
-                fixed.romanized.replace(Regex("""\b${Regex.escape(romaji(old))}"""), romaji(wanted))
+                fixed.parts.mapIndexed { at, part -> if (at in fixing) part.copy(reading = wanted) else part },
+                inReading.sortedDescending().fold(fixed.reading) { line, at -> line.replaceRange(at, at + old.length, wanted) },
+                fixed.romanized.replace(Regex("""\b${Regex.escape(romaji(old))}""")) { if (++seen in nth) romaji(wanted) else it.value }
             )
         }
     }
@@ -214,11 +222,12 @@ internal object Readings {
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun pinyin(): Transliterator = transliterator ?: Transliterator.getInstance("Han-Latin").also { transliterator = it }
 
+    /** One line at a time, as Android's transliterator can't be used from two threads at once. */
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun chinese(line: String): LineReading {
+    private fun chinese(line: String): LineReading = synchronized(this) {
         val parts = line.map { char -> if (isHan(char)) Ruby(char.toString(), pinyin().transliterate(char.toString())) else Ruby(char.toString()) }
         val romanized = pinyin().transliterate(line).trim()
-        return LineReading(joined(parts), romanized, romanized)
+        LineReading(joined(parts), romanized, romanized)
     }
 
     private fun korean(line: String): LineReading {

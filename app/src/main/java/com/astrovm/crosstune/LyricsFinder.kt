@@ -20,14 +20,6 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
 
-/**
- * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
- * crowdsourced, so what it gives back is checked against the song asked about before it's
- * believed: the words of a song with the same name by someone else are no use at all.
- *
- * Timed words come with when each line is sung, so they can follow the song as it plays; the plain
- * words are what's shown when nothing says where in the song it is.
- */
 /** What LRCLIB's Retry-After asks for when it's busy. */
 internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
 
@@ -37,6 +29,14 @@ internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
 private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
 
+/**
+ * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
+ * crowdsourced, so what it gives back is checked against the song asked about before it's
+ * believed: the words of a song with the same name by someone else are no use at all.
+ *
+ * Timed words come with when each line is sung, so they can follow the song as it plays; the plain
+ * words are what's shown when nothing says where in the song it is.
+ */
 internal class LyricsFinder(
     private val client: OkHttpClient,
     /** The app's own version, which LRCLIB asks a caller to give so a problem can be traced back. */
@@ -71,16 +71,37 @@ internal class LyricsFinder(
      * shows, so those are asked for too, and NetEase, which has many more such songs, last. Words
      * found anywhere win; otherwise "none" from any of them is believed over one that wouldn't answer.
      */
-    suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics {
+    suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
+        firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
+
+    /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
+    data class FirstLook(val lyrics: Lyrics, val final: Boolean)
+
+    /**
+     * [lyricsOf] in two steps, so the words can show as soon as they're found: first what's kept, or
+     * found, then [retimed], which may take a while longer.
+     */
+    suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
-        if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
-        val key = cacheKey(metadata)
-        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
+        if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(words, final = !provisional) } }
         val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
-        // Words timed badly, or not at all, are timed as a well-timed copy of the song times them, when there's one.
+        // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
+        cache?.let { cache ->
+            toCache(found, provisional = true)?.let { cache.put(cacheKey(metadata), it) }
+            cache.save()
+        }
+        return FirstLook(found, final = false)
+    }
+
+    /**
+     * [found], timed as a well-timed copy of the song times them when they're timed badly or not at
+     * all and there's one, and kept so.
+     */
+    suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { timedWell(metadata, words, timeoutMs) } } ?: found
         cache?.let { cache ->
-            toCache(answer)?.let { cache.put(key, it) }
+            toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
         return answer
@@ -173,22 +194,24 @@ internal class LyricsFinder(
         else -> Lyrics.Unavailable
     }
 
-    /** Words as kept: the plain words and each timed line. */
-    private fun toCache(answer: Lyrics): String? = (answer as? Lyrics.Found)?.let { found ->
+    /** Words as kept: the plain words and each timed line, and whether they're still to be timed better. */
+    private fun toCache(answer: Lyrics, provisional: Boolean = false): String? = (answer as? Lyrics.Found)?.let { found ->
         JSONObject()
             .put("words", found.words)
+            .apply { if (provisional) put("provisional", true) }
             .put("lines", JSONArray().apply { found.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
             .toString()
     }
 
-    private fun fromCache(kept: String): Lyrics? {
+    /** Words kept, and whether they're still to be timed better. */
+    private fun fromCache(kept: String): Pair<Lyrics.Found, Boolean>? {
         // "None", as earlier versions kept, isn't words, so it's asked again.
         return try {
             val json = JSONObject(kept)
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> list.getJSONArray(index).let { LyricLine(it.getLong(0), it.getString(1)) } }
             }
-            Lyrics.Found(json.getString("words"), lines)
+            Lyrics.Found(json.getString("words"), lines) to json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }
@@ -283,7 +306,7 @@ internal class LyricsFinder(
                 try {
                     // No list at all means it wouldn't answer, which is not a song without words.
                     val answers = answersFor(metadata) ?: return@withTimeoutOrNull Lyrics.Unavailable
-                    wordsOf(answers, metadata) ?: Lyrics.None
+                    wordsOf(answers, metadata, timeoutMs) ?: Lyrics.None
                 } catch (_: IOException) {
                     Lyrics.Unavailable
                 } catch (_: JSONException) {
@@ -295,10 +318,17 @@ internal class LyricsFinder(
         return Lyrics.Unavailable
     }
 
-    private fun wordsOf(answers: List<Answer>, metadata: MusicMetadata): Lyrics.Found? {
+    private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
-        val songs = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        // Timed copies of different lengths are different takes, e.g. a live one named the same, so
+        // the one as long as the song comes first: as the app playing it or its service says, or
+        // else the iTunes Store, asked only then.
+        val lengths = named.filter { it.synced().isNotEmpty() }.mapNotNull { it.lengthMs() }
+        val takes = lengths.isNotEmpty() && lengths.max() - lengths.min() > SAME_LENGTH_MS
+        val lengthMs = metadata.lengthMs ?: if (takes) withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs else null
+        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length) > SAME_LENGTH_MS } ?: true } } ?: named
         val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
@@ -520,6 +550,9 @@ internal class LyricsFinder(
 
         /** How much longer or shorter another copy's recording can be and still be the same take, remastered or not. */
         const val SAME_TAKE_LENGTH_MS = 15_000L
+
+        /** How far apart two copies of the same take of a song may be in length. */
+        const val SAME_LENGTH_MS = 3_000L
 
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L

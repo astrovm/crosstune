@@ -212,9 +212,8 @@ internal data class ScreenActions(
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
     val onStartPractice: () -> Unit = {},
-    val onAnswerPractice: (Int) -> Unit = {},
-    val onRevealPractice: () -> Unit = {},
-    val onGradePractice: (Boolean) -> Unit = {},
+    val onTurnPractice: () -> Unit = {},
+    val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
@@ -239,7 +238,6 @@ internal data class ScreenActions(
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
-    /** Sets where translations come from, by address and key; false when the address isn't one. */
     /** ChatGPT translates, signed in, or else MyMemory. */
     val onChatGptTranslationChange: (Boolean) -> Unit = {},
     /** Asks ChatGPT this model, by its slug, from now on. */
@@ -298,9 +296,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val guided = actions.copy(onShowAllowGuide = { guide = GUIDE_ALLOW }, onShowAppsGuide = { guide = GUIDE_APPS })
     val screen = when {
+        // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
+        // after; so are the words it was for.
+        state.listening -> Screen.LISTENING
+        !state.setupComplete && state.lyricsFor != null -> Screen.LYRICS
         // A link from another app is handled right away; setup waits for the next regular launch.
         !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
-        state.listening -> Screen.LISTENING
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
@@ -1502,7 +1503,7 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                         entry.link.service?.let { stringResource(it.labelRes) }.orEmpty()
                     )
                         .filter { it.isNotBlank() }
-                        .joinToString(" · "),
+                        .joinToString(", "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1654,8 +1655,6 @@ private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier 
     }
 }
 
-/** How many Recent items fit at a glance; past that, a search shows above them. */
-
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
     sortedBy { if ((it as? Destination.Service)?.service in installed || (it is Destination.Alternative && it.packageName != null)) 0 else 1 }
@@ -1706,7 +1705,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                         CoverArt(result.artworkUrl, loadArtwork, size = 48.dp)
                         Column(modifier = Modifier.padding(start = 12.dp)) {
                             Text(result.title, style = MaterialTheme.typography.titleMedium)
-                            Text(listOf(stringResource(result.type.labelRes), result.artist).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                            Text(listOf(stringResource(result.type.labelRes), result.artist).filter { it.isNotBlank() }.joinToString(", "), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

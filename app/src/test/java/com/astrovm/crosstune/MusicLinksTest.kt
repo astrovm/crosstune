@@ -192,6 +192,8 @@ class MusicLinksTest {
 
         assertLink("https://tidal.com/browse/track/134858527", MusicService.TIDAL, ItemType.TRACK, "134858527", "https://tidal.com/track/134858527")
         assertLink("https://listen.tidal.com/album/134858522", MusicService.TIDAL, ItemType.ALBUM, "134858522", "https://tidal.com/album/134858522")
+        // A song's link under its album's is the song.
+        assertLink("https://tidal.com/browse/album/134858522/track/134858527", MusicService.TIDAL, ItemType.TRACK, "134858527", "https://tidal.com/track/134858527")
         assertLink(
             "https://www.tidal.com/playlist/0a1b-2c3d",
             MusicService.TIDAL, ItemType.PLAYLIST, "0a1b-2c3d", "https://tidal.com/playlist/0a1b-2c3d"
@@ -343,12 +345,33 @@ class MusicLinksTest {
     }
 
     @Test
+    fun aSongRecognizedWithoutAnArtistIsLookedUpByItsNameAlone() {
+        assertEquals("https://www.google.com/search?q=Hallelujah", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "")).url)
+        assertEquals("https://www.google.com/search?q=Hallelujah%20by%20Jeff%20Buckley", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "Jeff Buckley")).url)
+    }
+
+    @Test
+    fun textWithSeveralLinksIsAboutTheFirstThatsMusic() {
+        assertLink(
+            "Look at this https://example.com/post/1 and this song: https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT, then https://www.deezer.com/track/1",
+            MusicService.SPOTIFY, ItemType.TRACK, "4cOdK2wGLETKBW3PvgPWqT", "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+        )
+        // None of them music is no link.
+        assertNull(link("https://example.com/a https://example.org/b"))
+    }
+
+    @Test
     fun youtubeAndYouTubeMusicPlaylistsAndWhereEachOpensAsItself() {
         val list = "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
         assertLink("https://www.youtube.com/playlist?list=$list", MusicService.YOUTUBE, ItemType.PLAYLIST, list, "https://www.youtube.com/playlist?list=$list")
         assertLink("https://music.youtube.com/playlist?list=$list&si=x", MusicService.YOUTUBE_MUSIC, ItemType.PLAYLIST, list, "https://music.youtube.com/playlist?list=$list")
         assertNull(link("https://www.youtube.com/playlist?list=short"))
         assertNull(link("https://www.youtube.com/playlist"))
+        // YouTube Music's album and artist pages, but not YouTube's channels or other pages.
+        assertLink("https://music.youtube.com/browse/MPREb_yB069tmn6yf?si=x", MusicService.YOUTUBE_MUSIC, ItemType.ALBUM, "MPREb_yB069tmn6yf", "https://music.youtube.com/browse/MPREb_yB069tmn6yf")
+        assertLink("https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ", MusicService.YOUTUBE_MUSIC, ItemType.ARTIST, "UCT77P4HLpV7B2sbmuxa_djQ", "https://music.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ")
+        assertNull(link("https://music.youtube.com/browse/FEmusic_home"))
+        assertNull(link("https://www.youtube.com/channel/UCT77P4HLpV7B2sbmuxa_djQ"))
 
         val playlist = link("https://www.youtube.com/playlist?list=$list")!!
         assertEquals("https://music.youtube.com/playlist?list=$list", playlist.youtubePlaylistOn(MusicService.YOUTUBE_MUSIC))

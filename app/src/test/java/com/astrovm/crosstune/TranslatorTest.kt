@@ -121,6 +121,31 @@ class TranslatorTest {
     }
 
     @Test
+    fun batchesTranslatedBeforeOneFailsAreKeptAndOnlyTheRestAskedAgain() {
+        val lines = (1..40).map { "Line number $it of the song" }
+        // The day's translations run out after the first batch.
+        var asked = 0
+        fake.handler = { request: Request ->
+            asked++
+            val text = request.url.queryParameter("q").orEmpty()
+            val body = if (asked == 1) {
+                JSONObject().put("responseData", JSONObject().put("translatedText", text.split("\n").joinToString("\n") { "[$it]" })).put("responseStatus", 200)
+            } else {
+                JSONObject().put("responseData", JSONObject().put("translatedText", "QUOTA")).put("responseStatus", 429)
+            }
+            FakeSpotify.html(request, body.toString())
+        }
+        assertNull(translate(lines))
+        assertEquals(2, asked)
+        // Asked again, the first batch is already there.
+        myMemory()
+        fake.requestedUrls.clear()
+        assertEquals(lines.map { "[$it]" }, translate(lines))
+        assertEquals(2, fake.requestedUrls.size)
+        assertTrue(fake.requestedUrls.none { "Line%20number%201%20" in it })
+    }
+
+    @Test
     fun aBatchThatComesBackWithOtherRowsIsAskedLineByLine() {
         // Two lines read back as one.
         fake.handler = { request: Request ->

@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.ClipData
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
@@ -134,6 +135,14 @@ class MainActivityTest {
     // region helpers
 
     /** What the Quick Settings tile and launcher shortcut send. */
+    /**
+     * Waits for [condition], meanwhile running what background work hands back to the main thread,
+     * which Compose's own wait leaves queued until something else runs it: on a slow machine, words
+     * found in the background never reached the screen.
+     */
+    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean) =
+        composeRule.waitUntil(timeoutMs) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
+
     private fun pasteIntent() =
         Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD).setClassName(app, MainActivity.PASTE_ALIAS)
 
@@ -202,11 +211,11 @@ class MainActivityTest {
     }
 
     private fun waitForResult() {
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun waitForDestinationReady() {
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             !composeRule.onNodeWithText(string(R.string.copy_link_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
     }
@@ -217,7 +226,7 @@ class MainActivityTest {
     }
 
     private fun waitForText(text: String) {
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodesWithTextCount(text) > 0
         }
     }
@@ -810,13 +819,13 @@ class MainActivityTest {
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
         assertFalse(activity.isFinishing)
 
-        // The songs found are remembered, so playing them again only asks YouTube for the queue.
+        // The songs found are remembered, and for a while so is one not found, so playing them again
+        // only asks YouTube for the queue.
         fake.requestBodies.clear()
         click(string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
-        // Once among the songs, once among the videos.
-        assertEquals(listOf("Second Song", "Second Song"), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
+        assertEquals(emptyList<String>(), fake.requestBodies.filter { "\"query\"" in it }.map { JSONObject(it).getString("query") })
     }
 
     @Test
@@ -860,7 +869,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.songs_shown, 2, 150))
         // Every song's cover shows, and is kept with the playlist in Recent.
         waitUntil { HistoryStore(prefs()).load().first().metadata.tracks.map { it.artworkUrl } == listOf(firstCover, secondCover) }
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(ARTWORK_TAG, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(ARTWORK_TAG, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
 
         // Deezer can't queue them, so the button plays the first.
         click(string(R.string.play_first_in, string(MusicService.DEEZER.labelRes)))
@@ -960,11 +969,11 @@ class MainActivityTest {
         val secondPart = composeRule.onNodeWithText(string(R.string.part_range, 51, 60)).performScrollTo()
         // With the card scrolled away, a floating button stands in for its main one. The second part
         // only just showed at the bottom, so it still plays the first.
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(firstPart, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(firstPart, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
         // Scrolled into the second part, it plays that one.
         composeRule.onNodeWithText("Song 60").performScrollTo()
         val secondPartIn = string(R.string.play_part_in, 51, 60, youTubeMusic)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(secondPartIn, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(secondPartIn, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
         // Each part's header plays it. The floating button may cover it at the bottom edge, so it's tapped by its action.
         secondPart.performSemanticsAction(SemanticsActions.OnClick)
         // It shows how far it got while it looks the songs up.
@@ -1216,6 +1225,56 @@ class MainActivityTest {
     }
 
     @Test
+    fun anAppAskedToOpenLongAgoWhileAwayIsntOpenedOnComingBack() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Exact", "Artist · Song")) }
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/track/$TRACK_ID")
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        // Asked while away, and back a while later: it's not opened out of the blue.
+        controller!!.pause().stop()
+        composeRule.runOnIdle { model.openResult() }
+        composeRule.waitForIdle()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(61))
+        controller!!.restart().resume()
+        composeRule.waitForIdle()
+        assertNull(nextStartedActivity())
+        // Back soon after, it is.
+        controller!!.pause().stop()
+        composeRule.runOnIdle { model.openResult() }
+        composeRule.waitForIdle()
+        controller!!.restart().resume()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aLookupWithNoAnswerSearchesRatherThanSayingItsNotThereAndIsTriedAgain() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        var deezerUp = false
+        fake.handler = { request ->
+            when {
+                request.url.host != "api.deezer.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Exact", "Artist · Song"))
+                deezerUp -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, "", code = 503)
+            }
+        }
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        val activity = launch(trackLink())
+
+        // Deezer down says nothing about whether it has the song, so it's searched there.
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+        assertTextAbsent(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertEquals(false, HistoryStore(prefs()).load().first().destinationLinks["DEEZER"]?.matchingEnabled)
+
+        // Opened again from Recent, it's looked for again: now Deezer answers that it isn't there.
+        deezerUp = true
+        composeRule.runOnIdle { ViewModelProvider(activity)[MainViewModel::class.java].openRecent(url) }
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+    }
+
+    @Test
     fun aSongByNameNotThereIsSearchedForWithItsButton() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
@@ -1265,7 +1324,7 @@ class MainActivityTest {
         val opened = nextStartedActivity()!!
         assertEquals("https://open.spotify.com/track/$TRACK_ID", opened.dataString)
         assertEquals(MusicService.SPOTIFY.packageName, opened.`package`)
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil(TIMEOUT_MS) { activity.isFinishing }
     }
 
     @Test
@@ -1405,7 +1464,7 @@ class MainActivityTest {
 
         val activity = launch(Intent(MainActivity.ACTION_OPEN_RECENT, Uri.parse(url)))
 
-        composeRule.waitUntil(TIMEOUT_MS) { activity.isFinishing }
+        waitUntil(TIMEOUT_MS) { activity.isFinishing }
         // YouTube Music has no album by that name here, so it's searched for, not played as its songs.
         val opened = nextStartedActivity()!!.dataString!!
         assertTrue(opened, opened.startsWith("https://music.youtube.com/search"))
@@ -1441,7 +1500,7 @@ class MainActivityTest {
         launch()
         resolveTyped("https://open.spotify.com/track/$TRACK_ID")
 
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
         val song = dynamicShortcuts().single()
         assertEquals("Recent Song", song.shortLabel)
         // Tapping it opens the song like tapping its link, wherever the user listens.
@@ -1452,12 +1511,12 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.clear_history_button))
         click(string(R.string.clear_button))
         click(string(R.string.clear_history_button))
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isEmpty() }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().isEmpty() }
         assertTrue(HistoryStore(prefs()).load().isEmpty())
 
         // Clearing can be undone for a while, which brings the shortcuts back too.
         click(string(R.string.undo_button))
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
         assertEquals(1, HistoryStore(prefs()).load().size)
 
         // Once the offer is gone, the cleared history is too.
@@ -1516,7 +1575,7 @@ class MainActivityTest {
         resolveTyped()
 
         // Three, as many as Android shows per app.
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 4 }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 4 }
         val (song, deezer) = dynamicShortcuts().sortedBy { it.rank }
         assertEquals(
             listOf("No Cover", "Deezer", string(R.string.share_link_button), string(R.string.show_song_short)),
@@ -1533,7 +1592,7 @@ class MainActivityTest {
         // Android shows them for any shared text, so they can be turned off, leaving the song.
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_share_sheet_apps)).performScrollTo().performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 1 }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 1 }
         assertEquals("No Cover", dynamicShortcuts().single().shortLabel)
         assertFalse(prefs().getBoolean("share_sheet_apps", true))
     }
@@ -1543,7 +1602,7 @@ class MainActivityTest {
     fun beforeAndroid11ShareSheetTargetsAreNotKeptLongLived() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         launch()
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
         assertEquals("Deezer", dynamicShortcuts().minBy { it.rank }.shortLabel)
     }
 
@@ -1915,7 +1974,7 @@ class MainActivityTest {
         typeUrl("https://open.spotify.com/track/$TRACK_ID")
         click(string(R.string.resolve_button))
         waitForText("Cover Song")
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodes(hasTestTag(ARTWORK_TAG)).fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals("https://img.example/cover.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
@@ -1935,7 +1994,7 @@ class MainActivityTest {
         typeUrl("https://open.spotify.com/track/$TRACK_ID")
         click(string(R.string.resolve_button))
         waitForText("Plain Song")
-        composeRule.waitUntil(TIMEOUT_MS) { "https://img.example/cover.jpg" in fake.requestedUrls }
+        waitUntil(TIMEOUT_MS) { "https://img.example/cover.jpg" in fake.requestedUrls }
         composeRule.waitForIdle()
         composeRule.onNode(hasTestTag(ARTWORK_TAG)).assertDoesNotExist()
     }
@@ -2099,6 +2158,16 @@ class MainActivityTest {
         composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
 
         assertEquals("https://crosstune.4st.li/es/privacy/", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aWebPageWithNoBrowserToOpenItSaysSoRatherThanCrashing() {
+        launch()
+        click(string(R.string.settings_button))
+        shadowOf(app).checkActivities(true)
+        composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(string(R.string.error_no_app_to_open), ShadowToast.getTextOfLatestToast())
     }
 
     @Test
@@ -2437,7 +2506,8 @@ class MainActivityTest {
             410 to R.string.error_not_found,
             429 to R.string.error_rate_limited,
             503 to R.string.error_service_unavailable,
-            403 to R.string.error_not_found,
+            // A page turned away says the service failed, not that the song's gone.
+            403 to R.string.error_service_unavailable,
             400 to R.string.error_metadata_unavailable
         )
         for ((code, message) in cases) {
@@ -2634,7 +2704,7 @@ class MainActivityTest {
 
         // Closed from the screen itself, so the song is shown again.
         click(string(R.string.dismiss_button))
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText("夜が灯りを投げるBedで").fetchSemanticsNodes().isEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText("夜が灯りを投げるBedで").fetchSemanticsNodes().isEmpty() }
         waitForResult()
 
         // A song with no words of its own says so, rather than sitting empty. Each song is another,
@@ -2704,13 +2774,13 @@ class MainActivityTest {
         // Allowed and back, with no app playing it yet: the offer goes, and the microphone's still there.
         playback.access = true
         controller!!.pause().resume()
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
 
         // Its app plays it, paused 25 seconds in: the second line is lit, and the app's in the header's
         // corner instead of the microphone, not over the words.
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
         assertLit("Two")
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertDoesNotExist()
         // Its icon plays the song, paused, and shows it would pause it once it plays.
@@ -2718,18 +2788,18 @@ class MainActivityTest {
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).performClick()
         assertEquals(listOf(true), playback.plays)
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_pause), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_pause), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).performClick()
         assertEquals(listOf(true, false), playback.plays)
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_play), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_play), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         // A line tapped moves the app there.
         composeRule.onNodeWithText("Three").performClick()
         assertEquals(listOf(40_000L), playback.seeks)
 
         // Playing on, past the last line; an app that can't jump isn't asked to.
         playback.playing.value = Following(PlaybackClock(45_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = false, appPackage = app.packageName)
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodes(hasText("Three") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("One").performClick()
@@ -2767,7 +2837,7 @@ class MainActivityTest {
         composeRule.onNodeWithText("♪").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
         // Followed in an app that can be moved, tapping it goes there; held, it still opens nothing.
         playback.playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithText("♪").performClick()
         assertEquals(listOf(5_000L), playback.seeks)
         composeRule.onNodeWithText("♪").performTouchInput { longClick() }
@@ -2781,7 +2851,7 @@ class MainActivityTest {
         playback.access = true
         controller!!.pause().resume()
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
         // Held, a line opens to study; tapped, it still moves the app there.
         composeRule.onNodeWithText("Two").performTouchInput { longClick() }
         composeRule.waitForIdle()
@@ -2861,7 +2931,7 @@ class MainActivityTest {
         playback.access = true
         controller!!.pause().resume()
         assertTextAbsent(string(R.string.follow_help_title))
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
@@ -2909,7 +2979,6 @@ class MainActivityTest {
     fun theAppsColorAndPureBlackArePickedInSettingsAndKept() {
         launch()
         click(string(R.string.settings_button))
-        // The swatches scroll sideways inside the page, so the page is scrolled to their row first.
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
         val ocean = composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
         ocean.assertIsNotSelected()
@@ -2932,6 +3001,23 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo().assertIsOn()
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2000dp")
+    fun everyColorFitsInItsRowOnANarrowPhone() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
+        // The picked one's name ends where the row does.
+        val rowEnd = composeRule.onNodeWithText(string(R.string.palette_wallpaper)).fetchSemanticsNode().boundsInRoot.right
+        val swatches = listOf(R.string.palette_wallpaper, R.string.palette_violet, R.string.palette_ocean, R.string.palette_forest, R.string.palette_sunset, R.string.palette_rose)
+            .map { composeRule.onNodeWithContentDescription(string(it)).fetchSemanticsNode().boundsInRoot }
+        // All whole, on one line, each still a full touch.
+        assertTrue(swatches.all { it.right <= rowEnd + 1f })
+        assertEquals(1, swatches.map { it.top }.distinct().size)
+        val touch = with(composeRule.density) { 48.dp.toPx() }
+        assertTrue(swatches.all { it.width >= touch - 1f })
     }
 
     @Test
@@ -3031,9 +3117,9 @@ class MainActivityTest {
         assertTextShown(string(R.string.chatgpt_continue))
         waitUntil { ChatGpt.REVOKE_URL in fake.requestedUrls }
 
-        // Signed in again, it isn't said again.
+        // Signed in again, afresh, it isn't said again.
         startSigningIn()
-        thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}") }
+        thread { openAi.comeBack("code=c&state=${openAi.authorize.queryParameter("state")}&client_id=oaiapp_1") }
         waitUntil { composeRule.onAllNodesWithText(FakeOpenAi.EMAIL).fetchSemanticsNodes().isNotEmpty() }
         assertTextAbsent(string(R.string.chatgpt_welcome_title))
     }
@@ -3084,6 +3170,11 @@ class MainActivityTest {
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.theme_dark)).assertExists()
+        // The menu ticks the one picked.
+        composeRule.onNodeWithText(string(R.string.setting_theme)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.theme_dark)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        composeRule.onNode(hasText(string(R.string.theme_light)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)).assertExists()
     }
 
     @Test
@@ -3637,7 +3728,7 @@ class MainActivityTest {
         prefs().edit().putBoolean("exact_match", true).commit()
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") {
-                val title = if (fake.requestBodies.last().contains("Second")) "Second" else "First"
+                val title = if (FakeSpotify.bodyOf(request).contains("Second")) "Second" else "First"
                 val videoId = if (title == "Second") "second00000" else "first000000"
                 FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                     "flexColumns":[
@@ -4215,7 +4306,7 @@ class MainActivityTest {
 
         fake.requestedUrls.clear()
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
-        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.isNotEmpty() }
         // Straight to looking the video up, without asking YouTube Music first.
         assertTrue(fake.requestedUrls.none { "youtubei/v1/next" in it })
     }
@@ -5285,7 +5376,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextShown(string(R.string.notice_app_still_opens, "Spotify"))
         assertTextShown(string(R.string.notice_links_not_allowed))
-        composeRule.waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
     }
 
     @Test

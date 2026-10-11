@@ -36,11 +36,19 @@ internal class LookupCache(
     /** The newest list not written yet; a write that finds none has been overtaken by a later one. */
     private val pending = AtomicReference<String?>()
 
-    suspend fun get(key: String): String? = loaded().let { synchronized(it) { it[key] } }
+    /** What's kept for [key], which then counts as just used, so what's used often stays longest. */
+    suspend fun get(key: String): String? = loaded().let { entries ->
+        synchronized(entries) {
+            val value = entries.remove(key) ?: return null
+            entries[key] = value
+            changed = true
+            value
+        }
+    }
 
     suspend fun put(key: String, value: String) = loaded().let { entries ->
         synchronized(entries) {
-            // Moved to the end, so the oldest are dropped first.
+            // Moved to the end, so the longest unused are dropped first.
             entries.remove(key)
             entries[key] = value
             entries.keys.take(maxOf(0, entries.size - maxEntries)).forEach(entries::remove)

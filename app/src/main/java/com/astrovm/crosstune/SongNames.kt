@@ -31,15 +31,17 @@ internal object SongNames {
      * recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*)\s*[)\]]?$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed)?|mono|stereo)\b$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
 
+    /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
+    private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
+
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5
 
-    /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     /**
      * The names a song may go by: its title, then, for one that's two names joined by a dash, as
      * YouTube Music gives "ミステリー・ガール - Mystery Girl", each of them.
@@ -47,6 +49,7 @@ internal object SongNames {
     fun titleNames(title: String): List<String> =
         listOf(title) + title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
 
+    /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     fun normalize(text: String): String =
         Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .replace(lettersAndDigits, "")
@@ -59,16 +62,25 @@ internal object SongNames {
         Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .split(wordSplit).filter { it.isNotEmpty() }.toSet()
 
-    /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself. */
+    /**
+     * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
+     * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
+     */
     fun withoutEditionTag(title: String): String {
         var stripped = title
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
-            val shorter = stripped.replace(featuring, "").replace(editionTag, "")
+            val unfeatured = stripped.replace(featuring, "")
+            val tag = editionTag.find(unfeatured)?.value.orEmpty()
+            if (words(tag).any { it in OTHER_RECORDING }) return unfeatured.takeIf { it.isNotBlank() } ?: stripped
+            val shorter = unfeatured.replace(editionTag, "")
             if (shorter == stripped || shorter.isBlank()) return stripped
             stripped = shorter
         }
     }
+
+    /** Words in a tag that make it another recording, though it also says it's remastered or in mono. */
+    private val OTHER_RECORDING = setOf("live", "remix", "acoustic", "demo", "instrumental", "unplugged", "karaoke", "cover", "session", "sessions")
 
     /**
      * "A & B feat. C" is credited as just "A" on some services, so each name counts on its own,

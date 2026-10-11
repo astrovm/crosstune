@@ -275,10 +275,10 @@
     <string name="lyrics_explain_failed">Nie udało się wyjaśnić tego wersu.</string>
     <string name="song_search_chatgpt">Znalezione przez ChatGPT</string>
     <string name="saved_practice">Ćwicz</string>
-    <string name="practice_show">Pokaż znaczenie</string>
+    <string name="practice_show">Pokaż odpowiedź</string>
     <string name="practice_again">Jeszcze raz</string>
-    <string name="practice_knew">Wiedziałem</string>
-    <string name="practice_next">Dalej</string>
+    <string name="practice_good">Dobrze</string>
+    <string name="practice_easy">Łatwe</string>
     <string name="practice_caught_up">Wszystko powtórzone</string>
     <string name="lyrics_ask_line">Zapytaj o ten wers</string>
     <string name="lyrics_ask_send">Wyślij</string>
@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Przykłady</string>
     <string name="lyrics_examples_failed">Nie udało się napisać przykładów.</string>
     <string name="lyrics_ask_song">Zapytaj o utwór</string>
-    <string name="song_level">Poziom %1$s</string>
     <string name="song_original">Cover utworu</string>
     <string name="song_samples">Sample</string>
     <string name="artist_who">Kto</string>

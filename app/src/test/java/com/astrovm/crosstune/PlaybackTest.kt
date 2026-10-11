@@ -59,7 +59,7 @@ class PlaybackTest {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
     }
 
-    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null, position: Long = 42_000): MediaController {
+    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null, position: Long = 42_000, duration: Long? = null): MediaController {
         shadowOf(app.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
@@ -72,7 +72,8 @@ class PlaybackTest {
             MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .apply { if (artist != null) putString(MediaMetadata.METADATA_KEY_ARTIST, artist) }
                 .apply { art.forEach { (key, uri) -> putString(key, uri) } }
-                .apply { if (album != null) putString(MediaMetadata.METADATA_KEY_ALBUM, album) }.build()
+                .apply { if (album != null) putString(MediaMetadata.METADATA_KEY_ALBUM, album) }
+                .apply { if (duration != null) putLong(MediaMetadata.METADATA_KEY_DURATION, duration) }.build()
         )
         shadowOf(controller).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, at).setActions(actions).build())
         return controller
@@ -189,6 +190,24 @@ class PlaybackTest {
         shadowOf(youtube).executeOnMetadataChanged(video)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("YouTube", seen.last()?.app)
+    }
+
+    @Test
+    fun aSongPlayingSaysHowLongItIs() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours", duration = 200_040))
+        assertEquals(200_040L, playback.nowPlaying()?.metadata?.lengthMs)
+    }
+
+    @Test
+    fun aVideosLengthIsntTheSongs() {
+        allow()
+        sounding()
+        // A video's length is the video's, which may open with more than the song.
+        shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO", duration = 262_000))
+        assertEquals("Blinding Lights", playback.nowPlaying()?.metadata?.title)
+        assertNull(playback.nowPlaying()?.metadata?.lengthMs)
     }
 
     @Test

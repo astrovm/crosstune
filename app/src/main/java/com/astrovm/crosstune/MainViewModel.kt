@@ -19,12 +19,15 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal data class UiState(
@@ -252,16 +255,13 @@ internal fun savedPalette(name: String?): Palette {
 /** When a song isn't in the app it goes to: say so and offer both, open it where it's from, or search anyway. */
 internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
 
-/**
- * What's switched on to help read a song's words in another language: [readings] over them, kana
- * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
- * Then what's been worked out for the words shown, line by line.
- */
-/** A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none. */
 /** How dark the ground over the visuals is to start with: enough for the words to read. */
 internal const val DEFAULT_VISUALS_SHADE = 0.45f
 
-/** [type] is what kind of word it is, e.g. "noun", when the dictionary says. */
+/**
+ * A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none.
+ * [type] is what kind of word it is, e.g. "noun", when the dictionary says.
+ */
 internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false, val type: String? = null)
 
 /** Signing in with ChatGPT: [email] once signed in, and how the last try went. */
@@ -279,15 +279,15 @@ internal data class ChatGptState(
 )
 
 /**
- * A saved [line] being practised: its meaning to pick among [choices], or, without them, to show
- * when [revealed]; [picked], the choice picked. With no [line], none is due: all are caught up.
+ * A saved [line] being practised as a card: the line first, or its meaning when [meaningFirst], to
+ * think of the other side, which shows once [turned]. [due] are left, this one too. With no [line],
+ * none is due: all are caught up.
  */
 internal data class Practice(
     val line: SavedLine? = null,
-    val choices: List<String>? = null,
-    val loading: Boolean = false,
-    val picked: Int? = null,
-    val revealed: Boolean = false
+    val meaningFirst: Boolean = false,
+    val turned: Boolean = false,
+    val due: Int = 0
 )
 
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
@@ -300,11 +300,15 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val writing get() = !done && !failed && !limitReached
 }
 
+/**
+ * What's switched on to help read a song's words in another language: [readings] over them, kana
+ * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
+ * Then what's been worked out for the words shown, line by line.
+ */
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
     val translation: Boolean = false,
-    /** Where translations come from instead of MyMemory, when set. */
     /** Signed in, whether ChatGPT translates, rather than MyMemory. */
     val chatGptTranslation: Boolean = true,
     /** The language picked to translate into, as Settings lists it; null for the app's own. */
@@ -336,8 +340,8 @@ internal data class Learning(
     val songQuestions: List<LineQuestion> = emptyList(),
     /** Who the artist is, as ChatGPT is writing it, or has. */
     val artist: LineExplanation? = null,
-    /** Sentences using line [LineExamples.index]'s words, as ChatGPT writes them. */
-    val examples: LineExamples? = null
+    /** Sentences using the word tapped, as ChatGPT writes them. */
+    val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, wordsAs = wordsAs)
@@ -365,8 +369,8 @@ internal data class Asking<T>(val value: T? = null, val failed: Boolean = false)
     val loading get() = value == null && !failed
 }
 
-/** Sentences using line [index]'s words, once they've come, or that they couldn't be had. */
-internal data class LineExamples(val index: Int, val asking: Asking<List<Example>> = Asking())
+/** Sentences using [word], from line [index], once they've come, or that they couldn't be had. */
+internal data class WordExamples(val word: Word, val index: Int, val asking: Asking<List<Example>> = Asking())
 
 /**
  * A song not found in [destination], with its [original] link, which opens it where it is, when it has
@@ -381,8 +385,11 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
 internal sealed interface Effect {
-    /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
-    data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
+    /**
+     * [packageName] is null for custom destinations, which open in whatever app handles the URL.
+     * [atMs] is when it was asked, so one that waited while Crosstune was away isn't opened long after.
+     */
+    data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean, val atMs: Long = SystemClock.elapsedRealtime()) : Effect
     data class Share(val url: String) : Effect
 }
 
@@ -406,6 +413,11 @@ internal class MainViewModel(
     private val systemDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** How long listening along waits after naming a song before it listens again. */
     private val listenAlongPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
+    /**
+     * How long listening along rests after hearing nothing, doubled each time it hears nothing again,
+     * up to [QUIET_PAUSE_DOUBLINGS] times, so a paused song doesn't keep the microphone on.
+     */
+    private val quietPauseMs: Long = LISTEN_ALONG_PAUSE_MS,
     /** The clock a song's place is kept on, the one that counts since the phone started. */
     private val now: () -> Long = SystemClock::elapsedRealtime,
     /** Where a song's words are translated; nullable so tests need no translation service. */
@@ -1142,17 +1154,19 @@ internal class MainViewModel(
                 effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
                 return@launch
             }
-            val exactUrl = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
+            val match = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
                 uiState = uiState.copy(isMatching = true)
                 try {
-                    matcher.find(service, track)
+                    matcher.lookFor(service, track)
                 } finally {
                     if (isActive) uiState = uiState.copy(isMatching = false)
                 }
             }
+            val exactUrl = (match as? ExactMatcher.Match.Found)?.url
             val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
             val service = destination.matchService
-            if (exactUrl == null && uiState.exactMatch && service != null && canMatchExactly(service, ItemType.TRACK)) {
+            // Not found there, as opposed to no answer, e.g. offline, which just searches.
+            if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
             effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
@@ -1285,13 +1299,16 @@ internal class MainViewModel(
         japanese = null
         syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
+            var first: LyricsFinder.FirstLook? = null
             uiState = uiState.copy(
                 lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
-                // A lookup that failed says so, rather than claiming the song has no words.
-                when (val answer = finder.lyricsOf(song)) {
+                // A lookup that failed says so, rather than claiming the song has no words. The words
+                // show as soon as they're found, and their timing may get better after.
+                first = finder.firstLook(song)
+                when (val answer = first.lyrics) {
                     is LyricsFinder.Lyrics.Found -> {
                         foundLines = answer.lines
                         syncPoints = syncStore.load(song, answer.lines)
@@ -1310,9 +1327,21 @@ internal class MainViewModel(
                 if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
             }
             follow(song)
+            first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
         }
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
+    }
+
+    /**
+     * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
+     * of the song; kept as they are when they're put in time by hand meanwhile.
+     */
+    private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
+        val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
+        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty()) return
+        foundLines = better.lines
+        uiState = uiState.copy(lyricLines = better.lines)
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
@@ -1324,6 +1353,9 @@ internal class MainViewModel(
 
     private var alongJob: Job? = null
 
+    /** Told when the app playing the song shown starts playing it, e.g. after a pause, so listening along wakes. */
+    private val appPlaysAgain = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     /**
      * Keeps the microphone listening along with the words: every little while it asks what's
      * playing nearby and how far into it, so a pause, a skip or the next song is followed. Only
@@ -1333,16 +1365,24 @@ internal class MainViewModel(
         if (alongJob?.isActive == true) return
         uiState = uiState.copy(listeningAlong = true)
         alongJob = viewModelScope.launch {
+            var quiet = 0
             while (isActive) {
                 when (val heard = listener.listen()) {
                     is Heard.Song -> {
+                        quiet = 0
                         heardAlong(heard)
                         delay(listenAlongPauseMs)
                     }
-                    // Nothing heard, the music has most likely stopped, so the words stop where they are.
-                    Heard.Nothing -> heardClock?.takeIf { it.playing }?.let { clock ->
-                        heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
-                        keepInTime()
+                    // Nothing heard, the music has most likely stopped, so the words stop where they are,
+                    // and the microphone rests, longer each time, until the app playing it plays again.
+                    Heard.Nothing -> {
+                        heardClock?.takeIf { it.playing }?.let { clock ->
+                            heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
+                            keepInTime()
+                        }
+                        val rest = quietPauseMs * (1L shl minOf(quiet, QUIET_PAUSE_DOUBLINGS))
+                        quiet++
+                        withTimeoutOrNull(rest) { appPlaysAgain.first() }
                     }
                     is Heard.Failed -> {
                         // Without the microphone there's nothing to listen with; anything else, e.g. the
@@ -1399,11 +1439,15 @@ internal class MainViewModel(
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
-        // Named by an app that gave no cover, it's found by its name, so Recent shows one.
+        // Named by an app that gave no cover, it's found by its name, so Recent and its words show one.
         if (heard.metadata.artworkUrl != null) return
         viewModelScope.launch {
             val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
-            uiState = uiState.copy(history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)))
+            val shown = uiState.lyricsFor?.takeIf { it == heard.metadata }
+            uiState = uiState.copy(
+                history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)),
+                lyricsFor = shown?.copy(artworkUrl = cover) ?: uiState.lyricsFor
+            )
         }
     }
 
@@ -1481,6 +1525,7 @@ internal class MainViewModel(
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {
             source.follow(song).collect { playing ->
+                if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
@@ -1704,52 +1749,30 @@ internal class MainViewModel(
         uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
     }
 
-    private var practiceJob: Job? = null
-
     /**
-     * Practises the next saved line due, the one due longest: signed in, its meaning picked among
-     * two wrong ones; otherwise, shown, then said whether it was known.
+     * Practises the next saved line due, the one due longest, as a card: the line or its meaning
+     * first, each in turn, the other side to think of before it's turned.
      */
     fun startPractice() {
-        val line = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }.minByOrNull { it.due }
-        practiceJob?.cancel()
-        if (line == null || !usesChatGpt()) {
-            uiState = uiState.copy(practice = Practice(line))
-            return
-        }
-        uiState = uiState.copy(practice = Practice(line, loading = true))
-        practiceJob = viewModelScope.launch {
-            val meaning = line.translation!!
-            val wrong = tutor?.quizChoices(line.text, meaning)
-            val choices = wrong?.let { (it + meaning).shuffled() }
-            uiState = uiState.copy(practice = Practice(line, choices))
-        }
+        val due = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }
+        val line = due.minByOrNull { it.due }
+        uiState = uiState.copy(practice = Practice(line, meaningFirst = line != null && line.box % 2 == 1, due = due.size))
     }
 
-    /** Picks choice [index]: right or wrong, the line is practised. */
-    fun answerPractice(index: Int) {
-        val practice = uiState.practice ?: return
+    /** Turns the card, to say how well its other side was known. */
+    fun turnPractice() {
+        uiState = uiState.copy(practice = uiState.practice?.copy(turned = true))
+    }
+
+    /** Says how well the card turned was known, and goes on to the next. */
+    fun gradePractice(grade: Grade) {
+        val practice = uiState.practice?.takeIf { it.turned } ?: return
         val line = practice.line ?: return
-        val choices = practice.choices ?: return
-        if (practice.picked != null) return
-        val knew = choices.getOrNull(index) == line.translation
-        uiState = uiState.copy(practice = practice.copy(picked = index), savedLines = savedLinesStore.practised(line, knew, wallClock()))
-    }
-
-    /** Shows the meaning, to say whether it was known. */
-    fun revealPractice() {
-        uiState = uiState.copy(practice = uiState.practice?.copy(revealed = true))
-    }
-
-    /** Says whether the line shown was known, and goes on to the next. */
-    fun gradePractice(knew: Boolean) {
-        val line = uiState.practice?.line ?: return
-        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, knew, wallClock()))
+        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, grade, wallClock()))
         startPractice()
     }
 
     fun stopPractice() {
-        practiceJob?.cancel()
         uiState = uiState.copy(practice = null)
     }
 
@@ -1767,7 +1790,8 @@ internal class MainViewModel(
         val translator = translator ?: return
         val line = wordLines().getOrNull(index)
         wordJob?.cancel()
-        uiState = uiState.copy(word = WordMeaning(word, looking = true))
+        examplesJob?.cancel()
+        uiState = uiState.copy(word = WordMeaning(word, looking = true), learning = uiState.learning.copy(examples = null))
         wordJob = viewModelScope.launch {
             val language = translateInto()
             val inLine = if (usesChatGpt() && line != null) tutor?.meaning(word.lookup, line, language) else null
@@ -1785,7 +1809,8 @@ internal class MainViewModel(
 
     fun dismissWord() {
         wordJob?.cancel()
-        uiState = uiState.copy(word = null)
+        examplesJob?.cancel()
+        uiState = uiState.copy(word = null, learning = uiState.learning.copy(examples = null))
     }
 
     /** Signed in with ChatGPT, which the AI features ask. */
@@ -1847,7 +1872,7 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         val song = uiState.lyricsFor ?: return
         val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
-        findSongFacts(song, lines)
+        findSongFacts(song)
         // Already explained, or on its way, it's just shown.
         if (uiState.learning.songExplanation?.let { it.done || it.writing } == true) return
         songExplanationJob?.cancel()
@@ -1862,13 +1887,13 @@ internal class MainViewModel(
 
     private var songFactsJob: Job? = null
 
-    /** Finds how hard the song's words are, and what it covers or samples, unless it's known. */
-    private fun findSongFacts(song: MusicMetadata, lines: List<String>) {
+    /** Finds what the song covers or samples, unless it's known. */
+    private fun findSongFacts(song: MusicMetadata) {
         val tutor = tutor ?: return
         if (uiState.learning.songFacts != null || songFactsJob?.isActive == true) return
         songFactsJob = viewModelScope.launch {
-            val facts = tutor.songFacts(song, lines, translateInto()) ?: return@launch
-            if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
+            val facts = tutor.songFacts(song) ?: return@launch
+            if (uiState.lyricsFor?.let { sameSong(it, song) } == true) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
         }
     }
 
@@ -1942,20 +1967,21 @@ internal class MainViewModel(
 
     private var examplesJob: Job? = null
 
-    /** Has ChatGPT write sentences using line [index]'s words, the way it does. */
+    /** Has ChatGPT write sentences using the word tapped in line [index], the way the line does. */
     fun findExamples(index: Int) {
         val tutor = tutor ?: return
         val song = uiState.lyricsFor ?: return
+        val word = uiState.word?.word ?: return
         val line = wordLines().getOrNull(index) ?: return
         examplesJob?.cancel()
-        setExamples(LineExamples(index))
+        setExamples(WordExamples(word, index))
         examplesJob = viewModelScope.launch {
-            val examples = tutor.examples(line, song, translateInto())
-            setExamples(LineExamples(index, Asking(examples, failed = examples == null)))
+            val examples = tutor.examples(word.lookup, line, song, translateInto())
+            setExamples(WordExamples(word, index, Asking(examples, failed = examples == null)))
         }
     }
 
-    private fun setExamples(examples: LineExamples) {
+    private fun setExamples(examples: WordExamples?) {
         uiState = uiState.copy(learning = uiState.learning.copy(examples = examples))
     }
 
@@ -2130,16 +2156,23 @@ internal class MainViewModel(
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
-        val exactUrl = if (uiState.exactMatch && service != null) {
+        val match = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
-            matcher.find(service, metadata).also { uiState = uiState.copy(isMatching = false) }
+            matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
         } else {
             null
         }
+        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        rememberDestination(destination, PreparedLink(url, exactUrl != null, uiState.exactMatch))
+        rememberDestination(destination, PreparedLink(url, exactUrl != null, matched(match)))
         return url.forSharing()
     }
+
+    /**
+     * Whether a link was prepared with exact matching: not when the lookup got no answer, e.g.
+     * offline, so it isn't taken as not being there, and is looked for again next time.
+     */
+    private fun matched(match: ExactMatcher.Match?) = uiState.exactMatch && match != ExactMatcher.Match.Failed
 
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
     fun openOriginal() {
@@ -2232,9 +2265,10 @@ internal class MainViewModel(
             matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { return it }
         }
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
-        val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
+        val match = if (uiState.exactMatch && service != null) matcher.lookFor(service, entry.metadata) else null
+        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))
-        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, uiState.exactMatch))
+        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, matched(match)))
         uiState = uiState.copy(history = history)
         return url.forSharing()
     }
@@ -2544,6 +2578,11 @@ internal class MainViewModel(
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
+
+        /** How many wrong meanings a practised line's right one is picked among. */
+
+        /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
+        const val QUIET_PAUSE_DOUBLINGS = 3
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L

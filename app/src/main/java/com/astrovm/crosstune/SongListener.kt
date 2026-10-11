@@ -31,10 +31,10 @@ import kotlin.math.min
 
 /** What listening found. */
 internal sealed interface Heard {
-    /** [appleMusicId] is the song on Apple Music, when Shazam knows it. */
     /**
-     * [offsetMs] is how far into the song the sound heard starts, and [startedAtMs] when that sound
-     * started, on the clock that counts since the phone started, so the words can follow on from there.
+     * [appleMusicId] is the song on Apple Music, when Shazam knows it. [offsetMs] is how far into the
+     * song the sound heard starts, and [startedAtMs] when that sound started, on the clock that counts
+     * since the phone started, so the words can follow on from there.
      */
     data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null) : Heard {
         /** Where the song is, as heard, when both halves are known. */
@@ -230,6 +230,8 @@ internal class SongListener(
         }
         var tried = 0
         var heard: Heard? = null
+        // The network failing for a moment is asked again with more sound, but not twice in a row.
+        var offline: Heard.Failed? = null
         while (heard == null) {
             // Asked again once there's another step's worth, or whatever's left when recording ends.
             val now = progress.first { it.done || it.recorded >= tried + STEP }
@@ -237,10 +239,15 @@ internal class SongListener(
                 Heard.Failed(AppError.MICROPHONE)
             } else if (now.recorded == tried) {
                 // A microphone that can't open, or gives no sound at all, isn't working.
-                if (tried == 0) Heard.Failed(AppError.MICROPHONE) else Heard.Nothing
+                if (tried == 0) Heard.Failed(AppError.MICROPHONE) else offline ?: Heard.Nothing
             } else {
                 tried = now.recorded
-                shazam.recognize(audio.copyOf(tried), tried).takeIf { it !is Heard.Nothing || tried == audio.size }
+                // Not named yet, it's asked again with more, and what the last ask says is the
+                // answer; Shazam saying it's busy is believed at once.
+                val answer = shazam.recognize(audio.copyOf(tried), tried)
+                val failedAgain = answer is Heard.Failed && answer.error == AppError.NETWORK && offline != null
+                offline = (answer as? Heard.Failed)?.takeIf { it.error == AppError.NETWORK }
+                answer.takeIf { it is Heard.Song || (it is Heard.Failed && (it.error != AppError.NETWORK || failedAgain)) || tried == audio.size }
             }
         }
         recorder.cancelAndJoin()

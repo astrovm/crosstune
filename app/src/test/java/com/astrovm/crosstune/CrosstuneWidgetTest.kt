@@ -39,9 +39,9 @@ import java.security.MessageDigest
 class CrosstuneWidgetTest {
 
     private val app: Context = ApplicationProvider.getApplicationContext()
-    private val song = WidgetSong("Song", "Artist · Spotify", "https://open.spotify.com/track/1", null)
+    private val song = WidgetSong("Song", "Artist, Spotify", "https://open.spotify.com/track/1", null)
     private val paste = Intent(MainActivity.ACTION_PASTE_FROM_CLIPBOARD).setClassName(app, MainActivity.PASTE_ALIAS)
-    private val withCover = song.copy(title = "Covered", subtitle = "Band · Deezer", url = "https://open.spotify.com/track/2", cover = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888))
+    private val withCover = song.copy(title = "Covered", subtitle = "Band, Deezer", url = "https://open.spotify.com/track/2", cover = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888))
 
     @Before
     fun clearHistory() {
@@ -77,7 +77,7 @@ class CrosstuneWidgetTest {
     fun wideItShowsRecentWithEachSongsActions() = widget(CrosstuneWidget.LIST, listOf(song, withCover)) {
         onNode(hasText(app.getString(R.string.app_name))).assertExists()
         onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.shortcut_paste_long)))).assertAny(hasStartActivityClickAction(paste))
-        onNode(hasText("Artist · Spotify")).assertExists()
+        onNode(hasText("Artist, Spotify")).assertExists()
         onNode(hasText("Covered")).assertExists()
         // ▶ opens the song in the user's app; tapping the rest of the row shows it in Crosstune.
         onAllNodes(hasAnyDescendant(hasContentDescription(app.getString(R.string.history_open, "Song"))))
@@ -158,8 +158,8 @@ class CrosstuneWidgetTest {
         val songs = CrosstuneWidget.widgetSongs(app)
 
         assertEquals(listOf("Track", "Album"), songs.map { it.title })
-        assertEquals("Band · Spotify", songs[0].subtitle)
-        assertEquals("${app.getString(R.string.type_album)} · Deezer", songs[1].subtitle)
+        assertEquals("Band, Spotify", songs[0].subtitle)
+        assertEquals("${app.getString(R.string.type_album)}, Deezer", songs[1].subtitle)
         assertEquals(CrosstuneWidget.COVER_PIXELS, songs[0].cover!!.width)
         assertNull(songs[1].cover)
     }

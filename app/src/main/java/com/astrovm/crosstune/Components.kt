@@ -23,6 +23,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -211,4 +216,22 @@ internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): C
         }
     }
     return color
+}
+
+/** Opens a web page in the browser; with none to open it, says so rather than crashing. */
+@Composable
+internal fun rememberWebOpener(): (String) -> Unit {
+    val handler = LocalUriHandler.current
+    val context = LocalContext.current
+    val noApp = stringResource(R.string.error_no_app_to_open)
+    return remember(handler, context, noApp) {
+        { url ->
+            try {
+                handler.openUri(url)
+            } catch (_: IllegalArgumentException) {
+                // What Compose throws when no app can open it, in place of ActivityNotFoundException.
+                Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 }

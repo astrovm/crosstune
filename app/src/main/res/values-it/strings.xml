@@ -276,10 +276,10 @@
     <string name="lyrics_explain_failed">Impossibile spiegare questa riga.</string>
     <string name="song_search_chatgpt">Trovata da ChatGPT</string>
     <string name="saved_practice">Esercitati</string>
-    <string name="practice_show">Mostra significato</string>
+    <string name="practice_show">Mostra risposta</string>
     <string name="practice_again">Di nuovo</string>
-    <string name="practice_knew">Lo sapevo</string>
-    <string name="practice_next">Avanti</string>
+    <string name="practice_good">Bene</string>
+    <string name="practice_easy">Facile</string>
     <string name="practice_caught_up">Tutto in pari</string>
     <string name="lyrics_ask_line">Chiedi su questa riga</string>
     <string name="lyrics_ask_send">Invia</string>
@@ -307,7 +307,6 @@
     <string name="lyrics_examples">Esempi</string>
     <string name="lyrics_examples_failed">Impossibile scrivere esempi.</string>
     <string name="lyrics_ask_song">Chiedi sulla canzone</string>
-    <string name="song_level">Livello %1$s</string>
     <string name="song_original">Cover di</string>
     <string name="song_samples">Campiona</string>
     <string name="artist_who">Chi è</string>

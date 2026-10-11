@@ -19,8 +19,10 @@ internal interface Milkdrop {
     /** Starts drawing at [width] by [height]; false when it can't. */
     fun open(width: Int, height: Int): Boolean
     fun size(width: Int, height: Int)
-    /** Moves on to [preset], the text of a .milk file, blending into it when [smooth]. */
-    /** Whether it loaded: a phone may not manage some presets' shaders. */
+    /**
+     * Moves on to [preset], the text of a .milk file, blending into it when [smooth]; whether it
+     * loaded, as a phone may not manage some presets' shaders.
+     */
     fun show(preset: String, smooth: Boolean): Boolean
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
@@ -73,16 +75,18 @@ internal interface SoundTap {
  * hears the music through headphones too. Android only allows it with the microphone permission.
  */
 internal class OutputMixTap private constructor(private val visualizer: Visualizer) : SoundTap {
-    override fun read(into: ByteArray): Int {
-        if (into.size < visualizer.captureSize) return 0
-        return if (visualizer.getWaveForm(into) == Visualizer.SUCCESS) visualizer.captureSize else 0
+    override fun read(into: ByteArray): Int = try {
+        if (into.size < visualizer.captureSize) 0
+        else if (visualizer.getWaveForm(into) == Visualizer.SUCCESS) visualizer.captureSize else 0
+    } catch (_: IllegalStateException) {
+        // Taken away meanwhile, e.g. by another app's, it hears nothing.
+        0
     }
 
     override fun close() = visualizer.release()
 
     companion object {
-        /** Null without the permission, or on a phone that won't share its sound. */
-        /** [create] makes one on the output mix, audio session 0. */
+        /** [create] makes one on the output mix, audio session 0; null without the permission, or on a phone that won't share its sound. */
         fun open(create: () -> Visualizer = { Visualizer(0) }): OutputMixTap? {
             var visualizer: Visualizer? = null
             return try {
@@ -237,10 +241,12 @@ internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : 
         const val SCALE = 2
     }
 
+    /** Drawing on, the thread lets the surface go once it's done, so the screen doesn't wait for it. */
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-        thread?.finish()
+        val drawing = thread ?: return true
+        drawing.finish()
         thread = null
-        return true
+        return false
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
@@ -274,16 +280,20 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
         lock.notifyAll()
     }
 
-    /** Stops, and waits for it, so nothing draws into the surface once it's gone. */
-    fun finish() {
-        synchronized(lock) {
-            done = true
-            lock.notifyAll()
-        }
-        join()
+    /** Stops after the frame it's on, then lets the surface go, so nothing draws into it once it's gone. */
+    fun finish() = synchronized(lock) {
+        done = true
+        lock.notifyAll()
     }
 
-    override fun run() {
+    override fun run() = try {
+        draw()
+    } finally {
+        // Its surface is this thread's to let go, once nothing draws into it.
+        surface.release()
+    }
+
+    private fun draw() {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         EGL14.eglInitialize(display, null, 0, null, 0)
         val configs = arrayOfNulls<EGLConfig>(1)
@@ -307,8 +317,8 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
         } else {
             EGL14.EGL_NO_SURFACE
         }
-        // Without OpenGL ES 3 there are just no visuals.
-        if (window != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, window, window, context)) {
+        // Without OpenGL ES 3, or with visuals that fail to start, there are just no visuals.
+        if (window != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, window, window, context)) try {
             renderer.created()
             while (true) {
                 val size = synchronized(lock) {
@@ -324,7 +334,10 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
                 renderer.frame()
                 EGL14.eglSwapBuffers(display, window)
             }
-            renderer.stop()
+        } catch (_: RuntimeException) {
+            // Failed partway, the visuals just stop.
+        } finally {
+            runCatching { renderer.stop() }
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         }
         if (window != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, window)

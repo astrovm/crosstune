@@ -49,6 +49,8 @@ internal interface FloatingHost {
     fun toggleListening()
     /** How the words look and where they are, kept when [save]d, e.g. once a drag is done. */
     fun update(options: FloatingOptions, save: Boolean = true)
+    /** The words were closed, with Crosstune still out of sight, so nothing listens along any more. */
+    fun closed()
 }
 
 /**
@@ -101,6 +103,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** Closed from its notification or its own button, rather than by Crosstune coming back in sight. */
+    private fun close() {
+        host?.closed()
+        stopSelf()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val host = host
         when (intent?.action) {
@@ -111,7 +119,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 if (host == null) stopSelf() else if (view == null) show(host)
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
-            else -> stopSelf()
+            else -> close()
         }
         return START_NOT_STICKY
     }
@@ -146,15 +154,27 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     private fun openIntent() = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
 
-    private fun show(host: FloatingHost) {
-        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
-        if (!Settings.canDrawOverlays(this)) return stopSelf()
-        val options = host.state.floating
+    /** Where the words go, as [options] keep them, on the screen as it is now, whichever way it's turned. */
+    private fun place(options: FloatingOptions) {
         val screen = resources.displayMetrics
         val margin = (MARGIN_DP * screen.density).toInt()
         params.width = options.width.takeIf { it > 0 }?.coerceAtMost(screen.widthPixels) ?: (screen.widthPixels - 2 * margin)
         params.x = options.left.takeIf { it >= 0 }?.coerceAtMost(screen.widthPixels - params.width) ?: ((screen.widthPixels - params.width) / 2)
         params.y = options.top.takeIf { it >= 0 } ?: (screen.heightPixels / 4)
+    }
+
+    /** Turned, the words fit the screen's new width, rather than run off its side. */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val view = view ?: return
+        place(host?.state?.floating ?: return)
+        windows.updateViewLayout(view, params)
+    }
+
+    private fun show(host: FloatingHost) {
+        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
+        if (!Settings.canDrawOverlays(this)) return stopSelf()
+        place(host.state.floating)
         val content = ComposeView(this).apply {
             setContent {
                 val state = host.state
@@ -165,7 +185,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,
                             onLock = { host.update(host.state.floating.copy(locked = true)) },
-                            onClose = ::stopSelf,
+                            onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
                             onSlidersAt = { sliders = it }

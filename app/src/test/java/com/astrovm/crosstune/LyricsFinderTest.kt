@@ -47,6 +47,36 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsTheSongIsTaken() {
+        fun copy(words: String, seconds: Int) =
+            """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""
+        val copies = "[${copy("Live", 312)},${copy("Studio", 245)}]"
+        var storeLength = 0
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com") {
+                FakeSpotify.html(request, """{"results":[{"trackId":1,"trackName":"Song","artistName":"Band","trackTimeMillis":$storeLength}]}""")
+            } else {
+                FakeSpotify.html(request, copies)
+            }
+        }
+        // As long as the app playing it says, give or take.
+        assertEquals("Studio", words(MusicMetadata("Song", "Band", lengthMs = 246_500)))
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 311_000)))
+        // Not said, the iTunes Store is asked how long it is, only because the copies differ.
+        storeLength = 245_300
+        fake.requestedUrls.clear()
+        assertEquals("Studio", words(MusicMetadata("Song", "Band")))
+        assertTrue(fake.requestedUrls.any { "itunes.apple.com" in it })
+        // None that long, the first timed one is taken, as before.
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 100_000)))
+        // Copies about as long as each other are the same take, so nothing's asked.
+        fake.handler = { request -> FakeSpotify.html(request, "[${copy("One", 245)},${copy("Two", 247)}]") }
+        fake.requestedUrls.clear()
+        assertEquals("One", words(MusicMetadata("Song", "Band")))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
+    }
+
+    @Test
     fun theWordsOfAnotherSongAreNeverTaken() {
         // Someone else's song of the same name is no use at all.
         val namesakes = listOf(
@@ -741,6 +771,30 @@ class LyricsFinderTest {
         val found = found(remix) as Lyrics.Found
         assertEquals(SyncedLyrics.parse(early).map { it.text }, found.lines.map { it.text })
         found.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+    }
+
+    @Test
+    fun theWordsComeFirstAndTheirBetterTimesAfterAndAreKeptSo() {
+        val copies = arrayOf(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0)
+        )
+        remixTimedEarly(*copies, storeSeconds = 318.483)
+        val file = File.createTempFile("lyrics", ".json").apply { delete() }
+        val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        // First as found, to show at once.
+        val first = runBlocking { finder.firstLook(remix) }
+        assertEquals(LyricsFinder.FirstLook(Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early)), final = false), first)
+        // Kept at once as they are, so they show again with no lookup, still to be timed.
+        val asked = fake.requestedUrls.size
+        assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) })
+        assertEquals(asked, fake.requestedUrls.size)
+        // Then timed as the copies agree, and kept that way.
+        val better = runBlocking { finder.retimed(remix, first.lyrics) } as Lyrics.Found
+        better.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+        val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
+        assertEquals(LyricsFinder.FirstLook(better, final = true), again)
+        file.delete()
     }
 
     @Test

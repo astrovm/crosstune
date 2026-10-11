@@ -113,6 +113,7 @@ class ListeningTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.microphoneFactory = { AudioRecordMicrophone() }
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
+        MainActivity.quietPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
@@ -151,9 +152,17 @@ class ListeningTest {
         composeRule.waitForIdle()
     }
 
+    /**
+     * Waits for [condition], meanwhile running what background work hands back to the main thread,
+     * which Compose's own wait leaves queued until something else runs it: on a slow machine, words
+     * found in the background never reached the screen.
+     */
+    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean) =
+        composeRule.waitUntil(timeoutMs) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
+
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun waitForText(text: String) = composeRule.waitUntil(TIMEOUT_MS) { shown(text) }
+    private fun waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
 
     private fun recognize() = click(string(R.string.recognize_button))
 
@@ -181,7 +190,7 @@ class ListeningTest {
         waitForText(string(R.string.listening_text))
         assertEquals(1, microphone.opened)
         microphone.play(3.0)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Iris")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Iris")).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
         assertTrue(shown("https://music.apple.com/us/song/1109658204"))
         assertTrue(fake.requestedUrls.contains("https://itunes.apple.com/lookup?id=1109658204&country=us"))
@@ -208,7 +217,7 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         // No music app plays it, so it follows what Crosstune heard: the line sung from 10 seconds in.
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodes(hasText("Ten") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNode(hasText("Late") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)).assertExists()
@@ -255,7 +264,8 @@ class ListeningTest {
         fake.handler = { throw IOException("offline") }
         allowMicrophone()
         launch()
-        microphone.play(3.0)
+        // Asked again with more sound once, in case it was a moment, then it says so.
+        microphone.play(12.0)
         recognize()
         waitForText(string(R.string.error_network))
         // Try again listens again, rather than looking anything up.
@@ -273,8 +283,8 @@ class ListeningTest {
         recognize()
         waitForText(string(R.string.listening_text))
         click(string(R.string.cancel_button))
-        composeRule.waitUntil(TIMEOUT_MS) { microphone.closed }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
+        waitUntil(TIMEOUT_MS) { microphone.closed }
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
         assertEquals(0, shazamRequests())
         assertTrue(composeRule.onAllNodes(hasText(string(R.string.error_no_match))).fetchSemanticsNodes().isEmpty())
         // Back stops it too.
@@ -282,8 +292,8 @@ class ListeningTest {
         waitForText(string(R.string.listening_text))
         assertEquals(2, microphone.opened)
         controller!!.get().onBackPressedDispatcher.onBackPressed()
-        composeRule.waitUntil(TIMEOUT_MS) { microphone.closed }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
+        waitUntil(TIMEOUT_MS) { microphone.closed }
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
     }
 
     @Test
@@ -298,7 +308,7 @@ class ListeningTest {
         assertTrue(shown(string(R.string.listening_text)))
         assertTrue(!microphone.closed)
         controller!!.pause().stop()
-        composeRule.waitUntil(TIMEOUT_MS) { microphone.closed }
+        waitUntil(TIMEOUT_MS) { microphone.closed }
         controller!!.start().resume()
         composeRule.waitForIdle()
         assertTrue(!shown(string(R.string.listening_text)))
@@ -331,6 +341,48 @@ class ListeningTest {
         composeRule.waitForIdle()
         waitForText(string(R.string.listening_text))
         assertEquals(1, microphone.opened)
+    }
+
+    @Test
+    fun theMicrophoneAskedForToListenAlongIsForThatThoughTheScreenTurns() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        click(string(R.string.lyrics_stop_listening))
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        click(string(R.string.lyrics_listen_along))
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+        // Turned while Android asks, then allowed: it listens along, rather than for a new song.
+        controller!!.recreate()
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        hearing.song("Demo", 3.0)
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
+        assertFalse(controllerModel().uiState.listening)
+    }
+
+    @Test
+    fun theFloatingWordsMicrophoneAsksForItBackInCrosstune() {
+        val hearing = FakeHearing()
+        floatOverApps(hearing)
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_stop_listening))
+        // Taken back meanwhile, the microphone is asked for in Crosstune, which comes to the front.
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        click(string(R.string.lyrics_listen_along))
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component!!.className)
+        val before = hearing.listens
+        controller!!.restart()
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        waitUntil(TIMEOUT_MS) { hearing.listens > before }
+        // Asked once: back again, it isn't asked again.
+        controller!!.pause().stop()
+        controller!!.restart()
+        assertEquals(asked, shadowOf(controller!!.get()).lastRequestedPermission)
     }
 
     @Test
@@ -392,6 +444,7 @@ class ListeningTest {
      */
     private fun listeningAlong(hearing: FakeHearing) {
         MainActivity.listenAlongPauseMs = 0
+        MainActivity.quietPauseMs = 0
         MainActivity.hearingFactory = { hearing }
         fake.handler = { request ->
             val title = request.url.queryParameter("track_name")
@@ -413,7 +466,47 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+    }
+
+    @Test
+    fun hearingNothingRestsTheMicrophoneUntilTheAppPlayingTheSongPlaysAgain() {
+        val hearing = FakeHearing()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        listeningAlong(hearing)
+        MainActivity.quietPauseMs = 60_000
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo one") && hearing.listens == 2 }
+
+        // Nothing heard, the music has stopped: the microphone rests rather than listening on and on.
+        hearing.next.trySend(Heard.Nothing)
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertEquals(2, hearing.listens)
+        // The app playing it plays again, so it listens again straight away.
+        phone.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
+        composeRule.waitForIdle()
+        assertEquals(2, hearing.listens)
+        phone.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+    }
+
+    @Test
+    fun theMicrophoneTakenAwayWhileListeningAlongIsSaidOnTheWords() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
+        waitForText(string(AppError.MICROPHONE.messageRes))
+        // Still on the words, with a way to allow it.
+        assertTrue(lit("Demo one"))
+        click(string(R.string.open_settings_button))
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, shadowOf(app).nextStartedActivity.action)
     }
 
     @Test
@@ -422,7 +515,7 @@ class ListeningTest {
         demoWords(hearing)
         // A few seconds in, it may as well be the next song, skipped to.
         hearing.song("Other", 3.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
     }
 
     @Test
@@ -432,23 +525,23 @@ class ListeningTest {
         // Heard twice further on, as a skip is, it's 41 seconds in.
         hearing.song("Demo", 41.0)
         hearing.song("Demo", 41.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
         val asked = fake.requestedUrls.size
         // Well into it, Shazam names it otherwise, a moment on from where it is: the same recording.
         hearing.song("Demo (Live at Home)", 42.0)
         hearing.song("Demo (Live at Home)", 43.0)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 4 }
+        waitUntil(TIMEOUT_MS) { hearing.listens >= 4 }
         composeRule.waitForIdle()
         assertTrue(lit("Demo three"))
         assertTrue(fake.requestedUrls.drop(asked).none { "Live" in java.net.URLDecoder.decode(it, "UTF-8") })
         assertEquals("Demo", HistoryStore(prefs()).load().first().metadata.title)
         // The next song, from its start, takes over.
         hearing.song("Other", 1.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
     }
 
     @Test
-    fun aSongHeardAlongWithNoCoverGetsOneInRecentByItsName() {
+    fun aSongHeardAlongWithNoCoverGetsOneByItsNameInRecentAndItsWords() {
         val hearing = FakeHearing()
         demoWords(hearing)
         val lyrics = fake.handler
@@ -460,13 +553,15 @@ class ListeningTest {
             }
         }
         hearing.song("Kite", 0.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Kite one") }
-        composeRule.waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().firstOrNull()?.metadata?.artworkUrl == "https://cdn/kite.jpg" }
+        waitUntil(TIMEOUT_MS) { lit("Kite one") }
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().firstOrNull()?.metadata?.artworkUrl == "https://cdn/kite.jpg" }
         assertEquals("Kite", HistoryStore(prefs()).load().first().metadata.title)
+        // Its words show it too.
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.artworkUrl == "https://cdn/kite.jpg" }
         // One the app named with a cover keeps it, and none is looked for.
         val asked = fake.requestedUrls.size
         hearing.next.trySend(Heard.Song(MusicMetadata("Third", "Band", artworkUrl = "https://cdn/third.jpg"), null, 0, SystemClock.elapsedRealtime()))
-        composeRule.waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.title == "Third" }
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.title == "Third" }
         composeRule.waitForIdle()
         assertEquals("https://cdn/third.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
         assertTrue(fake.requestedUrls.drop(asked).none { "deezer" in it && "Third" in it })
@@ -488,16 +583,16 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         // Followed in the app, which shows instead of the microphone, still listening along.
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_following_app, "Music")) }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_following_app, "Music")) }
         // Shazam names it otherwise while the app plays it: the words stay.
         hearing.song("Demo (Remix)", 5.0)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }
+        waitUntil(TIMEOUT_MS) { hearing.listens >= 3 }
         assertTrue(shown("Demo one"))
         assertFalse(shown("Demo (Remix) one"))
         // The app no longer plays it: the song heard takes over.
         phone.playing.value = null
         hearing.song("Other", 1.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
     }
 
     @Test
@@ -517,14 +612,14 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
 
         click(string(R.string.lyrics_sync))
         waitForText(string(R.string.lyrics_sync_hint))
         // Nothing to reset before a line is put in time.
         assertFalse(shown(string(R.string.lyrics_sync_reset)))
         composeRule.onNodeWithText("Demo two").performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
         // Tapped while putting the words in time, the app isn't moved.
         assertEquals(emptyList<Long>(), phone.seeks)
         // Kept for the song, so it's in time next time too.
@@ -532,16 +627,16 @@ class ListeningTest {
 
         // Reset puts them back as found.
         click(string(R.string.lyrics_sync_reset))
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
         assertFalse(shown(string(R.string.lyrics_sync_reset)))
 
         // Done, a line tapped moves the app again: to where it is now that the words are in time.
         composeRule.onNodeWithText("Demo two").performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
         click(string(R.string.lyrics_sync_done))
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_sync_hint)) }
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_sync_hint)) }
         composeRule.onNodeWithText("Demo three").performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
         assertEquals(listOf(35_000L), phone.seeks)
     }
 
@@ -562,11 +657,11 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         // Heard 2 seconds into the song, so its first line, not where the video is.
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
         assertFalse(lit("Demo three"))
         // A line tapped moves the video to it, 45 seconds on.
         composeRule.onNodeWithText("Demo two").performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { phone.seeks.isNotEmpty() }
         assertTrue(phone.seeks.toString(), phone.seeks.last() in 54_000..56_000)
     }
 
@@ -578,32 +673,32 @@ class ListeningTest {
         // Heard far from where the words are, once, it might be the chorus heard as its other time:
         // nothing moves until a second hearing agrees, as a real skip would.
         hearing.song("Demo", 12.5)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
         assertTrue(lit("Demo one"))
         // Close to where they are, a hearing changes nothing either.
         hearing.song("Demo", 2.5)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
         assertTrue(lit("Demo one"))
         hearing.song("Demo", 12.5)
         hearing.song("Demo", 12.6)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
 
         // Nothing heard, the song's taken to have stopped; heard again further on, it follows on from there.
         hearing.next.trySend(Heard.Nothing)
         hearing.song("Demo", 41.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
 
         // Shazam busy, it's asked again, and the next song takes over the words.
         hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
         hearing.next.trySend(Heard.Song(MusicMetadata("Other", "Band"), "1109658204", 0, SystemClock.elapsedRealtime()))
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
         assertTrue(shown("Other"))
         // Each song heard along the way joins Recent: by its Apple Music link when Shazam knows one.
         val recent = HistoryStore(prefs()).load()
         assertEquals(listOf("Other", "Demo"), recent.map { it.metadata.title })
         assertEquals(MusicService.APPLE_MUSIC, recent.first().link.service)
         assertEquals(null, recent[1].link.service)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 10 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 10 }
 
         // Stopped, it listens no more, and the words stay.
         click(string(R.string.lyrics_stop_listening))
@@ -619,7 +714,7 @@ class ListeningTest {
         val hearing = FakeHearing()
         demoWords(hearing)
         hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
-        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
         // The words stay; closed, the song says why it stopped.
         click(string(R.string.dismiss_button))
         waitForText(string(R.string.error_microphone))
@@ -631,21 +726,39 @@ class ListeningTest {
         demoWords(hearing)
         // The next song, one with no Apple Music link, joins Recent by its name.
         hearing.song("Third", 0.0)
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Third one") }
+        waitUntil(TIMEOUT_MS) { lit("Third one") }
         val third = HistoryStore(prefs()).load().first()
         assertEquals("Third", third.metadata.title)
         assertEquals(null, third.link.service)
 
         // Out of sight, it stops listening; back, it listens again.
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
         controller!!.pause().stop()
         controller!!.start().resume()
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
 
         // Turned off and on from the words themselves.
         click(string(R.string.lyrics_stop_listening))
         click(string(R.string.lyrics_listen_along))
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 5 }
+    }
+
+    @Test
+    fun listeningForWordsBeforeSetupShowsListeningThenTheWordsThenSetup() {
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch(MainActivity.lyricsIntent(app))
+        // Listening is in sight, to be stopped, not hidden behind setup.
+        waitForText(string(R.string.listening_text))
+        hearing.song("Demo", 2.0)
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        // Done with the words, setup's next.
+        controllerModel().dismissLyrics()
+        composeRule.waitForIdle()
+        assertFalse(shown("Demo one"))
+        waitForText(string(R.string.setup_get_started))
     }
 
     @Test
@@ -656,7 +769,7 @@ class ListeningTest {
         hearing.song("Demo", 2.0)
         launch(MainActivity.lyricsIntent(app))
         // No result to tap Lyrics on first: the words open as soon as the song is named, and keep listening.
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
     }
 
     @Test
@@ -678,8 +791,8 @@ class ListeningTest {
         hearing.song("Demo", 2.0)
         click(string(R.string.tile_lyrics_label))
         // No result to tap Lyrics on first: the words open as soon as the song is named.
-        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
-        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(cover) }
+        waitUntil(TIMEOUT_MS) { lit("Demo one") && described(string(R.string.lyrics_stop_listening)) }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(cover) }
     }
 
     @Test
@@ -697,7 +810,7 @@ class ListeningTest {
         demoWords(FakeHearing())
         assertTrue(visualsShown().isEmpty())
         click(string(R.string.visuals_show))
-        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         // On, the button opens what else they can do.
         assertTrue(described(string(R.string.visuals_options)))
         // The words are still there, over them.
@@ -707,7 +820,7 @@ class ListeningTest {
 
         click(string(R.string.visuals_options))
         click(string(R.string.visuals_hide))
-        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
+        waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
         assertTrue(described(string(R.string.visuals_show)))
         assertFalse(prefs().getBoolean("visuals", true))
     }
@@ -716,11 +829,11 @@ class ListeningTest {
     fun onlyTheVisualsCanShowUntilATapBringsTheWordsBack() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
-        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         click(string(R.string.visuals_options))
         click(string(R.string.visuals_only))
         // The words and the buttons make way, the visuals stay.
-        composeRule.waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
         assertFalse(described(string(R.string.visuals_options)))
         assertTrue(visualsShown().isNotEmpty())
         // A tap anywhere brings the words back.
@@ -728,7 +841,7 @@ class ListeningTest {
         composeRule.onNode(SemanticsMatcher("shows the words") {
             androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
         }).performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
         assertTrue(visualsShown().isNotEmpty())
     }
 
@@ -751,7 +864,7 @@ class ListeningTest {
     fun theVisualsCanBeDarkenedOrSkippedAndTheBarMakesWayWhileScrolling() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
-        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         // How dark they're shaded, kept once let go.
         click(string(R.string.visuals_options))
         composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
@@ -765,8 +878,8 @@ class ListeningTest {
         // Scrolling the words, the bar makes way, and comes back once they rest.
         composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))
             .performTouchInput { swipeUp() }
-        composeRule.waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
-        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
+        waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
+        waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
     }
 
     @Test
@@ -790,7 +903,7 @@ class ListeningTest {
         allowMicrophone()
         activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
         composeRule.waitForIdle()
-        composeRule.waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
     }
 
     /** The visuals on screen, which draw nothing here, with no GPU. */
@@ -811,6 +924,33 @@ class ListeningTest {
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
         override fun close() = Unit
+    }
+
+    @Test
+    fun wordsFoundUntimedTakeTheTimesOfATimedCopyOnceItsFound() {
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        var asked = 0
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                // Answering late, as on a slow machine.
+                Thread.sleep(500)
+                // Found untimed at first, shown as they are; a timed copy comes from asking again.
+                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars""""
+                FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"$timed}]""")
+            } else {
+                FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        // Looked for in more places first, as they're untimed, which can take a while on a slow machine.
+        waitUntil(TIMEOUT_MS * 3) { controllerModel().uiState.lyricLines.isNotEmpty() }
+        assertEquals(listOf(LyricLine(1_000, "Night sky"), LyricLine(5_000, "Stars")), controllerModel().uiState.lyricLines)
+        assertEquals(2, asked)
     }
 
     @Test
@@ -839,7 +979,7 @@ class ListeningTest {
         fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
         hearing.song(title, 2.0)
         val floating = hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG))
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(shown("Band"))
         // Never cut short: every line it takes is shown.
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
@@ -893,6 +1033,20 @@ class ListeningTest {
     }
 
     @Test
+    fun turnedTheFloatingWordsFitTheScreensNewWidth() {
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        val wide = (view.layoutParams as WindowManager.LayoutParams).width
+        // Made as wide as they go, then the screen narrows, as turning it does.
+        prefs().edit().putInt("floating_width", wide).putInt("floating_left", 0).commit()
+        org.robolectric.RuntimeEnvironment.setQualifiers("w300dp-h700dp")
+        floating.get().onConfigurationChanged(app.resources.configuration)
+        val window = view.layoutParams as WindowManager.LayoutParams
+        assertTrue(window.width <= app.resources.displayMetrics.widthPixels)
+        assertTrue(window.x + window.width <= app.resources.displayMetrics.widthPixels)
+    }
+
+    @Test
     fun lockedWordsAlwaysHaveAWayOutEvenFloatingLockedFromLastTime() {
         // Locked when they last floated, and with no notification to unlock them from.
         prefs().edit().putBoolean("floating_locked", true).commit()
@@ -937,7 +1091,7 @@ class ListeningTest {
         // Out of sight, it still listens along.
         val listens = hearing.listens
         hearing.song("Demo", 12.0)
-        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
         val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals(string(R.string.floating_notification), shadowOf(notification).contentTitle)
 
@@ -1092,7 +1246,7 @@ class ListeningTest {
         assertFalse(prefs().getBoolean("floating_next_line", true))
         hearing.song("Demo", 12.5)
         hearing.song("Demo", 12.6)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Demo two") && shown("Demo one") && !shown("Demo three") }
+        waitUntil(TIMEOUT_MS) { shown("Demo two") && shown("Demo one") && !shown("Demo three") }
 
         // Tapped again, all of it goes, and next time only the buttons come out.
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
@@ -1166,6 +1320,24 @@ class ListeningTest {
         controller!!.destroy()
         controller = null
         assertEquals(null, FloatingLyricsService.host)
+    }
+
+    @Test
+    fun closingTheFloatingWordsStopsListeningAlongTillCrosstuneIsBack() {
+        val hearing = FakeHearing()
+        val floating = floatOverApps(hearing)
+        // Floating, they listen along, out of sight.
+        hearing.song("Demo", 3.0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        floating.command(FloatingLyricsService.ACTION_CLOSE)
+        composeRule.waitForIdle()
+        hearing.song("Demo", 4.0)
+        Thread.sleep(200)
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        // Back in sight, they listen along again.
+        controller!!.restart()
+        waitUntil(TIMEOUT_MS) { hearing.listens > 3 }
     }
 
     @Test
@@ -1260,13 +1432,12 @@ class ListeningTest {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "restore song lyrics written in romaji" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMAJI_JAPANESE[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
-                "CEFR" in instructions -> FakeOpenAi.stream("""{"level": "B1", "why": "Easy words.", "original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
+                "covers and samples" in instructions -> FakeOpenAi.stream("""{"original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
                 "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
                 "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
-                "You make a quiz" in instructions -> FakeOpenAi.stream("[\"Day sky\", \"Night rain\"]")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
                 "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
@@ -1282,24 +1453,24 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         // The whole song at once, and MyMemory isn't asked.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         assertTrue(shown("«Night sky»"))
         assertFalse(fake.requestedUrls.any { "mymemory" in it })
 
         // A line opens to study; ChatGPT explains it as it writes, and keeps it with the line once saved.
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         click(string(R.string.lyrics_explain_line))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
+        waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
         // In its parts, each under its label.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("A noun and its adjective.") }
+        waitUntil(TIMEOUT_MS) { shown("A noun and its adjective.") }
         assertTrue(shown(string(R.string.explanation_in_song)) && shown(string(R.string.explanation_language)))
         click(string(R.string.lyrics_save_line))
         assertEquals("Looking up at night.\n---\nA noun and its adjective.", SavedLinesStore(prefs()).load().single().explanation)
 
         // A word in it means what it does in that line.
         val line = hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
-        composeRule.waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
-        composeRule.waitUntil(TIMEOUT_MS) { shown("the heavens") }
+        waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        waitUntil(TIMEOUT_MS) { shown("the heavens") }
         val asked = openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content")
         assertEquals("Night sky", org.json.JSONObject(asked).getString("line"))
     }
@@ -1309,7 +1480,7 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         // Back to the song, then to Settings, where ChatGPT is picked.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.settings_button))
@@ -1321,7 +1492,7 @@ class ListeningTest {
         // The words are translated again, by MyMemory now.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
     }
 
     @Test
@@ -1330,7 +1501,7 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         openAi.models = { 200 to FakeOpenAi.modelsJson("gpt-6.1-sol" to "list", "gpt-6.1-luna" to "list") }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         assertEquals("gpt-6.1-luna", openAi.asked.last().getString("model"))
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.settings_button))
@@ -1341,7 +1512,7 @@ class ListeningTest {
         // Translated again, by the model picked.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
+        waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
     }
 
     @Test
@@ -1351,20 +1522,20 @@ class ListeningTest {
         val explained = openAi.reply
         openAi.reply = { body -> if ("explain the song in four parts" in body.getString("instructions")) 500 to "" else explained(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         aboutSong()
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_song_meaning_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_song_meaning_failed)) }
         // Asked again, it's explained.
         openAi.reply = explained
         click(string(R.string.retry_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
+        waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
         // What's known about it, its story and mood; no key lines, so their label isn't shown.
         assertTrue(shown("From 1985.") && shown("Calm.") && shown(string(R.string.song_about)) && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
         assertFalse(shown(string(R.string.song_key_lines)))
         val asked = openAi.asked.count { "explain the song in four parts" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown("A night under the stars.") }
+        waitUntil(TIMEOUT_MS) { !shown("A night under the stars.") }
         aboutSong()
         waitForText("A night under the stars.")
         assertEquals(asked, openAi.asked.count { "explain the song in four parts" in it.getString("instructions") })
@@ -1375,26 +1546,26 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         // Nothing to ask about before it's explained.
         assertFalse(shown(string(R.string.lyrics_ask_line)))
         click(string(R.string.lyrics_explain_line))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_line)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_line)) }
         composeRule.onNode(hasText(string(R.string.lyrics_ask_line))).performTextInput("Why night?")
         click(string(R.string.lyrics_ask_send))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Because it rhymes.") }
+        waitUntil(TIMEOUT_MS) { shown("Because it rhymes.") }
         assertTrue(shown("Why night?"))
         // The next question goes with the last one and its answer.
         composeRule.onNode(hasText(string(R.string.lyrics_ask_line))).performTextInput("And stars?")
         click(string(R.string.lyrics_ask_send))
-        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").endsWith("Question: And stars?") }
+        waitUntil(TIMEOUT_MS) { openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").endsWith("Question: And stars?") }
         assertTrue(openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("Question: Why night?\nAnswer: Because it rhymes."))
         // Failing says so.
         openAi.reply = { 500 to "" }
         composeRule.onNode(hasText(string(R.string.lyrics_ask_line))).performTextInput("Again?")
         click(string(R.string.lyrics_ask_send))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
     }
 
     @Test
@@ -1403,33 +1574,67 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "君はアスファルト・レディ\\n夜の雨", openAi = openAi)
         // The dictionary reads 君 as くん here; ChatGPT puts it right.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("きみ") }
+        waitUntil(TIMEOUT_MS) { shown("きみ") }
         assertFalse(shown("くん"))
     }
 
     @Test
-    fun savedLinesArePractisedPickingTheirMeaningSignedIn() {
+    fun aLineSavedIsPractisedStraightFromTheStudyMenu() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Night sky»") }
+        waitUntil(TIMEOUT_MS) { shown("«Night sky»") }
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         click(string(R.string.lyrics_save_line))
         // The sheet closed, back to the words.
         composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
-        // Practised straight from the study menu, which says how many are due.
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
+        // The study menu says how many are due.
         studyMenu()
         assertTrue(shown(string(R.string.practice_due, 1)))
         click(string(R.string.saved_practice))
-        // Its meaning among two wrong ones; picked, it's practised.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Night rain") }
-        assertTrue(shown("«Night sky»") && shown("Day sky"))
-        click("«Night sky»")
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)
-        click(string(R.string.practice_next))
         // Nothing else is due.
         waitForText(string(R.string.practice_caught_up))
+    }
+
+    @Test
+    fun savedLinesArePractisedAsCardsTurnedThenSaidHowWellTheyWereKnown() {
+        val saved = """[{"text":"Night sky","translation":"Cielo nocturno","title":"Demo","artist":"Band"},{"text":"Stars","translation":"Estrellas","title":"Demo","artist":"Band","box":1,"due":1}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", true).commit()
+        wordsOf(null, "Night sky\nStars")
+        waitForText("[Stars]")
+        studyMenu()
+        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.saved_practice))
+        // The one due longest first, the line on its face, its meaning to think of; with how many are left.
+        waitForText(string(R.string.practice_due, 2))
+        assertFalse(controllerModel().uiState.practice!!.meaningFirst)
+        assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
+        // Not turned yet, it can't be said how well it was known.
+        controllerModel().gradePractice(Grade.EASY)
+        assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
+        // Tapped, the card turns.
+        composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
+        waitForText("Cielo nocturno")
+        assertFalse(shown(string(R.string.practice_show)))
+        val before = System.currentTimeMillis()
+        click(string(R.string.practice_good))
+        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
+        assertEquals(1, good.box)
+        assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
+        // Known once before, the next shows its meaning first; known easily, it's back much later.
+        waitForText(string(R.string.practice_due, 1))
+        assertTrue(controllerModel().uiState.practice!!.meaningFirst && shown("Estrellas"))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_easy))
+        val easy = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
+        assertEquals(3, easy.box)
+        assertTrue(easy.due >= before + 7 * DAY_MS)
+        waitForText(string(R.string.practice_caught_up))
+        assertFalse(shown(string(R.string.practice_due, 0)))
     }
 
     @Test
@@ -1465,15 +1670,15 @@ class ListeningTest {
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
         click(string(R.string.lyrics_save_line))
         click(string(R.string.lyrics_explain_line))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.chatgpt_limit_reached)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.chatgpt_limit_reached)) }
         assertTrue(shown(string(R.string.chatgpt_manage_usage)))
         // Anything else failing says so, and it can be asked again.
         openAi.reply = { 500 to "" }
         click(string(R.string.lyrics_explain_line))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_explain_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_explain_failed)) }
         openAi.reply = explained
         click(string(R.string.lyrics_explain_line))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
+        waitUntil(TIMEOUT_MS) { shown("Looking up at night.") }
         // Saved before it was explained, the line keeps the explanation too.
         assertEquals("Looking up at night.\n---\nA noun and its adjective.", SavedLinesStore(prefs()).load().single().explanation)
     }
@@ -1484,15 +1689,15 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
+        waitUntil(TIMEOUT_MS) { shown("よぞら") }
         composeRule.onAllNodes(hasText("夜空")).onFirst().performTouchInput { longClick() }
         composeRule.waitForIdle()
         // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
         val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty() }
         // Each of its words still taps for its meaning, with its reading over it, once the dictionary
         // that finds them is loaded; the line may show a moment without its readings meanwhile.
-        composeRule.waitUntil(TIMEOUT_MS) {
+        waitUntil(TIMEOUT_MS) {
             if (composeRule.onAllNodes(hasText("よぞら") and inSheet).fetchSemanticsNodes().isNotEmpty()) {
                 runCatching { composeRule.onAllNodes(hasText("夜空") and inSheet).onFirst().performFirstLinkClick() }
             }
@@ -1508,15 +1713,15 @@ class ListeningTest {
         learnMenu()
         // Only in kana, readings over kanji have nothing to sit over; romaji can still go under.
         click(string(R.string.lyrics_only_kana))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞらにほしが") && shown("たべる") }
+        waitUntil(TIMEOUT_MS) { shown("よぞらにほしが") && shown("たべる") }
         assertFalse(shown("夜空に星が"))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertEquals("KANA", prefs().getString("lyrics_words_as", null))
         click(string(R.string.lyrics_romanized))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
         // Only in romaji, it isn't said twice.
         click(string(R.string.lyrics_only_latin))
-        composeRule.waitUntil(TIMEOUT_MS) { !shown("よぞらにほしが") }
+        waitUntil(TIMEOUT_MS) { !shown("よぞらにほしが") }
         assertEquals(1, composeRule.onAllNodes(hasText("yozora ni hoshi ga")).fetchSemanticsNodes().size)
         assertFalse(shown(string(R.string.lyrics_romanized)))
         // Floating, too.
@@ -1530,7 +1735,7 @@ class ListeningTest {
         // As written again.
         learnMenu()
         click(string(R.string.lyrics_as_written))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("夜空に星が") }
+        waitUntil(TIMEOUT_MS) { shown("夜空に星が") }
         assertEquals("WRITTEN", prefs().getString("lyrics_words_as", null))
     }
 
@@ -1540,14 +1745,14 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞら") }
+        waitUntil(TIMEOUT_MS) { shown("よぞら") }
         // The kana after it shows as written, each character free to wrap.
         assertTrue(shown("べ") && shown("る"))
         assertTrue(prefs().getBoolean("lyrics_readings", false))
         click(string(R.string.lyrics_romanized))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
         click(string(R.string.lyrics_translation))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
         assertTrue(shown("[食べる]"))
 
         // Floating, the line being sung brings its reading, romaji and translation along.
@@ -1588,15 +1793,17 @@ class ListeningTest {
         learnMenu()
         click(string(R.string.lyrics_translation))
         // Not an error, and nothing worth saying: there's just nothing to translate them into.
-        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
         composeRule.waitForIdle()
         val line = composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
-        composeRule.waitUntil(TIMEOUT_MS) { runCatching { line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "Night" } }.isSuccess }
+        waitUntil(TIMEOUT_MS) { runCatching { line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "Night" } }.isSuccess }
         waitForText("The time between sunset and sunrise.")
+        // Signed out, there are no examples to ask for.
+        assertFalse(shown(string(R.string.lyrics_examples)))
         line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "sky" }
         waitForText(string(R.string.lyrics_word_unknown))
     }
@@ -1605,8 +1812,31 @@ class ListeningTest {
     fun wordsAreTranslatedIntoTheLanguagePicked() {
         prefs().edit().putBoolean("lyrics_translation", true).putString("translate_into", "pt-BR").commit()
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
-        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cpt-BR" in it })
+    }
+
+    @Test
+    fun wordsAreTranslatedIntoTheAppsLanguageAsItIsNow() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.mymemory.translated.net" -> translation(request, 200)
+                else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        // The app's language changed since Crosstune opened, as in its settings.
+        app.getSystemService(android.app.LocaleManager::class.java).applicationLocales = android.os.LocaleList.forLanguageTags("ja")
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky")
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "api.mymemory.translated.net" in it } }
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cja" in it })
     }
 
     @Test
@@ -1617,7 +1847,7 @@ class ListeningTest {
         assertFalse(shown("[Stars]"))
         fake.handler = { request -> translation(request) }
         click(string(R.string.retry_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
         // English has no readings to offer, only a translation; signed out, with no lines kept, there's
         // nothing to say about the song or study.
@@ -1639,7 +1869,7 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(shown(string(R.string.lyrics_only_kana)))
         click(string(R.string.lyrics_romanized))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("saranghae") }
+        waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))
 
         // With nothing to follow, a line tapped opens to study, its words looked up as the lines are translated.
@@ -1648,16 +1878,17 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_repeat_line)))
         // The line, once, with its words to tap in it.
         val line = hasText("사랑해") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(line).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(line).fetchSemanticsNodes().isNotEmpty() }
         // Written once in the sheet: no list of its words besides.
         assertEquals(1, composeRule.onAllNodes(hasText("사랑해") and !androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)) and !androidx.compose.ui.test.hasTestTag(LYRIC_LINE_TAG)).fetchSemanticsNodes().size)
         // Its words are found as Readings splits them, a moment after it opens, then tapped.
-        composeRule.waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
-        composeRule.waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
+        waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
     }
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+        const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
             """"hub":{"actions":[{"type":"applemusicplay","id":"1109658204"}]}}}"""
@@ -1670,7 +1901,7 @@ class ListeningTest {
     }
 
     /** Waits for the words, shown whole when nothing helps read them. */
-    private fun waitForWords() = composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Stars", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitForWords() = waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Stars", substring = true)).fetchSemanticsNodes().isNotEmpty() }
 
     /** The catalogue has Moon by Luna, and whatever else ChatGPT names isn't found; otherwise as [before]. */
     private fun withCatalogue(before: (okhttp3.Request) -> okhttp3.Response) {
@@ -1694,7 +1925,7 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         aboutSong(R.string.song_tab_words)
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_words_to_know_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_words_to_know_failed)) }
         openAi.reply = answers
         click(string(R.string.retry_button))
         waitForText("cielo")
@@ -1709,7 +1940,7 @@ class ListeningTest {
         // Closed and opened again, they're there, not asked again.
         val asked = openAi.asked.size
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown("cielo") }
+        waitUntil(TIMEOUT_MS) { !shown("cielo") }
         aboutSong(R.string.song_tab_words)
         waitForText("cielo")
         assertEquals(asked, openAi.asked.size)
@@ -1723,7 +1954,7 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         aboutSong(R.string.song_tab_artist)
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_about_artist_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_about_artist_failed)) }
         openAi.reply = answers
         click(string(R.string.retry_button))
         waitForText("A band from Rome.")
@@ -1731,22 +1962,22 @@ class ListeningTest {
         // Asked about again, it's there already.
         val asked = openAi.asked.size
         composeRule.onNode(hasText("A band from Rome.")).performTouchInput { swipeDown() }
-        composeRule.waitUntil(TIMEOUT_MS) { !shown("A band from Rome.") }
+        waitUntil(TIMEOUT_MS) { !shown("A band from Rome.") }
         aboutSong(R.string.song_tab_artist)
         waitForText("A band from Rome.")
         assertEquals(asked, openAi.asked.size)
     }
 
     @Test
-    fun whatTheSongMeansSaysItsLevelWhatItCoversAndAnswersQuestions() {
+    fun whatTheSongMeansSaysWhatItCoversAndAnswersQuestions() {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         aboutSong()
         waitForText("A night under the stars.")
-        // How hard it is, at a glance, and why; the song it covers and the one it samples.
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(string(R.string.song_level, "B1"))).fetchSemanticsNodes().isNotEmpty() }
-        assertTrue(shown("Easy words.") && shown(string(R.string.song_original)) && shown("Old Band") && shown(string(R.string.song_samples)) && shown("Drummer"))
+        // The song it covers and the one it samples.
+        waitUntil(TIMEOUT_MS) { shown("Old Band") }
+        assertTrue(shown(string(R.string.song_original)) && shown(string(R.string.song_samples)) && shown("Drummer"))
         // Explained, more can be asked about it.
         composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("Why stars?")
         click(string(R.string.lyrics_ask_send))
@@ -1757,31 +1988,45 @@ class ListeningTest {
         openAi.reply = { 500 to "" }
         composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("And night?")
         click(string(R.string.lyrics_ask_send))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
         // The song it covers opens like a song looked up, leaving the words.
         composeRule.onNode(hasText("First Demo")).performScrollTo().performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.song_original)) && shown("First Demo") && shown("Old Band") }
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.song_original)) && shown("First Demo") && shown("Old Band") }
     }
 
 
 
     @Test
-    fun aLineCanBeSeenInExamplesAndSaysSoWhenItCant() {
+    fun aWordCanBeSeenInExamplesAndSaysSoWhenItCant() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         val answers = openAi.reply
         openAi.reply = { body -> if ("example sentences" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        // A whole line has no examples: only a word in it does, once it's tapped and its meaning found.
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_save_line)) }
+        assertFalse(shown(string(R.string.lyrics_examples)))
+        val line = hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
+        waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        waitUntil(TIMEOUT_MS) { shown("the heavens") }
         click(string(R.string.lyrics_examples))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_examples_failed)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_examples_failed)) }
         openAi.reply = answers
         click(string(R.string.lyrics_examples))
         waitForText("The sky is blue.")
         assertTrue(shown("El cielo es azul."))
+        val sent = org.json.JSONObject(openAi.asked.last { "example sentences" in it.getString("instructions") }.getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("Night", sent.getString("word"))
+        assertEquals("Night sky", sent.getString("line"))
+        val examplesButton = hasText(string(R.string.lyrics_examples)) and androidx.compose.ui.test.hasClickAction()
+        assertTrue(composeRule.onAllNodes(examplesButton).fetchSemanticsNodes().isEmpty())
+        // Tapped again, the word starts without them.
+        composeRule.onNode(line).performFirstLinkClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(examplesButton).fetchSemanticsNodes().isNotEmpty() }
+        assertFalse(shown("The sky is blue."))
     }
-
 
     @Test
     fun songsLikeOneAreAPlaylistOfThoseInTheCatalogue() {
@@ -1792,7 +2037,7 @@ class ListeningTest {
         aboutSong()
         composeRule.onNode(hasText(string(R.string.lyrics_songs_like))).performScrollTo().performClick()
         // The words close for the songs, the one the catalogue doesn't have left out.
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
         assertTrue(shown("Luna") && shown("Demo"))
         assertFalse(shown("Made Up"))
     }
@@ -1807,7 +2052,7 @@ class ListeningTest {
         withCatalogue(fake.handler)
         aboutSong()
         composeRule.onNode(hasText(string(R.string.lyrics_songs_like))).performScrollTo().performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.error_no_songs_like)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.error_no_songs_like)) }
         assertFalse(shown(string(R.string.songs_like_label)))
     }
 
@@ -1819,10 +2064,10 @@ class ListeningTest {
         launch()
         composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("calm rainy night songs")
         click(string(R.string.resolve_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.song_search_playlist)) }
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.song_search_playlist)) }
         click(string(R.string.song_search_playlist))
         // A list named after the mood, with ChatGPT's songs, to play or share like a playlist.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
+        waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
         assertFalse(shown(string(R.string.song_search_label_for, "calm rainy night songs")))
         assertFalse(shown(string(R.string.songs_like_label)))
     }
@@ -1832,22 +2077,22 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
         // In Japanese, the line being sung still lit, and the menu says ChatGPT wrote it.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("夜に君は") && shown("明日の歌") }
+        waitUntil(TIMEOUT_MS) { shown("夜に君は") && shown("明日の歌") }
         composeRule.onNode(hasText("星が光る") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
         assertFalse(shown("yoru ni kimi wa"))
         learnMenu()
         assertTrue(described(string(R.string.lyrics_from_romaji)))
         // Read as Japanese now, it can show in kana, or its own romaji.
         click(string(R.string.lyrics_only_kana))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("よるにきみは") }
+        waitUntil(TIMEOUT_MS) { shown("よるにきみは") }
         click(string(R.string.lyrics_as_written))
-        composeRule.waitUntil(TIMEOUT_MS) { shown("夜に君は") }
+        waitUntil(TIMEOUT_MS) { shown("夜に君は") }
     }
 
     @Test
     fun japaneseFoundInRomajiStaysSoSignedOut() {
         wordsOf(ROMAJI, "yoru ni kimi wa")
-        composeRule.waitUntil(TIMEOUT_MS) { shown("yoru ni kimi wa") && shown("ashita no uta") }
+        waitUntil(TIMEOUT_MS) { shown("yoru ni kimi wa") && shown("ashita no uta") }
     }
 
     @Test
@@ -1856,7 +2101,7 @@ class ListeningTest {
         val answers = openAi.reply
         openAi.reply = { body -> if ("restore song lyrics written in romaji" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.any { "restore song lyrics written in romaji" in it.getString("instructions") } }
+        waitUntil(TIMEOUT_MS * 3) { openAi.asked.any { "restore song lyrics written in romaji" in it.getString("instructions") } }
         composeRule.waitForIdle()
         assertTrue(shown("yoru ni kimi wa") && shown("ashita no uta"))
         assertFalse(shown("夜に君は"))

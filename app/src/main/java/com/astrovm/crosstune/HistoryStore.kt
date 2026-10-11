@@ -17,10 +17,14 @@ internal data class HistoryEntry(
 /** Keeps the most recent resolved items, newest first, in SharedPreferences. */
 internal class HistoryStore(private val preferences: SharedPreferences) {
 
+    /** The entries last read or saved, with the text they're kept as, so the same text isn't read again. */
+    private var known: Pair<String, List<HistoryEntry>>? = null
+
     fun load(): List<HistoryEntry> {
         val stored = preferences.getString(KEY_HISTORY, null) ?: return emptyList()
+        known?.takeIf { it.first == stored }?.let { return it.second }
         val array = runCatching { JSONArray(stored) }.getOrNull() ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toEntry() }
+        return (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toEntry() }.also { known = stored to it }
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
@@ -86,7 +90,9 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     })
             )
         }
-        preferences.edit { putString(KEY_HISTORY, array.toString()) }
+        val stored = array.toString()
+        known = stored to entries
+        preferences.edit { putString(KEY_HISTORY, stored) }
     }
 
     private fun JSONObject.toEntry(): HistoryEntry? {

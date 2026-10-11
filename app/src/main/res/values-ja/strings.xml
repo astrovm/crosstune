@@ -276,10 +276,10 @@
     <string name="lyrics_explain_failed">この行を解説できませんでした。</string>
     <string name="song_search_chatgpt">ChatGPT が見つけた曲</string>
     <string name="saved_practice">練習</string>
-    <string name="practice_show">意味を見る</string>
+    <string name="practice_show">答えを見る</string>
     <string name="practice_again">もう一度</string>
-    <string name="practice_knew">わかった</string>
-    <string name="practice_next">次へ</string>
+    <string name="practice_good">正解</string>
+    <string name="practice_easy">簡単</string>
     <string name="practice_caught_up">すべて完了</string>
     <string name="lyrics_ask_line">この行について質問</string>
     <string name="lyrics_ask_send">送信</string>
@@ -307,7 +307,6 @@
     <string name="lyrics_examples">例文</string>
     <string name="lyrics_examples_failed">例文を作れませんでした。</string>
     <string name="lyrics_ask_song">この曲について質問</string>
-    <string name="song_level">レベル %1$s</string>
     <string name="song_original">カバー元</string>
     <string name="song_samples">サンプリング</string>
     <string name="artist_who">どんな人</string>

@@ -71,7 +71,13 @@ internal object MusicLinks {
 
     fun parse(text: String): LinkInput? {
         nowPlayingSong(text)?.let { return it }
-        val value = (extractFirstUrl(text) ?: text).trim()
+        // Text with more than one link, e.g. a post sharing a song, is about the first that's music.
+        val urls = urlRegex.findAll(text).map { it.value.trimEnd(*URL_END) }.toList()
+        if (urls.isEmpty()) return parseOne(text.trim())
+        return urls.firstNotNullOfOrNull { parseOne(it.trim()) }
+    }
+
+    private fun parseOne(value: String): LinkInput? {
         spotifyUriOrId(value)?.let { return LinkInput.Link(it) }
 
         // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
@@ -182,10 +188,10 @@ internal object MusicLinks {
     /** True for [domain] itself and its subdomains, but not look-alikes such as "notdeezer.com". */
     private fun String.isOn(domain: String) = this == domain || endsWith(".$domain")
 
-    fun extractFirstUrl(text: String): String? {
-        val match = urlRegex.find(text)?.value ?: return null
-        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '、')
-    }
+    fun extractFirstUrl(text: String): String? = urlRegex.find(text)?.value?.trimEnd(*URL_END)
+
+    /** What ends a sentence around a link rather than the link. */
+    private val URL_END = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '、')
 
     /** Short-link landing pages sometimes redirect with JavaScript; the target URL is still in the HTML. */
     fun fromPage(html: String): MusicLink? {
@@ -245,6 +251,11 @@ internal object MusicLinks {
             val base = if (service == MusicService.YOUTUBE_MUSIC) "https://music.youtube.com" else "https://www.youtube.com"
             MusicLink(service, ItemType.PLAYLIST, list, "$base/playlist?list=$list")
         }
+        // YouTube Music's own pages for an album and an artist.
+        service == MusicService.YOUTUBE_MUSIC && segments.size == 2 && segments[0] == "browse" && segments[1].startsWith("MPREb_") ->
+            MusicLink(service, ItemType.ALBUM, segments[1], "https://music.youtube.com/browse/${segments[1]}")
+        service == MusicService.YOUTUBE_MUSIC && segments.size == 2 && segments[0] == "channel" && segments[1].startsWith("UC") ->
+            MusicLink(service, ItemType.ARTIST, segments[1], "https://music.youtube.com/channel/${segments[1]}")
         else -> null
     }
 
@@ -327,7 +338,7 @@ internal object MusicLinks {
     /** A song known only by name, kept as a Google search for it, as Now Playing shares it. */
     fun recognizedSong(metadata: MusicMetadata): LinkInput.RecognizedSong {
         val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
-            .addQueryParameter("q", "${metadata.title} by ${metadata.artist}").build().toString()
+            .addQueryParameter("q", if (metadata.artist.isBlank()) metadata.title else "${metadata.title} by ${metadata.artist}").build().toString()
         return LinkInput.RecognizedSong(canonical, metadata)
     }
 
@@ -336,7 +347,8 @@ internal object MusicLinks {
         MusicLink(MusicService.DEEZER, type, id, "https://www.deezer.com/$path/$id").takeIf { numericIdRegex.matches(id) }
     }
 
-    private fun tidal(segments: List<String>): MusicLink? = typedItem(segments) { type, id ->
+    /** A song's link may be under its album's, "album/123/track/456": the song is what's meant. */
+    private fun tidal(segments: List<String>): MusicLink? = typedItem(segments.subList(segments.indexOfLast { it.lowercase() in itemPaths }.coerceAtLeast(0), segments.size)) { type, id ->
         val path = itemPaths.entries.first { it.value == type }.key
         MusicLink(MusicService.TIDAL, type, id, "https://tidal.com/$path/$id").takeIf { tidalIdRegex.matches(id) }
     }

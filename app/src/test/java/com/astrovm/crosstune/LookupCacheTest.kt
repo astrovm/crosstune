@@ -20,6 +20,26 @@ class LookupCacheTest {
     private fun cache(file: File = this.file) = LookupCache(file, Dispatchers.Unconfined)
 
     @Test
+    fun whatsUsedOftenStaysLongest() = runBlocking {
+        val cache = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2)
+        cache.put("a", "1")
+        cache.put("b", "2")
+        // Used again, "a" counts as newer than "b", which goes to make room.
+        assertEquals("1", cache.get("a"))
+        cache.put("c", "3")
+        assertEquals("1", cache.get("a"))
+        assertNull(cache.get("b"))
+        assertEquals("3", cache.get("c"))
+        assertNull(cache.get("missing"))
+        // Kept in that order too.
+        cache.save()
+        val restarted = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2)
+        restarted.put("d", "4")
+        assertNull(restarted.get("a"))
+        assertEquals("3", restarted.get("c"))
+    }
+
+    @Test
     fun whatsFoundIsKeptAcrossRestartsUpToTheNewest() = runBlocking {
         val cache = cache()
         // Nothing to save yet.

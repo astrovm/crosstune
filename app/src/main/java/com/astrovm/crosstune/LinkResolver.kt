@@ -5,8 +5,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 import org.json.JSONException
@@ -90,8 +92,16 @@ internal class LinkResolver(
     }
 
     private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {
+        if (link.service == MusicService.YOUTUBE_MUSIC && (link.type == ItemType.ALBUM || link.type == ItemType.ARTIST)) {
+            return@guarded youTubeMusicPage(link)?.let { Resolution.Resolved(link, it) } ?: Resolution.Failed(AppError.METADATA_UNAVAILABLE, link)
+        }
         val (response, body) = fetch(metadataUrl(link))
-        httpError(response)?.let { return@guarded Resolution.Failed(it, link) }
+        // A video its owner keeps from being embedded elsewhere, as many labels' are, has no oEmbed,
+        // but YouTube Music still says what it is.
+        if ((response.code == 401 || response.code == 403) && link.isYouTubeVideo()) {
+            youTubeMusicVideo(link.id)?.let { return@guarded Resolution.Resolved(link, it) }
+        }
+        httpError(response, privateWhenRefused = link.isOEmbed())?.let { return@guarded Resolution.Failed(it, link) }
         // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
         if (link.service == MusicService.DEEZER) {
             MetadataParsers.deezerError(JSONObject(body))?.let { return@guarded Resolution.Failed(it, link) }
@@ -192,6 +202,33 @@ internal class LinkResolver(
     }
 
     /** Cancelling the calling coroutine cancels the HTTP call. */
+    private fun MusicLink.isYouTubeVideo() =
+        (service == MusicService.YOUTUBE || service == MusicService.YOUTUBE_MUSIC) && type == ItemType.TRACK
+
+    /** The video [id] as YouTube Music names it, or null when it can't. */
+    private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
+        youTubeMusic(YOUTUBE_MUSIC_NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
+
+    /** An album's or artist's page on YouTube Music, as its header names it, with an album's songs. */
+    private suspend fun youTubeMusicPage(link: MusicLink): MusicMetadata? =
+        youTubeMusic(YOUTUBE_MUSIC_BROWSE_URL, "browseId", link.id)?.let { MetadataParsers.youtubeMusicPage(it, link.type) }
+
+    /** What YouTube Music's [url] answers about [key] [id]; null when it doesn't. */
+    private suspend fun youTubeMusic(url: String, key: String, id: String): JSONObject? = try {
+        val body = JSONObject()
+            .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
+            .put(key, id)
+        val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) return@use null
+            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
+        }
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
+    }
+
     private suspend fun fetch(url: String): Pair<Response, String> {
         val request = Request.Builder().url(url).get().build()
         return client.newCall(request).executeAsync().use { response ->
@@ -199,14 +236,30 @@ internal class LinkResolver(
         }
     }
 
-    /** Error pages still carry generic metadata, so any non-2xx status must fail before parsing. */
-    private fun httpError(response: Response): AppError? = when {
+    /** Whether [metadataUrl] asks an oEmbed endpoint, which turns away what's private. */
+    private fun MusicLink.isOEmbed() = when (service) {
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> type != ItemType.PLAYLIST
+        MusicService.SOUNDCLOUD, MusicService.AUDIOMACK -> true
+        else -> false
+    }
+
+    /**
+     * Error pages still carry generic metadata, so any non-2xx status must fail before parsing.
+     * Turned away, an oEmbed endpoint means it's private, as [privateWhenRefused] says; a page means
+     * the service won't answer, e.g. it takes Crosstune for a bot, which says nothing about the song.
+     */
+    private fun httpError(response: Response, privateWhenRefused: Boolean = true): AppError? = when {
         response.isSuccessful -> null
         response.code == 404 || response.code == 410 -> AppError.NOT_FOUND
-        // oEmbed answers private or embedding-disabled videos with 401/403.
-        response.code == 401 || response.code == 403 -> AppError.NOT_FOUND
+        response.code == 401 || response.code == 403 -> if (privateWhenRefused) AppError.NOT_FOUND else AppError.SERVICE_UNAVAILABLE
         response.code == 429 -> AppError.RATE_LIMITED
         response.code >= 500 -> AppError.SERVICE_UNAVAILABLE
         else -> AppError.METADATA_UNAVAILABLE
+    }
+
+    private companion object {
+        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
+        const val YOUTUBE_MUSIC_BROWSE_URL = "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false"
+        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
     }
 }
