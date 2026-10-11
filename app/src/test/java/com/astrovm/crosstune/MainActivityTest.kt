@@ -1734,6 +1734,18 @@ class MainActivityTest {
         val asked = fake.requestedUrls.size
         comeBack()
         assertEquals(asked, fake.requestedUrls.size)
+        composeRule.onNodeWithTag(RESULT_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun aLinkCopiedBeforeSetupIsDoneIsLeftAlone() {
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        respondWithTrack("Copied Song", "Artist · Song")
+        launch()
+        copied("https://open.spotify.com/track/$TRACK_ID")
+        comeBack()
+        assertTextShown(string(R.string.setup_get_started))
+        assertTrue(fake.requestedUrls.isEmpty())
     }
 
     @Test

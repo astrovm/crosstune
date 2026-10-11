@@ -512,10 +512,11 @@ var NMAX=${files.size - 1};
         val pages = mapOf(
             "1" to (1..30).joinToString("") { uFretResult(100 + it, "曲$it", "竹内まりや") },
             "2" to uFretResult(7, "プラスチック・ドール", "竹内まりや") + uFretResult(8, "プラスティック・ラブ", "竹内まりや", beginner = true) +
-                uFretResult(10, "プラスティック・ラブ", "他の人") + uFretResult(9, "プラスティック・ラブ", "山下達郎 &amp; 竹内まりや")
+                uFretResult(10, "プラスティック・ラブ", "他の人") + uFretResult(9, "プラスティック・ラブ", "山下達郎 &amp; 竹内まりや") +
+                (11..12).joinToString("") { uFretResult(it, "プラスティック・ラブ", "竹内まりや") }
         )
-        val sheets = mapOf(
-            "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("Night Tempo", "竹内まりや")),
+        val sheets = mutableMapOf(
+            "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("Night Tempo", "竹内まりや"), "川の道" to listOf("竹内まりや")),
             "https://www.ufret.jp/song.php?data=8" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている"),
             "https://www.ufret.jp/song.php?data=9" to uFretSong("[G]川の道を歩いていく", "朝の光に歌っている"),
             "https://www.ultimate-guitar.com/search.php" to ugSearch()
@@ -533,6 +534,12 @@ var NMAX=${files.size - 1};
         val listed = fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl() }.filter { it.queryParameter("key") == "竹内まりや" }
         assertEquals(listOf("1", "2"), listed.map { it.queryParameter("p") })
         assertTrue(fake.requestedUrls.none { it.endsWith("data=7") || it.endsWith("data=10") })
+
+        // Three sheets at most are tried, the easier one last.
+        listOf(9, 11, 12).forEach { sheets["https://www.ufret.jp/song.php?data=$it"] = "" }
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(plastic, japanese))
+        assertEquals(listOf("9", "11", "12"), fake.requestedUrls.filter { "song.php" in it }.map { it.toHttpUrl().queryParameter("data") })
 
         // Not there, the last page, one not full, is the last asked; no sound-alike is asked for a title in Japanese.
         fake.requestedUrls.clear()

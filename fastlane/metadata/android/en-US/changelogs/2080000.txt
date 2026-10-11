@@ -1,8 +1,10 @@
-Lyrics timed word by word light up each word as it's sung.
-Chords over the words: turn them on in Readings and translation.
-Lyrics stop where the music app stops, instead of running on.
+The song playing shows on open, its lyrics ready.
+A music link you just copied is looked up when you come back.
+Lyrics light up word by word as they're sung.
+Chords over the words, also from LaCuerda and for J-pop like Plastic Love.
+Lyrics stop when the music stops.
 Romaji as it's sung: sensee, not sensei.
-Lyrics you open stay that song's, not whatever's playing.
-Lyrics with readings show at once, and long lines break evenly.
-Faster the first time lyrics, readings and chords open after an update.
+Lyrics you open stay that song's.
+Readings show at once; long lines break evenly.
+Cleaner screens: notices close, Recent lists each song once.
 ChatGPT sign-in says it needs a paid plan.

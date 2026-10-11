@@ -37,6 +37,9 @@ import android.widget.ImageView
 import android.view.MotionEvent
 import android.app.NotificationManager
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -222,8 +225,13 @@ class ListeningTest {
     @Test
     fun withoutAccessToMusicAppsNothingIsOfferedAsPlaying() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
-        MainActivity.playbackFactory = { FakePlayback().apply { access = false; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
         launch()
+        waitForText(string(R.string.playing_now))
+        // Access taken away while away, what was offered goes with it.
+        phone.access = false
+        controller!!.pause().resume()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.playing_now)))
         assertFalse(shown("Iris"))
@@ -2277,6 +2285,14 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
         assertTrue(shown("Luna") && shown("Demo"))
         assertFalse(shown("Made Up"))
+        // A link copied meanwhile doesn't replace them.
+        val clip = ClipData.newPlainText("copied", "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")
+        app.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+        ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType).invoke(clip.description, System.currentTimeMillis() - 1_000)
+        controller!!.windowFocusChanged(false)
+        controller!!.windowFocusChanged(true)
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.songs_like_label)) && shown("Moon"))
     }
 
     @Test

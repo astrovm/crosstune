@@ -131,10 +131,10 @@ internal object SongNames {
      */
     fun soundsAlike(latin: String, loanword: String): Boolean {
         val katakana = bareTitle(loanword)
-        if (katakana.none { it in 'ァ'..'ヺ' } || !katakana.all { it in '゠'..'ヿ' || it.isWhitespace() }) return false
+        if (!katakana.all { it in '゠'..'ヿ' || it.isWhitespace() }) return false
         val said = consonants(Readings.romaji(katakana))
         val written = consonants(bareTitle(latin))
-        if (said.length < MIN_SOUNDS || written.length < MIN_SOUNDS) return false
+        if (said.length < MIN_SOUNDS) return false
         return if (said.length < FUZZY_SOUNDS) said == written else distance(said, written) <= 1
     }
 
@@ -160,9 +160,9 @@ internal object SongNames {
 
     /** Spellings of one sound, in order: "ch" before "c", and an r that ends a sound before l is read as r. */
     private val sounds = listOf(
-        Regex("tch|ch") to "C", Regex("sh|th") to "s", Regex("ph") to "f", Regex("ck|qu?") to "k",
+        Regex("th") to "s", Regex("ph") to "f", Regex("ck|qu?") to "k",
         Regex("x") to "ks", Regex("c(?=[eiy])") to "s", Regex("c") to "k", Regex("r(?![aeiouy])") to "",
-        Regex("l") to "r", Regex("v") to "b", Regex("z") to "s", Regex("m(?=[bp])") to "n", Regex("C") to "c"
+        Regex("l") to "r", Regex("v") to "b", Regex("z") to "s", Regex("m(?=[bp])") to "n"
     )
 
     /** Fewer consonants than this say too little to tell names apart; under [FUZZY_SOUNDS], all must agree. */
