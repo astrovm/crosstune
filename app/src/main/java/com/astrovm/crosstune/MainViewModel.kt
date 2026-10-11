@@ -1733,12 +1733,18 @@ internal class MainViewModel(
     private var practiceJob: Job? = null
 
     /**
-     * Practises the next saved line due, the one due longest: signed in, its meaning picked among
-     * two wrong ones; otherwise, shown, then said whether it was known.
+     * Practises the next saved line due, the one due longest: its meaning picked among two wrong
+     * ones, other lines' meanings, or with too few of those, signed in, ones ChatGPT makes up;
+     * otherwise, shown, then said whether it was known.
      */
     fun startPractice() {
         val line = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }.minByOrNull { it.due }
         practiceJob?.cancel()
+        val others = line?.let { practised -> uiState.savedLines.mapNotNull { it.translation?.trim() }.filter { !it.equals(practised.translation?.trim(), ignoreCase = true) }.distinct() }.orEmpty()
+        if (line != null && others.size >= QUIZ_WRONG_CHOICES) {
+            uiState = uiState.copy(practice = Practice(line, (others.shuffled().take(QUIZ_WRONG_CHOICES) + line.translation!!).shuffled()))
+            return
+        }
         if (line == null || !usesChatGpt()) {
             uiState = uiState.copy(practice = Practice(line))
             return
@@ -2578,6 +2584,9 @@ internal class MainViewModel(
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
+
+        /** How many wrong meanings a practised line's right one is picked among. */
+        const val QUIZ_WRONG_CHOICES = 2
 
         /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
         const val QUIET_PAUSE_DOUBLINGS = 3

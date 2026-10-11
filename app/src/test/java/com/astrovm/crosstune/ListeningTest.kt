@@ -1504,6 +1504,24 @@ class ListeningTest {
     }
 
     @Test
+    fun withOtherLinesSavedTheirMeaningsAreTheWrongChoicesWithoutChatGpt() {
+        val saved = listOf("Night sky" to "Cielo nocturno", "Stars" to "Estrellas", "Rain" to "Lluvia", "Sky" to "Cielo nocturno")
+            .joinToString(",") { (text, meaning) -> """{"text":"$text","translation":"$meaning","title":"Demo","artist":"Band","due":${if (text == "Night sky") 0 else Long.MAX_VALUE}}""" }
+        prefs().edit().putString("saved_lines", "[$saved]").putBoolean("lyrics_translation", true).commit()
+        wordsOf(null, "Night sky\nStars")
+        waitForText("[Stars]")
+        studyMenu()
+        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.saved_practice))
+        // Signed out, its meaning is picked among the other lines' meanings, each shown once.
+        waitForText("Estrellas")
+        assertTrue(shown("Lluvia"))
+        assertEquals(1, composeRule.onAllNodes(hasText("Cielo nocturno")).fetchSemanticsNodes().size)
+        click("Cielo nocturno")
+        assertEquals(1, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
+    }
+
+    @Test
     fun aLineSavedFirstGetsItsExplanationAndAUsedUpPlanSaysSo() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
