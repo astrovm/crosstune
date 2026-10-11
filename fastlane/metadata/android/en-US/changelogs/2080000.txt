@@ -1,3 +1,5 @@
 Lyrics timed word by word light up each word as it's sung.
 Chords over the words: turn them on in Readings and translation.
 Lyrics stop where the music app stops, instead of running on.
+Romaji as it's sung: sensee, not sensei.
+Lyrics you open stay that song's, not whatever's playing.

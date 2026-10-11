@@ -70,14 +70,21 @@ internal object Readings {
                 token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface,
                 token.partOfSpeechLevel1,
                 token.partOfSpeechLevel2,
-                token.baseForm?.takeIf { it != "*" } ?: token.surface
+                token.baseForm?.takeIf { it != "*" } ?: token.surface,
+                token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) }
             )
         }
 
-    /** A word as the dictionary splits a line, with how it reads and what part of speech it is. */
-    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface) {
-        /** How it's said, for romaji: the particles は and へ are said wa and e. */
-        val said get() = if (kind == "助詞") when (surface) { "は" -> "わ"; "へ" -> "え"; else -> kana } else kana
+    /** The dictionary draws out おう as おー, but not えい, as in せんせい, said せんせー. */
+    private fun drawnOutE(kana: String) = kana.replace(Regex("([えけげせぜてでねへべぺめれ])い"), "$1ー")
+
+    /**
+     * A word as the dictionary splits a line, with how it reads and what part of speech it is, and
+     * how it's [spoken], when that's known: 先生, read せんせい, is said せんせー.
+     */
+    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface, val spoken: String? = null) {
+        /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
+        val said get() = if (kind == "助詞") when (surface) { "は" -> "わ"; "へ" -> "え"; else -> kana } else spoken ?: kana
     }
 
     /**
@@ -122,10 +129,16 @@ internal object Readings {
             LineReading(
                 fixed.parts.mapIndexed { at, part -> if (at in fixing) part.copy(reading = wanted) else part },
                 inReading.sortedDescending().fold(fixed.reading) { line, at -> line.replaceRange(at, at + old.length, wanted) },
-                fixed.romanized.replace(Regex("""\b${Regex.escape(romaji(old))}""")) { if (++seen in nth) romaji(wanted) else it.value }
+                // Romaji is as it's said, so the reading may be there drawn out, sensee for sensei.
+                fixed.romanized.replace(Regex("""\b(${Regex.escape(drawnOut(romaji(old)))}|${Regex.escape(romaji(old))})""")) {
+                    if (++seen !in nth) it.value else if (it.value == romaji(old)) romaji(wanted) else drawnOut(romaji(wanted))
+                }
             )
         }
     }
+
+    /** Romaji with its long vowels as they're said: ei and ou drawn out, as ee and oo. */
+    private fun drawnOut(romaji: String) = romaji.replace("ei", "ee").replace("ou", "oo")
 
     /**
      * The words of a line in kana, as romaji spaces them: a verb with its endings is one word, e.g.

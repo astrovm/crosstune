@@ -49,7 +49,7 @@ class ReadingsTest {
         val (line) = Readings.of(listOf("I love 東京"), Script.JAPANESE)
         assertEquals(Ruby("東京", "とうきょう"), line.parts.last())
         assertEquals("I love ", line.parts.first().text)
-        assertEquals("I love toukyou", line.romanized)
+        assertEquals("I love tookyoo", line.romanized)
         val (blank) = Readings.of(listOf(""), Script.JAPANESE)
         assertEquals("", blank.romanized)
     }
@@ -66,6 +66,17 @@ class ReadingsTest {
         assertEquals("umi e", romanized("海へ"))
         assertEquals("hana", romanized("花"))
         assertEquals("wa", Readings.words("君は", Script.JAPANESE).last().romanized)
+    }
+
+    @Test
+    fun romajiIsAsTheWordsAreSaid() {
+        fun romanized(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized
+        // Long vowels are drawn out as they're sung, though the kana write them otherwise.
+        assertEquals("sensee", romanized("先生"))
+        assertEquals("koinu no yoo ni", romanized("仔犬のように"))
+        assertEquals("yoo", Readings.words("仔犬のように", Script.JAPANESE).first { it.text == "よう" }.romanized)
+        // Only within a word: 思う's う is said on its own.
+        assertEquals("omou", romanized("思う"))
     }
 
     @Test
@@ -137,7 +148,7 @@ class ReadingsTest {
     @Test
     fun englishInJapaneseLyricsIsRomanizedAsWritten() {
         // The dictionary splits "Don't" into Don, ' and t.
-        assertEquals("Don't Say dare ka no udedokei wa", Readings.of(listOf("Don't Say 誰かの腕時計は"), Script.JAPANESE).single().romanized)
+        assertEquals("Don't Say dare ka no udedokee wa", Readings.of(listOf("Don't Say 誰かの腕時計は"), Script.JAPANESE).single().romanized)
         assertEquals("I’m Here kimi no", Readings.of(listOf("I’m Here 君の"), Script.JAPANESE).single().romanized)
         // And looked up as one word.
         assertEquals(true, Readings.words("Don't Say 誰かの腕時計は", Script.JAPANESE).any { it.text == "Don't" })
@@ -161,5 +172,8 @@ class ReadingsTest {
         // Only those kanji are read otherwise: the same sounds written in kana elsewhere in the line stay.
         val kana = listOf(LineReading(listOf(Ruby("君", "くん"), Ruby("はくん")), "くんはくん", "kun wa kun"))
         assertEquals(LineReading(listOf(Ruby("君", "きみ"), Ruby("はくん")), "きみはくん", "kimi wa kun"), Readings.corrected(kana, listOf(ReadingFix(0, "君", "きみ")))[0])
+        // Romaji drawn out as it's said is put right drawn out too.
+        val said = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と")), "せいと", "seeto"))
+        assertEquals("shooto", Readings.corrected(said, listOf(ReadingFix(0, "生", "しょう")))[0].romanized)
     }
 }
