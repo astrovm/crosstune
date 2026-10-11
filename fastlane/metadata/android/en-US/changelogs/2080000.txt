@@ -1,0 +1,1 @@
+Lyrics timed word by word light up each word as it's sung.
