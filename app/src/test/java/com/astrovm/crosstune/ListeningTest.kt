@@ -417,6 +417,37 @@ class ListeningTest {
     }
 
     @Test
+    fun anotherSongHeardEarlyOnTakesOverThoughItsWhereTheSongShownIs() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // A few seconds in, it may as well be the next song, skipped to.
+        hearing.song("Other", 3.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+    }
+
+    @Test
+    fun anotherReleaseOfTheSongHeardWhereItIsKeepsItsWordsButTheNextSongTakesOver() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // Heard twice further on, as a skip is, it's 41 seconds in.
+        hearing.song("Demo", 41.0)
+        hearing.song("Demo", 41.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        val asked = fake.requestedUrls.size
+        // Well into it, Shazam names it otherwise, a moment on from where it is: the same recording.
+        hearing.song("Demo (Live at Home)", 42.0)
+        hearing.song("Demo (Live at Home)", 43.0)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens >= 4 }
+        composeRule.waitForIdle()
+        assertTrue(lit("Demo three"))
+        assertTrue(fake.requestedUrls.drop(asked).none { "Live" in java.net.URLDecoder.decode(it, "UTF-8") })
+        assertEquals("Demo", HistoryStore(prefs()).load().first().metadata.title)
+        // The next song, from its start, takes over.
+        hearing.song("Other", 1.0)
+        composeRule.waitUntil(TIMEOUT_MS) { lit("Other one") }
+    }
+
+    @Test
     fun aSongHeardAlongWithNoCoverGetsOneInRecentByItsName() {
         val hearing = FakeHearing()
         demoWords(hearing)

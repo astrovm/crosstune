@@ -371,7 +371,8 @@ class MainActivityTest {
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
-        assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") })
+        // Deezer has no cover for it, so Apple's is looked for too.
+        assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") || it.startsWith("https://itunes.apple.com/search") })
     }
 
     @Test

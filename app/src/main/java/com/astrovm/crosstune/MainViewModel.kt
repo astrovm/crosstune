@@ -1365,6 +1365,16 @@ internal class MainViewModel(
         // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
         if (shown != null && !sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
+        // Heard by another name right where the song shown is, well into it, it's the same recording
+        // on another release, as Shazam sometimes names it, not the next song, which starts over.
+        val clock = heardClock
+        val at = heard.clock
+        if (shown != null && at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
+            clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
+        ) {
+            heardClock = steadied(clock, at)
+            return keepInTime()
+        }
         if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
             heardSong = song
             heardClock = heard.clock
@@ -2521,6 +2531,12 @@ internal class MainViewModel(
 
         /** How far apart two hearings of a song can be and still be the same place in it. */
         const val STEADY_MS = 2_000L
+
+        /** How close a song heard by another name must be to where the one shown is to be the same recording. */
+        const val SAME_RECORDING_MS = 10_000L
+
+        /** How far into the song shown that's believed: earlier, it may just as well be the next song. */
+        const val SAME_RECORDING_AFTER_MS = 30_000L
         /** How long ago the song can have been heard and still line up a video with it. */
         const val HEARD_LATELY_MS = 60_000L
 
