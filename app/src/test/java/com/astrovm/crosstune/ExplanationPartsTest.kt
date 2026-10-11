@@ -37,6 +37,18 @@ class ExplanationPartsTest {
     }
 
     @Test
+    fun aLineOfOtherDashesIsABreakToo() {
+        // As GPT-6-Luna really answered for Under My Thumb, in Spanish, an em dash between blank lines.
+        assertEquals(
+            listOf("Salió en 1966.", "Habla un hombre.", "El ritmo es canchero.", "“Under my thumb” significa “bajo mi control”."),
+            explanationParts("Salió en 1966.\n\n—\n\nHabla un hombre.\n\n—\n\nEl ritmo es canchero.\n\n—\n\n“Under my thumb” significa “bajo mi control”.")
+        )
+        assertEquals(listOf("Story.", "Mood.", "Lines."), explanationParts("Story.\n–\nMood.\n ——— \nLines."))
+        // A line starting with one, as Spanish quotes speech, is still a part.
+        assertEquals(listOf("Story.\n— Hola, dijo.", "Mood."), explanationParts("Story.\n— Hola, dijo.\n—\nMood."))
+    }
+
+    @Test
     fun markdownAndSourcesChatGptAddsAnywayAreLeftOut() {
         // As GPT-6-Luna and GPT-6.1-Sol really answered.
         assertEquals(

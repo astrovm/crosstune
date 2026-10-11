@@ -287,10 +287,11 @@ internal const val PART_BREAK = "---"
 /**
  * The parts of an explanation, in order, empty where it left one out; while it's still being
  * written, those so far, without the start of a break that's only half there. Asked to break
- * them with a line of dashes, ChatGPT sometimes leaves a blank line instead, which then does.
+ * them with a line of dashes, ChatGPT sometimes leaves a blank line instead, which then does, or
+ * a line of em or en dashes, in Spanish.
  */
 internal fun explanationParts(text: String): List<String> {
-    val parts = plainText(text).split(Regex("""\n[ \t]*-{3,}[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
+    val parts = plainText(text).split(Regex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
     if (parts.size > 1) return parts
     return parts.single().split(Regex("""\n[ \t]*\n\s*""")).map { it.trim() }
 }
