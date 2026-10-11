@@ -16,20 +16,12 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      * [lines] in [language], translated together as the song they are, each line's translation, or
      * null where there's nothing to translate; null for all of them when it couldn't be done.
      */
-    suspend fun translate(
-        lines: List<String>,
-        language: String,
-        song: MusicMetadata? = null,
-        /** Word for word, keeping the original's order, rather than as it would naturally be said. */
-        literal: Boolean = false,
-        onLines: (List<String?>) -> Unit = {}
-    ): List<String?>? {
+    suspend fun translate(lines: List<String>, language: String, song: MusicMetadata? = null, onLines: (List<String?>) -> Unit = {}): List<String?>? {
         val words = lines.filter { line -> line.any(Char::isLetter) }.distinct()
         // Each model's own, so picking another translates anew.
         val model = chatGpt.model() ?: return null
         // Kept for [song]: the same line in another song may mean something else there.
-        val kind = if (literal) "literal" else "translation"
-        val key = { line: String -> "$kind|$model|$language|${song?.title}|${song?.artist}|$line" }
+        val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val kept = known.filterValues { it != null }.mapValues { it.value!! }
@@ -40,15 +32,9 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         } else {
             val name = nameOf(language)
             // Tried on real songs: thinking less, the first line comes in 1.5 s rather than 5, as good.
-            // Tried on real songs with GPT-6-Luna: word for word, Plastic Love's 恋のプログラムを 狂わせないでね
-            // came as "No me hagas fallar el programa del amor", against "No desarmes mi plan para el amor".
-            val how = if (literal) {
-                "Translate each line as literally as reads in $name: keep the original's word order and each word's own meaning, even where it reads awkwardly, rather than a natural rewording. "
-            } else {
-                "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. "
-            }
             val reply = chatGpt.ask(
-                "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " + how +
+                "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " +
+                    "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
                     "Reply with only a JSON array of strings, the same length and in the same order, one translation for each line. " +
                     "A line already in $name stays as it is.",
                 JSONArray(missing).toString(),
@@ -234,19 +220,59 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
 
     /**
      * Which of [rows], a music service's search results as "title | artist • album • length", is
-     * [song], by its index; null when none is, or it couldn't say.
+     * [song], by its index; null when none is, or it couldn't say. [videos] says the rows are videos
+     * as "title | channel • views • length" instead, put up by anyone.
      */
-    suspend fun pickSong(song: MusicMetadata, rows: List<String>): Int? {
+    suspend fun pickSong(song: MusicMetadata, rows: List<String>, videos: Boolean = false): Int? {
         if (rows.isEmpty()) return null
         // Tried on real YouTube Music results with GPT-6-Luna: 7 of 7 right in about 2.5 s, e.g.
         // Stay With Me as 真夜中のドア〜stay with me, and none for Sam Smith's among Miki Matsubara's.
-        val reply = chatGpt.ask(
-            "You match songs across music services. The user sends a song, as title and artist, and a numbered list of search results from another service, each as title | artist • album • length. Pick the result that is this same song by this same artist: titles may be written in another script or language, or with a subtitle. Prefer the original recording over remixes, covers, live or later versions, unless the song's own title names one. Reply with only the number, or 0 when none is this song.",
-            "Song: ${song.title} by ${song.artist}\n\nResults:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
-            effort = "low"
-        )
+        // Videos are asked apart: among songs, a video's uploader read as its artist and it said none
+        // for The Blue Hearts' Owaranai Uta 4 times in 6; asked apart, 15 of 16 picked its upload, and the
+        // other a lyrics video of the same recording, with none for a made-up song.
+        val reply = if (videos) {
+            chatGpt.ask(
+                "You match songs to videos. The user sends a song, as title and artist, and a numbered list of YouTube videos, each as title | channel • views • length. Anyone may have put a video up, so its title, not its channel, says whose song it is; it may be written in another script or language. Pick the video that plays this song's original recording by this artist, e.g. with lyrics on screen. Leave out covers, karaoke, instrumentals, live and other versions, unless the song's own title names one. Reply with only the number, or 0 when none is.",
+                "Song: ${song.title} by ${song.artist}\n\nVideos:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
+                effort = "low"
+            )
+        } else {
+            chatGpt.ask(
+                "You match songs across music services. The user sends a song, as title and artist, and a numbered list of search results from another service, each as title | artist • album • length. Pick the result that is this same song by this same artist: titles may be written in another script or language, or with a subtitle. Prefer the original recording over remixes, covers, live or later versions, unless the song's own title names one. Reply with only the number, or 0 when none is this song.",
+                "Song: ${song.title} by ${song.artist}\n\nResults:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
+                effort = "low"
+            )
+        }
         val number = (reply as? ChatGptReply.Answer)?.text?.trim()?.takeWhile(Char::isDigit)?.toIntOrNull() ?: return null
         return (number - 1).takeIf { it in rows.indices }
+    }
+
+    /**
+     * [song]'s [lines], Japanese written in romaji, written in Japanese as its lyrics are, line by
+     * line; null when it couldn't be done.
+     */
+    suspend fun fromRomaji(song: MusicMetadata, lines: List<String>): List<String>? {
+        val model = chatGpt.model() ?: return null
+        val key = "romaji|$model|${song.title}|${song.artist}|${lines.size}"
+        val kept = cache.get(key) ?: run {
+            // Tried on real songs with GPT-6-Luna: Owaranai Uta and Gurenge came back as they're
+            // written, 終わらない歌を歌おう, 強くなれる理由を知った, a romaji typo put right and English
+            // kept, in about 2 s.
+            val reply = chatGpt.ask(
+                "You restore song lyrics written in romaji to Japanese. The user sends a song, as title and artist, and its lines as a JSON array of strings, in order. " +
+                    "Write each line in Japanese as the song's lyrics are officially written, in kanji and kana; keep words sung in English as they are. " +
+                    "Reply with only a JSON array of strings, the same length and in the same order. A line that isn't Japanese stays as it is.",
+                JSONObject().put("song", "${song.title} by ${song.artist}").put("lines", JSONArray(lines)).toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+        }
+        val japanese = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it) } }
+        if (japanese.size != lines.size) return null
+        cache.put(key, kept)
+        cache.save()
+        // A line with no words, like a gap, stays one.
+        return japanese.mapIndexed { index, line -> if (lines[index].isBlank()) lines[index] else line.trim() }
     }
 
     /**
@@ -278,33 +304,6 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         cache.put(key, kept)
         cache.save()
         return words
-    }
-
-    /**
-     * For each of [song]'s [lines], the word most worth listening for, as written in it, to leave
-     * blank; null for a line with none. Null when it couldn't say.
-     */
-    suspend fun blanks(song: MusicMetadata, lines: List<String>): List<String?>? {
-        val model = chatGpt.model() ?: return null
-        val key = "blanks|$model|${song.title}|${song.artist}|${lines.size}"
-        val kept = cache.get(key) ?: run {
-            // Tried on real songs with GPT-6-Luna: Plastic Love's 31 lines came in about 7 s, a useful
-            // word from each, 突然, 出逢い, 孤独な, none for its blank lines.
-            val reply = chatGpt.ask(
-                "You make a listening exercise from a song for someone learning its language. The user sends the song's lyrics as a JSON array of lines. " +
-                    "For each line, pick the one word most worth listening for: a useful word, not a name or a word repeated from the line before. " +
-                    "Reply with only a JSON array of strings, the same length and in the same order, each the word exactly as written in its line, or an empty string for a line with no words.",
-                JSONArray(lines).toString(),
-                effort = "low"
-            )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
-        }
-        val words = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it).trim() } }
-        if (words.size != lines.size) return null
-        cache.put(key, kept)
-        cache.save()
-        // Only a word that's in its line can be left out of it.
-        return words.mapIndexed { index, word -> word.takeIf { it.isNotEmpty() && it in lines[index] } }
     }
 
     /**

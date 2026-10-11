@@ -324,12 +324,10 @@ internal data class Learning(
     /** Questions asked about line [questionsAbout], in order, with their answers. */
     val questionsAbout: Int? = null,
     val questions: List<LineQuestion> = emptyList(),
-    /** Translated word for word by ChatGPT, rather than as it would naturally be said. */
-    val literal: Boolean = false,
-    /** Signed in, one word of each line left blank, to listen for, until it's sung. */
-    val blanks: Boolean = false,
-    /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
-    val blankWords: List<String?> = emptyList(),
+    /** How the words show: as written, or in kana or Latin letters for a script that reads otherwise. */
+    val wordsAs: WordsAs = WordsAs.WRITTEN,
+    /** Set when the words were found in romaji, and ChatGPT wrote them in Japanese. */
+    val fromRomaji: Boolean = false,
     /** The words most worth learning from the song, as ChatGPT finds them. */
     val wordsToKnow: Asking<List<KeyWord>>? = null,
     /** How hard the song's words are, and what it covers or samples, once ChatGPT found out. */
@@ -342,8 +340,25 @@ internal data class Learning(
     val examples: LineExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, literal = literal, blanks = blanks)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, wordsAs = wordsAs)
 }
+
+/** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
+internal enum class WordsAs { WRITTEN, KANA, LATIN }
+
+/**
+ * What shows instead of line [index] as the words are set to show: its kana, or its Latin letters,
+ * once its reading's worked out; null as written.
+ */
+internal fun Learning.insteadOf(index: Int): String? {
+    val reading = lines.getOrNull(index) ?: return null
+    if (showsAs == WordsAs.KANA) return reading.reading
+    if (showsAs == WordsAs.LATIN) return reading.romanized.takeIf { it.isNotBlank() }
+    return null
+}
+
+/** How the words show for the script they're in: only Japanese has kana, so the others show as written. */
+internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 
 /** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
 internal data class Asking<T>(val value: T? = null, val failed: Boolean = false) {
@@ -411,6 +426,13 @@ internal class MainViewModel(
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
+
+    /** The words found in romaji, written in Japanese by ChatGPT, line by line, once they are. */
+    private var japanese: List<String>? = null
+
+    /** [lines] as they show: in Japanese when found in romaji and written so, timed as found. */
+    private fun shown(lines: List<LyricLine>): List<LyricLine> =
+        japanese?.let { written -> lines.mapIndexed { index, line -> line.copy(text = written.getOrElse(index) { line.text }) } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
@@ -444,8 +466,7 @@ internal class MainViewModel(
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
-                literal = preferences.getBoolean(KEY_TRANSLATION_LITERAL, false),
-                blanks = preferences.getBoolean(KEY_BLANKS, false)
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -1148,16 +1169,18 @@ internal class MainViewModel(
             selectedDestination = destination ?: uiState.selectedDestination
         )
         job?.cancel()
-        job = viewModelScope.launch { open(chosen, finishAfterOpen) }
+        job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
     }
 
-    private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
+    /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
+    private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
         val url = prepareDestination(destination) ?: return
         val original = uiState.link?.takeIf { it.service != null }
         if (uiState.resultMissing) {
             when (uiState.notFoundAction) {
-                // It stays here, saying it isn't there, with both ways on.
-                NotFoundAction.ASK -> {
+                // It stays here, saying it isn't there, with both ways on. With nowhere else to open,
+                // e.g. a song typed in, a tap on "Search in" searches.
+                NotFoundAction.ASK -> if (!tapped || original != null) {
                     pendingOpen = false
                     // Still the link that came in, so it shows over first-run setup.
                     uiState = uiState.copy(handingOff = false, selectedDestination = destination)
@@ -1259,6 +1282,7 @@ internal class MainViewModel(
         stopLearning()
         stopFollowing()
         foundLines = emptyList()
+        japanese = null
         syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
             uiState = uiState.copy(
@@ -1276,6 +1300,8 @@ internal class MainViewModel(
                         )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
                         learn()
+                        // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
+                        if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                     }
                     LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                     LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
@@ -1341,6 +1367,16 @@ internal class MainViewModel(
         // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
         if (shown != null && !sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
+        // Heard by another name right where the song shown is, well into it, it's the same recording
+        // on another release, as Shazam sometimes names it, not the next song, which starts over.
+        val clock = heardClock
+        val at = heard.clock
+        if (shown != null && at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
+            clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
+        ) {
+            heardClock = steadied(clock, at)
+            return keepInTime()
+        }
         if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
             heardSong = song
             heardClock = heard.clock
@@ -1357,12 +1393,18 @@ internal class MainViewModel(
 
     /**
      * A song heard along the way joins Recent, as one Crosstune listened for does: by its Apple Music
-     * link when Shazam knows it, or else by its name. Nothing needs looking up to keep it.
+     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none.
      */
     private fun remember(heard: Heard.Song) {
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
+        // Named by an app that gave no cover, it's found by its name, so Recent shows one.
+        if (heard.metadata.artworkUrl != null) return
+        viewModelScope.launch {
+            val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
+            uiState = uiState.copy(history = historyStore.update(link.url, heard.metadata.copy(artworkUrl = cover)))
+        }
     }
 
     /**
@@ -1582,8 +1624,31 @@ internal class MainViewModel(
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
         syncPoints = points
+        // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
-        uiState = uiState.copy(lyricLines = LyricsSync.adjust(foundLines, points), lyricsSynced = points.isNotEmpty())
+        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty())
+    }
+
+    private var romajiJob: Job? = null
+
+    /**
+     * Has ChatGPT write [song]'s words, found in romaji, in Japanese, each line timed as found; then
+     * they're worked out again as Japanese, with readings, kana and romaji of their own.
+     */
+    private fun writeInJapanese(song: MusicMetadata) {
+        val lines = wordLines()
+        romajiJob = viewModelScope.launch {
+            val written = tutor?.fromRomaji(song, lines) ?: return@launch
+            if (uiState.lyricsFor != song || wordLines() != lines) return@launch
+            japanese = written
+            stopLearning()
+            uiState = uiState.copy(
+                lyrics = written.joinToString("\n"),
+                lyricLines = shown(uiState.lyricLines),
+                learning = uiState.learning.fresh(Readings.scriptOf(written)).copy(fromRomaji = true)
+            )
+            learn()
+        }
     }
 
     /** Closes the words. The next song starts without them, rather than showing the last one's. */
@@ -1602,13 +1667,12 @@ internal class MainViewModel(
 
     private var readingsJob: Job? = null
     private var translationJob: Job? = null
-    private var blanksJob: Job? = null
 
     /** What was being worked out is for words no longer shown. */
     private fun stopLearning() {
         readingsJob?.cancel()
         translationJob?.cancel()
-        blanksJob?.cancel()
+        romajiJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()
@@ -1961,7 +2025,7 @@ internal class MainViewModel(
         val learning = uiState.learning
         val lines = wordLines()
         val script = learning.script
-        if ((learning.readings || learning.romanized) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
+        if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
                 val read = withContext(systemDispatcher) { Readings.of(lines, script) }
@@ -1974,13 +2038,6 @@ internal class MainViewModel(
                 }
             }
         }
-        val song = uiState.lyricsFor
-        if (learning.blanks && usesChatGpt() && song != null && lines.isNotEmpty() && learning.blankWords.isEmpty() && blanksJob?.isActive != true) {
-            blanksJob = viewModelScope.launch {
-                val blanks = tutor?.blanks(song, lines) ?: return@launch
-                if (wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(blankWords = blanks))
-            }
-        }
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
@@ -1989,7 +2046,7 @@ internal class MainViewModel(
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
                     if (usesChatGpt() && learning.chatGptTranslation) {
-                        tutor?.translate(lines, language, uiState.lyricsFor, learning.literal) { so ->
+                        tutor?.translate(lines, language, uiState.lyricsFor) { so ->
                             // Shown line by line as they come, while it's still translating these words.
                             viewModelScope.launch {
                                 if (uiState.learning.translating && wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(translations = so))
@@ -2026,19 +2083,10 @@ internal class MainViewModel(
         learn()
     }
 
-    /** Translates word for word with ChatGPT, or as it would naturally be said, from now on. */
-    fun setLiteral(on: Boolean) {
-        preferences.edit { putBoolean(KEY_TRANSLATION_LITERAL, on) }
-        // One kind of translation is no answer for the other.
-        translationJob?.cancel()
-        uiState = uiState.copy(learning = uiState.learning.copy(literal = on, translations = emptyList(), translating = false, translationFailed = false))
-        learn()
-    }
-
-    /** Leaves a word of each line blank to listen for, or shows them whole, from now on. */
-    fun setBlanks(on: Boolean) {
-        preferences.edit { putBoolean(KEY_BLANKS, on) }
-        uiState = uiState.copy(learning = uiState.learning.copy(blanks = on))
+    /** Shows the words as written, or only in kana or Latin letters, from now on. */
+    fun setWordsAs(wordsAs: WordsAs) {
+        preferences.edit { putString(KEY_WORDS_AS, wordsAs.name) }
+        uiState = uiState.copy(learning = uiState.learning.copy(wordsAs = wordsAs))
         learn()
     }
 
@@ -2460,8 +2508,7 @@ internal class MainViewModel(
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
-        private const val KEY_TRANSLATION_LITERAL = "translation_literal"
-        private const val KEY_BLANKS = "lyrics_blanks"
+        private const val KEY_WORDS_AS = "lyrics_words_as"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
 
         /** Typed text of this many words or more may describe a song rather than name it. */
@@ -2486,6 +2533,12 @@ internal class MainViewModel(
 
         /** How far apart two hearings of a song can be and still be the same place in it. */
         const val STEADY_MS = 2_000L
+
+        /** How close a song heard by another name must be to where the one shown is to be the same recording. */
+        const val SAME_RECORDING_MS = 10_000L
+
+        /** How far into the song shown that's believed: earlier, it may just as well be the next song. */
+        const val SAME_RECORDING_AFTER_MS = 30_000L
         /** How long ago the song can have been heard and still line up a video with it. */
         const val HEARD_LATELY_MS = 60_000L
 

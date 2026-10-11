@@ -134,6 +134,13 @@ class MainActivity : ComponentActivity() {
      */
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { floatNow() }
 
+    /**
+     * Signing in with ChatGPT asks for notifications first on Android 13: without them, phones like
+     * Xiaomi's freeze Crosstune once the browser's open, keep-alive service and all, and the sign-in
+     * waits until Crosstune's opened again. Asked or not, it signs in after.
+     */
+    private val signInNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { signInWithChatGpt() }
+
     /** What asked for the microphone: listening for a song, or listening along with the words. */
     private var afterMicrophone: () -> Unit = { viewModel.listen() }
 
@@ -317,8 +324,7 @@ class MainActivity : ComponentActivity() {
                         onAskAboutLine = viewModel::askAboutLine,
                         onExplainSong = viewModel::explainSong,
                         onAskAboutSong = viewModel::askAboutSong,
-                        onLiteralChange = viewModel::setLiteral,
-                        onBlanksChange = viewModel::setBlanks,
+                        onWordsAsChange = viewModel::setWordsAs,
                         onFindWordsToKnow = viewModel::findWordsToKnow,
                         onToggleSavedWord = viewModel::toggleSavedWord,
                         onAboutArtist = viewModel::aboutArtist,
@@ -333,9 +339,13 @@ class MainActivity : ComponentActivity() {
                         onChatGptModelChange = viewModel::pickChatGptModel,
                         onTranslateIntoChange = viewModel::setTranslateInto,
                         onSignInWithChatGpt = {
-                            // Kept running while the browser signs in, until it's done, however it ends.
-                            ChatGptSignInService.start(this)
-                            viewModel.signInWithChatGpt(done = { ChatGptSignInService.stop(applicationContext) })
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                signInNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                signInWithChatGpt()
+                            }
                         },
                         onCancelChatGptSignIn = viewModel::cancelChatGptSignIn,
                         onSignOutOfChatGpt = viewModel::signOutOfChatGpt,
@@ -458,6 +468,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         floatNow()
+    }
+
+    /** Signs in with ChatGPT, kept running while the browser signs in, until it's done, however it ends. */
+    private fun signInWithChatGpt() {
+        ChatGptSignInService.start(this)
+        viewModel.signInWithChatGpt(done = { ChatGptSignInService.stop(applicationContext) })
     }
 
     private fun floatNow() {

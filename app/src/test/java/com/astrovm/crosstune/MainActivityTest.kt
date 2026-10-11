@@ -371,7 +371,8 @@ class MainActivityTest {
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/track/123", nextStartedActivity()!!.dataString)
-        assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") })
+        // Deezer has no cover for it, so Apple's is looked for too.
+        assertTrue(fake.requestedUrls.all { it.startsWith("https://api.deezer.com/search") || it.startsWith("https://itunes.apple.com/search") })
     }
 
     @Test
@@ -1212,6 +1213,23 @@ class MainActivityTest {
         click(string(R.string.search_anyway, string(R.string.target_deezer)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
+    fun aSongByNameNotThereIsSearchedForWithItsButton() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
+        val activity = launch()
+        // A song by name only, e.g. one heard, has nowhere else to open.
+        composeRule.runOnIdle { ViewModelProvider(activity)[MainViewModel::class.java].openNamedSong("Owaranai Uta", "The Blue Hearts") }
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertNull(nextStartedActivity())
+
+        // So its button searches where it goes, as it says.
+        click(string(R.string.search_in_destination, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Owaranai%20Uta%20The%20Blue%20Hearts", nextStartedActivity()!!.dataString)
+        assertFalse(activity.isFinishing)
     }
 
     @Test
@@ -2809,7 +2827,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.lyrics_save_line))
 
         // Then found among the lines kept, and let go there.
-        click(string(R.string.lyrics_learn))
+        click(string(R.string.lyrics_study))
         click(string(R.string.lyrics_saved_lines))
         assertTextShown("Dakare Ni Kita Onna")
         assertTextShown("Kingo Hamada")
@@ -2936,6 +2954,21 @@ class MainActivityTest {
         File(app.noBackupFilesDir, "chatgpt.json").delete()
         launch()
         click(string(R.string.settings_button))
+
+        // Android 13 asks about notifications first, without which some phones freeze Crosstune
+        // while the browser's open; turned down, it signs in all the same.
+        composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(android.content.pm.PackageManager.PERMISSION_DENIED))
+        composeRule.waitForIdle()
+        assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+        click(string(R.string.cancel_button))
+        // Allowed, it isn't asked again.
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
 
         /** Starts signing in, and returns once the browser's open for it. */
         fun startSigningIn() {

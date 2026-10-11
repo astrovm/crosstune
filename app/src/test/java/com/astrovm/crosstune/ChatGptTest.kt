@@ -722,7 +722,28 @@ class ChatGptTest {
         // Nothing to pick from asks nothing.
         val count = openAi.asked.size
         assertNull(runBlocking { tutor.pickSong(song, emptyList()) })
+        assertNull(runBlocking { tutor.pickSong(song, emptyList(), videos = true) })
         assertEquals(count, openAi.asked.size)
+    }
+
+    @Test
+    fun aSongIsPickedFromVideosByTheirTitleNotTheirChannel() {
+        val tutor = tutor()
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        val rows = listOf("【カラオケ】終わらない歌/THE BLUE HEARTS | Karaoke Ch • 39K views • 3:09", "The Blue Hearts - Owaranai Uta with lyrics | Fan • 195K views • 3:04")
+        answering("2")
+        assertEquals(1, runBlocking { tutor.pickSong(song, rows, videos = true) })
+        val asked = openAi.asked.single()
+        assertEquals(
+            "Song: Owaranai Uta by THE BLUE HEARTS\n\nVideos:\n1. ${rows[0]}\n2. ${rows[1]}",
+            asked.getJSONArray("input").getJSONObject(0).getString("content")
+        )
+        assertTrue(asked.getString("instructions").contains("its title, not its channel"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        listOf("0", "3", "None").forEach { text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.pickSong(song, rows, videos = true) })
+        }
     }
 
     @Test
@@ -749,28 +770,6 @@ class ChatGptTest {
         assertNull(runBlocking { tutor(chatGpt()).wordsToKnow(song.copy(title = "Other"), lines, "es") })
     }
 
-    @Test
-    fun aWordOfEachLineIsLeftBlankOnlyWhenItsThere() {
-        val tutor = tutor()
-        val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
-        val lines = listOf("突然のキスや", "", "I'm just playing games")
-        answering("[\"突然\", \"\", \"games\"]")
-        assertEquals(listOf("突然", null, "games"), runBlocking { tutor.blanks(song, lines) })
-        assertEquals(JSONArray(lines).toString(), openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
-        assertEquals("low", openAi.asked.single().getJSONObject("reasoning").getString("effort"))
-        runBlocking { tutor.blanks(song, lines) }
-        assertEquals(1, openAi.asked.size)
-        // A word that isn't in its line can't be left out of it.
-        answering("[\"キス\", \"\", \"love\"]")
-        assertEquals(listOf("キス", null, null), runBlocking { tutor.blanks(song.copy(title = "Other"), lines) })
-        // Too few, or no answer, is none.
-        listOf("[\"突然\"]", "No JSON").forEachIndexed { index, text ->
-            answering(text)
-            assertNull(runBlocking { tutor.blanks(song.copy(title = "Song $index"), lines) })
-        }
-        openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).blanks(song.copy(title = "Third"), lines) })
-    }
 
     @Test
     fun aSongsLevelAndWhatItCoversOrSamplesAreFoundOnTheWeb() {
@@ -874,17 +873,30 @@ class ChatGptTest {
         assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
     }
 
+
     @Test
-    fun wordForWordIsAskedAndKeptApartFromTheNaturalTranslation() {
+    fun japaneseInRomajiIsWrittenInJapaneseLineByLine() {
         val tutor = tutor()
-        answering("[\"Me hagas fallar el programa del amor\"]")
-        assertEquals(listOf("Me hagas fallar el programa del amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es", literal = true) })
-        assertTrue(openAi.asked.single().getString("instructions").contains("keep the original's word order"))
-        // The natural one is another answer, asked for on its own.
-        answering("[\"No desarmes mi plan para el amor\"]")
-        assertEquals(listOf("No desarmes mi plan para el amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es") })
-        assertTrue(openAi.asked.last().getString("instructions").contains("reads naturally"))
-        assertEquals(listOf("Me hagas fallar el programa del amor"), runBlocking { tutor.translate(listOf("恋のプログラムを"), "es", literal = true) })
-        assertEquals(2, openAi.asked.size)
+        val song = MusicMetadata("Owaranai Uta", "Paranmaum")
+        val lines = listOf("owaranai uta o utaou", "", "kusottare no sekai no tame")
+        answering("[\" 終わらない歌を歌おう \", \"♪\", \"クソッタレの世界のため\"]")
+        // A line with no words stays as it was.
+        assertEquals(listOf("終わらない歌を歌おう", "", "クソッタレの世界のため"), runBlocking { tutor.fromRomaji(song, lines) })
+        val asked = openAi.asked.single()
+        val sent = JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("Owaranai Uta by Paranmaum", sent.getString("song"))
+        assertEquals(JSONArray(lines).toString(), sent.getJSONArray("lines").toString())
+        assertTrue(asked.getString("instructions").contains("keep words sung in English"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Kept for the song.
+        runBlocking { tutor.fromRomaji(song, lines) }
+        assertEquals(1, openAi.asked.size)
+        // Too few lines, or no answer, is none.
+        listOf("[\"終わらない歌を歌おう\"]", "No JSON").forEachIndexed { index, text ->
+            answering(text)
+            assertNull(runBlocking { tutor.fromRomaji(song.copy(title = "Song $index"), lines) })
+        }
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).fromRomaji(song.copy(title = "Other"), lines) })
     }
 }
