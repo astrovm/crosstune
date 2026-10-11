@@ -261,6 +261,7 @@
     <string name="floating_notification">앱 위에 가사가 떠 있음</string>
     <string name="lyrics_learn">읽기와 번역</string>
     <string name="lyrics_readings">단어 위에 읽기</string>
+    <string name="lyrics_reading_size">읽기 크기</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>

@@ -1882,6 +1882,25 @@ class ListeningTest {
     }
 
     @Test
+    fun readingsAreOnFromTheStartAndCanBeMadeBigger() {
+        // Kept bigger than they go, from a build that let them, they're as big as they go now.
+        prefs().edit().putFloat("reading_scale", 5f).commit()
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\nたべる")
+        waitForText("夜空に星が")
+        assertEquals(MAX_READING_SCALE, controllerModel().uiState.learning.readingScale)
+        learnMenu()
+        val size = hasContentDescription(string(R.string.lyrics_reading_size))
+        composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
+        composeRule.waitForIdle()
+        assertEquals(0.6f, controllerModel().uiState.learning.readingScale, 0.01f)
+        assertEquals(0.6f, prefs().getFloat("reading_scale", 0f), 0.01f)
+        // Without readings, there's no size to change.
+        click(string(R.string.lyrics_readings))
+        composeRule.waitForIdle()
+        assertFalse(composeRule.onAllNodes(size).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun japaneseWordsShowOnlyInKanaOrRomajiAlsoFloating() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")

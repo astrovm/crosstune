@@ -261,6 +261,7 @@
     <string name="floating_notification">歌词正悬浮在应用上方</string>
     <string name="lyrics_learn">读音和翻译</string>
     <string name="lyrics_readings">在文字上方显示读音</string>
+    <string name="lyrics_reading_size">读音大小</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_translation">翻译</string>
     <string name="lyrics_translation_failed">暂时无法翻译。</string>

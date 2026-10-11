@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.content.Context
 import android.os.Build
 import android.view.textclassifier.TextClassificationManager
+import android.view.textclassifier.TextClassifier
 import android.view.textclassifier.TextLanguage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,9 @@ internal fun interface LyricsLanguage {
  */
 internal class AndroidLyricsLanguage(
     private val context: Context,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** What tells, Android's own unless a test stands in for it. */
+    private val classifier: () -> TextClassifier? = { context.getSystemService(TextClassificationManager::class.java)?.textClassifier }
 ) : LyricsLanguage {
     override suspend fun of(lines: List<String>): String? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
@@ -28,8 +31,7 @@ internal class AndroidLyricsLanguage(
         // Android doesn't allow asking from the main thread.
         return withContext(dispatcher) {
             try {
-                val classifier = context.getSystemService(TextClassificationManager::class.java)?.textClassifier ?: return@withContext null
-                val told = classifier.detectLanguage(TextLanguage.Request.Builder(text).build())
+                val told = (classifier() ?: return@withContext null).detectLanguage(TextLanguage.Request.Builder(text).build())
                 if (told.localeHypothesisCount == 0) return@withContext null
                 val locale = told.getLocale(0)
                 code(locale.language).takeIf { told.getConfidenceScore(locale) >= SURE }

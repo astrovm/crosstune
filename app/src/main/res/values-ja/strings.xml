@@ -262,6 +262,7 @@
     <string name="floating_notification">歌詞をアプリの上に表示中</string>
     <string name="lyrics_learn">読みと翻訳</string>
     <string name="lyrics_readings">単語の上に読み</string>
+    <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>

@@ -519,11 +519,33 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
         // Readings sit over the words as written; Latin letters under them, unless they're what shows.
         if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
             LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+            if (learning.readings) ReadingSize(learning.readingScale, actions)
         }
         if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
         HorizontalDivider()
         LearnItem(R.string.lyrics_chords, chords.on, actions.onChordsChange)
+    }
+}
+
+/** How big the readings are, from as they start to nearly as big as the words. */
+@Composable
+private fun ReadingSize(scale: Float, actions: ScreenActions) {
+    val size = stringResource(R.string.lyrics_reading_size)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
+        AppIcon(R.drawable.ic_format_size, contentDescription = null)
+        // Where it was let go is kept, even before the menu has caught up with it.
+        var latest by remember { mutableFloatStateOf(scale) }
+        Slider(
+            value = scale,
+            onValueChange = {
+                latest = it
+                actions.onReadingScaleChange(it, false)
+            },
+            onValueChangeFinished = { actions.onReadingScaleChange(latest, true) },
+            valueRange = READING_SCALE..MAX_READING_SCALE,
+            modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = size }
+        )
     }
 }
 
@@ -940,12 +962,14 @@ internal class LineHelp(
     val romanized: Boolean,
     val translation: String?,
     /** What shows instead of the line: its kana, or its Latin letters. */
-    val instead: String? = null
+    val instead: String? = null,
+    /** How big [readings] are beside the words they're over. */
+    val readingScale: Float = READING_SCALE
 )
 
 internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index))
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale)
 }
 
 
@@ -1055,7 +1079,7 @@ private fun LyricLineText(
             // Chords sit over the letters they're played on, where readings would.
             ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, following.takeIf { lit }, style)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
-            RubyLine(reading.parts, style)
+            RubyLine(reading.parts, style, help.readingScale)
         } else if (lit && following != null && words.isNotEmpty()) {
             SungWords(words, following, style)
         } else {
@@ -1176,14 +1200,14 @@ internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
  * once, and each reading is drawn over where its piece landed.
  */
 @Composable
-internal fun RubyLine(parts: List<Ruby>, style: TextStyle) {
+internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READING_SCALE) {
     val over = style.copy(
-        fontSize = style.fontSize * READING_SCALE,
-        lineHeight = style.fontSize * 0.5f,
+        fontSize = style.fontSize * scale,
+        lineHeight = style.fontSize * (scale + READING_GAP),
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    val text = remember(parts) { rubyText(parts) }
+    val text = remember(parts, scale) { rubyText(parts, scale) }
     val measurer = rememberTextMeasurer()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
@@ -1213,10 +1237,10 @@ internal fun RubyLine(parts: List<Ruby>, style: TextStyle) {
  * [parts] as one line, a piece whose reading is wider than it spaced out to make room for it. Kana
  * and kanji are about as wide as they're tall, so their widths are told by how many there are.
  */
-internal fun rubyText(parts: List<Ruby>): AnnotatedString = buildAnnotatedString {
+internal fun rubyText(parts: List<Ruby>, scale: Float = READING_SCALE): AnnotatedString = buildAnnotatedString {
     parts.forEach { part ->
         val reading = part.reading
-        val spare = if (reading == null) 0f else reading.length * READING_SCALE - part.text.length
+        val spare = if (reading == null) 0f else reading.length * scale - part.text.length
         if (spare > 0f) withStyle(SpanStyle(letterSpacing = (spare / part.text.length).em)) { append(part.text) } else append(part.text)
     }
 }
@@ -1240,8 +1264,12 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
     }
 }
 
-/** How big readings are beside the words they're over. */
+/** How big readings are beside the words they're over, to start with; and as big as they can be made. */
 internal const val READING_SCALE = 0.45f
+internal const val MAX_READING_SCALE = 0.8f
+
+/** The room between a row's readings and the words under them, beside the words' size. */
+private const val READING_GAP = 0.05f
 
 /**
  * What a line can wrap between: a word in Latin letters with the space after it, or, since
@@ -1330,7 +1358,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // over the kanji, as in the lyrics.
             val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
             if (parts != null) {
-                TappableRubyLine(parts, words, state.word?.word) { actions.onLookUpWord(it, index) }
+                TappableRubyLine(parts, words, state.word?.word, learning.readingScale) { actions.onLookUpWord(it, index) }
             } else {
                 TappableLine(text.ifBlank { "♪" }, words, state.word?.word) { actions.onLookUpWord(it, index) }
             }
@@ -1414,7 +1442,7 @@ private fun wordLink(word: Word, picked: Boolean, highlight: SpanStyle, onPick: 
  * [words] a link to it. The word looked up stands out.
  */
 @Composable
-private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?, onPick: (Word) -> Unit) {
+private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?, scale: Float, onPick: (Word) -> Unit) {
     val text = parts.joinToString("") { it.text }
     // Where in the line each word is.
     val spans = buildList {
@@ -1426,7 +1454,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
         }
     }
     val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-    val over = style.copy(fontSize = style.fontSize * 0.45f, lineHeight = style.fontSize * 0.5f, fontWeight = FontWeight.Medium)
+    val over = style.copy(fontSize = style.fontSize * scale, lineHeight = style.fontSize * (scale + READING_GAP), fontWeight = FontWeight.Medium)
     val highlight = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
     FlowRow(modifier = Modifier.testTag(STUDY_LINE_TAG)) {
         var at = 0

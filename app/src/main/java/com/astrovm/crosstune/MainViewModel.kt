@@ -343,6 +343,8 @@ internal data class Learning(
     val into: String? = null,
     /** The languages, by code, e.g. "en", the user reads, whose songs aren't translated. */
     val untranslated: Set<String> = emptySet(),
+    /** How big readings are beside the words they're over. */
+    val readingScale: Float = READING_SCALE,
     /** The script the words are in, when it reads differently from how it looks. */
     val script: Script? = null,
     /** How each line reads, once worked out. */
@@ -374,7 +376,7 @@ internal data class Learning(
     val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, script, wordsAs = wordsAs)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, script, wordsAs = wordsAs)
 }
 
 /** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
@@ -518,6 +520,7 @@ internal class MainViewModel(
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
                 untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
+                readingScale = preferences.getFloat(KEY_READING_SCALE, READING_SCALE).coerceIn(READING_SCALE, MAX_READING_SCALE),
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
             ),
             floating = FloatingOptions(
@@ -2223,6 +2226,12 @@ internal class MainViewModel(
         learn()
     }
 
+    /** Kept only once let go, [save], rather than at every step of the slider. */
+    fun setReadingScale(scale: Float, save: Boolean) {
+        if (save) preferences.edit { putFloat(KEY_READING_SCALE, scale) }
+        uiState = uiState.copy(learning = uiState.learning.copy(readingScale = scale))
+    }
+
     fun setRomanized(on: Boolean) {
         preferences.edit { putBoolean(KEY_ROMANIZED, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(romanized = on))
@@ -2700,6 +2709,7 @@ internal class MainViewModel(
         const val SONG = -1
         private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_UNTRANSLATED = "untranslated_languages"
+        private const val KEY_READING_SCALE = "reading_scale"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"

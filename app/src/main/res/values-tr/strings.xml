@@ -261,6 +261,7 @@
     <string name="floating_notification">Sözler uygulamalarının üzerinde yüzüyor</string>
     <string name="lyrics_learn">Okunuş ve çeviri</string>
     <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
+    <string name="lyrics_reading_size">Okunuş boyutu</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>

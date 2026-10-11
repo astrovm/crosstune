@@ -261,6 +261,7 @@
     <string name="floating_notification">Songtext schwebt über deinen Apps</string>
     <string name="lyrics_learn">Lesungen und Übersetzung</string>
     <string name="lyrics_readings">Lesung über den Wörtern</string>
+    <string name="lyrics_reading_size">Größe der Lesung</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_translation">Übersetzung</string>
     <string name="lyrics_translation_failed">Konnte gerade nicht übersetzen.</string>

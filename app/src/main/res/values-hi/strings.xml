@@ -261,6 +261,7 @@
     <string name="floating_notification">बोल आपके ऐप्स के ऊपर तैर रहे हैं</string>
     <string name="lyrics_learn">उच्चारण और अनुवाद</string>
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
+    <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>

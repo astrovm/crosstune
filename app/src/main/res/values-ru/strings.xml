@@ -261,6 +261,7 @@
     <string name="floating_notification">Текст поверх ваших приложений</string>
     <string name="lyrics_learn">Чтение и перевод</string>
     <string name="lyrics_readings">Чтение над словами</string>
+    <string name="lyrics_reading_size">Размер чтения</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>

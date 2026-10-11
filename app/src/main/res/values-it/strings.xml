@@ -262,6 +262,7 @@
     <string name="floating_notification">Testo che fluttua sopra le tue app</string>
     <string name="lyrics_learn">Letture e traduzione</string>
     <string name="lyrics_readings">Lettura sopra le parole</string>
+    <string name="lyrics_reading_size">Dimensione della lettura</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_translation">Traduzione</string>
     <string name="lyrics_translation_failed">Impossibile tradurre ora.</string>
