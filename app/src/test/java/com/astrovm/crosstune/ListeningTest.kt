@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import android.os.Looper
 import android.Manifest
 import org.robolectric.shadows.ShadowSettings
@@ -593,6 +594,35 @@ class ListeningTest {
         phone.playing.value = null
         hearing.song("Other", 1.0)
         waitUntil(TIMEOUT_MS) { lit("Other one") }
+    }
+
+    @Test
+    fun theWordsStopWhereTheAppStopped() {
+        val phone = FakePlayback().apply {
+            access = true
+            playing.value = Following(PlaybackClock(39_990, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo two") && described(string(R.string.lyrics_following_app, "Music")) }
+        phone.playing.value = Following(PlaybackClock(39_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        // Closed, or on to a song of its own: the words stay where it was, not back to where the song was heard.
+        phone.playing.value = null
+        waitUntil(TIMEOUT_MS) { !described(string(R.string.lyrics_following_app, "Music")) }
+        Thread.sleep(1_500)
+        composeRule.waitForIdle()
+        assertTrue(lit("Demo two"))
+        assertFalse(lit("Demo one") || lit("Demo three"))
+        // Heard again, they go on from there.
+        hearing.song("Demo", 45.0)
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
     }
 
     @Test
@@ -1768,13 +1798,15 @@ class ListeningTest {
                 else -> words(request)
             }
         }
-        // A site that won't answer says so, and is asked again.
+        // A site that won't answer shows nothing; switched off and on, it's asked again.
         learnMenu()
         click(string(R.string.lyrics_chords))
         assertTrue(prefs().getBoolean("lyrics_chords", false))
-        waitForText(string(R.string.lyrics_chords_failed))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://www.ultimate-guitar.com/search.php") } }
+        assertNull(chordsOver("Walking down the river road"))
         up = true
-        click(string(R.string.retry_button))
+        click(string(R.string.lyrics_chords))
+        click(string(R.string.lyrics_chords))
         waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
         assertTrue(shown(string(R.string.lyrics_capo, 3)))
         assertEquals(listOf("D"), chordsOver("Singing to the morning light"))
@@ -1790,12 +1822,14 @@ class ListeningTest {
     }
 
     @Test
-    fun aSongWithoutChordsSaysSo() {
+    fun aSongWithoutChordsShowsJustItsWords() {
         prefs().edit().putBoolean("lyrics_chords", true).commit()
         wordsOf("[00:01.00] Walking down the river road\\n[00:05.00] Singing to the morning light", "Walking down the river road\\nSinging to the morning light")
-        // On from before, they're looked up with the words; neither site has them.
-        waitForText(string(R.string.lyrics_chords_none))
+        // On from before, they're looked up with the words; neither site has them, and nothing says so.
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://www.ufret.jp/search.php") } }
         assertTrue(fake.requestedUrls.any { it.startsWith("https://www.ultimate-guitar.com/search.php") })
+        assertTrue(shown("Walking down the river road"))
+        assertNull(chordsOver("Walking down the river road"))
     }
 
     @Test
@@ -1830,10 +1864,9 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.lyrics_button))
-        waitForText(string(R.string.lyrics_chords_none))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://www.ufret.jp/search.php") } }
         hearing.song("Other", 3.0)
         waitUntil(TIMEOUT_MS) { chordsOver("Other one") == listOf("G") }
-        assertFalse(shown(string(R.string.lyrics_chords_none)))
     }
 
     @Test

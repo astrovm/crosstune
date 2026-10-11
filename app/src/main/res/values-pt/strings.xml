@@ -268,8 +268,6 @@
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
     <string name="lyrics_chords">Acordes</string>
-    <string name="lyrics_chords_none">Nenhum acorde encontrado para esta música.</string>
-    <string name="lyrics_chords_failed">Não foi possível obter os acordes agora.</string>
     <string name="lyrics_capo">Capotraste %1$d</string>
     <string name="setting_translate_into">Traduzir para</string>
     <string name="translate_into_app_language">Idioma do app</string>

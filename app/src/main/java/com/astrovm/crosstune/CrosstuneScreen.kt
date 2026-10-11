@@ -207,7 +207,6 @@ internal data class ScreenActions(
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
-    val onRetryChords: () -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
     val onRemoveSavedLine: (SavedLine) -> Unit = {},
     /** Looks up a word, in the line it's in, by the line's index. */

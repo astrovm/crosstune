@@ -1,21 +1,28 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.Executors
 
 /** Runs under Robolectric for the real org.json implementation. */
 @RunWith(RobolectricTestRunner::class)
 class ChordFinderTest {
+    private companion object {
+        const val LOOKUPS = "chord lookups"
+    }
 
     private val fake = FakeSpotify()
 
@@ -24,7 +31,13 @@ class ChordFinderTest {
     private val river = MusicMetadata("River Road", "The Walkers")
     private val kawa = MusicMetadata("川の道", "歩く人")
 
-    private fun finder(cache: LookupCache? = null) = ChordFinder(fake.client(), Dispatchers.Unconfined, cache)
+    /** Where lookups happen, as they would on the phone: away from whoever asked. */
+    private val lookups = Executors.newSingleThreadExecutor { Thread(it, LOOKUPS) }.asCoroutineDispatcher()
+
+    @After
+    fun stopLookups() = lookups.close()
+
+    private fun finder(cache: LookupCache? = null) = ChordFinder(fake.client(), lookups, cache)
 
     private fun chords(song: MusicMetadata, texts: List<String>, finder: ChordFinder = finder()) = runBlocking { finder.chordsOf(song, texts) }
 
@@ -54,6 +67,23 @@ class ChordFinderTest {
         ugPage(JSONObject().put("tab_view", JSONObject().put("wiki_tab", JSONObject().put("content", content)).apply { capo?.let { put("meta", JSONObject().put("capo", it)) } }))
 
     private val ugWalking = "[tab][ch]G[/ch]       [ch]C[/ch]\nWalking down the river road[/tab]\n[tab][ch]D[/ch]\nSinging to the morning light[/tab]"
+
+    /** NetEase's results for a search: songs by their names, with their artists'. */
+    private fun netEase(vararg songs: Pair<String, List<String>>) = JSONObject().put(
+        "result",
+        JSONObject().put("songs", JSONArray(songs.map { (name, artists) -> JSONObject().put("name", name).put("artists", JSONArray(artists.map { JSONObject().put("name", it) })) }))
+    ).toString()
+
+    /** U-FRET answering [searches] by what's searched for, and [pages] otherwise. */
+    private fun uFret(searches: Map<String, String>, pages: Map<String, String>): (Request) -> okhttp3.Response = { request ->
+        if (request.url.host == "www.ufret.jp" && request.url.encodedPath == "/search.php") {
+            FakeSpotify.html(request, searches[request.url.queryParameter("key")].orEmpty())
+        } else {
+            answer(request, pages)
+        }
+    }
+
+    private val uFretSearches get() = fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl().queryParameter("key") }
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
@@ -172,7 +202,8 @@ class ChordFinderTest {
                 mapOf(
                     "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 3)),
                     "https://tabs.ultimate-guitar.com/tab/gone-1" to "<html>Not found</html>",
-                    "https://www.ufret.jp/search.php" to ""
+                    "https://www.ufret.jp/search.php" to "",
+                    "https://music.163.com/api/search/get" to "{}"
                 )
             )
         }
@@ -252,5 +283,92 @@ class ChordFinderTest {
             listOf(SheetLine("Caminando junto al río", listOf(Chord(0, "G"), Chord(4, "C"))), SheetLine("Cantando a la luz del día &bogus;", listOf(Chord(0, "D")))),
             found.sheet.lines
         )
+    }
+
+    @Test
+    fun aSongIsLookedUpAwayFromWhoeverAsked() {
+        val readFrom = mutableSetOf<String>()
+        val texts = object : AbstractList<String>() {
+            override val size get() = english.size
+            override fun get(index: Int) = english[index].also { readFrom += Thread.currentThread().name.substringBefore(" @") }
+        }
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/few-1", "River Road", "The Walkers", 3)),
+                    "https://tabs.ultimate-guitar.com/tab/few-1" to ugTab(ugWalking)
+                )
+            )
+        }
+        assertTrue(chords(river, texts) is ChordFinder.Chords.Found)
+        assertEquals(setOf(LOOKUPS), readFrom)
+    }
+
+    @Test
+    fun aTitleInTwoIsLookedUpByEachAndTheOriginalComesBeforeACover() {
+        val song = MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi")
+        val words = listOf("川の道を歩いていく", "朝の光に歌っている")
+        // U-FRET knows it by its Japanese name, and the singer by hers, which NetEase has.
+        fake.handler = uFret(
+            mapOf("プラスティック・ラブ" to uFretResult(5, "プラスティック・ラブ", "eill") + uFretResult(6, "プラスティック・ラブ", "竹内まりや")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("竹内まりや"), "Plastic Love" to listOf("竹内まりや", "Someone"), "Other" to listOf("Nobody")),
+                "https://www.ufret.jp/song.php?data=5" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている"),
+                "https://www.ufret.jp/song.php?data=6" to uFretSong("[Am]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=6", (chords(song, words) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "プラスティック・ラブ"), uFretSearches)
+        assertTrue(fake.requestHeaders.contains("Referer" to "https://music.163.com/"))
+        // Ultimate Guitar knows it by its name in Latin letters.
+        fake.requestedUrls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && request.url.queryParameter("value") == "Plastic Love Mariya Takeuchi") {
+                FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/plastic-1", "Plastic Love", "Mariya Takeuchi", 3)))
+            } else {
+                answer(request, mapOf("https://tabs.ultimate-guitar.com/tab/plastic-1" to ugTab(ugWalking), "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+            }
+        }
+        assertEquals("https://tabs.ultimate-guitar.com/tab/plastic-1", (chords(song, english) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(
+            listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "Plastic Love Mariya Takeuchi"),
+            fake.requestedUrls.filter { "search.php" in it }.map { it.toHttpUrl().queryParameter("value") }
+        )
+    }
+
+    @Test
+    fun aSongNamedInLatinLettersIsLookedUpOnUFretByItsJapaneseNames() {
+        // "Kimi ha 1000%" is "君は1000%", as NetEase has it; asked once for all the searches.
+        val kimi = MusicMetadata("Kimi ha 1000%", "1986 OMEGA TRIBE")
+        fake.handler = uFret(
+            mapOf("君は1000%" to uFretResult(8, "君は1000%", "1986オメガトライブ")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("君は1000%" to listOf("1986オメガトライブ"), "Kimi ha 1000% (Live)" to listOf("Someone"), "君は1000% (Live)" to listOf("1986オメガトライブ")),
+                "https://www.ufret.jp/song.php?data=8" to uFretSong("[G]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=8", (chords(kimi, japanese) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(listOf("Kimi ha 1000% 1986 OMEGA TRIBE", "君は1000%"), uFretSearches)
+        assertEquals(1, fake.requestedUrls.count { "music.163.com" in it })
+        // "Lemon" is sung by "米津玄師", as NetEase calls Kenshi Yonezu.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            mapOf("Lemon 米津玄師" to uFretResult(9, "Lemon", "米津玄師")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("Lemon" to listOf("Kenshi Yonezu", "米津玄師")),
+                "https://www.ufret.jp/song.php?data=9" to uFretSong("[Am]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=9", (chords(MusicMetadata("Lemon", "Kenshi Yonezu"), japanese) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(listOf("Lemon Kenshi Yonezu", "Lemon 米津玄師"), uFretSearches)
+        // Named nothing else, it's looked up by its own name alone, and only so far.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            emptyMap(),
+            mapOf("https://music.163.com/api/search/get" to netEase("一つ" to listOf("A"), "二つ" to listOf("B"), "三つ" to listOf("C")), "https://www.ultimate-guitar.com/search.php" to ugSearch())
+        )
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Nowhere", "Nobody"), japanese))
+        assertEquals(listOf("Nowhere Nobody", "一つ", "二つ", "Nowhere"), uFretSearches)
     }
 }

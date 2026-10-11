@@ -302,25 +302,22 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val writing get() = !done && !failed && !limitReached
 }
 
-/**
- * What's switched on to help read a song's words in another language: [readings] over them, kana
- * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
- * Then what's been worked out for the words shown, line by line.
- */
-/** A song's chords, shown over its words while [on], and how looking them up went. */
+/** A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were found. */
 internal data class ChordsState(
     val on: Boolean = false,
     val loading: Boolean = false,
-    /** Neither site has chords for the song. */
-    val missing: Boolean = false,
-    /** A site wouldn't answer, so there may still be some. */
-    val failed: Boolean = false,
+    val tried: Boolean = false,
     val sheet: ChordSheet? = null
 ) {
     /** For another song's words, or the same words written otherwise: switched on as it was, nothing looked up yet. */
     fun fresh() = ChordsState(on = on)
 }
 
+/**
+ * What's switched on to help read a song's words in another language: [readings] over them, kana
+ * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
+ * Then what's been worked out for the words shown, line by line.
+ */
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
@@ -1547,6 +1544,13 @@ internal class MainViewModel(
         followJob = viewModelScope.launch {
             source.follow(song).collect { playing ->
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
+                // The app stopped it, was closed or went on to another song: the words stop where it left
+                // them, rather than run on from where the song was heard before, until it's heard again.
+                val left = inSong(appFollowing)?.clock
+                if (playing == null && left != null) {
+                    heardSong = song
+                    heardClock = PlaybackClock(left.positionAt(now()), now(), playing = false)
+                }
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
@@ -2123,29 +2127,23 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val chords = uiState.chords
         val lines = wordLines()
-        if (!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.sheet != null || chords.missing || chords.failed) return
+        if (!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.tried) return
         chordsJob = viewModelScope.launch {
             uiState = uiState.copy(chords = uiState.chords.copy(loading = true))
             val answer = finder.chordsOf(song, lines)
-            uiState = uiState.copy(
-                chords = uiState.chords.copy(
-                    loading = false, sheet = (answer as? ChordFinder.Chords.Found)?.sheet,
-                    missing = answer == ChordFinder.Chords.None, failed = answer == ChordFinder.Chords.Unavailable
-                )
-            )
+            uiState = uiState.copy(chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet))
         }
     }
 
-    /** Shows the song's chords over its words, from now on, or stops. */
+    /**
+     * Shows the song's chords over its words, from now on, or stops, and stops looking them up.
+     * Switched on again, a song with none found is looked up again.
+     */
     fun setChords(on: Boolean) {
         preferences.edit { putBoolean(KEY_CHORDS, on) }
-        uiState = uiState.copy(chords = uiState.chords.copy(on = on))
-        chords()
-    }
-
-    /** Asks for the chords again, after a site wouldn't answer. */
-    fun retryChords() {
-        uiState = uiState.copy(chords = uiState.chords.copy(failed = false))
+        if (!on) chordsJob?.cancel()
+        val chords = uiState.chords
+        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.tried && chords.sheet != null))
         chords()
     }
 

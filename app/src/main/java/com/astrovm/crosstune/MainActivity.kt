@@ -353,7 +353,6 @@ class MainActivity : ComponentActivity() {
                         onRomanizedChange = viewModel::setRomanized,
                         onTranslationChange = viewModel::setTranslation,
                         onChordsChange = viewModel::setChords,
-                        onRetryChords = viewModel::retryChords,
                         onRetryTranslation = viewModel::retryTranslation,
                         onToggleSavedLine = viewModel::toggleSavedLine,
                         onRemoveSavedLine = viewModel::removeSavedLine,

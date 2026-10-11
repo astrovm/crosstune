@@ -269,8 +269,6 @@
     <string name="lyrics_translation">Traduzione</string>
     <string name="lyrics_translation_failed">Impossibile tradurre ora.</string>
     <string name="lyrics_chords">Accordi</string>
-    <string name="lyrics_chords_none">Nessun accordo trovato per questa canzone.</string>
-    <string name="lyrics_chords_failed">Impossibile ottenere gli accordi ora.</string>
     <string name="lyrics_capo">Capotasto %1$d</string>
     <string name="setting_translate_into">Traduci in</string>
     <string name="translate_into_app_language">Lingua dell\'app</string>

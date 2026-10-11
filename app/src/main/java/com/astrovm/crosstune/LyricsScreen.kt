@@ -13,7 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInVertically
 import kotlinx.coroutines.delay
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
@@ -65,6 +65,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
@@ -247,7 +248,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // Signed in with ChatGPT, the song opens to what it's about.
             LyricsHeader(song.copy(artworkUrl = cover), actions, onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null })
             TranslationStatus(state.learning, actions)
-            ChordsStatus(state.chords, actions)
+            CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -592,28 +593,20 @@ private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
     }
 }
 
-/** Where the chords are from, and the capo they're played with; or that there are none, or they couldn't be had. */
+/** The fret the chords shown are played with a capo on, when they need one. */
 @Composable
-private fun ChordsStatus(chords: ChordsState, actions: ScreenActions) {
-    val sheet = chords.sheet
-    val shows = chords.on && (sheet != null || chords.missing || chords.failed)
-    AnimatedVisibility(visible = shows, enter = Motion.appear, exit = Motion.disappear) {
-        val open = rememberWebOpener()
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-            val said = when {
-                sheet != null -> sheet.capo.takeIf { it > 0 }?.let { stringResource(R.string.lyrics_capo, it) }.orEmpty()
-                chords.failed -> stringResource(R.string.lyrics_chords_failed)
-                else -> stringResource(R.string.lyrics_chords_none)
-            }
-            Text(
-                said,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (sheet != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp)
-            )
-            if (sheet != null) TextButton(onClick = { open(sheet.url) }) { Text(sheet.site.label) }
-            if (chords.failed) TextButton(onClick = actions.onRetryChords) { Text(stringResource(R.string.retry_button)) }
-        }
+private fun CapoStatus(chords: ChordsState) {
+    val capo = chords.sheet?.capo?.takeIf { chords.on && it > 0 }
+    AnimatedVisibility(visible = capo != null, enter = Motion.appear, exit = Motion.disappear) {
+        // Kept as it goes, so it doesn't read "Capo 0" on its way out.
+        val fret = remember { intArrayOf(0) }
+        capo?.let { fret[0] = it }
+        Text(
+            stringResource(R.string.lyrics_capo, fret[0]),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
+        )
     }
 }
 
@@ -1136,7 +1129,9 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
     val position = rememberPosition(following.takeIf { line.words.isNotEmpty() })
-    val playing = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
+    // Read only where it's drawn, so a new chord played just draws it again.
+    val playing = remember { mutableIntStateOf(-1) }
+    playing.intValue = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
     val shown = position?.let { sungText(line.words, it) } ?: AnnotatedString(text)
     val measurer = rememberTextMeasurer()
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1150,12 +1145,13 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
         modifier = Modifier
             .fillMaxWidth()
             .semantics { this[ChordsShown] = chords.over.map { it.name } }
-            .drawBehind {
-                val words = layout ?: return@drawBehind
+            // Laid out once for the words as laid out, not again each frame the line's sung.
+            .drawWithCache {
                 val labels = chords.over.map { measurer.measure(it.name, chordStyle) }
-                val gap = chordStyle.fontSize.toPx() / 3
-                chordPlaces(chords.over, labels.map { it.size.width.toFloat() }, words, size.width, gap).forEachIndexed { index, (x, y) ->
-                    drawText(labels[index], color = if (playing >= 0 && index != playing) dim else chordStyle.color, topLeft = Offset(x, y))
+                val places = layout?.let { chordPlaces(chords.over, labels.map { label -> label.size.width.toFloat() }, it, size.width, chordStyle.fontSize.toPx() / 3) }.orEmpty()
+                onDrawBehind {
+                    val now = playing.intValue
+                    places.forEachIndexed { index, place -> drawText(labels[index], color = if (now >= 0 && index != now) dim else chordStyle.color, topLeft = place) }
                 }
             }
     )
