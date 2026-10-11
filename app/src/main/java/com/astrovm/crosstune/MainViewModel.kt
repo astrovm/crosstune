@@ -1169,16 +1169,18 @@ internal class MainViewModel(
             selectedDestination = destination ?: uiState.selectedDestination
         )
         job?.cancel()
-        job = viewModelScope.launch { open(chosen, finishAfterOpen) }
+        job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
     }
 
-    private suspend fun open(destination: Destination, finishAfterOpen: Boolean) {
+    /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
+    private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
         val url = prepareDestination(destination) ?: return
         val original = uiState.link?.takeIf { it.service != null }
         if (uiState.resultMissing) {
             when (uiState.notFoundAction) {
-                // It stays here, saying it isn't there, with both ways on.
-                NotFoundAction.ASK -> {
+                // It stays here, saying it isn't there, with both ways on. With nowhere else to open,
+                // e.g. a song typed in, a tap on "Search in" searches.
+                NotFoundAction.ASK -> if (!tapped || original != null) {
                     pendingOpen = false
                     // Still the link that came in, so it shows over first-run setup.
                     uiState = uiState.copy(handingOff = false, selectedDestination = destination)

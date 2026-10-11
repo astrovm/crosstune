@@ -722,7 +722,28 @@ class ChatGptTest {
         // Nothing to pick from asks nothing.
         val count = openAi.asked.size
         assertNull(runBlocking { tutor.pickSong(song, emptyList()) })
+        assertNull(runBlocking { tutor.pickSong(song, emptyList(), videos = true) })
         assertEquals(count, openAi.asked.size)
+    }
+
+    @Test
+    fun aSongIsPickedFromVideosByTheirTitleNotTheirChannel() {
+        val tutor = tutor()
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        val rows = listOf("【カラオケ】終わらない歌/THE BLUE HEARTS | Karaoke Ch • 39K views • 3:09", "The Blue Hearts - Owaranai Uta with lyrics | Fan • 195K views • 3:04")
+        answering("2")
+        assertEquals(1, runBlocking { tutor.pickSong(song, rows, videos = true) })
+        val asked = openAi.asked.single()
+        assertEquals(
+            "Song: Owaranai Uta by THE BLUE HEARTS\n\nVideos:\n1. ${rows[0]}\n2. ${rows[1]}",
+            asked.getJSONArray("input").getJSONObject(0).getString("content")
+        )
+        assertTrue(asked.getString("instructions").contains("its title, not its channel"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        listOf("0", "3", "None").forEach { text ->
+            answering(text)
+            assertNull(text, runBlocking { tutor.pickSong(song, rows, videos = true) })
+        }
     }
 
     @Test

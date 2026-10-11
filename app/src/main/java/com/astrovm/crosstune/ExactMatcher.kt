@@ -39,9 +39,10 @@ internal class ExactMatcher(
     private val apis: ServiceApis = ServiceApis(client, country, ioDispatcher),
     /**
      * The one of [rows], a service's search results as "title | details", that is the song, by its
-     * index; null for none. Asked last, when nothing matches by name: ChatGPT, when signed in.
+     * index; null for none. The last Boolean says the rows are videos anyone put up. Asked last, when
+     * nothing matches by name: ChatGPT, when signed in.
      */
-    private val pick: suspend (MusicMetadata, List<String>) -> Int? = { _, _ -> null }
+    private val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, _, _ -> null }
 ) {
 
     /** What an artist's own Bandcamp page name may add to their name. */
@@ -488,9 +489,10 @@ internal class ExactMatcher(
         // A song that was never released, e.g. one only on SoundCloud, may still be uploaded as a video.
         val videos = searchVideosOnYouTubeMusic(metadata, client)
         theSongsVideo(metadata, videos, watchUrl)?.let { return it }
-        // Last, a song named otherwise there, e.g. in Japanese, is picked from the songs, or from the
-        // videos for one that's only been put up by others, e.g. The Blue Hearts', all at once.
-        return pickedFrom(metadata, playable(items).take(PICK_FROM) + playable(videos).take(PICK_FROM), watchUrl)
+        // Last, a song named otherwise there, e.g. in Japanese, is picked from the songs, then from the
+        // videos for one that's only been put up by others, e.g. The Blue Hearts'.
+        pickedFrom(metadata, playable(items).take(PICK_FROM), watchUrl, videos = false)?.let { return it }
+        return pickedFrom(metadata, playable(videos).take(PICK_FROM), watchUrl, videos = true)
     }
 
     /** The songs or videos among [items] that play, by their id, with their "title | details". */
@@ -501,9 +503,9 @@ internal class ExactMatcher(
     }
 
     /** The one among [songs], as [playable] has them, that [pick] says the song is. */
-    private suspend fun pickedFrom(metadata: MusicMetadata, songs: List<Pair<String, String>>, watchUrl: String): String? {
+    private suspend fun pickedFrom(metadata: MusicMetadata, songs: List<Pair<String, String>>, watchUrl: String, videos: Boolean): String? {
         if (songs.isEmpty()) return null
-        val index = pick(metadata, songs.map { it.second }) ?: return null
+        val index = pick(metadata, songs.map { it.second }, videos) ?: return null
         return songs.getOrNull(index)?.let { watchUrl + it.first }
     }
 

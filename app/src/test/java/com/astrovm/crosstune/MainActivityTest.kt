@@ -1216,6 +1216,23 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongByNameNotThereIsSearchedForWithItsButton() {
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
+        val activity = launch()
+        // A song by name only, e.g. one heard, has nowhere else to open.
+        composeRule.runOnIdle { ViewModelProvider(activity)[MainViewModel::class.java].openNamedSong("Owaranai Uta", "The Blue Hearts") }
+        waitForText(string(R.string.not_found_on, string(R.string.target_deezer)))
+        assertNull(nextStartedActivity())
+
+        // So its button searches where it goes, as it says.
+        click(string(R.string.search_in_destination, string(R.string.target_deezer)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Owaranai%20Uta%20The%20Blue%20Hearts", nextStartedActivity()!!.dataString)
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
     fun someonesOwnPlaylistWithoutItsSongsIsNotSearchedForElsewhere() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
         var askedForAlbum = false

@@ -316,41 +316,51 @@ class ExactMatcherTest {
 
     @Test
     fun aSongNamedOtherwiseOnYouTubeMusicIsPickedFromItsResultsLast() {
-        val asked = mutableListOf<List<String>>()
-        var answer: Int? = 1
-        val matcher = ExactMatcher(fake.client(), "AR", pick = { metadata, rows ->
+        val asked = mutableListOf<Pair<List<String>, Boolean>>()
+        var songAnswer: Int? = 1
+        var videoAnswer: Int? = null
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { metadata, rows, videos ->
             assertEquals("Miki Matsubara", metadata.artist)
-            asked += rows
-            answer
+            asked += rows to videos
+            if (videos) videoAnswer else songAnswer
         })
         val rows = (0..7).map { youTubeMusicRow("真夜中のドア$it", "松原みき • Pocket Park • 5:26", videoId = "door00000$it") }
         val video = youTubeMusicRow("松原みき - 真夜中のドア (歌詞付き)", "Fan • 1M views • 5:26", videoId = "video000000")
         youTubeMusicTabs(songs = listOf(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")) + rows, videos = listOf(video))
         val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
         assertEquals("https://music.youtube.com/watch?v=door000001", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        // Picked among the first six songs and the videos, as "title | details", all at once.
-        assertEquals(listOf((0..5).map { "真夜中のドア$it | 松原みき • Pocket Park • 5:26" } + "松原みき - 真夜中のドア (歌詞付き) | Fan • 1M views • 5:26"), asked)
-        // A video put up by someone else is picked too, for a song only there that way.
-        answer = 6
+        // Picked among the first six songs, as "title | details", and the videos aren't asked about.
+        assertEquals(listOf((0..5).map { "真夜中のドア$it | 松原みき • Pocket Park • 5:26" } to false), asked)
+        // None of the songs, a video put up by someone else is picked, asked apart, for a song only there that way.
+        asked.clear()
+        songAnswer = null
+        videoAnswer = 0
         assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe.copy(title = "Mayonaka no Door")) })
-        // No answer, or one past the songs, is no match.
-        answer = -1
-        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        answer = null
-        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        answer = 7
-        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        assertEquals(listOf(false, true), asked.map { it.second })
+        assertEquals(listOf("松原みき - 真夜中のドア (歌詞付き) | Fan • 1M views • 5:26"), asked.last().first)
+        // No answer, or one past the songs or videos, is no match.
+        listOf(-1 to -1, null to null, 8 to 1).forEach { (song, video) ->
+            songAnswer = song
+            videoAnswer = video
+            assertNull("$song $video", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        }
         // Not asked when there's no song or video to pick from, or a song matches by name.
         asked.clear()
         youTubeMusicTabs(songs = listOf(youTubeMusicRow("Album", "Album • 松原みき", browseId = "MPREb_x")), videos = emptyList())
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
         respond(youTubeMusicPage(youTubeMusicRow("Stay With Me", "Miki Matsubara • Album • 5:26", videoId = "named000000")))
         assertEquals("https://music.youtube.com/watch?v=named000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
-        assertEquals(emptyList<List<String>>(), asked)
+        assertEquals(emptyList<Pair<List<String>, Boolean>>(), asked)
+        // With videos but no songs, only the videos are asked about.
+        youTubeMusicTabs(songs = emptyList(), videos = listOf(video))
+        videoAnswer = 0
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        assertEquals(listOf(true), asked.map { it.second })
         // Nor for an album.
+        asked.clear()
         respond(youTubeMusicPage(*rows.toTypedArray()))
         runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Pocket Park", "Miki Matsubara", type = ItemType.ALBUM)) }
-        assertEquals(emptyList<List<String>>(), asked)
+        assertEquals(emptyList<Pair<List<String>, Boolean>>(), asked)
         // By default nothing is picked.
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
     }

@@ -220,17 +220,29 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
 
     /**
      * Which of [rows], a music service's search results as "title | artist • album • length", is
-     * [song], by its index; null when none is, or it couldn't say.
+     * [song], by its index; null when none is, or it couldn't say. [videos] says the rows are videos
+     * as "title | channel • views • length" instead, put up by anyone.
      */
-    suspend fun pickSong(song: MusicMetadata, rows: List<String>): Int? {
+    suspend fun pickSong(song: MusicMetadata, rows: List<String>, videos: Boolean = false): Int? {
         if (rows.isEmpty()) return null
         // Tried on real YouTube Music results with GPT-6-Luna: 7 of 7 right in about 2.5 s, e.g.
         // Stay With Me as 真夜中のドア〜stay with me, and none for Sam Smith's among Miki Matsubara's.
-        val reply = chatGpt.ask(
-            "You match songs across music services. The user sends a song, as title and artist, and a numbered list of search results from another service, each as title | artist • album • length. Pick the result that is this same song by this same artist: titles may be written in another script or language, or with a subtitle. Prefer the original recording over remixes, covers, live or later versions, unless the song's own title names one. Reply with only the number, or 0 when none is this song.",
-            "Song: ${song.title} by ${song.artist}\n\nResults:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
-            effort = "low"
-        )
+        // Videos are asked apart: among songs, a video's uploader read as its artist and it said none
+        // for The Blue Hearts' Owaranai Uta 4 times in 6; asked apart, 15 of 16 picked its upload, and the
+        // other a lyrics video of the same recording, with none for a made-up song.
+        val reply = if (videos) {
+            chatGpt.ask(
+                "You match songs to videos. The user sends a song, as title and artist, and a numbered list of YouTube videos, each as title | channel • views • length. Anyone may have put a video up, so its title, not its channel, says whose song it is; it may be written in another script or language. Pick the video that plays this song's original recording by this artist, e.g. with lyrics on screen. Leave out covers, karaoke, instrumentals, live and other versions, unless the song's own title names one. Reply with only the number, or 0 when none is.",
+                "Song: ${song.title} by ${song.artist}\n\nVideos:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
+                effort = "low"
+            )
+        } else {
+            chatGpt.ask(
+                "You match songs across music services. The user sends a song, as title and artist, and a numbered list of search results from another service, each as title | artist • album • length. Pick the result that is this same song by this same artist: titles may be written in another script or language, or with a subtitle. Prefer the original recording over remixes, covers, live or later versions, unless the song's own title names one. Reply with only the number, or 0 when none is this song.",
+                "Song: ${song.title} by ${song.artist}\n\nResults:\n${rows.mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n")}",
+                effort = "low"
+            )
+        }
         val number = (reply as? ChatGptReply.Answer)?.text?.trim()?.takeWhile(Char::isDigit)?.toIntOrNull() ?: return null
         return (number - 1).takeIf { it in rows.indices }
     }
