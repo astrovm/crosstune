@@ -267,6 +267,7 @@
     <string name="lyrics_chords">Akorlar</string>
     <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>
+    <string name="setting_untranslated">Çevirme</string>
     <string name="translate_into_app_language">Uygulama dili</string>
     <string name="setting_translation_server">Çeviriler</string>
     <string name="lyrics_study_line">Bu satırı çalış</string>

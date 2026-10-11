@@ -267,6 +267,7 @@
     <string name="lyrics_chords">Akordy</string>
     <string name="lyrics_capo">Kapodaster %1$d</string>
     <string name="setting_translate_into">Tłumacz na</string>
+    <string name="setting_untranslated">Nie tłumacz</string>
     <string name="translate_into_app_language">Język aplikacji</string>
     <string name="setting_translation_server">Tłumaczenia z</string>
     <string name="lyrics_study_line">Ucz się tego wiersza</string>

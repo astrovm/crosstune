@@ -267,6 +267,7 @@
     <string name="lyrics_chords">Accords</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Traduire en</string>
+    <string name="setting_untranslated">Ne pas traduire</string>
     <string name="translate_into_app_language">Langue de l\'appli</string>
     <string name="setting_translation_server">Traductions par</string>
     <string name="lyrics_study_line">Étudier cette ligne</string>

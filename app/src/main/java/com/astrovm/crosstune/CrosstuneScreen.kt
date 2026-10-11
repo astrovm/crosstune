@@ -248,6 +248,8 @@ internal data class ScreenActions(
     val onChatGptModelChange: (String) -> Unit = {},
     /** One of the app's languages to translate into, or null for the app's own. */
     val onTranslateIntoChange: (String?) -> Unit = {},
+    /** The languages, by code, whose songs aren't translated. */
+    val onUntranslatedChange: (Set<String>) -> Unit = {},
     val onSignInWithChatGpt: () -> Unit = {},
     val onCancelChatGptSignIn: () -> Unit = {},
     val onSignOutOfChatGpt: () -> Unit = {},

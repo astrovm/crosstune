@@ -3795,6 +3795,25 @@ class MainActivityTest {
     }
 
     @Test
+    fun songsInLanguagesPickedAreLeftUntranslated() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_untranslated)).performScrollTo().performClick()
+        // As many as wanted, with the list staying open.
+        composeRule.onNodeWithText("English").performClick()
+        composeRule.onNodeWithText("Français").performClick()
+        composeRule.waitForIdle()
+        assertEquals(setOf("en", "fr"), prefs().getStringSet("untranslated_languages", null))
+        // Picked again, one is translated again.
+        composeRule.onNodeWithText("English").performClick()
+        composeRule.waitForIdle()
+        assertEquals(setOf("fr"), prefs().getStringSet("untranslated_languages", null))
+        // Beside the setting, the ones picked, as well as in the list.
+        composeRule.onAllNodesWithText("Français").assertCountEquals(2)
+        composeRule.onAllNodesWithText("English").assertCountEquals(1)
+    }
+
+    @Test
     fun exactMatchOpensDirectLinkAndFallsBackToSearch() {
         fake.handler = { request ->
             when (request.url.host) {

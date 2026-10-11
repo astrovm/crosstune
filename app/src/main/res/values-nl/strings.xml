@@ -267,6 +267,7 @@
     <string name="lyrics_chords">Akkoorden</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Vertalen naar</string>
+    <string name="setting_untranslated">Niet vertalen</string>
     <string name="translate_into_app_language">App-taal</string>
     <string name="setting_translation_server">Vertalingen van</string>
     <string name="lyrics_study_line">Deze regel leren</string>

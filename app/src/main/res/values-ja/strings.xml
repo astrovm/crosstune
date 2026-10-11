@@ -268,6 +268,7 @@
     <string name="lyrics_chords">コード</string>
     <string name="lyrics_capo">カポ %1$d</string>
     <string name="setting_translate_into">翻訳先</string>
+    <string name="setting_untranslated">翻訳しない</string>
     <string name="translate_into_app_language">アプリの言語</string>
     <string name="setting_translation_server">翻訳の提供元</string>
     <string name="lyrics_study_line">この行を学ぶ</string>

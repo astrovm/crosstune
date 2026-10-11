@@ -267,6 +267,7 @@
     <string name="lyrics_chords">Acordes</string>
     <string name="lyrics_capo">Capotraste %1$d</string>
     <string name="setting_translate_into">Traduzir para</string>
+    <string name="setting_untranslated">Não traduzir</string>
     <string name="translate_into_app_language">Idioma do app</string>
     <string name="setting_translation_server">Traduções de</string>
     <string name="lyrics_study_line">Estudar esta linha</string>

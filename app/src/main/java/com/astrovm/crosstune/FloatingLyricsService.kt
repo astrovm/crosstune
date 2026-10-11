@@ -93,6 +93,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     /** Where in the window the sliders are, whose drags are theirs, not the window's. */
     private var sliders: Rect? = null
+    /** Where in the window the words are while their sides show, whose bottom is dragged to make them taller. */
+    private var words: Rect? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -188,7 +190,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                             onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
-                            onSlidersAt = { sliders = it }
+                            onSlidersAt = { sliders = it },
+                            onWordsAt = { words = it }
                         )
                     )
                 }
@@ -246,7 +249,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     /**
      * Holds the words and moves their window with them: a finger dragged moves it, one dragged from
-     * either side makes it wider or narrower, and two pinched make the words bigger or smaller. It
+     * either side makes it wider or narrower, one dragged from their bottom, while it shows, taller or
+     * shorter, and two pinched make the words bigger or smaller. It
      * goes by where fingers are on screen, since the window, and everything in it, moves under them.
      * Taps, and drags on the sliders, are left to the words.
      */
@@ -254,10 +258,14 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
         private val edge = EDGE_DP * resources.displayMetrics.density
         private val narrowest = (NARROWEST_DP * resources.displayMetrics.density).toInt()
+        private val shortest = (SHORTEST_DP * resources.displayMetrics.density).toInt()
+        /** How far under the words their bottom can still be caught, before the buttons there. */
+        private val below = BELOW_DP * resources.displayMetrics.density
         private var gesture = Gesture.NONE
         private var downX = 0f
         private var downY = 0f
         private var from = Rect()
+        private var tallFrom = 0
         private var pinchFrom = 0f
         private var scaleFrom = 1f
 
@@ -267,10 +275,13 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     downX = event.rawX
                     downY = event.rawY
                     from = Rect(params.x, params.y, params.x + params.width, params.y)
+                    val words = words
+                    tallFrom = words?.height() ?: 0
                     gesture = when {
                         sliders?.contains(event.x.toInt(), event.y.toInt()) == true -> Gesture.SLIDER
                         event.x < edge -> Gesture.LEFT
                         event.x > width - edge -> Gesture.RIGHT
+                        words != null && event.y in words.bottom - edge..words.bottom + below -> Gesture.BOTTOM
                         else -> Gesture.NONE
                     }
                 }
@@ -348,6 +359,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     params.width = from.right - params.x
                 }
                 Gesture.RIGHT -> params.width = (from.width() + dx).coerceIn(narrowest, screen.widthPixels - from.left)
+                // The window fits what's in it, so it's the words that are made taller, and it follows.
+                Gesture.BOTTOM -> {
+                    val tall = (tallFrom + dy).coerceIn(shortest, maxOf(shortest, screen.heightPixels - params.y))
+                    host.update(host.state.floating.copy(height = tall), save = false)
+                    return
+                }
                 else -> {
                     params.x = (from.left + dx).coerceIn(0, maxOf(0, screen.widthPixels - params.width))
                     params.y = (from.top + dy).coerceIn(0, maxOf(0, screen.heightPixels - height))
@@ -357,7 +374,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
     }
 
-    private enum class Gesture { NONE, MOVE, LEFT, RIGHT, PINCH, SLIDER }
+    private enum class Gesture { NONE, MOVE, LEFT, RIGHT, BOTTOM, PINCH, SLIDER }
 
     override fun onDestroy() {
         hideUnlock()
@@ -382,6 +399,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         /** How far in from either side a drag makes the words wider or narrower rather than moving them. */
         private const val EDGE_DP = 24
         private const val NARROWEST_DP = 160
+        private const val SHORTEST_DP = 48
+        private const val BELOW_DP = 6
         /**
          * Room either side of the words, until they're first resized: enough to keep their sides,
          * dragged to resize, clear of the edges, where a swipe is Android's back gesture.

@@ -268,6 +268,7 @@
     <string name="lyrics_chords">Accordi</string>
     <string name="lyrics_capo">Capotasto %1$d</string>
     <string name="setting_translate_into">Traduci in</string>
+    <string name="setting_untranslated">Non tradurre</string>
     <string name="translate_into_app_language">Lingua dell\'app</string>
     <string name="setting_translation_server">Traduzioni da</string>
     <string name="lyrics_study_line">Studia questa riga</string>

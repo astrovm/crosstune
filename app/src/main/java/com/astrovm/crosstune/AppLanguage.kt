@@ -28,6 +28,9 @@ internal object AppLanguage {
         "id", "hi", "ja", "ko", "zh-CN", "zh-TW"
     )
 
+    /** The languages, one each, whose songs can be left untranslated: the app's. */
+    val untranslatedTags = listOf("en", "es", "pt", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh")
+
     /** What lyrics are translated into for [tag]: itself, or its language's first, e.g. "es-AR" for one saved as "es"; null for none. */
     fun translationTag(tag: String): String? {
         if (tag in translationTags) return tag
@@ -42,7 +45,7 @@ internal object AppLanguage {
         "en" to "🇺🇸", "es" to "🇦🇷", "pt-BR" to "🇧🇷", "de" to "🇩🇪", "fr" to "🇫🇷", "it" to "🇮🇹", "nl" to "🇳🇱", "pl" to "🇵🇱",
         "ru" to "🇷🇺", "tr" to "🇹🇷", "id" to "🇮🇩", "hi" to "🇮🇳", "ja" to "🇯🇵", "ko" to "🇰🇷", "zh-CN" to "🇨🇳",
         "en-US" to "🇺🇸", "en-GB" to "🇬🇧", "es-AR" to "🇦🇷", "es-ES" to "🇪🇸", "es-MX" to "🇲🇽", "pt-PT" to "🇵🇹",
-        "fr-FR" to "🇫🇷", "fr-CA" to "🇨🇦", "zh-TW" to "🇹🇼"
+        "fr-FR" to "🇫🇷", "fr-CA" to "🇨🇦", "zh-TW" to "🇹🇼", "pt" to "🇧🇷"
     )
 
     /** The flag shown by the language [tag], or null for one without. */

@@ -101,7 +101,8 @@ class ListeningTest {
         // Unit tests have no GPU or native library to draw visuals with.
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
+        // Visuals are on from the start; the tests about turning them on start with them off.
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false)
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -125,6 +126,7 @@ class ListeningTest {
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = { OutputMixTap.open() }
+        MainActivity.lyricsLanguageFactory = null
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
     }
@@ -958,6 +960,15 @@ class ListeningTest {
     }
 
     @Test
+    fun visualsMoveBehindTheWordsFromTheStart() {
+        prefs().edit().remove("visuals").commit()
+        demoWords(FakeHearing())
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        assertTrue(described(string(R.string.visuals_options)))
+        assertTrue(lit("Demo one"))
+    }
+
+    @Test
     fun onlyTheVisualsCanShowUntilATapBringsTheWordsBack() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
@@ -1340,6 +1351,38 @@ class ListeningTest {
     private fun controllerModel() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
 
     private val sliders = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
+
+    @Test
+    fun floatingWordsAreMadeTallerOrShorterFromTheirBottomWhileItShows() {
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        fun words() = composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).fetchSemanticsNode().boundsInWindow
+        fun touch(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, view.width / 2f, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        fun drag(from: Float, to: Float) {
+            touch(MotionEvent.ACTION_DOWN, from)
+            touch(MotionEvent.ACTION_MOVE, to)
+            touch(MotionEvent.ACTION_UP, to)
+            composeRule.waitForIdle()
+        }
+        val fits = words().height
+        // Without the buttons out, their bottom is no different: dragged, they move.
+        val top = (view.layoutParams as WindowManager.LayoutParams).y
+        drag(words().bottom - 4f, words().bottom + 100f)
+        assertEquals(top + 104, (view.layoutParams as WindowManager.LayoutParams).y)
+        assertEquals(fits, words().height, 1f)
+
+        // With them out, it's dragged down to make them taller, kept for next time.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        drag(words().bottom - 4f, words().bottom + 200f)
+        assertEquals(fits + 204, words().height, 2f)
+        assertEquals(fits + 204, prefs().getInt("floating_height", -1).toFloat(), 2f)
+        assertEquals(top + 104, (view.layoutParams as WindowManager.LayoutParams).y)
+        // Up, they're shorter, but never shorter than the words need.
+        drag(words().bottom - 4f, words().bottom - 10_000f)
+        assertEquals(fits, words().height, 1f)
+        floating.destroy()
+    }
 
     @Test
     fun floatingWordsAreChangedOnThemselves() {
@@ -2084,6 +2127,30 @@ class ListeningTest {
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cpt-BR" in it })
+    }
+
+    @Test
+    fun songsInALanguageTheUserReadsArentTranslated() {
+        var language = "en"
+        MainActivity.lyricsLanguageFactory = { LyricsLanguage { language } }
+        prefs().edit().putBoolean("lyrics_translation", true).putStringSet("untranslated_languages", setOf("en", "fr")).commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitForText("Stars")
+        composeRule.waitForIdle()
+        assertFalse(shown("[Stars]"))
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { "api.mymemory.translated.net" in it })
+        // One in a language not picked is.
+        language = "es"
+        controllerModel().setUntranslated(setOf("en"))
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+    }
+
+    @Test
+    fun aSongWhoseLanguageCantBeToldIsTranslated() {
+        MainActivity.lyricsLanguageFactory = { LyricsLanguage { null } }
+        prefs().edit().putBoolean("lyrics_translation", true).putStringSet("untranslated_languages", setOf("en")).commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
     }
 
     @Test

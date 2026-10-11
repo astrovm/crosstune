@@ -267,6 +267,7 @@
     <string name="lyrics_chords">कॉर्ड्स</string>
     <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>
+    <string name="setting_untranslated">अनुवाद न करें</string>
     <string name="translate_into_app_language">ऐप की भाषा</string>
     <string name="setting_translation_server">अनुवाद यहां से</string>
     <string name="lyrics_study_line">यह लाइन सीखें</string>

@@ -341,6 +341,8 @@ internal data class Learning(
     val chatGptTranslation: Boolean = true,
     /** The language picked to translate into, as Settings lists it; null for the app's own. */
     val into: String? = null,
+    /** The languages, by code, e.g. "en", the user reads, whose songs aren't translated. */
+    val untranslated: Set<String> = emptySet(),
     /** The script the words are in, when it reads differently from how it looks. */
     val script: Script? = null,
     /** How each line reads, once worked out. */
@@ -372,7 +374,7 @@ internal data class Learning(
     val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, wordsAs = wordsAs)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, script, wordsAs = wordsAs)
 }
 
 /** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
@@ -459,7 +461,9 @@ internal class MainViewModel(
     /** The time of day, for when saved lines are next practised. */
     private val wallClock: () -> Long = System::currentTimeMillis,
     /** Where a song's chords come from; nullable so tests need no chord sites. */
-    private val chordFinder: ChordFinder? = null
+    private val chordFinder: ChordFinder? = null,
+    /** Which language a song's words are in; nullable so tests need none. */
+    private val lyricsLanguage: LyricsLanguage? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -501,18 +505,19 @@ internal class MainViewModel(
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
-            visuals = preferences.getBoolean(KEY_VISUALS, false),
+            visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             canFollowApps = playback?.hasAccess() == true,
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             chords = ChordsState(on = preferences.getBoolean(KEY_CHORDS, false)),
             learning = Learning(
-                readings = preferences.getBoolean(KEY_READINGS, false),
+                readings = preferences.getBoolean(KEY_READINGS, true),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
+                untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
             ),
             floating = FloatingOptions(
@@ -524,6 +529,7 @@ internal class MainViewModel(
                 left = preferences.getInt(KEY_FLOATING_LEFT, -1),
                 top = preferences.getInt(KEY_FLOATING_TOP, -1),
                 width = preferences.getInt(KEY_FLOATING_WIDTH, -1),
+                height = preferences.getInt(KEY_FLOATING_HEIGHT, -1),
                 visuals = preferences.getBoolean(KEY_FLOATING_VISUALS, false)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
@@ -1703,6 +1709,7 @@ internal class MainViewModel(
             putInt(KEY_FLOATING_LEFT, options.left)
             putInt(KEY_FLOATING_TOP, options.top)
             putInt(KEY_FLOATING_WIDTH, options.width)
+            putInt(KEY_FLOATING_HEIGHT, options.height)
             putBoolean(KEY_FLOATING_VISUALS, options.visuals)
         }
     }
@@ -2154,6 +2161,11 @@ internal class MainViewModel(
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
+                // A song in a language the user reads needs none, line by line.
+                if (learning.untranslated.isNotEmpty() && lyricsLanguage?.of(lines) in learning.untranslated) {
+                    uiState = uiState.copy(learning = uiState.learning.copy(translations = lines.map { null }, translating = false))
+                    return@launch
+                }
                 val language = translateInto()
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
@@ -2248,6 +2260,16 @@ internal class MainViewModel(
     /** The language lyrics and words are translated into: the one picked, or else the app's. */
     private fun translateInto(): String =
         uiState.learning.into?.let { Translator.languageOf(java.util.Locale.forLanguageTag(it)) } ?: translationLanguage()
+
+    /** Leaves songs in [languages], of [AppLanguage.untranslatedTags], untranslated from now on. */
+    fun setUntranslated(languages: Set<String>) {
+        val untranslated = languages.filter { it in AppLanguage.untranslatedTags }.toSet()
+        preferences.edit { putStringSet(KEY_UNTRANSLATED, untranslated) }
+        // The song shown may be in one of them now, or not any more.
+        translationJob?.cancel()
+        uiState = uiState.copy(learning = uiState.learning.copy(untranslated = untranslated, translations = emptyList(), translating = false, translationFailed = false))
+        learn()
+    }
 
     /** Translates into [tag], one of [AppLanguage.translationTags], from now on, or into the app's own with null. */
     fun setTranslateInto(tag: String?) {
@@ -2677,12 +2699,14 @@ internal class MainViewModel(
         /** Where a song's explanation, which is no line's, says it's from. */
         const val SONG = -1
         private const val KEY_TRANSLATE_INTO = "translate_into"
+        private const val KEY_UNTRANSLATED = "untranslated_languages"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"
         private const val KEY_FLOATING_PREVIOUS_LINE = "floating_previous_line"
         private const val KEY_FLOATING_LEFT = "floating_left"
         private const val KEY_FLOATING_WIDTH = "floating_width"
+        private const val KEY_FLOATING_HEIGHT = "floating_height"
         private const val KEY_FLOATING_VISUALS = "floating_visuals"
         private const val KEY_FLOATING_NEXT_LINE = "floating_next_line"
         private const val KEY_FLOATING_LOCKED = "floating_locked"
