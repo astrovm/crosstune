@@ -37,8 +37,12 @@ class FakeSpotify : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        requestedUrls += request.url.toString()
-        requestBodies += bodyOf(request)
+        // Both at once, so a body stays at its URL's place when lookups run at the same time.
+        val body = bodyOf(request)
+        synchronized(this) {
+            requestedUrls += request.url.toString()
+            requestBodies += body
+        }
         request.headers.forEach { (name, value) -> requestHeaders += name to value }
         if (delayMillis > 0) Thread.sleep(delayMillis)
         return handler(request)

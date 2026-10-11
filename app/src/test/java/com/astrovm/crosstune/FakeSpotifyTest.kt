@@ -38,4 +38,26 @@ class FakeSpotifyTest {
         assertEquals("", fake.requestBodies.last())
         assertEquals("videos", seen)
     }
+
+    @Test
+    fun eachRequestsBodyIsAtItsUrlsPlaceEvenWhenRequestsRunAtOnce() {
+        val fake = FakeSpotify()
+        val client = fake.client()
+        val start = CountDownLatch(1)
+        val threads = (0 until 8).map { t ->
+            thread {
+                start.await()
+                repeat(200) { n ->
+                    val id = "$t-$n"
+                    client.newCall(Request.Builder().url("https://music.youtube.com/next?id=$id").post(id.toRequestBody()).build()).execute().close()
+                }
+            }
+        }
+        start.countDown()
+        threads.forEach { it.join(30_000) }
+
+        assertEquals(1_600, fake.requestedUrls.size)
+        // A test finds a request by its URL, then reads its body at the same place.
+        fake.requestedUrls.forEachIndexed { i, url -> assertEquals(url, url.substringAfter("id="), fake.requestBodies[i]) }
+    }
 }
