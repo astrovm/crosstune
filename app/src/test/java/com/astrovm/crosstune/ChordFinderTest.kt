@@ -549,6 +549,19 @@ var NMAX=${files.size - 1};
         fake.requestedUrls.clear()
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道", "Mariya Takeuchi"), japanese))
         assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("p") != null })
+
+        // However many songs the singer has, no more than eight pages of them are looked through.
+        fake.handler = { request ->
+            val url = request.url
+            if (url.encodedPath == "/search.php" && url.host == "www.ufret.jp") {
+                FakeSpotify.html(request, if (url.queryParameter("p") != null) (1..30).joinToString("") { uFretResult(100 + it, "曲$it", "竹内まりや") } else "")
+            } else {
+                answer(request, sheets)
+            }
+        }
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Lonely Hearts", "竹内まりや"), japanese))
+        assertEquals((1..8).map { "$it" }, fake.requestedUrls.mapNotNull { it.toHttpUrl().queryParameter("p") })
     }
 
     @Test
