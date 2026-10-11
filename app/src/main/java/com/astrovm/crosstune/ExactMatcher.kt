@@ -121,7 +121,7 @@ internal class ExactMatcher(
      */
     private class Answer(val url: String?, val toPick: ToPick? = null)
 
-    private class ToPick(val metadata: MusicMetadata, val songs: List<Pair<String, String>>, val videos: List<Pair<String, String>>, val watchUrl: String)
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthMs: Long?)
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
@@ -159,8 +159,8 @@ internal class ExactMatcher(
     private suspend fun picked(toPick: ToPick): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
-                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false)
-                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true)
+                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthMs)
+                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthMs)
             )
         } ?: return Match.Failed
         return url.url?.let(Match::Found) ?: Match.Missing
@@ -548,21 +548,23 @@ internal class ExactMatcher(
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl))
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthMs))
     }
 
-    /** The songs or videos among [items] that play, by their id, with their "title | details". */
-    private fun playable(items: List<JSONObject>): List<Pair<String, String>> = items.mapNotNull { item ->
-        val id = item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null } ?: return@mapNotNull null
-        val columns = item.optJSONArray("flexColumns")?.objects()?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
-        id to "${columns.getOrNull(0).orEmpty()} | ${columns.getOrNull(1).orEmpty()}"
-    }
+    /** The songs or videos among [items] that play. */
+    private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
 
-    /** The one among [songs], as [playable] has them, that [pick] says the song is. */
-    private suspend fun pickedFrom(metadata: MusicMetadata, songs: List<Pair<String, String>>, watchUrl: String, videos: Boolean): String? {
-        if (songs.isEmpty()) return null
-        val index = pick(metadata, songs.map { it.second }, videos) ?: return null
-        return songs.getOrNull(index)?.let { watchUrl + it.first }
+    /**
+     * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
+     * are anyone's, and may say anything, so one far from the song's [lengthMs] isn't taken: a few
+     * seconds for a song, more for a video, which may open with more.
+     */
+    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthMs: Long?): String? {
+        if (rows.isEmpty()) return null
+        val index = pick(metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
+        val row = rows.getOrNull(index) ?: return null
+        val off = lengthMs?.let { wanted -> row.lengthMs?.let { kotlin.math.abs(it - wanted) } } ?: 0L
+        return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
 
     /**
@@ -847,6 +849,9 @@ internal class ExactMatcher(
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
+
+        /** How far a video ChatGPT picks may be from the song's length, as a video may open or end with more. */
+        const val PICKED_VIDEO_LENGTH_MS = 45_000L
 
         /** Words a video's title has when it's another version of the song, or not the song at all. */
         private val VERSION_WORDS = setOf(

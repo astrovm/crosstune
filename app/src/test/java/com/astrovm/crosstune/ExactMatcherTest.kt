@@ -500,6 +500,28 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aPickFarFromTheSongsLengthIsntTaken() {
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        var answer = 0
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> answer })
+        fun picks(songs: List<String> = emptyList(), videos: List<String> = emptyList()): String? {
+            namesAndTabs(songs = songs, videos = videos, apple = mapOf("AR" to appleSong("Stay With Me", "Miki Matsubara", 312_000)))
+            return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        // A song a few seconds off is it; one far off, whatever its title says, isn't.
+        assertEquals("https://music.youtube.com/watch?v=door0000000", picks(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 5:18", videoId = "door0000000"))))
+        assertNull(picks(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 3:00", videoId = "door0000000"))))
+        // A video may run longer, but not much.
+        assertEquals("https://music.youtube.com/watch?v=video000000", picks(videos = listOf(youTubeMusicRow("真夜中のドア MV", "Fan • 1K views • 5:50", videoId = "video000000"))))
+        assertNull(picks(videos = listOf(youTubeMusicRow("真夜中のドア 1 hour loop", "Fan • 1K views • 1:00:00", videoId = "video000000"))))
+        // Without a length to go by, it's taken.
+        namesAndTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 3:00", videoId = "door0000000")))
+        assertEquals("https://music.youtube.com/watch?v=door0000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) })
+        answer = 3
+        assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
     fun chatGptHasItsOwnWhileToPickAfterTheSearches() {
         val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
         youTubeMusicTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 5:26", videoId = "door0000000")), videos = emptyList())
