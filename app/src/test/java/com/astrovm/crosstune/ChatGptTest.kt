@@ -105,7 +105,7 @@ class ChatGptTest {
     }
 
     @Test
-    fun signedOutTheSessionEndsAndSigningInAgainReusesTheRegistration() {
+    fun signedOutTheSessionEndsAndAnotherAccountCanSignIn() {
         val chatGpt = chatGpt()
         signIn(chatGpt)
         val host = openAi.authorize.queryParameter("ext_agent_host_id")
@@ -114,20 +114,24 @@ class ChatGptTest {
         assertEquals("token=refresh-1&token_type_hint=refresh_token&client_id=oaiapp_1", fake.requestBodies[revoke])
         assertNull(runBlocking { chatGpt.email() })
         assertNull(runBlocking { chatGpt.accessToken() })
+        assertFalse(saved().has("client_id"))
 
-        // The browser may not say the registration again; it's the one kept.
-        assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}" })
-        assertEquals("oaiapp_1", openAi.authorize.queryParameter("client_id"))
-        assertNull(openAi.authorize.queryParameter("agent_name_hint"))
+        // Signing in again starts afresh, hinting at no account, so another one can sign in, with a
+        // registration of its own; this phone is still the same one.
+        openAi.tokenAnswer = { form -> 200 to openAi.tokens(openAi.idToken(audience = form.getValue("client_id"), subject = "user-2"), access = "access-2") }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}&client_id=oaiapp_2" })
+        assertEquals("dynamic_agent_client", openAi.authorize.queryParameter("client_id"))
+        assertTrue(openAi.authorize.queryParameter("agent_name_hint")!!.isNotEmpty())
         assertEquals(host, openAi.authorize.queryParameter("ext_agent_host_id"))
-        assertEquals("ana@example.com", openAi.authorize.queryParameter("login_hint"))
-        // Signed out, the account's free to change, so it isn't hinted at.
+        assertNull(openAi.authorize.queryParameter("login_hint"))
         assertNull(openAi.authorize.queryParameter("id_token_hint"))
-        assertEquals("oaiapp_1", tokenForms().last()["client_id"])
+        assertEquals("oaiapp_2", saved().getString("client_id"))
+        assertEquals("access-2", runBlocking { chatGpt.accessToken() })
 
-        // Signed in again without signing out, it is.
+        // Signed in again without signing out, the account is hinted at, and kept to.
         signIn(chatGpt) { "code=c&state=${it.queryParameter("state")}" }
         assertTrue(openAi.authorize.queryParameter("id_token_hint")!!.isNotEmpty())
+        assertEquals("oaiapp_2", openAi.authorize.queryParameter("client_id"))
     }
 
     @Test
@@ -299,6 +303,31 @@ class ChatGptTest {
     }
 
     @Test
+    fun aRenewalThatLeavesTheRefreshTokenKeepsIt() {
+        val chatGpt = chatGpt()
+        signIn(chatGpt)
+        clock += 60 * 60 * 1000
+        openAi.tokenAnswer = { 200 to """{"access_token":"access-3","expires_in":3600}""" }
+        assertEquals("access-3", runBlocking { chatGpt.accessToken() })
+        assertEquals("refresh-1", saved().getString("refresh_token"))
+    }
+
+    @Test
+    fun aTokenTurnedDownIsRenewedAndAskedWithOnceMore() {
+        val chatGpt = signedIn()
+        var turnedDown = 1
+        openAi.reply = { if (turnedDown-- > 0) 401 to "" else 200 to FakeOpenAi.stream("Hello") }
+        assertEquals(ChatGptReply.Answer("Hello"), runBlocking { chatGpt.ask("Be brief.", "Say hello") })
+        assertEquals("refresh_token", tokenForms().last()["grant_type"])
+        assertEquals("access-2", runBlocking { chatGpt.accessToken() })
+        // Turned down again with the new one, it's no answer, not asked on and on.
+        val renewals = tokenForms().size
+        openAi.reply = { 401 to "" }
+        assertEquals(ChatGptReply.Failed, runBlocking { chatGpt.ask("Be brief.", "Say hello") })
+        assertEquals(renewals + 1, tokenForms().size)
+    }
+
+    @Test
     fun aDamagedFileStartsOver() {
         file.writeText("{not json")
         val chatGpt = chatGpt()
@@ -465,8 +494,15 @@ class ChatGptTest {
         answering("He calls her a city woman.")
         runBlocking { tutor.explain(song, lines, 1, "en") {} }
         assertTrue(openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What the song is about:\nA man dazzled by a woman of the city."))
-        // Without the models, there's no model to ask.
+        // Opened again with the models not listed, e.g. offline, what the model asked last answered is
+        // still there, with nothing asked.
         openAi.models = { 500 to "" }
+        val askedBefore = openAi.asked.size
+        assertEquals(ChatGptReply.Answer("A man dazzled by a woman of the city."), runBlocking { tutor(chatGpt()).explainSong(song, lines, "en") {} })
+        assertEquals(askedBefore, openAi.asked.size)
+        // Signed in afresh, no model's been asked, so there's none to ask.
+        runBlocking { chatGpt().signOut() }
+        signIn(chatGpt())
         assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explainSong(song.copy(title = "Other"), lines, "en") {} })
         assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).explain(song.copy(title = "Other"), lines, 0, "en") {} })
     }
@@ -544,9 +580,10 @@ class ChatGptTest {
         answering("[\"Hi\"]")
         assertEquals(listOf("Hi"), runBlocking { tutor.translate(listOf("Hola"), "en") })
         assertEquals(listOf("gpt-6.1-sol", "gpt-6-terra"), openAi.asked.map { it.getString("model") })
-        // Without the models, there's no model to ask.
+        // Without the models listed, the one asked last is asked again.
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+        assertEquals(listOf("Hi"), runBlocking { tutor(chatGpt()).translate(listOf("Adiós"), "en") })
+        assertEquals("gpt-6-terra", openAi.asked.last().getString("model"))
     }
 
     @Test
@@ -814,8 +851,11 @@ class ChatGptTest {
         // Kept for the artist, whichever of their songs.
         assertEquals(reply, runBlocking { tutor.aboutArtist(song.copy(title = "Septentrion"), "en") {} })
         assertEquals(1, openAi.asked.size)
+        // Without the models listed, the one asked last is asked again.
         openAi.models = { 500 to "" }
-        assertEquals(ChatGptReply.Failed, runBlocking { tutor(chatGpt()).aboutArtist(song.copy(artist = "Other"), "en") {} })
+        runBlocking { tutor(chatGpt()).aboutArtist(song.copy(artist = "Other"), "en") {} }
+        assertEquals(2, openAi.asked.size)
+        assertEquals(asked.getString("model"), openAi.asked.last().getString("model"))
     }
 
     @Test

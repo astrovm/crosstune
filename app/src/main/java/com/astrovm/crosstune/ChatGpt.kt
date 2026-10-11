@@ -103,10 +103,19 @@ internal class ChatGpt(
         }
     }
 
-    /** The model asked: the one picked, while the account offers it, or else [defaultModel]'s. */
+    /**
+     * The model asked: the one picked, while the account offers it, or else [defaultModel]'s. When the
+     * account's models can't be listed, e.g. offline, it's the one asked last, so what it answered
+     * before, kept by the model that answered, is still there.
+     */
     suspend fun model(): String? {
-        val models = models() ?: return null
-        return models.firstOrNull { it.slug == picked }?.slug ?: defaultModel(models)?.slug
+        val models = models() ?: return tokens.withLock { load().takeIf { it.has(ACCESS_TOKEN) }?.optString(LAST_MODEL)?.ifEmpty { null } }
+        val model = models.firstOrNull { it.slug == picked }?.slug ?: defaultModel(models)?.slug ?: return null
+        tokens.withLock {
+            val account = load()
+            if (account.has(ACCESS_TOKEN) && account.optString(LAST_MODEL) != model) write(account.put(LAST_MODEL, model))
+        }
+        return model
     }
 
     /**
@@ -119,9 +128,12 @@ internal class ChatGpt(
         webSearch: Boolean = false,
         /** How hard it thinks before answering, "low" for quick ones, or the model's own when null. */
         effort: String? = null,
+        /** Set when asked again with a renewed token, after the last one was turned down. */
+        renewed: Boolean = false,
         onText: (String) -> Unit = {}
     ): ChatGptReply {
-        val token = accessToken() ?: return ChatGptReply.Failed
+        val token = accessToken(renew = renewed) ?: return ChatGptReply.Failed
+        var turnedDown = false
         val reply = try {
             val model = model() ?: return ChatGptReply.Failed
             val body = JSONObject()
@@ -140,6 +152,8 @@ internal class ChatGpt(
             withContext(ioDispatcher) {
                 answers.newCall(request).executeAsync().use { response ->
                     when {
+                        // Ended early, e.g. signed out elsewhere, the token's renewed, once.
+                        response.code == 401 && !renewed -> ChatGptReply.Failed.also { turnedDown = true }
                         response.code == 429 -> ChatGptReply.LimitReached
                         // A tool the account may not use is refused, with a 400, before anything's written.
                         response.code == 400 && webSearch -> null
@@ -151,8 +165,9 @@ internal class ChatGpt(
         } catch (_: IOException) {
             ChatGptReply.Failed
         }
+        if (turnedDown) return ask(instructions, input, webSearch, effort, renewed = true, onText = onText)
         // Not allowed to search the web, it answers from what it knows.
-        return reply ?: ask(instructions, input, webSearch = false, effort = effort, onText = onText)
+        return reply ?: ask(instructions, input, webSearch = false, effort = effort, onText = onText, renewed = renewed)
     }
 
     /**
@@ -275,10 +290,10 @@ internal class ChatGpt(
      * when it couldn't be renewed, maybe offline. Renewing won't ever happen twice at once, as each
      * renewal replaces the token it was renewed with.
      */
-    suspend fun accessToken(): String? = tokens.withLock {
+    suspend fun accessToken(renew: Boolean = false): String? = tokens.withLock {
         val account = load()
         if (!account.has(ACCESS_TOKEN)) return null
-        if (account.getLong(EXPIRES_AT) - now() > RENEW_BEFORE_MS) return account.getString(ACCESS_TOKEN)
+        if (!renew && account.getLong(EXPIRES_AT) - now() > RENEW_BEFORE_MS) return account.getString(ACCESS_TOKEN)
         val form = FormBody.Builder()
             .add("grant_type", "refresh_token")
             .add("client_id", account.getString(CLIENT_ID))
@@ -309,7 +324,10 @@ internal class ChatGpt(
         }
     }
 
-    /** Signs out, asking OpenAI to end the session too; the registration is kept for signing in again. */
+    /**
+     * Signs out, asking OpenAI to end the session too. Who it was is forgotten with it, so the next
+     * sign-in may be another account, with a registration of its own.
+     */
     suspend fun signOut() = tokens.withLock {
         // Another account may offer others.
         offered = null
@@ -328,14 +346,14 @@ internal class ChatGpt(
             }
         }
         forget(account)
-        // Signed out, the next sign-in is free to pick another account.
-        account.remove(ID_TOKEN)
+        listOf(CLIENT_ID, SUBJECT, EMAIL, ID_TOKEN, DECLINED, LAST_MODEL).forEach(account::remove)
         write(account)
     }
 
     private fun keep(account: JSONObject, response: JSONObject) {
         account.put(ACCESS_TOKEN, response.getString("access_token"))
-            .put(REFRESH_TOKEN, response.getString("refresh_token"))
+            // A renewal may leave the refresh token as it was.
+            .put(REFRESH_TOKEN, response.optString("refresh_token").ifEmpty { account.getString(REFRESH_TOKEN) })
             .put(EXPIRES_AT, now() + response.getLong("expires_in") * 1000)
     }
 
@@ -522,6 +540,7 @@ internal class ChatGpt(
         private const val CLIENT_ID = "client_id"
         private const val SUBJECT = "subject"
         private const val EMAIL = "email"
+        private const val LAST_MODEL = "last_model"
         private const val ID_TOKEN = "id_token"
         private const val ACCESS_TOKEN = "access_token"
         private const val REFRESH_TOKEN = "refresh_token"
