@@ -124,6 +124,51 @@ internal object SongNames {
         }
     }
 
+    /**
+     * Whether [loanword], a name in katakana, says [latin], as "プラスティック・ラブ" does "Plastic
+     * Love". Japanese puts vowels between consonants, reads l as r, v as b, and leaves out an r
+     * that ends a sound, so the two are compared by the consonants they're said with, one off.
+     */
+    fun soundsAlike(latin: String, loanword: String): Boolean {
+        val katakana = bareTitle(loanword)
+        if (!katakana.all { it in '゠'..'ヿ' || it.isWhitespace() }) return false
+        val said = consonants(Readings.romaji(katakana))
+        val written = consonants(bareTitle(latin))
+        if (said.length < MIN_SOUNDS) return false
+        return if (said.length < FUZZY_SOUNDS) said == written else distance(said, written) <= 1
+    }
+
+    /** The consonants [text] is said with, those that sound alike as one: "Plastic Love" is "prstkrb". */
+    private fun consonants(text: String): String {
+        var said = text.lowercase().filter { it in 'a'..'z' }
+        for ((from, to) in sounds) said = said.replace(from, to)
+        return said.filter { it !in "aeiouhwy" }.fold("") { kept, c -> if (kept.lastOrNull() == c) kept else kept + c }
+    }
+
+    /** How many letters to change to make [one] into [other]. */
+    private fun distance(one: String, other: String): Int {
+        var previous = IntArray(other.length + 1) { it }
+        for (i in one.indices) {
+            val row = IntArray(other.length + 1).also { it[0] = i + 1 }
+            for (j in other.indices) {
+                row[j + 1] = minOf(previous[j + 1] + 1, row[j] + 1, previous[j] + if (one[i] == other[j]) 0 else 1)
+            }
+            previous = row
+        }
+        return previous[other.length]
+    }
+
+    /** Spellings of one sound, in order: "ch" before "c", and an r that ends a sound before l is read as r. */
+    private val sounds = listOf(
+        Regex("th") to "s", Regex("ph") to "f", Regex("ck|qu?") to "k",
+        Regex("x") to "ks", Regex("c(?=[eiy])") to "s", Regex("c") to "k", Regex("r(?![aeiouy])") to "",
+        Regex("l") to "r", Regex("v") to "b", Regex("z") to "s", Regex("m(?=[bp])") to "n"
+    )
+
+    /** Fewer consonants than this say too little to tell names apart; under [FUZZY_SOUNDS], all must agree. */
+    private const val MIN_SOUNDS = 3
+    private const val FUZZY_SOUNDS = 5
+
     /** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
     private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
 

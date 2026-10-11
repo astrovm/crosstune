@@ -3,6 +3,7 @@
     <string name="spotify_link_label">म्यूज़िक लिंक</string>
     <string name="spotify_link_placeholder">म्यूज़िक लिंक या गाने का नाम पेस्ट करें</string>
     <string name="resolve_button">लिंक बदलें</string>
+    <string name="search_button">खोजें</string>
     <string name="paste_button">पेस्ट करें</string>
     <string name="recognize_button">गाना पहचानें</string>
     <string name="setting_recognizer">गाने पहचानने वाला ऐप</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">लिंक इसमें खोलें</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
-    <string name="settings_links_description">इनके जिन लिंक पर आप टैप करते हैं, वे Crosstune में खुलते हैं। शेयर और पेस्ट हमेशा काम करते हैं।</string>
     <string name="rule_opens_in">%1$s में खुलेगा</string>
     <string name="rule_default">डिफ़ॉल्ट (%1$s)</string>
     <string name="settings_custom_title">अन्य ऐप्लिकेशन और साइटें</string>
@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">व्यवहार</string>
     <string name="settings_listening_title">पहचान और बोल</string>
     <string name="settings_appearance_title">दिखावट</string>
-    <string name="chatgpt_use_plan">अपना ChatGPT प्लान इस्तेमाल करें</string>
+    <string name="chatgpt_use_plan">अपना पेड ChatGPT प्लान इस्तेमाल करें</string>
     <string name="chatgpt_continue">ChatGPT के साथ जारी रखें</string>
     <string name="chatgpt_manage_usage">इस्तेमाल प्रबंधित करें</string>
     <string name="chatgpt_model">मॉडल</string>
     <string name="chatgpt_sign_out">साइन आउट करें</string>
-    <string name="chatgpt_declined">Crosstune को आपका ChatGPT प्लान इस्तेमाल करने की अनुमति नहीं मिली।</string>
+    <string name="chatgpt_declined">Crosstune को यह ChatGPT प्लान इस्तेमाल करने की अनुमति नहीं मिली। इसके लिए पेड प्लान चाहिए।</string>
     <string name="chatgpt_failed">ChatGPT से साइन इन नहीं हो सका। फिर से कोशिश करें।</string>
     <string name="chatgpt_welcome_title">आप अपना ChatGPT प्लान इस्तेमाल कर रहे हैं</string>
     <string name="chatgpt_welcome_message">Crosstune की AI सुविधाएं अब आपके ChatGPT प्लान का इस्तेमाल करती हैं। आप ChatGPT की सेटिंग में इनका इस्तेमाल प्रबंधित कर सकते हैं।</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं।</string>
     <string name="settings_listening_locked">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं। इसे चालू करने के लिए नीचे कोई दूसरा ऐप चुनें।</string>
     <string name="setup_destination_title">आप कहाँ सुनते हैं?</string>
-    <string name="setup_destination_body">इसे बाद में बदला जा सकता है।</string>
     <string name="setup_allow_title">लिंक की अनुमति दें</string>
-    <string name="setup_allow_none">आपने कोई सेवा नहीं चुनी, इसलिए अनुमति देने के लिए कुछ नहीं है। फिर भी आप Crosstune में लिंक शेयर या पेस्ट कर सकते हैं।</string>
+    <string name="setup_allow_none">कोई सेवा नहीं चुनी। फिर भी लिंक शेयर या पेस्ट कर सकते हैं।</string>
     <string name="setup_allow_step_add">“लिंक जोड़ें” पर टैप करें।</string>
     <string name="setup_allow_step_in_app">“ऐप में” चुनें।</string>
     <string name="setup_allow_step_tick">सभी लिंक चुनें, फिर “जोड़ें” पर टैप करें।</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">पहले गाना दिखाएं</string>
     <string name="show_song_short">गाना देखें</string>
     <string name="setting_exact_match">सटीक मैच खोलें</string>
-    <string name="setting_exact_match_description">ऐप सपोर्ट करे तो सीधे गाना खोलता है, वरना खोजता है।</string>
+    <string name="setting_exact_match_description">वरना खोजता है।</string>
     <string name="setting_not_found">जब कोई गाना न मिले</string>
     <string name="not_found_ask">मुझसे पूछें</string>
     <string name="not_found_original">जहाँ से आया वहीं खोलें</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">%1$s पर नहीं है</string>
     <string name="search_anyway">फिर भी %1$s पर खोजें</string>
     <string name="setting_clean_links">लिंक से ट्रैकिंग हटाएँ</string>
-    <string name="setting_clean_links_description">आप जो लिंक खोलते, कॉपी करते या शेयर करते हैं, उनसे ?si= या utm_ जैसे ट्रैकिंग हिस्से हटा देता है।</string>
+    <string name="setting_clean_links_description">\?si=, utm_ जैसे हिस्से हटाता है।</string>
     <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>
     <string name="setting_share_sheet_apps_description">शेयर करते समय संगीत ऐप दिखाएँ।</string>
     <string name="setting_language">भाषा</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">इसमें खोलें</string>
     <string name="cancel_button">रद्द करें</string>
     <string name="retry_button">फिर कोशिश करें</string>
+    <string name="more_button">और</string>
     <string name="history_title">हाल के</string>
     <string name="search_recent">हाल ही में खोजें</string>
     <string name="close_recent_search">खोज बंद करें</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">astro ने %1$s से बनाया</string>
 
     <string name="error_invalid_url">यह किसी गाने, एल्बम, कलाकार या प्लेलिस्ट का लिंक नहीं है।</string>
-    <string name="error_network">कनेक्ट नहीं हो सका। अपना इंटरनेट जाँचकर फिर कोशिश करें।</string>
-    <string name="error_not_found">सेवा को यह नहीं मिला। यह निजी हो सकता है या हटाया जा चुका है।</string>
-    <string name="error_rate_limited">सेवा व्यस्त है। थोड़ा रुककर फिर कोशिश करें।</string>
+    <string name="error_network">कनेक्ट नहीं हो सका।</string>
+    <string name="error_not_found">नहीं मिला। शायद निजी है या हटा दिया गया।</string>
+    <string name="error_rate_limited">सेवा व्यस्त है।</string>
     <string name="error_service_unavailable">सेवा जवाब नहीं दे रही। थोड़ी देर में फिर कोशिश करें।</string>
     <string name="error_no_app_to_open">कोई भी इंस्टॉल किया ऐप्लिकेशन इस लिंक को नहीं खोल सकता।</string>
     <string name="error_metadata_unavailable">इस लिंक की जानकारी नहीं पढ़ी जा सकी।</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">टैप किए गए लिंक Crosstune में नहीं, ब्राउज़र में खुलते हैं</string>
     <string name="allow_button">अनुमति दें</string>
     <string name="notice_app_still_opens">%1$s अब भी अपने लिंक खुद खोलता है</string>
+    <string name="notice_apps_still_open">%1$s अब भी अपने लिंक खुद खोलते हैं</string>
     <string name="fix_button">ठीक करें</string>
     <string name="history_cleared">इतिहास मिटाया गया</string>
     <string name="history_removed">हटाया गया</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">संगीत</string>
     <string name="setup_sources_videos">वीडियो</string>
     <string name="setting_only_music_videos_note">सिर्फ़ संगीत वीडियो आपके ऐप में जाते हैं। बाकी पहले की तरह खुलते हैं।</string>
-    <string name="guide_may_differ">आपके फ़ोन पर यह थोड़ा अलग दिख सकता है।</string>
     <string name="setup_apps_stop_body">“ब्राउज़र में” चुनें या “समर्थित लिंक खोलें” बंद करें।</string>
     <string name="setup_apps_progress">ऐप %1$d / %2$d</string>
     <string name="setup_apps_all_done">हो गया। अब कोई दूसरा ऐप ये लिंक नहीं खोलता।</string>
@@ -190,13 +190,13 @@
     <string name="choose_app_button">ऐप चुनें</string>
     <string name="make_default_named">%1$s को डिफ़ॉल्ट बनाएं</string>
     <string name="listening_text">सुन रहा है…</string>
-    <string name="error_no_match">गाना पहचाना नहीं जा सका। संगीत के पास जाकर फिर कोशिश करें।</string>
+    <string name="error_no_match">गाना पहचाना नहीं जा सका।</string>
     <string name="error_microphone">गाने पहचानने के लिए Crosstune को माइक्रोफ़ोन चाहिए।</string>
     <string name="error_recognition_unavailable">गाना पहचानना अभी उपलब्ध नहीं है।</string>
     <string name="open_settings_button">सेटिंग खोलें</string>
     <string name="open_app_button">%1$s खोलें</string>
     <string name="lyrics_button">बोल</string>
-    <string name="lyrics_title">बोल</string>
+    <string name="playing_now">अभी चल रहा है</string>
     <string name="lyrics_loading">बोल खोजे जा रहे हैं…</string>
     <string name="lyrics_none">इस गाने के बोल नहीं मिले।</string>
     <string name="lyrics_sync_service">Crosstune बोल सिंक</string>
@@ -230,7 +230,6 @@
     <string name="palette_sunset">सूर्यास्त</string>
     <string name="palette_rose">गुलाब</string>
     <string name="setting_pure_black">गहरा काला</string>
-    <string name="setting_pure_black_description">डार्क मोड में असली काला। OLED स्क्रीन और उसकी बैटरी के लिए बेहतर।</string>
     <string name="follow_help_title">बोल को अपने संगीत के साथ चलाएँ</string>
     <string name="follow_help_try">स्विच पर टैप करें, फिर बंद करें पर।</string>
     <string name="follow_help_restricted">⋮ पर टैप करें, फिर प्रतिबंधित सेटिंग की अनुमति दें पर।</string>
@@ -239,12 +238,11 @@
     <string name="follow_turn_on">चालू करें</string>
     <string name="follow_help_simple">इसे चालू करें और अनुमति दें पर टैप करें।</string>
     <string name="setting_lyrics_follow">बोल आपके म्यूज़िक ऐप के साथ चलें</string>
-    <string name="setting_lyrics_follow_description">सूचना ऐक्सेस चाहिए। आपकी सूचनाएँ कभी नहीं पढ़ी जातीं।</string>
+    <string name="setting_lyrics_follow_description">सूचना ऐक्सेस चाहिए।</string>
     <string name="follow_help_app_info">ऐप की जानकारी</string>
     <string name="follow_help_access_button">सूचना ऐक्सेस</string>
     <string name="song_search_title">गाने</string>
     <string name="song_search_none">“%1$s” के लिए कोई गाना नहीं मिला।</string>
-    <string name="song_search_label_for">“%1$s” के लिए मिला</string>
     <string name="floating_background">बैकग्राउंड</string>
     <string name="floating_text_size">टेक्स्ट का आकार</string>
     <string name="floating_float">दूसरे ऐप्स के ऊपर दिखाएं</string>

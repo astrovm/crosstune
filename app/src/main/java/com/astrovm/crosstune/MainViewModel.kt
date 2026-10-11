@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+/** The notice key for Crosstune's own links set to open in the browser. */
+internal const val OWN_LINKS_OFF = "own-links-off"
+
 internal data class UiState(
     val linkText: String = "",
     val isLoading: Boolean = false,
@@ -146,6 +149,10 @@ internal data class UiState(
     /** How many of [songSearch], from the first, ChatGPT named. */
     val songsFromChatGpt: Int = 0,
     val showLinkSettingsHelper: Boolean = false,
+    /** What the main screen's notices were about when the user closed them, by [noticeKeys]. */
+    val dismissedNotices: Set<String> = emptySet(),
+    /** The song a music app on the phone plays as Crosstune comes into sight, one tap from showing. */
+    val playingNow: MusicMetadata? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
     val setupComplete: Boolean = true,
@@ -222,6 +229,14 @@ internal data class UiState(
     val someLinksNotAllowed: Boolean
         get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
             frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
+
+    /** What keeps links from Crosstune now: each host not allowed, links set to the browser. */
+    val notAllowedKeys: Set<String>
+        get() = buildSet {
+            if (ownLinksOff && interceptsAnything) add(OWN_LINKS_OFF)
+            intercepted.forEach { service -> unapprovedHosts?.get(service).orEmpty().forEach { add("host:$it") } }
+            frontendSources.forEach { frontend -> unapprovedFrontendHosts?.get(frontend).orEmpty().forEach { add("host:$it") } }
+        }
 
     /**
      * Set when the app the result goes to was searched for it and doesn't have it, e.g. a song only on
@@ -471,6 +486,9 @@ internal class MainViewModel(
     /** The last look at what Android says about apps and links, null until the first one finishes. */
     private var linkState: LinkState? = null
     private var systemJob: Job? = null
+    private var playingJob: Job? = null
+    /** What [UiState.playingNow] was heard as, with where in the song it was. */
+    private var playingHeard: Heard.Song? = null
 
     var uiState by mutableStateOf(
         UiState(
@@ -509,6 +527,7 @@ internal class MainViewModel(
                 visuals = preferences.getBoolean(KEY_FLOATING_VISUALS, false)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
+            dismissedNotices = preferences.getStringSet(KEY_DISMISSED_NOTICES, null).orEmpty().toSet(),
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -832,9 +851,8 @@ internal class MainViewModel(
     /** Opens a song ChatGPT named, by [title] and [artist], like one picked from a search. */
     fun openNamedSong(title: String, artist: String) = chooseSong(MusicMetadata(title, artist))
 
-    /** A recognized song keeps its "Song by Artist" text, so Convert reads it again from the box. */
-    private fun fieldText(link: MusicLink, metadata: MusicMetadata) =
-        if (link.service == null) LinkInput.RecognizedSong(link.url, metadata).text else link.url
+    /** A link stays in the box; a song found by its name leaves it empty, as the song shows right under it. */
+    private fun fieldText(link: MusicLink) = if (link.service == null) "" else link.url
 
     /**
      * A recognized song shows only its name in the field, so the name reads back as the song just
@@ -944,23 +962,57 @@ internal class MainViewModel(
                 if (isActive) uiState = uiState.copy(listening = false)
             }
             when (heard) {
-                is Heard.Song -> {
-                    retryListens = false
-                    val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
-                        ?: MusicLinks.recognizedSong(heard.metadata)
-                    uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
-                    resolve(input, openWhenReady = false)
-                    // Once it's shown, as showing it forgets what was heard for whatever was shown before.
-                    heardSong = heard.metadata
-                    heardClock = heard.clock
-                    heardAtMs = now()
-                    // Asked for its words, they open straight away, and keep listening along, song after song.
-                    if (lyrics) showLyricsFor(heard.metadata)
-                }
+                is Heard.Song -> showHeard(heard, lyrics)
                 Heard.Nothing -> showListenError(AppError.NO_MATCH)
                 is Heard.Failed -> showListenError(heard.error)
             }
         }
+    }
+
+    /**
+     * Asks what a music app plays, as Crosstune comes into sight, to offer it at the top; its words
+     * are fetched meanwhile, so they show at once. Only with the access following an app needs.
+     */
+    fun checkPlayingNow() {
+        playingJob?.cancel()
+        val source = playback?.takeIf { it.hasAccess() }
+        if (source == null) {
+            playingHeard = null
+            uiState = uiState.copy(playingNow = null)
+            return
+        }
+        playingJob = viewModelScope.launch {
+            val heard = withContext(systemDispatcher) { source.nowPlaying() }
+            playingHeard = heard
+            uiState = uiState.copy(playingNow = heard?.metadata)
+            // Kept by the finder, so showing them later needs no lookup, nor fetching them ahead again.
+            heard?.let { lyricsFinder?.firstLook(it.metadata) }
+        }
+    }
+
+    /** Shows the song playing now as if just heard, with its words when [lyrics], in time with the app. */
+    fun showPlayingNow(lyrics: Boolean) {
+        val heard = playingHeard ?: return
+        cancelContentWork()
+        uiState = uiState.copy(
+            error = null, result = null, destinationUrls = emptyMap(), selectedDestination = null, link = null,
+            showDestinationPicker = false, handlingIncomingLink = false, handingOff = false
+        )
+        showHeard(heard, lyrics)
+    }
+
+    private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+        retryListens = false
+        val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
+            ?: MusicLinks.recognizedSong(heard.metadata)
+        uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
+        resolve(input, openWhenReady = false)
+        // Once it's shown, as showing it forgets what was heard for whatever was shown before.
+        heardSong = heard.metadata
+        heardClock = heard.clock
+        heardAtMs = now()
+        // Asked for its words, they open straight away, and keep listening along, song after song.
+        if (lyrics) showLyricsFor(heard.metadata)
     }
 
     fun stopListening() {
@@ -1046,7 +1098,7 @@ internal class MainViewModel(
             result = resolution.metadata,
             songsLike = false,
             link = resolution.link,
-            linkText = fieldText(resolution.link, resolution.metadata),
+            linkText = fieldText(resolution.link),
             destinationUrls = savedDestinations(entry),
             history = history
         )
@@ -1731,7 +1783,6 @@ internal class MainViewModel(
      */
     fun dismissLyrics() {
         heardSong = null
-        heardClock = null
         lyricsJob?.cancel()
         lyricsJob = null
         stopLearning()
@@ -2261,7 +2312,7 @@ internal class MainViewModel(
         lastRequest = null
         pendingOpen = false
         uiState = uiState.copy(
-            linkText = fieldText(entry.link, entry.metadata),
+            linkText = fieldText(entry.link),
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
@@ -2579,6 +2630,13 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
     }
 
+    /** Closes the main screen's notices about [keys]; one about anything else still shows. */
+    fun dismissNotices(keys: Set<String>) {
+        val dismissed = uiState.dismissedNotices + keys
+        uiState = uiState.copy(dismissedNotices = dismissed)
+        preferences.edit { putStringSet(KEY_DISMISSED_NOTICES, dismissed) }
+    }
+
     fun showError(error: AppError) {
         retryListens = false
         uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
@@ -2590,6 +2648,7 @@ internal class MainViewModel(
         private const val COVER_TIMEOUT_MS = 5_000L
         private const val VIDEO_COVER_TIMEOUT_MS = 2_000L
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
+        private const val KEY_DISMISSED_NOTICES = "dismissed_notices"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"

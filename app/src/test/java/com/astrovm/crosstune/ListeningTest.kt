@@ -4,6 +4,8 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 
@@ -37,6 +39,9 @@ import android.widget.ImageView
 import android.view.MotionEvent
 import android.app.NotificationManager
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -165,6 +170,12 @@ class ListeningTest {
 
     private fun waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
 
+    /** Whether [reading] is drawn over a line's words. */
+    private fun readingShown(reading: String) = composeRule.onAllNodes(
+        androidx.compose.ui.test.SemanticsMatcher("reads $reading") { reading in it.config.getOrElseNullable(ReadingsShown) { null }.orEmpty() },
+        useUnmergedTree = true
+    ).fetchSemanticsNodes().isNotEmpty()
+
     private fun recognize() = click(string(R.string.recognize_button))
 
     @Test
@@ -179,6 +190,78 @@ class ListeningTest {
         assertEquals(0, microphone.opened)
         assertEquals(0, shazamRequests())
         assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aSongPlayingAsTheAppOpensIsOfferedWithItsWordsAlreadyFetched() {
+        val playing = MusicMetadata("Demo", "Band")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime()) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""") }
+        launch()
+        waitForText(string(R.string.playing_now))
+        assertTrue(shown("Band"))
+        // Fetched before they're asked for, so asking shows them with no wait.
+        val kept = java.io.File(app.cacheDir, "lyrics.json")
+        waitUntil(TIMEOUT_MS) { kept.exists() && "Stars" in kept.readText() }
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky\nStars")
+        // Shown from what was kept: the sites the words come from were each asked once.
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://music.163.com/") })
+        // Named by the app, nothing was listened to.
+        assertEquals(0, microphone.opened)
+        assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun tappingTheSongPlayingShowsItAndItsOfferGoes() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitForText(string(R.string.playing_now))
+        click("Iris")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertFalse(shown(string(R.string.playing_now)))
+        assertEquals(0, microphone.opened)
+    }
+
+    @Test
+    fun theSongPlayingIsOfferedOnlyWhileNothingElseIsOnScreen() {
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        shazamAnswers(NO_MATCH)
+        allowMicrophone()
+        launch()
+        waitForText(string(R.string.playing_now))
+        // Typing a song in, it gives way.
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Other Song")
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextClearance()
+        waitForText(string(R.string.playing_now))
+        // Stopped meanwhile, Crosstune listens itself, and what it heard is shown alone.
+        phone.onThePhone = null
+        recognize()
+        waitForText(string(R.string.listening_text))
+        assertFalse(shown(string(R.string.playing_now)))
+        microphone.play(1.0)
+        microphone.end()
+        waitForText(string(R.string.error_no_match))
+        assertFalse(shown(string(R.string.playing_now)))
+    }
+
+    @Test
+    fun withoutAccessToMusicAppsNothingIsOfferedAsPlaying() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        waitForText(string(R.string.playing_now))
+        // Access taken away while away, what was offered goes with it.
+        phone.access = false
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(shown("Iris"))
     }
 
     @Test
@@ -326,7 +409,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         waitForText(string(R.string.error_microphone))
         // No Try again: Android won't ask again, so the way is in its settings.
-        assertTrue(!shown(string(R.string.retry_button)))
+        assertTrue(!described(string(R.string.retry_button)))
         click(string(R.string.open_settings_button))
         val settings = shadowOf(app).nextStartedActivity
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, settings.action)
@@ -400,7 +483,7 @@ class ListeningTest {
         microphone.play(3.0)
         recognize()
         waitForText(string(R.string.error_recognition_unavailable))
-        assertTrue(shown(string(R.string.retry_button)))
+        assertTrue(described(string(R.string.retry_button)))
         // Only the other apps: Crosstune is what just failed.
         assertTrue(!shown(string(R.string.open_app_button, string(R.string.app_name))))
         click(string(R.string.open_app_button, "Shazam"))
@@ -1623,8 +1706,8 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "君はアスファルト・レディ\\n夜の雨", openAi = openAi)
         // The dictionary reads 君 as くん here; ChatGPT puts it right.
-        waitUntil(TIMEOUT_MS) { shown("きみ") }
-        assertFalse(shown("くん"))
+        waitUntil(TIMEOUT_MS) { readingShown("きみ") }
+        assertFalse(readingShown("くん"))
     }
 
     @Test
@@ -1738,8 +1821,8 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        composeRule.onAllNodes(hasText("夜空")).onFirst().performTouchInput { longClick() }
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        composeRule.onAllNodes(hasText("夜空に星が")).onFirst().performTouchInput { longClick() }
         composeRule.waitForIdle()
         // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
         val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
@@ -1932,9 +2015,9 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        // The kana after it shows as written, each character free to wrap.
-        assertTrue(shown("べ") && shown("る"))
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        // Each line laid out as a whole, the kana after a kanji as written.
+        assertTrue(shown("食べる") && readingShown("た"))
         assertTrue(prefs().getBoolean("lyrics_readings", false))
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
@@ -1958,7 +2041,7 @@ class ListeningTest {
         click(string(R.string.lyrics_romanized))
         click(string(R.string.lyrics_translation))
         composeRule.waitForIdle()
-        assertFalse(shown("よぞら"))
+        assertFalse(readingShown("よぞら"))
         assertFalse(shown("[食べる]"))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
     }
@@ -2229,6 +2312,14 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
         assertTrue(shown("Luna") && shown("Demo"))
         assertFalse(shown("Made Up"))
+        // A link copied meanwhile doesn't replace them.
+        val clip = ClipData.newPlainText("copied", "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")
+        app.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+        ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType).invoke(clip.description, System.currentTimeMillis() - 1_000)
+        controller!!.windowFocusChanged(false)
+        controller!!.windowFocusChanged(true)
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.songs_like_label)) && shown("Moon"))
     }
 
     @Test
@@ -2252,12 +2343,11 @@ class ListeningTest {
         withCatalogue(fake.handler)
         launch()
         composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("calm rainy night songs")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         waitUntil(TIMEOUT_MS) { shown(string(R.string.song_search_playlist)) }
         click(string(R.string.song_search_playlist))
         // A list named after the mood, with ChatGPT's songs, to play or share like a playlist.
         waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
-        assertFalse(shown(string(R.string.song_search_label_for, "calm rainy night songs")))
         assertFalse(shown(string(R.string.songs_like_label)))
     }
 

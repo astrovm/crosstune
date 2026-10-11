@@ -4,6 +4,7 @@
     <string name="spotify_link_label">音楽リンク</string>
     <string name="spotify_link_placeholder">音楽リンクまたは曲名を貼り付け</string>
     <string name="resolve_button">変換</string>
+    <string name="search_button">検索</string>
     <string name="paste_button">貼り付け</string>
     <string name="recognize_button">曲を認識</string>
     <string name="setting_recognizer">楽曲認識アプリ</string>
@@ -24,7 +25,6 @@
     <string name="settings_default_label">リンクを開くアプリ</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
-    <string name="settings_links_description">ここでオンにしたサービスのリンクをタップすると Crosstune で開きます。共有と貼り付けはいつでも使えます。</string>
     <string name="rule_opens_in">%1$s で開く</string>
     <string name="rule_default">デフォルト（%1$s）</string>
     <string name="settings_custom_title">その他のアプリとサイト</string>
@@ -38,12 +38,12 @@
     <string name="settings_behaviour_title">動作</string>
     <string name="settings_listening_title">曲の認識と歌詞</string>
     <string name="settings_appearance_title">表示</string>
-    <string name="chatgpt_use_plan">ChatGPT のプランを使う</string>
+    <string name="chatgpt_use_plan">ChatGPT の有料プランを使う</string>
     <string name="chatgpt_continue">ChatGPT で続行</string>
     <string name="chatgpt_manage_usage">使用状況を管理</string>
     <string name="chatgpt_model">モデル</string>
     <string name="chatgpt_sign_out">ログアウト</string>
-    <string name="chatgpt_declined">Crosstune に ChatGPT のプランの使用が許可されませんでした。</string>
+    <string name="chatgpt_declined">Crosstune にこの ChatGPT プランの使用が許可されませんでした。有料プランが必要です。</string>
     <string name="chatgpt_failed">ChatGPT でログインできませんでした。もう一度お試しください。</string>
     <string name="chatgpt_welcome_title">ChatGPT のプランを使っています</string>
     <string name="chatgpt_welcome_message">Crosstune の AI 機能は ChatGPT のプランを使うようになりました。使用状況は ChatGPT の設定で管理できます。</string>
@@ -62,9 +62,8 @@
     <string name="setup_sources_listening_note">%1$s で聴いているので、そのリンクはすでにそこで開きます。</string>
     <string name="settings_listening_locked">%1$s で聴いているので、そのリンクはすでにそこで開きます。オンにするには、下で別のアプリを選んでください。</string>
     <string name="setup_destination_title">どこで聴きますか？</string>
-    <string name="setup_destination_body">あとから変更できます。</string>
     <string name="setup_allow_title">リンクを許可</string>
-    <string name="setup_allow_none">サービスが選ばれていないため、許可するものはありません。リンクの共有や貼り付けは Crosstune でそのまま使えます。</string>
+    <string name="setup_allow_none">サービスが選ばれていません。リンクの共有や貼り付けはできます。</string>
     <string name="setup_allow_step_add">「リンクを追加」をタップします。</string>
     <string name="setup_allow_step_in_app">「アプリで開く」を選んでください。</string>
     <string name="setup_allow_step_tick">すべてのリンクにチェックを入れて、「追加」をタップします。</string>
@@ -86,7 +85,7 @@
     <string name="show_song_first">先に曲を表示</string>
     <string name="show_song_short">曲を表示</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
-    <string name="setting_exact_match_description">アプリが対応していれば曲そのものを開きます。そうでなければ検索します。</string>
+    <string name="setting_exact_match_description">対応していなければ検索します。</string>
     <string name="setting_not_found">曲が見つからないとき</string>
     <string name="not_found_ask">確認する</string>
     <string name="not_found_original">元のアプリで開く</string>
@@ -94,7 +93,7 @@
     <string name="not_found_on">%1$s にはありません</string>
     <string name="search_anyway">%1$s でとにかく検索</string>
     <string name="setting_clean_links">リンクからトラッキングを削除</string>
-    <string name="setting_clean_links_description">開く、コピーする、共有するリンクから ?si= や utm_ などのトラッキング部分を取り除きます。</string>
+    <string name="setting_clean_links_description">\?si= や utm_ などを取り除きます。</string>
     <string name="setting_share_sheet_apps">共有メニューのアプリ</string>
     <string name="setting_share_sheet_apps_description">共有メニューに音楽アプリを表示します。</string>
     <string name="setting_language">言語</string>
@@ -103,6 +102,7 @@
     <string name="picker_title">アプリで開く</string>
     <string name="cancel_button">キャンセル</string>
     <string name="retry_button">再試行</string>
+    <string name="more_button">もっと見る</string>
     <string name="history_title">最近</string>
     <string name="search_recent">最近の項目を検索</string>
     <string name="close_recent_search">検索を閉じる</string>
@@ -139,9 +139,9 @@
     <string name="made_with_love">astro が %1$s を込めて作りました</string>
 
     <string name="error_invalid_url">曲、アルバム、アーティスト、プレイリストのリンクではありません。</string>
-    <string name="error_network">接続できませんでした。インターネットの接続を確認して、もう一度お試しください。</string>
-    <string name="error_not_found">サービスで見つかりませんでした。非公開か、削除された可能性があります。</string>
-    <string name="error_rate_limited">サービスが混み合っています。しばらくしてからもう一度お試しください。</string>
+    <string name="error_network">接続できませんでした。</string>
+    <string name="error_not_found">見つかりません。非公開か削除された可能性があります。</string>
+    <string name="error_rate_limited">サービスが混み合っています。</string>
     <string name="error_service_unavailable">サービスから応答がありません。しばらくしてからもう一度お試しください。</string>
     <string name="error_no_app_to_open">このリンクを開けるアプリがインストールされていません。</string>
     <string name="error_metadata_unavailable">このリンクの詳細を読み取れませんでした。</string>
@@ -155,6 +155,7 @@
     <string name="notice_own_links_off">タップしたリンクが Crosstune ではなくブラウザで開きます</string>
     <string name="allow_button">許可</string>
     <string name="notice_app_still_opens">%1$s がまだ自分のリンクを開いています</string>
+    <string name="notice_apps_still_open">%1$s がまだ自分のリンクを開いています</string>
     <string name="fix_button">修正</string>
     <string name="history_cleared">履歴を削除しました</string>
     <string name="history_removed">削除しました</string>
@@ -181,7 +182,6 @@
     <string name="setup_sources_music">音楽</string>
     <string name="setup_sources_videos">動画</string>
     <string name="setting_only_music_videos_note">アプリに送られるのは音楽動画だけです。その他はいつもどおり開きます。</string>
-    <string name="guide_may_differ">お使いのスマートフォンでは少し違って見えることがあります。</string>
     <string name="setup_apps_stop_body">「ブラウザで開く」を選ぶか、「対応リンクを開く」をオフにしてください。</string>
     <string name="setup_apps_progress">アプリ %1$d / %2$d</string>
     <string name="setup_apps_all_done">完了しました。ほかのアプリはもうリンクを開きません。</string>
@@ -191,13 +191,13 @@
     <string name="choose_app_button">アプリを選ぶ</string>
     <string name="make_default_named">%1$s をデフォルトにする</string>
     <string name="listening_text">聞き取り中…</string>
-    <string name="error_no_match">曲を認識できませんでした。音楽に近づいてもう一度お試しください。</string>
+    <string name="error_no_match">曲を認識できませんでした。</string>
     <string name="error_microphone">曲を認識するには、Crosstune にマイクへのアクセスが必要です。</string>
     <string name="error_recognition_unavailable">現在、曲の認識は利用できません。</string>
     <string name="open_settings_button">設定を開く</string>
     <string name="open_app_button">%1$s を開く</string>
     <string name="lyrics_button">歌詞</string>
-    <string name="lyrics_title">歌詞</string>
+    <string name="playing_now">再生中</string>
     <string name="lyrics_loading">歌詞を検索しています…</string>
     <string name="lyrics_none">この曲の歌詞は見つかりませんでした。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>
@@ -231,7 +231,6 @@
     <string name="palette_sunset">サンセット</string>
     <string name="palette_rose">ローズ</string>
     <string name="setting_pure_black">純黒</string>
-    <string name="setting_pure_black_description">ダークモードで本当の黒を使います。OLED 画面とバッテリーにやさしくなります。</string>
     <string name="follow_help_title">歌詞を音楽に合わせる</string>
     <string name="follow_help_try">スイッチをタップし、[閉じる] をタップします。</string>
     <string name="follow_help_restricted">⋮ をタップし、[制限付き設定を許可] をタップします。</string>
@@ -240,12 +239,11 @@
     <string name="follow_turn_on">オンにする</string>
     <string name="follow_help_simple">スイッチをオンにして [許可] をタップします。</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>
-    <string name="setting_lyrics_follow_description">通知へのアクセスが必要です。通知の内容を読むことはありません。</string>
+    <string name="setting_lyrics_follow_description">通知へのアクセスが必要です。</string>
     <string name="follow_help_app_info">アプリ情報</string>
     <string name="follow_help_access_button">通知へのアクセス</string>
     <string name="song_search_title">曲</string>
     <string name="song_search_none">「%1$s」に一致する曲がありません。</string>
-    <string name="song_search_label_for">「%1$s」の検索結果</string>
     <string name="floating_background">背景</string>
     <string name="floating_text_size">文字サイズ</string>
     <string name="floating_float">他のアプリの上に表示</string>

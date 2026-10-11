@@ -24,11 +24,13 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val stored = preferences.getString(KEY_HISTORY, null) ?: return emptyList()
         known?.takeIf { it.first == stored }?.let { return it.second }
         val array = runCatching { JSONArray(stored) }.getOrNull() ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toEntry() }.also { known = stored to it }
+        val entries = (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toEntry() }
+        // Kept by a version that listed a song once per app it came from: only its latest stays.
+        return entries.filterIndexed { index, entry -> entries.take(index).none { it.isSameAs(entry) } }.also { known = stored to it }
     }
 
     fun add(entry: HistoryEntry): List<HistoryEntry> {
-        val updated = (listOf(entry) + load().filterNot { it.link.isSameItem(entry.link) }).take(MAX_ENTRIES)
+        val updated = (listOf(entry) + load().filterNot { it.isSameAs(entry) }).take(MAX_ENTRIES)
         save(updated)
         return updated
     }
@@ -131,7 +133,11 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
 
 /**
  * The same thing, however it was linked: one link, or the same item on the same service, e.g. a song
- * shared once from its album's page and once on its own.
+ * shared once from its album's page and once on its own, or one song from two apps, or searched for.
  */
-private fun MusicLink.isSameItem(other: MusicLink): Boolean =
-    url == other.url || (service != null && service == other.service && type == other.type && id == other.id)
+private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
+    link.url == other.link.url ||
+        (link.service != null && link.service == other.link.service && link.type == other.link.type && link.id == other.link.id) ||
+        (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK &&
+            SongNames.normalize(metadata.title).let { it.isNotEmpty() && it == SongNames.normalize(other.metadata.title) } &&
+            SongNames.normalize(metadata.artist) == SongNames.normalize(other.metadata.artist))

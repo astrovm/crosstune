@@ -7,6 +7,7 @@
     <string name="spotify_link_label">Music link</string>
     <string name="spotify_link_placeholder">Paste a music link or a song name</string>
     <string name="resolve_button">Convert link</string>
+    <string name="search_button">Search</string>
     <string name="paste_button">Paste</string>
     <string name="recognize_button">Recognize a song</string>
     <string name="setting_recognizer">Song recognition app</string>
@@ -34,7 +35,6 @@
     <string name="settings_default_label">Open links in</string>
     <string name="settings_about_title">About</string>
     <string name="settings_links_title">Open links from</string>
-    <string name="settings_links_description">Tapped links from these open in Crosstune. Sharing and pasting always work.</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Other apps and sites</string>
@@ -49,12 +49,12 @@
     <string name="settings_listening_title">Recognition and lyrics</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_chatgpt_title" translatable="false">ChatGPT</string>
-    <string name="chatgpt_use_plan">Use your ChatGPT plan</string>
+    <string name="chatgpt_use_plan">Use your paid ChatGPT plan</string>
     <string name="chatgpt_continue">Continue with ChatGPT</string>
     <string name="chatgpt_manage_usage">Manage usage</string>
     <string name="chatgpt_model">Model</string>
     <string name="chatgpt_sign_out">Sign out</string>
-    <string name="chatgpt_declined">Crosstune wasn\'t allowed to use your ChatGPT plan.</string>
+    <string name="chatgpt_declined">Crosstune wasn\'t allowed to use this ChatGPT plan. It needs a paid one.</string>
     <string name="chatgpt_failed">Couldn\'t sign in with ChatGPT. Try again.</string>
     <string name="chatgpt_welcome_title">You\'re using your ChatGPT plan</string>
     <string name="chatgpt_welcome_message">Crosstune\'s AI features now use your ChatGPT plan. You can manage their usage in ChatGPT\'s settings.</string>
@@ -73,9 +73,8 @@
     <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
     <string name="settings_listening_locked">You listen in %1$s, so its links already open there. Pick another app below to turn this on.</string>
     <string name="setup_destination_title">Where do you listen?</string>
-    <string name="setup_destination_body">You can change it later.</string>
     <string name="setup_allow_title">Allow the links</string>
-    <string name="setup_allow_none">You didn\'t pick any services, so there\'s nothing to allow. You can still share or paste links into Crosstune.</string>
+    <string name="setup_allow_none">No services picked. You can still share or paste links.</string>
     <string name="setup_allow_step_add">Tap Add link.</string>
     <string name="setup_allow_step_in_app">Pick “In the app”.</string>
     <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
@@ -101,7 +100,7 @@
     <string name="show_song_first">Show the song first</string>
     <string name="show_song_short">Show song</string>
     <string name="setting_exact_match">Open the exact match</string>
-    <string name="setting_exact_match_description">Opens the song itself when the app supports it. Otherwise it searches.</string>
+    <string name="setting_exact_match_description">Otherwise it searches.</string>
     <string name="setting_not_found">When a song isn\'t found</string>
     <string name="not_found_ask">Ask me</string>
     <string name="not_found_original">Open it where it\'s from</string>
@@ -109,7 +108,7 @@
     <string name="not_found_on">Not on %1$s</string>
     <string name="search_anyway">Search %1$s anyway</string>
     <string name="setting_clean_links">Remove tracking from links</string>
-    <string name="setting_clean_links_description">Drops tracking parts like ?si= or utm_ from links you open, copy or share.</string>
+    <string name="setting_clean_links_description">Drops ?si=, utm_ and the like.</string>
     <string name="setting_share_sheet_apps">Apps in the share sheet</string>
     <string name="setting_share_sheet_apps_description">Show music apps as options when sharing.</string>
     <string name="setting_language">Language</string>
@@ -118,6 +117,7 @@
     <string name="picker_title">Open with</string>
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
+    <string name="more_button">More</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>
     <string name="close_recent_search">Close search</string>
@@ -132,7 +132,7 @@
     <string name="play_first_button">Play first song</string>
     <string name="songs_shown">First %1$d of %2$d</string>
     <string name="lyrics_button">Lyrics</string>
-    <string name="lyrics_title">Lyrics</string>
+    <string name="playing_now">Playing now</string>
     <string name="lyrics_loading">Getting lyrics…</string>
     <string name="lyrics_none">No lyrics found for this song.</string>
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>
@@ -166,7 +166,6 @@
     <string name="palette_sunset">Sunset</string>
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Pure black</string>
-    <string name="setting_pure_black_description">True black in dark mode. Easier on OLED screens and their battery.</string>
     <string name="follow_help_title">Let lyrics follow your music</string>
     <string name="follow_help_try">Tap the switch, then Close.</string>
     <string name="follow_help_restricted">Tap ⋮, then Allow restricted settings.</string>
@@ -175,11 +174,10 @@
     <string name="follow_turn_on">Turn on</string>
     <string name="follow_help_simple">Turn on the switch and tap Allow.</string>
     <string name="setting_lyrics_follow">Lyrics follow your music app</string>
-    <string name="setting_lyrics_follow_description">Needs notification access. Your notifications are never read.</string>
+    <string name="setting_lyrics_follow_description">Needs notification access.</string>
     <string name="follow_help_app_info">App info</string>
     <string name="follow_help_access_button">Notification access</string>
     <string name="song_search_title">Songs</string>
-    <string name="song_search_label_for">Found for “%1$s”</string>
     <string name="song_search_none">No songs found for “%1$s”.</string>
     <string name="clear_history_button">Clear history</string>
     <string name="tile_label">Open copied music link</string>
@@ -209,9 +207,9 @@
     <string name="privacy_policy_url">https://crosstune.4st.li/privacy/</string>
 
     <string name="error_invalid_url">That\'s not a song, album, artist or playlist link.</string>
-    <string name="error_network">Couldn\'t connect. Check your internet and try again.</string>
-    <string name="error_not_found">The service couldn\'t find this. It may be private or deleted.</string>
-    <string name="error_rate_limited">The service is busy. Wait a moment and try again.</string>
+    <string name="error_network">Couldn\'t connect.</string>
+    <string name="error_not_found">Not found. It may be private or deleted.</string>
+    <string name="error_rate_limited">The service is busy.</string>
     <string name="error_service_unavailable">The service isn\'t responding. Try again in a moment.</string>
     <string name="error_no_app_to_open">No installed app can open this link.</string>
     <string name="error_metadata_unavailable">Couldn\'t read the details of this link.</string>
@@ -223,6 +221,7 @@
     <string name="notice_own_links_off">Tapped links open in your browser, not Crosstune</string>
     <string name="allow_button">Allow</string>
     <string name="notice_app_still_opens">%1$s still opens its own links</string>
+    <string name="notice_apps_still_open">%1$s still open their own links</string>
     <string name="fix_button">Fix</string>
     <string name="history_cleared">History cleared</string>
     <string name="history_removed">Removed</string>
@@ -249,7 +248,6 @@
     <string name="setup_sources_music">Music</string>
     <string name="setup_sources_videos">Videos</string>
     <string name="setting_only_music_videos_note">Only music videos go to your app. Others open as usual.</string>
-    <string name="guide_may_differ">Your phone may look a bit different.</string>
     <string name="setup_apps_stop_body">Pick “In your browser”, or turn off “Open supported links”.</string>
     <string name="setup_apps_progress">App %1$d of %2$d</string>
     <string name="setup_apps_all_done">Done. No other app opens the links now.</string>
@@ -259,7 +257,7 @@
     <string name="choose_app_button">Choose app</string>
     <string name="make_default_named">Make %1$s the default</string>
     <string name="listening_text">Listening…</string>
-    <string name="error_no_match">Couldn\'t recognize the song. Try again closer to the music.</string>
+    <string name="error_no_match">Couldn\'t recognize the song.</string>
     <string name="error_microphone">Crosstune needs the microphone to recognize songs.</string>
     <string name="error_recognition_unavailable">Song recognition isn\'t available right now.</string>
     <string name="open_settings_button">Open settings</string>

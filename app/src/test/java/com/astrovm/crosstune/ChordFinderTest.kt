@@ -68,6 +68,30 @@ class ChordFinderTest {
 
     private val ugWalking = "[tab][ch]G[/ch]       [ch]C[/ch]\nWalking down the river road[/tab]\n[tab][ch]D[/ch]\nSinging to the morning light[/tab]"
 
+    /** A song in LaCuerda's results: its title, the kind of sheet each take is and the takes best liked first, "RT-21", and its page. */
+    private class LaCuerdaSong(val title: String, val takes: String, val file: String)
+
+    /** LaCuerda's results, by artist, as its page has them: each song's page listed apart, from the last row. */
+    private fun laCuerdaSearch(vararg artists: Triple<String, String, List<LaCuerdaSong>>): String {
+        var row = 0
+        val rows = artists.joinToString("\n") { (folder, name, songs) ->
+            """<tr><td><a href="/$folder/">$name</A></TD><td><ul class=b_main id=b_main0>""" +
+                songs.joinToString("") { """<li id='r${"%03d".format(row++)}' lcd='${it.takes}'> <a href="javascript:">${it.title}</a></li>""" } +
+                "</ul></td></tr>"
+        }
+        val files = artists.flatMap { it.third }.map { "'${it.file}'" }.reversed()
+        return """<table id=s_main>$rows</table><script>bMfill(1)
+var hds=[];
+var fns=[${files.joinToString(",")}];
+var NMAX=${files.size - 1};
+</script>"""
+    }
+
+    /** A sheet of LaCuerda's: its chords in lines of their own over the words. */
+    private fun laCuerdaSheet(content: String) = "<div id=tH4><pre id='tCode'></pre></div><div id=t_body><PRE>$content</PRE></div>"
+
+    private val laCuerdaWalking = "<div></div><A>G</A>       <A>C</A>\nWalking down the river road\n<div></div><A>D</A>\nSinging to the morning light"
+
     /** NetEase's results for a search: songs by their names, with their artists'. */
     private fun netEase(vararg songs: Pair<String, List<String>>) = JSONObject().put(
         "result",
@@ -178,6 +202,7 @@ class ChordFinderTest {
                 request,
                 mapOf(
                     "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                    "https://acordes.lacuerda.net/busca.php" to laCuerdaSearch(),
                     "https://www.ufret.jp/search.php" to uFretResult(7, "River Road", "The Walkers"),
                     "https://www.ufret.jp/song.php?data=7" to uFretSong("[G]Walking down the river road", "[D]Singing to the morning light")
                 )
@@ -202,6 +227,7 @@ class ChordFinderTest {
                 mapOf(
                     "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 3)),
                     "https://tabs.ultimate-guitar.com/tab/gone-1" to "<html>Not found</html>",
+                    "https://acordes.lacuerda.net/busca.php" to "<html>Sin resultados</html>",
                     "https://www.ufret.jp/search.php" to "",
                     "https://music.163.com/api/search/get" to "{}"
                 )
@@ -228,7 +254,7 @@ class ChordFinderTest {
         fake.delayMillis = 0
         // One wouldn't answer, the other did: what it found counts.
         fake.handler = { request ->
-            if (request.url.host == "www.ultimate-guitar.com") throw IOException("offline")
+            if (request.url.host != "www.ufret.jp") throw IOException("offline")
             answer(
                 request,
                 mapOf(
@@ -238,6 +264,100 @@ class ChordFinderTest {
             )
         }
         assertEquals(ChordSite.U_FRET, (chords(river, english) as ChordFinder.Chords.Found).sheet.site)
+    }
+
+    @Test
+    fun aSongUltimateGuitarHasNoChordsForComesFromLaCuerdasBestLikedSheetByTheArtist() {
+        val searches = mutableListOf<String?>()
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                searches += request.url.queryParameter("exp")
+                // By the artist, LaCuerda finds it under another name; by the title alone, it does.
+                val found = request.url.queryParameter("exp") == "River Road"
+                FakeSpotify.html(
+                    request,
+                    if (!found) laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("Other Song", "R-1", "other_song"))))
+                    else laCuerdaSearch(
+                        Triple("someone_else", "Someone Else", listOf(LaCuerdaSong("River Road", "R-1", "river_road"))),
+                        Triple("walkers", "Los Walkers", listOf(LaCuerdaSong("Other Song", "R-1", "other_song"))),
+                        Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "TRBR-4123", "river_road"), LaCuerdaSong("River R&oacute;ad", "R-1", "river_road_live")))
+                    )
+                )
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        // The best liked is for other words: the next one's taken.
+                        "https://acordes.lacuerda.net/walkers/river_road-4.shtml" to laCuerdaSheet("<div></div><A>Am</A>\nNothing like the song at all, really"),
+                        "https://acordes.lacuerda.net/walkers/river_road-2.shtml" to laCuerdaSheet("INTRO: <A>Em</A>\n\n$laCuerdaWalking &amp; more")
+                    )
+                )
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.LA_CUERDA, found.sheet.site)
+        assertEquals("https://acordes.lacuerda.net/walkers/river_road-2.shtml", found.sheet.url)
+        assertEquals(
+            listOf(
+                // Chords on their own line, words and all, are played on their own.
+                SheetLine("", listOf(Chord(7, "Em"))),
+                SheetLine("Walking down the river road", listOf(Chord(0, "G"), Chord(8, "C"))),
+                SheetLine("Singing to the morning light & more", listOf(Chord(0, "D")))
+            ),
+            found.sheet.lines
+        )
+        assertEquals(listOf("River Road The Walkers", "River Road"), searches)
+        // Before U-FRET, which has few songs in Spanish.
+        assertTrue(fake.requestedUrls.none { "ufret" in it })
+        // Words and chords only, the artist's best liked first, then theirs with the same words, then others'.
+        assertEquals(
+            listOf("https://acordes.lacuerda.net/walkers/river_road-4.shtml", "https://acordes.lacuerda.net/walkers/river_road-2.shtml"),
+            fake.requestedUrls.filter { ".shtml" in it }
+        )
+        fake.requestedUrls.clear()
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "TRBR-4x123", "river_road"), LaCuerdaSong("River R&oacute;ad", "R-1", "river_road_live"))), Triple("someone_else", "Someone Else", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        // Pages that aren't sheets.
+                        "https://acordes.lacuerda.net/" to "<html>No encontrado</html>",
+                        "https://www.ufret.jp/search.php" to "",
+                        "https://music.163.com/api/search/get" to "{}"
+                    )
+                )
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertEquals(
+            listOf("walkers/river_road-4", "walkers/river_road-2", "walkers/river_road_live"),
+            fake.requestedUrls.filter { ".shtml" in it }.map { it.removePrefix("https://acordes.lacuerda.net/").removeSuffix(".shtml") }
+        )
+        // Results it doesn't list the pages of are none.
+        fake.requestedUrls.clear()
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))).replace("var NMAX=0;", ""))
+            } else {
+                answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertTrue(fake.requestedUrls.none { ".shtml" in it })
+        // Nor are songs it doesn't say the artist of.
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))).replace("""<a href="/walkers/">The Walkers</A>""", ""))
+            } else {
+                answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertTrue(fake.requestedUrls.none { ".shtml" in it })
     }
 
     @Test
@@ -383,6 +503,65 @@ class ChordFinderTest {
         )
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Nowhere - 川の道", "Nobody"), japanese))
         assertEquals(listOf("Nowhere - 川の道 Nobody", "川の道", "一つ", "二つ", "Nowhere - 川の道"), uFretSearches)
+    }
+
+    @Test
+    fun aSongUFretHasOnlyInKatakanaIsFoundAmongTheArtistsSongsByHowItSounds() {
+        // No search finds "Plastic Love": U-FRET lists it as "プラスティック・ラブ", on the second page of the singer's.
+        val plastic = MusicMetadata("Plastic Love", "Mariya Takeuchi")
+        val pages = mapOf(
+            "1" to (1..30).joinToString("") { uFretResult(100 + it, "曲$it", "竹内まりや") },
+            "2" to uFretResult(7, "プラスチック・ドール", "竹内まりや") + uFretResult(8, "プラスティック・ラブ", "竹内まりや", beginner = true) +
+                uFretResult(10, "プラスティック・ラブ", "他の人") + uFretResult(9, "プラスティック・ラブ", "山下達郎 &amp; 竹内まりや") +
+                (11..12).joinToString("") { uFretResult(it, "プラスティック・ラブ", "竹内まりや") }
+        )
+        val sheets = mutableMapOf(
+            "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("Night Tempo", "竹内まりや"), "川の道" to listOf("竹内まりや")),
+            "https://www.ufret.jp/song.php?data=8" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている"),
+            "https://www.ufret.jp/song.php?data=9" to uFretSong("[G]川の道を歩いていく", "朝の光に歌っている"),
+            "https://www.ultimate-guitar.com/search.php" to ugSearch()
+        )
+        fake.handler = { request ->
+            val url = request.url
+            if (url.encodedPath == "/search.php" && url.host == "www.ufret.jp") {
+                FakeSpotify.html(request, if (url.queryParameter("key") == "竹内まりや") pages[url.queryParameter("p")].orEmpty() else "")
+            } else {
+                answer(request, sheets)
+            }
+        }
+        // The singer's own, not the easier one, nor one by someone else.
+        assertEquals("https://www.ufret.jp/song.php?data=9", (chords(plastic, japanese) as ChordFinder.Chords.Found).sheet.url)
+        val listed = fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl() }.filter { it.queryParameter("key") == "竹内まりや" }
+        assertEquals(listOf("1", "2"), listed.map { it.queryParameter("p") })
+        assertTrue(fake.requestedUrls.none { it.endsWith("data=7") || it.endsWith("data=10") })
+
+        // Three sheets at most are tried, the easier one last.
+        listOf(9, 11, 12).forEach { sheets["https://www.ufret.jp/song.php?data=$it"] = "" }
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(plastic, japanese))
+        assertEquals(listOf("9", "11", "12"), fake.requestedUrls.filter { "song.php" in it }.map { it.toHttpUrl().queryParameter("data") })
+
+        // Not there, the last page, one not full, is the last asked; no sound-alike is asked for a title in Japanese.
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Lonely Hearts", "竹内まりや"), japanese))
+        assertEquals(listOf("1", "2"), fake.requestedUrls.filter { it.startsWith("https://www.ufret.jp/search.php") }.map { it.toHttpUrl() }
+            .filter { it.queryParameter("p") != null }.map { it.queryParameter("p") })
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道", "Mariya Takeuchi"), japanese))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("p") != null })
+
+        // However many songs the singer has, no more than eight pages of them are looked through.
+        fake.handler = { request ->
+            val url = request.url
+            if (url.encodedPath == "/search.php" && url.host == "www.ufret.jp") {
+                FakeSpotify.html(request, if (url.queryParameter("p") != null) (1..30).joinToString("") { uFretResult(100 + it, "曲$it", "竹内まりや") } else "")
+            } else {
+                answer(request, sheets)
+            }
+        }
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Lonely Hearts", "竹内まりや"), japanese))
+        assertEquals((1..8).map { "$it" }, fake.requestedUrls.mapNotNull { it.toHttpUrl().queryParameter("p") })
     }
 
     @Test

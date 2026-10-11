@@ -186,6 +186,9 @@ internal data class ScreenActions(
     /** Shows how to stop the apps that keep the links, one at a time. */
     val onShowAppsGuide: () -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
+    val onDismissNotices: (Set<String>) -> Unit = {},
+    /** Shows the song a music app plays now, with its words when true. */
+    val onShowPlayingNow: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     /** Fetches the shown song's words and shows them. */
     val onShowLyrics: () -> Unit = {},
@@ -510,6 +513,15 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkNotices(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
+        val playing = state.playingNow.takeIf {
+            state.result == null && state.error == null && !state.isLoading && !state.listening && state.linkText.isBlank()
+        }
+        AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+            // Kept while it fades out, as the song goes when it's tapped.
+            val shown = remember { mutableStateOf(playing) }
+            if (playing != null) shown.value = playing
+            shown.value?.let { PlayingNow(it, actions) }
+        }
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
         // Covers found for a playlist's songs fill in where they are rather than bring a new result.
         AnimatedContent(targetState = state.result, contentKey = { it?.copy(tracks = emptyList()) }, transitionSpec = { swap() }, label = "result") { result ->
@@ -540,6 +552,40 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
             if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
+        }
+    }
+}
+
+/** The song a music app plays right now: tapping shows it, and its words are a tap away. */
+@Composable
+private fun PlayingNow(song: MusicMetadata, actions: ScreenActions) {
+    Surface(
+        onClick = { actions.onShowPlayingNow(false) },
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverArt(song.artworkUrl, actions.loadArtwork, size = 48.dp)
+            Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp).weight(1f)) {
+                Text(stringResource(R.string.playing_now), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    song.artist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = { actions.onShowPlayingNow(true) }) {
+                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
+            }
         }
     }
 }
@@ -609,29 +655,34 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
 }
 
 /**
- * One line for each thing still keeping links from Crosstune: links Android doesn't let it open
- * yet (before Android 12, which can't tell, a reminder until dismissed), and installed apps that
- * still open their own links.
+ * A line for what still keeps links from Crosstune: links Android doesn't let it open yet (before
+ * Android 12, which can't tell, a reminder), and one for installed apps that still open their own.
+ * On the main screen each can be closed, until something else keeps links; settings always shows them.
  */
 @Composable
-internal fun LinkNotices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean = true) {
+internal fun LinkNotices(state: UiState, actions: ScreenActions, inSettings: Boolean = false) {
     // Notices come and go as things are fixed, so the space they take follows smoothly.
-    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, includeNotAllowed) }
+    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, inSettings) }
 }
 
 @Composable
-private fun Notices(state: UiState, actions: ScreenActions, includeNotAllowed: Boolean) {
+private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean) {
     // Nothing is known to be wrong until Android has been asked.
     if (!state.systemStateKnown) return
-    // Settings marks each service that isn't allowed yet instead.
     val allow = stringResource(R.string.allow_button)
+    val dismissed = if (inSettings) emptySet() else state.dismissedNotices
+    val dismiss = { keys: Set<String> -> { actions.onDismissNotices(keys) }.takeUnless { inSettings } }
     // Each opens the matching guide, which shows exactly what to tap in Android's settings.
     if (state.unapprovedHosts != null) {
-        // Set to open in the browser, no link reaches Crosstune at all, so settings says so too.
-        if (state.ownLinksOff && state.interceptsAnything) {
-            NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide)
-        } else if (includeNotAllowed && state.someLinksNotAllowed) {
-            NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide)
+        val keys = state.notAllowedKeys
+        if (!dismissed.containsAll(keys)) {
+            // Set to open in the browser, no link reaches Crosstune at all.
+            if (OWN_LINKS_OFF in keys) {
+                NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide, dismiss(keys))
+            } else if (!inSettings) {
+                // Settings marks each service that isn't allowed yet instead.
+                NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide, dismiss(keys))
+            }
         }
     } else if (state.showLinkSettingsHelper) {
         NoticeStrip(
@@ -639,8 +690,15 @@ private fun Notices(state: UiState, actions: ScreenActions, includeNotAllowed: B
             onDismiss = actions.onDismissLinkSettingsHelper
         )
     }
-    state.blockingApps.orEmpty().forEach { app ->
-        NoticeStrip(stringResource(R.string.notice_app_still_opens, app.label), stringResource(R.string.fix_button), actions.onShowAppsGuide)
+    val apps = state.blockingApps.orEmpty().sortedBy { it.label }
+    val appKeys = apps.map { "app:${it.packageName}" }.toSet()
+    if (apps.isNotEmpty() && !dismissed.containsAll(appKeys)) {
+        val text = if (apps.size == 1) {
+            stringResource(R.string.notice_app_still_opens, apps.single().label)
+        } else {
+            stringResource(R.string.notice_apps_still_open, apps.joinToString(", ") { it.label })
+        }
+        NoticeStrip(text, stringResource(R.string.fix_button), actions.onShowAppsGuide, dismiss(appKeys))
     }
 }
 
@@ -746,7 +804,10 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         .padding(top = 12.dp)
         .heightIn(min = 56.dp)
     val canConvert = !busy && state.linkText.isNotBlank()
-    val convertLabel = @Composable { Text(stringResource(R.string.resolve_button), style = MaterialTheme.typography.labelLarge) }
+    // A name, not a link, is searched for.
+    val name = MusicLinks.parse(state.linkText) == null && !MusicLinks.looksLikeALink(state.linkText)
+    val label = if (name) R.string.search_button else R.string.resolve_button
+    val convertLabel = @Composable { Text(stringResource(label), style = MaterialTheme.typography.labelLarge) }
     // The text the result or error on screen came from: converting it again would change nothing,
     // and an error that's worth retrying has its own Try again.
     val shownText = rememberSaveable(state.result, state.error) { state.linkText }
@@ -799,6 +860,7 @@ internal fun DefaultDestinationMenu(
                         .flipWhen(expanded)
                 )
             }
+            var all by remember(expanded) { mutableStateOf(false) }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 modeLabels.forEach { (itemMode, itemLabel) ->
                     MenuChoice(itemLabel, mode == itemMode, icon = { ModeIcon(itemMode) }) {
@@ -807,13 +869,15 @@ internal fun DefaultDestinationMenu(
                     }
                 }
                 HorizontalDivider()
-                destinations.installedFirst(installed).forEach { destination ->
+                val short = destinations.shortList(installed, selected).takeUnless { all }
+                (short ?: destinations.installedFirst(installed)).forEach { destination ->
                     MenuChoice(destination.label(), mode == LinkMode.OPEN && destination == selected, icon = { DestinationIcon(destination, installed) }) {
                         expanded = false
                         onSelect(destination)
                         onMode(LinkMode.OPEN)
                     }
                 }
+                if (short != null) MoreChoice { all = true }
             }
         }
     }
@@ -833,18 +897,7 @@ private fun SongSearchSheet(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text(stringResource(R.string.song_search_title))
-                Text(
-                    stringResource(R.string.song_search_label_for, state.songSearchQuery),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
+        title = { Text(stringResource(R.string.song_search_title)) },
         text = {
             if (state.isSearchingSongs) {
                 Column {
@@ -958,43 +1011,47 @@ private fun ErrorCard(error: AppError, state: UiState, actions: ScreenActions) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp)
+            .padding(top = 16.dp)
             // Links from other apps fail with nothing else changing on screen, so announce it.
             .semantics { liveRegion = LiveRegionMode.Polite },
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer
     ) {
-        Row(modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 8.dp)) {
-            AppIcon(R.drawable.ic_error, contentDescription = null, modifier = Modifier.padding(top = 2.dp))
-            Column(modifier = Modifier.padding(start = 16.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            // One line: what went wrong, and trying again as an icon at its end.
+            Row(modifier = Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(R.drawable.ic_error, contentDescription = null, modifier = Modifier.size(20.dp))
                 Text(
                     text = stringResource(error.messageRes),
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)
                 )
-                // The theme's accent color is hard to read on the error color.
-                val onError = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (state.canRetry) {
-                        TextButton(onClick = actions.onRetry, colors = onError) {
-                            Text(stringResource(R.string.retry_button))
-                        }
+                if (state.canRetry) {
+                    IconButton(onClick = actions.onRetry) {
+                        AppIcon(R.drawable.ic_refresh, contentDescription = stringResource(R.string.retry_button))
                     }
+                }
+            }
+            // The theme's accent color is hard to read on the error color.
+            val onError = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer)
+            // Only what else can be done, under it.
+            val original = state.link?.service
+            val others = if (error == AppError.RECOGNITION_UNAVAILABLE) actions.recognizers.filterNot { it.listensHere } else emptyList()
+            if (error == AppError.MICROPHONE || others.isNotEmpty() || original != null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 20.dp)) {
                     if (error == AppError.MICROPHONE) {
                         TextButton(onClick = actions.onOpenMicrophoneSettings, colors = onError) {
                             Text(stringResource(R.string.open_settings_button))
                         }
                     }
                     // Shazam is busy, but another app may still name the song.
-                    if (error == AppError.RECOGNITION_UNAVAILABLE) {
-                        actions.recognizers.filterNot { it.listensHere }.forEach { recognizer ->
-                            TextButton(onClick = { actions.onRecognize(recognizer) }, colors = onError) {
-                                Text(stringResource(R.string.open_app_button, recognizer.label))
-                            }
+                    others.forEach { recognizer ->
+                        TextButton(onClick = { actions.onRecognize(recognizer) }, colors = onError) {
+                            Text(stringResource(R.string.open_app_button, recognizer.label))
                         }
                     }
                     // A link Crosstune couldn't read can still be opened in the app it belongs to.
-                    state.link?.service?.let { service ->
+                    original?.let { service ->
                         TextButton(onClick = actions.onOpenOriginal, colors = onError) {
                             Text(stringResource(service.openLabelRes))
                         }
@@ -1321,8 +1378,10 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
         ) {
             AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.choose_app_button), modifier = Modifier.flipWhen(expanded))
         }
+        var all by remember(expanded) { mutableStateOf(false) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            state.destinations.installedFirst(state.installed).forEach { destination ->
+            val short = state.destinations.shortList(state.installed, state.resultDestination).takeUnless { all }
+            (short ?: state.destinations.installedFirst(state.installed)).forEach { destination ->
                 val isSelected = destination == state.resultDestination
                 DropdownMenuItem(
                     text = {
@@ -1339,6 +1398,7 @@ private fun DestinationMenuButton(state: UiState, actions: ScreenActions) {
                     modifier = Modifier.semantics { this.selected = isSelected }
                 )
             }
+            if (short != null) MoreChoice { all = true }
         }
     }
 }
@@ -1496,12 +1556,10 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    // Most are songs, so only other kinds say what they are, which leaves room
-                    // for the service before the line is cut.
+                    // Most are songs, so only other kinds say what they are.
                     text = listOf(
                         if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
-                        entry.metadata.artist,
-                        entry.link.service?.let { stringResource(it.labelRes) }.orEmpty()
+                        entry.metadata.artist
                     )
                         .filter { it.isNotBlank() }
                         .joinToString(", "),
@@ -1658,7 +1716,28 @@ private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier 
 
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =
-    sortedBy { if ((it as? Destination.Service)?.service in installed || (it is Destination.Alternative && it.packageName != null)) 0 else 1 }
+    sortedBy { if (it.isInstalled(installed)) 0 else 1 }
+
+private fun Destination.isInstalled(installed: Set<MusicService>) =
+    (this as? Destination.Service)?.service in installed || (this is Destination.Alternative && packageName != null)
+
+/**
+ * What a menu of apps lists before More: the installed ones, the user's own sites, and [chosen];
+ * null when that's all of them, or none of them is installed, which lists them all.
+ */
+internal fun List<Destination>.shortList(installed: Set<MusicService>, chosen: Destination?): List<Destination>? =
+    installedFirst(installed).filter { it == chosen || it is Destination.Custom || it.isInstalled(installed) }
+        .takeIf { short -> short.size < size && short.any { it.isInstalled(installed) } }
+
+/** A menu's last item, which lists the apps left out. */
+@Composable
+private fun MoreChoice(onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.more_button)) },
+        leadingIcon = { Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { AppIcon(R.drawable.ic_expand_more, contentDescription = null) } },
+        onClick = onClick
+    )
+}
 
 /**
  * A destination's icon: an installed app's own, the bundled logo of a service, or, for sites
@@ -1711,7 +1790,10 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                     }
                 }
                 val hidden = state.pickerHides?.let(Destination::Service)
-                state.destinations.filter { it != hidden }.installedFirst(state.installed).forEach { destination ->
+                val choices = state.destinations.filter { it != hidden }
+                var all by rememberSaveable { mutableStateOf(false) }
+                val short = choices.shortList(state.installed, null).takeUnless { all }
+                (short ?: choices.installedFirst(state.installed)).forEach { destination ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { onPick(destination) }.padding(vertical = 10.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1721,6 +1803,16 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                         Column {
                             Text(destination.openLabel(), style = MaterialTheme.typography.bodyLarge)
                         }
+                    }
+                }
+                if (short != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { all = true }.padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { AppIcon(R.drawable.ic_expand_more, contentDescription = null) }
+                        Text(stringResource(R.string.more_button), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }

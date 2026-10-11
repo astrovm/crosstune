@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -52,8 +53,8 @@ internal const val LOGO_TAG = "logo"
 internal val ContentMaxWidth = 600.dp
 
 @Composable
-internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier: Modifier = Modifier) {
-    Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier)
+internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
+    Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier, tint = tint)
 }
 
 /**

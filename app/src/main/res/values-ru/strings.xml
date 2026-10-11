@@ -3,6 +3,7 @@
     <string name="spotify_link_label">Музыкальная ссылка</string>
     <string name="spotify_link_placeholder">Вставьте музыкальную ссылку или название трека</string>
     <string name="resolve_button">Преобразовать ссылку</string>
+    <string name="search_button">Найти</string>
     <string name="paste_button">Вставить</string>
     <string name="recognize_button">Распознать трек</string>
     <string name="setting_recognizer">Приложение для распознавания музыки</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">Открывать ссылки в</string>
     <string name="settings_about_title">О приложении</string>
     <string name="settings_links_title">Открывать ссылки из</string>
-    <string name="settings_links_description">Ссылки этих сервисов по нажатию открываются в Crosstune. Поделиться и вставить работает всегда.</string>
     <string name="rule_opens_in">Откроется в: %1$s</string>
     <string name="rule_default">По умолчанию (%1$s)</string>
     <string name="settings_custom_title">Другие приложения и сайты</string>
@@ -37,12 +37,12 @@
     <string name="settings_behaviour_title">Поведение</string>
     <string name="settings_listening_title">Распознавание и тексты</string>
     <string name="settings_appearance_title">Оформление</string>
-    <string name="chatgpt_use_plan">Использовать план ChatGPT</string>
+    <string name="chatgpt_use_plan">Использовать платный план ChatGPT</string>
     <string name="chatgpt_continue">Продолжить с ChatGPT</string>
     <string name="chatgpt_manage_usage">Управлять использованием</string>
     <string name="chatgpt_model">Модель</string>
     <string name="chatgpt_sign_out">Выйти</string>
-    <string name="chatgpt_declined">Crosstune не получил разрешения использовать ваш план ChatGPT.</string>
+    <string name="chatgpt_declined">Crosstune не получил разрешения использовать этот план ChatGPT. Нужен платный план.</string>
     <string name="chatgpt_failed">Не удалось войти через ChatGPT. Попробуйте ещё раз.</string>
     <string name="chatgpt_welcome_title">Вы используете свой план ChatGPT</string>
     <string name="chatgpt_welcome_message">ИИ-функции Crosstune теперь используют ваш план ChatGPT. Управлять использованием можно в настройках ChatGPT.</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">Вы слушаете в %1$s, поэтому его ссылки и так открываются там.</string>
     <string name="settings_listening_locked">Вы слушаете в %1$s, поэтому его ссылки и так открываются там. Чтобы включить, выберите ниже другое приложение.</string>
     <string name="setup_destination_title">Где вы слушаете музыку?</string>
-    <string name="setup_destination_body">Позже его можно сменить.</string>
     <string name="setup_allow_title">Разрешите ссылки</string>
-    <string name="setup_allow_none">Вы не выбрали ни одного сервиса, поэтому разрешать нечего. Ссылки всё равно можно отправлять в Crosstune или вставлять в него.</string>
+    <string name="setup_allow_none">Сервисы не выбраны. Ссылки всё равно можно отправлять или вставлять.</string>
     <string name="setup_allow_step_add">Нажмите «Добавить ссылку».</string>
     <string name="setup_allow_step_in_app">Выберите «В приложении».</string>
     <string name="setup_allow_step_tick">Отметьте все ссылки и нажмите «Добавить».</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">Сначала показать трек</string>
     <string name="show_song_short">Показать трек</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
-    <string name="setting_exact_match_description">Открывает сам трек, если приложение это поддерживает. Иначе ищет его.</string>
+    <string name="setting_exact_match_description">Иначе ищет.</string>
     <string name="setting_not_found">Если песня не найдена</string>
     <string name="not_found_ask">Спрашивать</string>
     <string name="not_found_original">Открывать там, откуда она</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">Нет в %1$s</string>
     <string name="search_anyway">Всё равно искать в %1$s</string>
     <string name="setting_clean_links">Убирать отслеживание из ссылок</string>
-    <string name="setting_clean_links_description">Удаляет метки отслеживания вроде ?si= или utm_ из ссылок, которые вы открываете, копируете или отправляете.</string>
+    <string name="setting_clean_links_description">Удаляет ?si=, utm_ и подобное.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>
     <string name="setting_share_sheet_apps_description">Показывать музыкальные приложения в меню «Поделиться».</string>
     <string name="setting_language">Язык</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">Открыть в</string>
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
+    <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>
     <string name="close_recent_search">Закрыть поиск</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">Сделано astro с %1$s</string>
 
     <string name="error_invalid_url">Это не ссылка на трек, альбом, исполнителя или плейлист.</string>
-    <string name="error_network">Не удалось подключиться. Проверьте интернет и повторите попытку.</string>
-    <string name="error_not_found">Сервис не нашёл этот материал. Возможно, он закрыт или удалён.</string>
-    <string name="error_rate_limited">Сервис перегружен. Подождите немного и повторите попытку.</string>
+    <string name="error_network">Не удалось подключиться.</string>
+    <string name="error_not_found">Не найдено. Возможно, закрыто или удалено.</string>
+    <string name="error_rate_limited">Сервис перегружен.</string>
     <string name="error_service_unavailable">Сервис не отвечает. Повторите попытку чуть позже.</string>
     <string name="error_no_app_to_open">Нет установленного приложения, которое может открыть эту ссылку.</string>
     <string name="error_metadata_unavailable">Не удалось получить сведения об этой ссылке.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">Ссылки открываются в браузере, а не в Crosstune</string>
     <string name="allow_button">Разрешить</string>
     <string name="notice_app_still_opens">%1$s всё ещё открывает свои ссылки</string>
+    <string name="notice_apps_still_open">%1$s всё ещё открывают свои ссылки</string>
     <string name="fix_button">Исправить</string>
     <string name="history_cleared">История очищена</string>
     <string name="history_removed">Удалено</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">Музыка</string>
     <string name="setup_sources_videos">Видео</string>
     <string name="setting_only_music_videos_note">В ваше приложение попадают только музыкальные видео. Остальные открываются как обычно.</string>
-    <string name="guide_may_differ">На вашем телефоне экран может немного отличаться.</string>
     <string name="setup_apps_stop_body">Выберите «В браузере» или отключите «Открывать поддерживаемые ссылки».</string>
     <string name="setup_apps_progress">Приложение %1$d из %2$d</string>
     <string name="setup_apps_all_done">Готово. Другие приложения больше не открывают ссылки.</string>
@@ -190,13 +190,13 @@
     <string name="choose_app_button">Выбрать приложение</string>
     <string name="make_default_named">Сделать %1$s основным</string>
     <string name="listening_text">Слушаю…</string>
-    <string name="error_no_match">Не удалось распознать трек. Попробуйте ещё раз ближе к музыке.</string>
+    <string name="error_no_match">Не удалось распознать трек.</string>
     <string name="error_microphone">Crosstune нужен микрофон, чтобы распознавать треки.</string>
     <string name="error_recognition_unavailable">Распознавание треков сейчас недоступно.</string>
     <string name="open_settings_button">Открыть настройки</string>
     <string name="open_app_button">Открыть %1$s</string>
     <string name="lyrics_button">Текст</string>
-    <string name="lyrics_title">Текст</string>
+    <string name="playing_now">Сейчас играет</string>
     <string name="lyrics_loading">Ищем текст…</string>
     <string name="lyrics_none">Для этого трека текст не найден.</string>
     <string name="lyrics_sync_service">Синхронизация текстов Crosstune</string>
@@ -230,7 +230,6 @@
     <string name="palette_sunset">Закат</string>
     <string name="palette_rose">Роза</string>
     <string name="setting_pure_black">Чистый чёрный</string>
-    <string name="setting_pure_black_description">Настоящий чёрный в тёмном режиме. Бережнее к OLED-экранам и их батарее.</string>
     <string name="follow_help_title">Текст в такт вашей музыке</string>
     <string name="follow_help_try">Нажмите на переключатель, затем «Закрыть».</string>
     <string name="follow_help_restricted">Нажмите ⋮, затем «Разрешить доступ к настройкам с ограниченным доступом».</string>
@@ -239,17 +238,16 @@
     <string name="follow_turn_on">Включить</string>
     <string name="follow_help_simple">Включите его и нажмите «Разрешить».</string>
     <string name="setting_lyrics_follow">Текст следует за музыкальным приложением</string>
-    <string name="setting_lyrics_follow_description">Нужен доступ к уведомлениям. Ваши уведомления никогда не читаются.</string>
+    <string name="setting_lyrics_follow_description">Нужен доступ к уведомлениям.</string>
     <string name="follow_help_app_info">О приложении</string>
     <string name="follow_help_access_button">Доступ к уведомлениям</string>
     <string name="song_search_title">Треки</string>
     <string name="song_search_none">Треки для «%1$s» не найдены.</string>
-    <string name="song_search_label_for">Найдено по запросу «%1$s»</string>
     <string name="floating_background">Фон</string>
     <string name="floating_text_size">Размер текста</string>
     <string name="floating_float">Поверх других приложений</string>
     <string name="floating_permission_title">Текст поверх приложений</string>
-    <string name="floating_permission_text">Android нужно ваше разрешение, чтобы Crosstune показывался поверх других приложений. Включите его на следующем экране и вернитесь — текст появится поверх.</string>
+    <string name="floating_permission_text">Android нужно ваше разрешение, чтобы Crosstune показывался поверх других приложений. Включите его на следующем экране и вернитесь, и текст появится поверх.</string>
     <string name="floating_permission_continue">Продолжить</string>
     <string name="floating_customize">Настроить</string>
     <string name="floating_previous_line">Предыдущая строка</string>
