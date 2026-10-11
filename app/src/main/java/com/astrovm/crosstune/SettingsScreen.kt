@@ -780,11 +780,6 @@ private fun appVersion(): String {
     return remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
 }
 
-/**
- * One source service: a switch for whether Crosstune opens its links, whether Android lets it yet,
- * and, once on or given its own app, where they go. The app the user listens in can't be turned on
- * while its links would just go back to it.
- */
 /** Everything Settings offers for one source of links: a service, or a web frontend's sites. */
 private class SourceSettings(
     val key: String,

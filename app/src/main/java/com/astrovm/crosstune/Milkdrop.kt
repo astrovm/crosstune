@@ -19,8 +19,10 @@ internal interface Milkdrop {
     /** Starts drawing at [width] by [height]; false when it can't. */
     fun open(width: Int, height: Int): Boolean
     fun size(width: Int, height: Int)
-    /** Moves on to [preset], the text of a .milk file, blending into it when [smooth]. */
-    /** Whether it loaded: a phone may not manage some presets' shaders. */
+    /**
+     * Moves on to [preset], the text of a .milk file, blending into it when [smooth]; whether it
+     * loaded, as a phone may not manage some presets' shaders.
+     */
     fun show(preset: String, smooth: Boolean): Boolean
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
@@ -84,8 +86,7 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
     override fun close() = visualizer.release()
 
     companion object {
-        /** Null without the permission, or on a phone that won't share its sound. */
-        /** [create] makes one on the output mix, audio session 0. */
+        /** [create] makes one on the output mix, audio session 0; null without the permission, or on a phone that won't share its sound. */
         fun open(create: () -> Visualizer = { Visualizer(0) }): OutputMixTap? {
             var visualizer: Visualizer? = null
             return try {

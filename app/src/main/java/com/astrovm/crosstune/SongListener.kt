@@ -31,10 +31,10 @@ import kotlin.math.min
 
 /** What listening found. */
 internal sealed interface Heard {
-    /** [appleMusicId] is the song on Apple Music, when Shazam knows it. */
     /**
-     * [offsetMs] is how far into the song the sound heard starts, and [startedAtMs] when that sound
-     * started, on the clock that counts since the phone started, so the words can follow on from there.
+     * [appleMusicId] is the song on Apple Music, when Shazam knows it. [offsetMs] is how far into the
+     * song the sound heard starts, and [startedAtMs] when that sound started, on the clock that counts
+     * since the phone started, so the words can follow on from there.
      */
     data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null) : Heard {
         /** Where the song is, as heard, when both halves are known. */

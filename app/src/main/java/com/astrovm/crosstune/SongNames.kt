@@ -39,7 +39,6 @@ internal object SongNames {
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5
 
-    /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     /**
      * The names a song may go by: its title, then, for one that's two names joined by a dash, as
      * YouTube Music gives "ミステリー・ガール - Mystery Girl", each of them.
@@ -47,6 +46,7 @@ internal object SongNames {
     fun titleNames(title: String): List<String> =
         listOf(title) + title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
 
+    /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     fun normalize(text: String): String =
         Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .replace(lettersAndDigits, "")

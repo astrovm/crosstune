@@ -239,7 +239,6 @@ internal data class ScreenActions(
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
-    /** Sets where translations come from, by address and key; false when the address isn't one. */
     /** ChatGPT translates, signed in, or else MyMemory. */
     val onChatGptTranslationChange: (Boolean) -> Unit = {},
     /** Asks ChatGPT this model, by its slug, from now on. */
@@ -1656,8 +1655,6 @@ private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier 
         Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
     }
 }
-
-/** How many Recent items fit at a glance; past that, a search shows above them. */
 
 /** Installed apps first: services whose app is installed, and frontend apps, which are only offered once installed. */
 internal fun List<Destination>.installedFirst(installed: Set<MusicService>): List<Destination> =

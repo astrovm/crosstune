@@ -826,8 +826,7 @@ internal class ExactMatcher(
         /** What YouTube adds to an artist's own channel name. */
         private val CHANNEL_SUFFIXES = setOf("topic", "vevo", "official", "music", "tv")
 
-        /** What a video's title adds that isn't another recording: "Official Video", "Lyrics", "HD". */
-        /** What a video's title says of it besides the song's name: "(Official Video)", "Lyrics", "Sub Español". */
+        /** What a video's title says of it besides the song's name, not another recording: "Official Video", "Lyrics", "Sub Español". */
         private val VIDEO_TAGS = setOf(
             "official", "video", "audio", "music", "lyric", "lyrics", "visualizer", "visualiser", "hd", "hq", "4k", "mv", "pv",
             "clip", "videoclip", "full", "version", "feat", "ft", "the", "with", "on", "screen", "high", "quality", "remastered",

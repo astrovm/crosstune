@@ -255,16 +255,13 @@ internal fun savedPalette(name: String?): Palette {
 /** When a song isn't in the app it goes to: say so and offer both, open it where it's from, or search anyway. */
 internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
 
-/**
- * What's switched on to help read a song's words in another language: [readings] over them, kana
- * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
- * Then what's been worked out for the words shown, line by line.
- */
-/** A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none. */
 /** How dark the ground over the visuals is to start with: enough for the words to read. */
 internal const val DEFAULT_VISUALS_SHADE = 0.45f
 
-/** [type] is what kind of word it is, e.g. "noun", when the dictionary says. */
+/**
+ * A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none.
+ * [type] is what kind of word it is, e.g. "noun", when the dictionary says.
+ */
 internal data class WordMeaning(val word: Word, val meaning: String? = null, val looking: Boolean = false, val failed: Boolean = false, val type: String? = null)
 
 /** Signing in with ChatGPT: [email] once signed in, and how the last try went. */
@@ -303,11 +300,15 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val writing get() = !done && !failed && !limitReached
 }
 
+/**
+ * What's switched on to help read a song's words in another language: [readings] over them, kana
+ * over kanji or pinyin over hanzi; the lines in Latin letters, [romanized]; and their [translation].
+ * Then what's been worked out for the words shown, line by line.
+ */
 internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
     val translation: Boolean = false,
-    /** Where translations come from instead of MyMemory, when set. */
     /** Signed in, whether ChatGPT translates, rather than MyMemory. */
     val chatGptTranslation: Boolean = true,
     /** The language picked to translate into, as Settings lists it; null for the app's own. */

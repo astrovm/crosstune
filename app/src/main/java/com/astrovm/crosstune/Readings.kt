@@ -222,11 +222,12 @@ internal object Readings {
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun pinyin(): Transliterator = transliterator ?: Transliterator.getInstance("Han-Latin").also { transliterator = it }
 
+    /** One line at a time, as Android's transliterator can't be used from two threads at once. */
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun chinese(line: String): LineReading {
+    private fun chinese(line: String): LineReading = synchronized(this) {
         val parts = line.map { char -> if (isHan(char)) Ruby(char.toString(), pinyin().transliterate(char.toString())) else Ruby(char.toString()) }
         val romanized = pinyin().transliterate(line).trim()
-        return LineReading(joined(parts), romanized, romanized)
+        LineReading(joined(parts), romanized, romanized)
     }
 
     private fun korean(line: String): LineReading {
