@@ -59,16 +59,25 @@ internal object SongNames {
         Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .split(wordSplit).filter { it.isNotEmpty() }.toSet()
 
-    /** "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself. */
+    /**
+     * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
+     * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
+     */
     fun withoutEditionTag(title: String): String {
         var stripped = title
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
-            val shorter = stripped.replace(featuring, "").replace(editionTag, "")
+            val unfeatured = stripped.replace(featuring, "")
+            val tag = editionTag.find(unfeatured)?.value.orEmpty()
+            if (words(tag).any { it in OTHER_RECORDING }) return unfeatured.takeIf { it.isNotBlank() } ?: stripped
+            val shorter = unfeatured.replace(editionTag, "")
             if (shorter == stripped || shorter.isBlank()) return stripped
             stripped = shorter
         }
     }
+
+    /** Words in a tag that make it another recording, though it also says it's remastered or in mono. */
+    private val OTHER_RECORDING = setOf("live", "remix", "acoustic", "demo", "instrumental", "unplugged", "karaoke", "cover", "session", "sessions")
 
     /**
      * "A & B feat. C" is credited as just "A" on some services, so each name counts on its own,
