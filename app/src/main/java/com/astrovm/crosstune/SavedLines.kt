@@ -38,10 +38,15 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         }
     }
 
-    /** Keeps [line], or lets it go when it's kept already. */
+    /**
+     * Keeps [line], or lets it go when it's kept already. With [MAX] kept, the one learned best makes
+     * room, the oldest of those, rather than one still being learned.
+     */
     fun toggle(line: SavedLine): List<SavedLine> {
         val saved = load()
-        return save(if (saved.any { it.isSame(line) }) saved.filterNot { it.isSame(line) } else (listOf(line) + saved).take(MAX))
+        if (saved.any { it.isSame(line) }) return save(saved.filterNot { it.isSame(line) })
+        val room = if (saved.size < MAX) saved else saved.minus(saved.asReversed().maxBy { it.box })
+        return save(listOf(line) + room.take(MAX - 1))
     }
 
     fun remove(line: SavedLine): List<SavedLine> = save(load().filterNot { it.isSame(line) })
@@ -79,11 +84,13 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     private fun JSONObject.text(name: String): String? = optString(name).takeIf { has(name) && it.isNotEmpty() }
 
-    private companion object {
-        const val KEY = "saved_lines"
+    companion object {
+        private const val KEY = "saved_lines"
+
+        /** How many lines are kept at most. */
         const val MAX = 500
-        const val DAY_MS = 24 * 60 * 60 * 1000L
-        const val AGAIN_MS = 10 * 60 * 1000L
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+        private const val AGAIN_MS = 10 * 60 * 1000L
     }
 }
 

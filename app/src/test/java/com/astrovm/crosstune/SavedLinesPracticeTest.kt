@@ -43,6 +43,21 @@ class SavedLinesPracticeTest {
     }
 
     @Test
+    fun withAllTheRoomTakenTheLineLearnedBestMakesRoom() {
+        val store = SavedLinesStore(prefs)
+        // The oldest is still being learned; two in the middle are known best, the older of them first.
+        repeat(SavedLinesStore.MAX) { store.toggle(line.copy(text = "Line $it")) }
+        listOf("Line 5", "Line 9").forEach { text ->
+            repeat(3) { store.practised(store.load().first { it.text == text }, knew = true, now = 0) }
+        }
+        val kept = store.toggle(line.copy(text = "New"))
+        assertEquals(SavedLinesStore.MAX, kept.size)
+        assertEquals("New", kept.first().text)
+        assertEquals(false, kept.any { it.text == "Line 5" })
+        assertEquals(true, kept.any { it.text == "Line 9" } && kept.any { it.text == "Line 0" })
+    }
+
+    @Test
     fun linesSavedBeforePracticeAreDueRightAway() {
         prefs.edit().putString("saved_lines", """[{"text":"風","translation":"Viento","title":"T","artist":"A"}]""").commit()
         val old = SavedLinesStore(prefs).load().single()
