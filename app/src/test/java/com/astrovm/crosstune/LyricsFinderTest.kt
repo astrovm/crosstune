@@ -38,8 +38,8 @@ class LyricsFinderTest {
     fun aSongGetsItsOwnWords() {
         respond("""[${answer("Dakare Ni Kita Onna", "Kingo Hamada", "夜が灯りを\n投げるBedで")}]""")
         assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで"), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
-        // LRCLIB first; the words have no timings, so other places are asked after.
-        val asked = fake.requestedUrls.first()
+        // LRCLIB is asked by title and artist; NetEase, asked at the same time, may come first.
+        val asked = fake.requestedUrls.first { it.startsWith("https://lrclib.net/") }
         assertEquals("https://lrclib.net/api/search?track_name=Dakare%20Ni%20Kita%20Onna&artist_name=Kingo%20Hamada", asked)
         // LRCLIB turns away a request that doesn't name itself, so it must say who and which version.
         val agent = fake.requestHeaders.first { it.first == "User-Agent" }.second
