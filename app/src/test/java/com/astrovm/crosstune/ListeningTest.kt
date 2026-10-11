@@ -1822,6 +1822,44 @@ class ListeningTest {
     }
 
     @Test
+    fun chordsSwitchedOffStopBeingLookedUp() {
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light")
+        waitForText("Walking down the river road\nSinging to the morning light")
+        val words = fake.handler
+        val searches = java.util.concurrent.atomic.AtomicInteger()
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        fake.handler = { request ->
+            when (request.url.host) {
+                // The first search hangs, then fails; those after it find them.
+                "www.ultimate-guitar.com" -> if (searches.incrementAndGet() == 1) {
+                    Thread.sleep(2_000)
+                    throw IOException("timed out")
+                } else {
+                    FakeSpotify.html(request, page("""{"results":[{"song_name":"Demo","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/demo-1"}]}"""))
+                }
+                "tabs.ultimate-guitar.com" -> FakeSpotify.html(
+                    request,
+                    page("""{"tab_view":{"wiki_tab":{"content":"[ch]G[/ch]      [ch]C[/ch]\nWalking down the river road\n[ch]D[/ch]\nSinging to the morning light"}}}""")
+                )
+                else -> words(request)
+            }
+        }
+        learnMenu()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { searches.get() == 1 }
+        // Off mid-lookup and on again: looked up anew, and the one dropped doesn't take them away when it ends.
+        click(string(R.string.lyrics_chords))
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        Thread.sleep(2_500)
+        composeRule.waitForIdle()
+        assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
+    }
+
+    @Test
     fun aSongWithoutChordsShowsJustItsWords() {
         prefs().edit().putBoolean("lyrics_chords", true).commit()
         wordsOf("[00:01.00] Walking down the river road\\n[00:05.00] Singing to the morning light", "Walking down the river road\\nSinging to the morning light")
@@ -1925,7 +1963,7 @@ class ListeningTest {
         // Not an error, and nothing worth saying: there's just nothing to translate them into.
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.lyrics_translation_failed)))
+        assertFalse(described(string(R.string.lyrics_translation_failed)))
 
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
         composeRule.waitForIdle()
@@ -1970,15 +2008,17 @@ class ListeningTest {
     }
 
     @Test
-    fun aTranslationThatCantBeDoneSaysSoAndIsTriedAgain() {
+    fun aTranslationThatCantBeDoneOffersToTryAgain() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars", translations = 503)
-        waitForText(string(R.string.lyrics_translation_failed))
+        // Shown as a button to try again, with no words of its own.
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_translation_failed)) }
+        assertFalse(shown(string(R.string.lyrics_translation_failed)))
         assertFalse(shown("[Stars]"))
         fake.handler = { request -> translation(request) }
-        click(string(R.string.retry_button))
+        click(string(R.string.lyrics_translation_failed))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
-        assertFalse(shown(string(R.string.lyrics_translation_failed)))
+        assertFalse(described(string(R.string.lyrics_translation_failed)))
         // English has no readings to offer, only a translation; signed out, with no lines kept, there's
         // nothing to say about the song or study.
         assertFalse(described(string(R.string.lyrics_about_song)))

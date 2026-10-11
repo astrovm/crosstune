@@ -200,7 +200,6 @@
     <string name="lyrics_title">歌詞</string>
     <string name="lyrics_loading">歌詞を検索しています…</string>
     <string name="lyrics_none">この曲の歌詞は見つかりませんでした。</string>
-    <string name="lyrics_failed">今は歌詞を取得できませんでした。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>
     <string name="lyrics_follow_allow">音楽アプリで再生中の曲に歌詞を合わせます。</string>
     <string name="lyrics_following_app">%1$s に合わせています</string>

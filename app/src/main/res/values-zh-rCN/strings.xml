@@ -199,7 +199,6 @@
     <string name="lyrics_title">歌词</string>
     <string name="lyrics_loading">正在查找歌词…</string>
     <string name="lyrics_none">没有找到这首歌的歌词。</string>
-    <string name="lyrics_failed">暂时无法获取歌词。</string>
     <string name="lyrics_sync_service">Crosstune 歌词同步</string>
     <string name="lyrics_follow_allow">让歌词跟随音乐应用中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟随 %1$s</string>

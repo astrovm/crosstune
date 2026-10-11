@@ -199,7 +199,6 @@
     <string name="lyrics_title">Songtext</string>
     <string name="lyrics_loading">Songtext wird gesucht…</string>
     <string name="lyrics_none">Für diesen Song wurde kein Songtext gefunden.</string>
-    <string name="lyrics_failed">Songtext konnte gerade nicht geladen werden.</string>
     <string name="lyrics_sync_service">Crosstune-Liedtext-Sync</string>
     <string name="lyrics_follow_allow">Lass den Text dem Song folgen, der in deiner Musik-App läuft.</string>
     <string name="lyrics_following_app">Folgt %1$s</string>

@@ -199,7 +199,6 @@
     <string name="lyrics_title">Letra</string>
     <string name="lyrics_loading">Buscando a letra…</string>
     <string name="lyrics_none">Nenhuma letra encontrada para esta música.</string>
-    <string name="lyrics_failed">Não foi possível obter a letra agora.</string>
     <string name="lyrics_sync_service">Sincronização de letras do Crosstune</string>
     <string name="lyrics_follow_allow">Deixe a letra acompanhar a música tocando no seu app de música.</string>
     <string name="lyrics_following_app">Acompanhando %1$s</string>

@@ -199,7 +199,6 @@
     <string name="lyrics_title">बोल</string>
     <string name="lyrics_loading">बोल खोजे जा रहे हैं…</string>
     <string name="lyrics_none">इस गाने के बोल नहीं मिले।</string>
-    <string name="lyrics_failed">अभी बोल नहीं लाए जा सके।</string>
     <string name="lyrics_sync_service">Crosstune बोल सिंक</string>
     <string name="lyrics_follow_allow">बोल को अपने म्यूज़िक ऐप में चल रहे गाने के साथ चलने दें।</string>
     <string name="lyrics_following_app">%1$s के साथ चल रहे हैं</string>

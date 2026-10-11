@@ -225,6 +225,9 @@ class MainActivityTest {
         composeRule.waitForIdle()
     }
 
+    private fun waitForDescription(label: String) =
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(label)).fetchSemanticsNodes().isNotEmpty() }
+
     private fun waitForText(text: String) {
         waitUntil(TIMEOUT_MS) {
             composeRule.onAllNodesWithTextCount(text) > 0
@@ -2690,12 +2693,13 @@ class MainActivityTest {
         assertTextShown(string(R.string.lyrics_button))
         assertTextAbsent("夜が灯りを投げるBedで")
 
-        // The words take a moment to come back, and the sheet says it is getting them rather than
-        // sitting blank while it waits. The delay is what keeps that state on screen long enough to
-        // be seen at all, on a loaded machine as well as a quiet one.
+        // The words take a moment to come back, and the sheet shows they're on their way, with no
+        // words of its own, rather than sitting blank while it waits. The delay is what keeps that
+        // state on screen long enough to be seen at all, on a loaded machine as well as a quiet one.
         fake.delayMillis = 500
         click(string(R.string.lyrics_button))
-        waitForText(string(R.string.lyrics_loading))
+        waitForDescription(string(R.string.lyrics_loading))
+        assertEquals(0, composeRule.onAllNodesWithTextCount(string(R.string.lyrics_loading)))
         waitForText("夜が灯りを投げるBedで")
         fake.delayMillis = 0
         // The words fill the screen, under the song they're of.
@@ -2707,8 +2711,8 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText("夜が灯りを投げるBedで").fetchSemanticsNodes().isEmpty() }
         waitForResult()
 
-        // A song with no words of its own says so, rather than sitting empty. Each song is another,
-        // since the words found for one are kept.
+        // A song with no words of its own shows a note, saying so only to screen readers. Each song
+        // is another, since the words found for one are kept.
         click(string(R.string.clear_button))
         fake.handler = { request ->
             if (request.url.host == "lrclib.net") FakeSpotify.html(request, "[]")
@@ -2717,10 +2721,11 @@ class MainActivityTest {
         resolveTyped("https://music.youtube.com/watch?v=Wordless123")
         waitForResult()
         click(string(R.string.lyrics_button))
-        waitForText(string(R.string.lyrics_none))
+        waitForDescription(string(R.string.lyrics_none))
+        assertEquals(0, composeRule.onAllNodesWithTextCount(string(R.string.lyrics_none)))
         click(string(R.string.dismiss_button))
 
-        // A service that won't answer says that too, and offers another try.
+        // A service that won't answer offers another try.
         click(string(R.string.clear_button))
         fake.handler = { request ->
             if (request.url.host == "lrclib.net") {
@@ -2732,9 +2737,9 @@ class MainActivityTest {
         resolveTyped("https://music.youtube.com/watch?v=BusySong123")
         waitForResult()
         click(string(R.string.lyrics_button))
-        waitForText(string(R.string.lyrics_failed))
+        waitForDescription(string(R.string.retry_button))
         click(string(R.string.retry_button))
-        waitForText(string(R.string.lyrics_failed))
+        waitForDescription(string(R.string.retry_button))
         // Asked once more on the retry, since a busy service is worth asking again.
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.count { it.startsWith("https://lrclib.net") } >= 5)
     }

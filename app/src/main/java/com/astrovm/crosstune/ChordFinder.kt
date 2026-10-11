@@ -110,7 +110,7 @@ internal class ChordFinder(
         val search = U_FRET_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("key", key).build()
         val found = uFretResult.findAll(fetch(search.toString())).map { it.destructured }
             .filter { (_, _, named) -> SongNames.same(named.replace(tags, "").trim(), title) }.toList()
-        val artists = if (found.any { (_, _, _, artist) -> SongNames.sameArtist(artist.trim(), song.artist) } || found.isEmpty() || japanese(song.artist)) {
+        val artists = if (found.any { (_, _, _, artist) -> SongNames.sameArtist(artist.trim(), song.artist) } || japanese(song.artist)) {
             listOf(song.artist)
         } else {
             listOf(song.artist) + otherNames().artists

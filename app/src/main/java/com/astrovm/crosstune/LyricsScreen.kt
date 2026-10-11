@@ -114,6 +114,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -264,15 +265,23 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
                     if (shown == LyricsShown.LOADING) {
-                        LyricsMessage(stringResource(R.string.lyrics_loading), loading = true)
+                        val loading = stringResource(R.string.lyrics_loading)
+                        LyricsMessage(Modifier.semantics { contentDescription = loading }) { LoadingLines() }
                     } else if (shown == LyricsShown.FAILED) {
-                        LyricsMessage(stringResource(R.string.lyrics_failed)) {
-                            FilledTonalButton(onClick = actions.onShowLyrics, modifier = Modifier.padding(top = 16.dp)) {
-                                Text(stringResource(R.string.retry_button))
+                        LyricsMessage {
+                            FilledTonalIconButton(onClick = actions.onShowLyrics, modifier = Modifier.size(72.dp)) {
+                                Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.retry_button), modifier = Modifier.size(36.dp))
                             }
                         }
                     } else if (shown == LyricsShown.NONE) {
-                        LyricsMessage(stringResource(R.string.lyrics_none))
+                        LyricsMessage {
+                            Icon(
+                                painterResource(R.drawable.ic_music_note),
+                                contentDescription = stringResource(R.string.lyrics_none),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(72.dp)
+                            )
+                        }
                     } else if (shown == LyricsShown.TIMED) {
                         TimedLyrics(state, actions, timedList, syncing, onStudy = { studying = it })
                     } else if (state.learning.shows || (state.chords.on && state.chords.sheet != null)) {
@@ -581,14 +590,10 @@ private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) ->
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
     // While it's on its way the translate button shows it; only failing needs saying.
     AnimatedVisibility(visible = learning.translation && learning.translationFailed, enter = Motion.appear, exit = Motion.disappear) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-            Text(
-                stringResource(R.string.lyrics_translation_failed),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp)
-            )
-            TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+            IconButton(onClick = actions.onRetryTranslation) {
+                Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.lyrics_translation_failed), tint = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }
@@ -793,27 +798,10 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
     }
 }
 
-/** Why there are no words to read yet, or at all. */
+/** Where the words go while they're on their way, or when there are none. */
 @Composable
-private fun LyricsMessage(text: String, loading: Boolean = false, action: @Composable () -> Unit = {}) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp)
-    ) {
-        if (loading) LoadingLines()
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .padding(top = 20.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }
-        )
-        action()
-    }
+private fun LyricsMessage(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(contentAlignment = Alignment.Center, modifier = modifier.fillMaxSize().padding(32.dp)) { content() }
 }
 
 /** Three bars breathing where the words will be, while they're on their way. */

@@ -199,7 +199,6 @@
     <string name="lyrics_title">Sözler</string>
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
-    <string name="lyrics_failed">Sözler şu anda alınamadı.</string>
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>
     <string name="lyrics_follow_allow">Sözler müzik uygulamanda çalan şarkıyı takip etsin.</string>
     <string name="lyrics_following_app">%1$s takip ediliyor</string>

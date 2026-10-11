@@ -362,13 +362,43 @@ class ChordFinderTest {
         )
         assertEquals("https://www.ufret.jp/song.php?data=9", (chords(MusicMetadata("Lemon", "Kenshi Yonezu"), japanese) as ChordFinder.Chords.Found).sheet.url)
         assertEquals(listOf("Lemon Kenshi Yonezu", "Lemon 米津玄師"), uFretSearches)
-        // Named nothing else, it's looked up by its own name alone, and only so far.
+        // A Japanese title by a singer named in Latin letters, the same.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            mapOf("レモン 米津玄師" to uFretResult(9, "レモン", "米津玄師")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("レモン" to listOf("米津玄師")),
+                "https://www.ufret.jp/song.php?data=9" to uFretSong("[Am]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=9", (chords(MusicMetadata("レモン", "Kenshi Yonezu"), japanese) as ChordFinder.Chords.Found).sheet.url)
+        // Not found, it's looked up by its names in Japanese, then its own, and only so far.
         fake.requestedUrls.clear()
         fake.handler = uFret(
             emptyMap(),
-            mapOf("https://music.163.com/api/search/get" to netEase("一つ" to listOf("A"), "二つ" to listOf("B"), "三つ" to listOf("C")), "https://www.ultimate-guitar.com/search.php" to ugSearch())
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("Elsewhere" to listOf("A"), "一つ" to listOf("A"), "二つ" to listOf("B"), "三つ" to listOf("C")),
+                "https://www.ultimate-guitar.com/search.php" to ugSearch()
+            )
         )
-        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Nowhere", "Nobody"), japanese))
-        assertEquals(listOf("Nowhere Nobody", "一つ", "二つ", "Nowhere"), uFretSearches)
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Nowhere - 川の道", "Nobody"), japanese))
+        assertEquals(listOf("Nowhere - 川の道 Nobody", "川の道", "一つ", "二つ", "Nowhere - 川の道"), uFretSearches)
+    }
+
+    @Test
+    fun aTitleIsSplitOnlyWhereItsTwoNames() {
+        // Split by a slash too; a letter on its own isn't a name.
+        fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道 / A", "歩く人"), japanese))
+        assertEquals(listOf("川の道 / A 歩く人", "川の道"), uFretSearches)
+        assertEquals(listOf("川の道 / A 歩く人"), fake.requestedUrls.filter { "ultimate-guitar" in it }.map { it.toHttpUrl().queryParameter("value") })
+        // Sung by a Japanese name, U-FRET's names for them are its own: NetEase isn't asked.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            mapOf("川の道 歩く人" to uFretResult(1, "川の道", "他の人")),
+            mapOf("https://www.ufret.jp/song.php?data=1" to "", "https://www.ultimate-guitar.com/search.php" to ugSearch())
+        )
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertTrue(fake.requestedUrls.none { "music.163.com" in it })
     }
 }

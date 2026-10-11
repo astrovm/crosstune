@@ -199,7 +199,6 @@
     <string name="lyrics_title">Paroles</string>
     <string name="lyrics_loading">Recherche des paroles…</string>
     <string name="lyrics_none">Aucune parole trouvée pour ce titre.</string>
-    <string name="lyrics_failed">Impossible d\'obtenir les paroles pour le moment.</string>
     <string name="lyrics_sync_service">Synchronisation des paroles de Crosstune</string>
     <string name="lyrics_follow_allow">Faites suivre aux paroles la chanson qui joue dans votre app de musique.</string>
     <string name="lyrics_following_app">Suit %1$s</string>
