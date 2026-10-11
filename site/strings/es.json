@@ -81,14 +81,15 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 9 de octubre de 2026",
+  "updated": "Última actualización: 11 de octubre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
     "No hay ningún servidor de Crosstune. Tu historial se queda en tu celular.",
     "Los links que convertís van solo a los servicios de música involucrados.",
     "Para reconocer una canción, Shazam recibe solo una huella del sonido, nunca el audio.",
-    "Borrá el historial cuando quieras desde la app."
+    "Borrá el historial cuando quieras desde la app.",
+    "Las funciones de IA son opcionales. Envían letras a OpenAI solo después de que inicies sesión con ChatGPT."
   ],
   "details_h2": "Detalles",
   "privacy_body": [
@@ -130,7 +131,7 @@
     ],
     [
       "p",
-      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra de una canción, la app envía el título y el artista a LRCLIB, un servicio de letras que no necesita cuenta ni clave. Cuando activás la traducción en la letra, la app envía sus líneas a MyMemory, un servicio de traducción que no pide cuenta, o al servidor de LibreTranslate que configures en Ajustes. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Si la app está en inglés, una palabra en inglés se busca en el diccionario de Wiktionary. Las líneas que guardás quedan en tu teléfono."
+      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra de una canción, la app envía el título y el artista a LRCLIB, un servicio de letras que no necesita cuenta ni clave. Cuando activás la traducción en la letra, la app envía sus líneas a MyMemory, un servicio de traducción que no pide cuenta, salvo que las traduzca ChatGPT, como se explica más abajo. Android detecta en tu celular el idioma de la canción, y las letras en un idioma que elegiste no traducir no se envían. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Si la app está en inglés, una palabra en inglés se busca en el diccionario de Wiktionary. Las líneas que guardás quedan en tu teléfono."
     ],
     [
       "p",
@@ -154,11 +155,23 @@
     ],
     [
       "h2",
+      "ChatGPT"
+    ],
+    [
+      "p",
+      "Las funciones de IA de Crosstune son opcionales y solo funcionan después de que inicies sesión con tu propio plan pago de ChatGPT. Iniciás sesión en el sitio de OpenAI, en tu navegador. Crosstune guarda la sesión en tu celular, la deja fuera de las copias de seguridad y solo la envía a OpenAI. Al cerrar sesión, se borra."
+    ],
+    [
+      "p",
+      "Mientras tenés la sesión iniciada, Crosstune le envía a OpenAI lo que necesita cada función: el título, el artista y la letra de una canción para traducirla o explicarla, corregir las lecturas en japonés, escribir en japonés letras encontradas en romaji o elegir palabras que vale la pena aprender; una palabra y su línea para buscarla; las preguntas que hacés sobre una línea o una canción; y una descripción que escribís, o una canción, para encontrar canciones que coincidan. OpenAI las trata según su propia política de privacidad, y cuentan para el uso de tu plan."
+    ],
+    [
+      "h2",
       "Permisos y seguridad"
     ],
     [
       "p",
-      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. Pide el permiso del micrófono la primera vez que reconocés una canción y usa el micrófono solo mientras escucha. Si hacés flotar la letra sobre otras apps, pide permiso para mostrarse sobre otras apps y, una vez, para mostrar una notificación, que la mantiene visible y te deja desbloquearla o cerrarla. No solicita permisos de ubicación, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si agregás un destino personalizado, elegí una dirección HTTPS de confianza."
+      "Crosstune usa el permiso de internet de Android para obtener información musical y portadas. Pide el permiso del micrófono la primera vez que reconocés una canción y usa el micrófono solo mientras escucha. Si hacés flotar la letra sobre otras apps, pide permiso para mostrarse sobre otras apps y, una vez, para mostrar una notificación, que la mantiene visible y te deja desbloquearla o cerrarla. No solicita permisos de ubicación, cámara, contactos ni ID de publicidad. Las solicitudes integradas a servicios de música usan HTTPS. Si agregás un destino personalizado, elegí una dirección HTTPS de confianza. Los visuales de MilkDrop también usan el permiso del micrófono para leer el sonido que reproduce tu celular, a través de Android; no se graba ni se envía a ningún lado. Si usás Shizuku, tocar Configurar todo pide el permiso de Shizuku, que Crosstune usa solo para cambiar por vos los ajustes de links de Android y el acceso de la letra."
     ],
     [
       "h2",

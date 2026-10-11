@@ -81,14 +81,15 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 9, 2026",
+  "updated": "Last updated: October 11, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
     "There's no Crosstune server. Your history stays on your phone.",
     "Links you convert go only to the music services involved.",
     "Recognizing a song sends Shazam only a fingerprint of the sound, never the audio.",
-    "Clear history anytime in the app."
+    "Clear history anytime in the app.",
+    "AI features are optional. They send lyrics to OpenAI only after you sign in with ChatGPT."
   ],
   "details_h2": "Details",
   "privacy_body": [
@@ -130,7 +131,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, or to the LibreTranslate server you set in Settings. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics, the app sends the song's title and artist to LRCLIB, a lyrics service that needs no account or key. When you turn on Translation in the lyrics, the app sends their lines to MyMemory, a translation service that needs no account, unless ChatGPT translates them, as described below. Android tells which language a song is in on your phone, and lyrics in a language you chose not to translate aren't sent. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone."
     ],
     [
       "p",
@@ -154,11 +155,23 @@
     ],
     [
       "h2",
+      "ChatGPT"
+    ],
+    [
+      "p",
+      "Crosstune's AI features are optional and only work after you sign in with your own paid ChatGPT plan. You sign in on OpenAI's site, in your browser. Crosstune keeps the sign-in on your phone, leaves it out of backups, and sends it only to OpenAI. Signing out deletes it."
+    ],
+    [
+      "p",
+      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in romaji in Japanese, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
+    ],
+    [
+      "h2",
       "Permissions and security"
     ],
     [
       "p",
-      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. If you float lyrics over other apps, it asks to display over other apps and, once, to show a notification, which keeps them up and lets you unlock or close them. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address."
+      "Crosstune uses Android's internet permission to retrieve music information and artwork. It asks for the microphone permission the first time you recognize a song, and uses the microphone only while listening. If you float lyrics over other apps, it asks to display over other apps and, once, to show a notification, which keeps them up and lets you unlock or close them. It does not request location, camera, contacts, or advertising-ID permissions. Built-in music-service requests use HTTPS. If you configure a custom destination, choose a trusted HTTPS address. MilkDrop visuals also use the microphone permission to read the sound your phone plays, through Android; it isn't recorded or sent anywhere. If you use Shizuku, tapping Set everything up asks for Shizuku's permission, which Crosstune uses only to change Android's link settings and lyrics access for you."
     ],
     [
       "h2",

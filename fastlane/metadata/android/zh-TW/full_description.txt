@@ -14,8 +14,11 @@
 <li>辨識附近正在播放的歌曲：Crosstune 可以自己聆聽，也可以開啟 Shazam 或 Google 歌曲搜尋。還可開啟 Shazam 連結和從 Pixel 的 Now Playing 分享的歌曲。</li>
 <li>無法讀取連結？可在連結來源的應用程式中開啟，也可以複製搜尋文字或分享搜尋連結。</li>
 <li>輸入歌名代替連結來查詢歌曲，還可以閱讀所開啟歌曲的歌詞。</li>
+<li>同步歌詞：跟隨你的音樂應用程式或一起聆聽，可浮在其他應用程式上方，背後播放 MilkDrop 視覺效果。</li>
+<li>透過假名、拼音和羅馬字，以及你還看不懂的語言的翻譯來學習字詞。</li>
+<li>用你的付費 ChatGPT 方案登入，就能翻譯整首歌、解說歌詞、找出值得學的詞，並透過描述來找歌。</li>
 <li>Android 12 以上版本支援 Material You 動態配色。</li>
 </ul>
 
 <b>隱私</b>
-沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。開啟「開啟完全相符的結果」後，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞時，歌曲的標題和藝人會傳送到 LRCLIB。
+沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。開啟「開啟完全相符的結果」後，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞時，歌曲的標題和藝人會傳送到 LRCLIB。翻譯會傳送到 MyMemory。用 ChatGPT 登入後，AI 功能會把歌曲的標題、藝人、歌詞以及你的提問傳送給 OpenAI。

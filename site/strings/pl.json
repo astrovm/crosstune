@@ -81,14 +81,15 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 9 października 2026",
+  "updated": "Ostatnia aktualizacja: 11 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
     "Nie ma serwera Crosstune. Historia zostaje na Twoim telefonie.",
     "Linki, które konwertujesz, trafiają tylko do serwisów muzycznych, których dotyczą.",
     "Do rozpoznania utworu Shazam dostaje tylko odcisk dźwięku, nigdy nagranie.",
-    "Historię możesz wyczyścić w aplikacji w każdej chwili."
+    "Historię możesz wyczyścić w aplikacji w każdej chwili.",
+    "Funkcje AI są opcjonalne. Wysyłają teksty do OpenAI dopiero po zalogowaniu się przez ChatGPT."
   ],
   "details_h2": "Szczegóły",
   "privacy_body": [
@@ -130,7 +131,7 @@
     ],
     [
       "p",
-      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst utworu, aplikacja wysyła tytuł i wykonawcę do serwisu LRCLIB, który nie wymaga konta ani klucza. Gdy włączysz tłumaczenie w tekście, aplikacja wysyła jego wiersze do MyMemory, usługi tłumaczeń bez konta, albo do serwera LibreTranslate ustawionego w Ustawieniach. Czytania, takie jak kana nad kanji, powstają na telefonie i nie są nigdzie wysyłane. Słowo, które dotkniesz, by poznać jego znaczenie, jest wysyłane tak samo. Jeśli aplikacja jest po angielsku, angielskie słowo jest wyszukiwane w słowniku Wiktionary. Zapisane wiersze zostają na telefonie."
+      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst utworu, aplikacja wysyła tytuł i wykonawcę do serwisu LRCLIB, który nie wymaga konta ani klucza. Gdy włączysz tłumaczenie w tekście, aplikacja wysyła jego wiersze do MyMemory, usługi tłumaczeń bez konta, chyba że przetłumaczy je ChatGPT, jak opisano niżej. Android rozpoznaje na telefonie język utworu, a teksty w języku, którego nie chcesz tłumaczyć, nie są wysyłane. Czytania, takie jak kana nad kanji, powstają na telefonie i nie są nigdzie wysyłane. Słowo, które dotkniesz, by poznać jego znaczenie, jest wysyłane tak samo. Jeśli aplikacja jest po angielsku, angielskie słowo jest wyszukiwane w słowniku Wiktionary. Zapisane wiersze zostają na telefonie."
     ],
     [
       "p",
@@ -154,11 +155,23 @@
     ],
     [
       "h2",
+      "ChatGPT"
+    ],
+    [
+      "p",
+      "Funkcje AI w Crosstune są opcjonalne i działają dopiero po zalogowaniu się własnym płatnym planem ChatGPT. Logujesz się na stronie OpenAI, w przeglądarce. Crosstune przechowuje logowanie na telefonie, pomija je w kopiach zapasowych i wysyła je tylko do OpenAI. Wylogowanie je usuwa."
+    ],
+    [
+      "p",
+      "Gdy jesteś zalogowany, Crosstune wysyła do OpenAI to, czego potrzebuje każda funkcja: tytuł, wykonawcę i tekst utworu, by go przetłumaczyć lub wyjaśnić, poprawić japońskie odczyty, zapisać po japońsku teksty znalezione w romaji albo wybrać słowa warte nauki; słowo i jego wiersz, by je sprawdzić; pytania, które zadajesz o wiersz lub utwór; oraz wpisany opis albo utwór, by znaleźć pasujące utwory. OpenAI przetwarza je zgodnie z własną polityką prywatności, a liczą się one do wykorzystania Twojego planu."
+    ],
+    [
+      "h2",
       "Uprawnienia i bezpieczeństwo"
     ],
     [
       "p",
-      "Crosstune używa uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Prosi o uprawnienie do mikrofonu przy pierwszym rozpoznawaniu utworu i używa mikrofonu tylko podczas słuchania. Jeśli wyświetlasz tekst nad innymi aplikacjami, aplikacja poprosi o zgodę na wyświetlanie nad innymi aplikacjami i, jednorazowo, na pokazywanie powiadomienia, które utrzymuje tekst na ekranie i pozwala go odblokować lub zamknąć. Nie prosi o uprawnienia do lokalizacji, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane żądania do serwisów muzycznych używają HTTPS. Jeśli dodasz własne miejsce docelowe, wybierz zaufany adres HTTPS."
+      "Crosstune używa uprawnienia Androida do internetu, aby pobierać informacje o muzyce i okładki. Prosi o uprawnienie do mikrofonu przy pierwszym rozpoznawaniu utworu i używa mikrofonu tylko podczas słuchania. Jeśli wyświetlasz tekst nad innymi aplikacjami, aplikacja poprosi o zgodę na wyświetlanie nad innymi aplikacjami i, jednorazowo, na pokazywanie powiadomienia, które utrzymuje tekst na ekranie i pozwala go odblokować lub zamknąć. Nie prosi o uprawnienia do lokalizacji, aparatu, kontaktów ani identyfikatora reklamowego. Wbudowane żądania do serwisów muzycznych używają HTTPS. Jeśli dodasz własne miejsce docelowe, wybierz zaufany adres HTTPS. Wizualizacje MilkDrop też używają uprawnienia do mikrofonu, by przez Androida odczytywać dźwięk odtwarzany przez telefon; nic nie jest nagrywane ani wysyłane. Jeśli używasz Shizuku, dotknięcie Skonfiguruj wszystko prosi o uprawnienie Shizuku, którego Crosstune używa tylko do zmiany za Ciebie ustawień linków Androida i dostępu dla tekstów."
     ],
     [
       "h2",

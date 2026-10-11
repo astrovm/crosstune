@@ -81,14 +81,15 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 9 Oktober 2026",
+  "updated": "Terakhir diperbarui: 11 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
     "Crosstune tidak punya server. Riwayatmu tetap di ponselmu.",
     "Link yang kamu konversi hanya dikirim ke layanan musik yang terkait.",
     "Untuk mengenali lagu, Shazam hanya menerima sidik jari suaranya, tidak pernah rekamannya.",
-    "Hapus riwayat kapan saja di aplikasi."
+    "Hapus riwayat kapan saja di aplikasi.",
+    "Fitur AI bersifat opsional. Fitur ini mengirim lirik ke OpenAI hanya setelah kamu masuk dengan ChatGPT."
   ],
   "details_h2": "Detail",
   "privacy_body": [
@@ -130,7 +131,7 @@
     ],
     [
       "p",
-      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik lagu, aplikasi mengirim judul dan artis lagu ke LRCLIB, layanan lirik yang tidak butuh akun atau kunci. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke MyMemory, layanan terjemahan tanpa akun, atau ke server LibreTranslate yang kamu atur di Setelan. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu."
+      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik lagu, aplikasi mengirim judul dan artis lagu ke LRCLIB, layanan lirik yang tidak butuh akun atau kunci. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke MyMemory, layanan terjemahan tanpa akun, kecuali ChatGPT yang menerjemahkannya, seperti dijelaskan di bawah. Android mengenali bahasa lagu di ponselmu, dan lirik dalam bahasa yang kamu pilih untuk tidak diterjemahkan tidak dikirim. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu."
     ],
     [
       "p",
@@ -154,11 +155,23 @@
     ],
     [
       "h2",
+      "ChatGPT"
+    ],
+    [
+      "p",
+      "Fitur AI Crosstune bersifat opsional dan hanya berfungsi setelah kamu masuk dengan paket ChatGPT berbayar milikmu sendiri. Kamu masuk di situs OpenAI, lewat browser. Crosstune menyimpan data masuk di ponselmu, tidak menyertakannya dalam cadangan, dan hanya mengirimnya ke OpenAI. Keluar akan menghapusnya."
+    ],
+    [
+      "p",
+      "Selama kamu masuk, Crosstune mengirim ke OpenAI apa yang dibutuhkan tiap fitur: judul, artis, dan lirik lagu untuk menerjemahkan atau menjelaskannya, membetulkan cara baca Jepang, menulis dalam bahasa Jepang lirik yang ditemukan dalam romaji, atau memilih kata yang layak dipelajari; sebuah kata dan barisnya untuk mencari artinya; pertanyaan yang kamu ajukan tentang sebuah baris atau lagu; dan deskripsi yang kamu ketik, atau sebuah lagu, untuk menemukan lagu yang cocok. OpenAI memprosesnya menurut kebijakan privasinya sendiri, dan semuanya dihitung dalam pemakaian paketmu."
+    ],
+    [
+      "h2",
       "Izin dan keamanan"
     ],
     [
       "p",
-      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu, dan memakai mikrofon hanya selama mendengarkan. Jika kamu mengambangkan lirik di atas aplikasi lain, aplikasi meminta izin untuk tampil di atas aplikasi lain dan, sekali saja, untuk menampilkan notifikasi, yang membuat lirik tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya."
+      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu, dan memakai mikrofon hanya selama mendengarkan. Jika kamu mengambangkan lirik di atas aplikasi lain, aplikasi meminta izin untuk tampil di atas aplikasi lain dan, sekali saja, untuk menampilkan notifikasi, yang membuat lirik tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya. Visual MilkDrop juga memakai izin mikrofon untuk membaca suara yang diputar ponselmu, lewat Android; suara itu tidak direkam atau dikirim ke mana pun. Jika kamu memakai Shizuku, mengetuk Atur semuanya akan meminta izin Shizuku, yang dipakai Crosstune hanya untuk mengubah setelan link Android dan akses lirik untukmu."
     ],
     [
       "h2",
