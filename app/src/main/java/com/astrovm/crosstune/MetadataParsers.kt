@@ -100,6 +100,35 @@ internal object MetadataParsers {
         return youtubeVideo(json.optString("title"), json.optString("author_name"))?.copy(artworkUrl = artwork)
     }
 
+    /**
+     * Video [id] in YouTube Music's answer for it: a song, or a label's official video, is named as
+     * its artist's channel names it, "プラスティック・ラブ - Plastic Love" by Mariya Takeuchi, with a
+     * song's length; anyone else's upload is read from its title, as a YouTube link's is.
+     */
+    fun youtubeMusicVideo(json: JSONObject, id: String): MusicMetadata? {
+        val video = findObject(json) { it.optJSONObject("playlistPanelVideoRenderer")?.takeIf { video -> video.optString("videoId") == id } } ?: return null
+        fun text(key: String) = video.optJSONObject(key)?.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.optJSONObject(it)?.optString("text").orEmpty() } }.orEmpty()
+        val title = text("title").ifBlank { return null }
+        val channel = text("longBylineText").substringBefore(" • ").trim()
+        val type = musicVideoType.find(video.toString())?.groupValues?.get(1)
+        val thumbnails = video.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+        val artwork = thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url")?.ifBlank { null }
+        val song = type == "ATV"
+        val named = (if (song || type == "OMV") youtubeVideo(title, "$channel - Topic") else youtubeVideo(title, channel)) ?: return null
+        val lengthMs = text("lengthText").takeIf { song }?.split(":")?.mapNotNull(String::toLongOrNull)?.takeIf { it.size in 2..3 }
+            ?.fold(0L) { total, part -> total * 60 + part }?.times(1000)
+        return named.copy(artworkUrl = artwork, lengthMs = lengthMs)
+    }
+
+    private val musicVideoType = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
+
+    /** The first object anywhere in [value] that [pick] picks. */
+    private fun findObject(value: Any?, pick: (JSONObject) -> JSONObject?): JSONObject? = when (value) {
+        is JSONObject -> pick(value) ?: value.keys().asSequence().firstNotNullOfOrNull { findObject(value.opt(it), pick) }
+        is JSONArray -> (0 until value.length()).firstNotNullOfOrNull { findObject(value.opt(it), pick) }
+        else -> null
+    }
+
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
         val rawTitle = title.replace(videoNoiseRegex, "").trim().ifEmpty { return null }

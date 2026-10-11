@@ -162,6 +162,36 @@ class LinkResolverTest {
         assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
     }
 
+    /** YouTube Music's answer about video [id], as its next song list has it. */
+    private fun nextFor(id: String, title: String, byline: String, length: String, type: String) =
+        """{"contents":{"panel":{"contents":[{"playlistPanelVideoRenderer":{"videoId":"other","title":{"runs":[{"text":"Another"}]}}},
+            {"playlistPanelVideoRenderer":{"videoId":"$id","title":{"runs":[{"text":"$title"}]},"longBylineText":{"runs":[{"text":"$byline"}]},
+            "lengthText":{"runs":[{"text":"$length"}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/small.jpg"},{"url":"https://i.ytimg.com/big.jpg"}]},
+            "navigationEndpoint":{"watchEndpoint":{"watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}}}]}}}"""
+
+    @Test
+    fun aVideoKeptFromBeingEmbeddedIsNamedByYouTubeMusic() {
+        var next = nextFor("4NRXx6U8ABQ", "プラスティック・ラブ - Plastic Love (Official Video)", "Mariya Takeuchi • 79M views", "5:09", "OMV")
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, next) else FakeSpotify.html(request, "Unauthorized", code = 401)
+        }
+        // A label's official video is named as its channel names it, without what the title adds.
+        val official = resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved
+        assertEquals(MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi", artworkUrl = "https://i.ytimg.com/big.jpg"), official.metadata)
+        assertTrue(fake.requestBodies.last().contains("\"videoId\":\"4NRXx6U8ABQ\""))
+        // A song says how long it is.
+        next = nextFor("4NRXx6U8ABQ", "夜に駆ける", "YOASOBI • 夜に駆ける • 2019", "4:22", "ATV")
+        assertEquals(MusicMetadata("夜に駆ける", "YOASOBI", artworkUrl = "https://i.ytimg.com/big.jpg", lengthMs = 262_000), (resolve("https://music.youtube.com/watch?v=4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        // Anyone else's upload is read from its title.
+        next = nextFor("4NRXx6U8ABQ", "The Blue Hearts - Owaranai Uta (with lyrics)", "Fan • 195K views", "3:04", "UGC")
+        assertEquals(MusicMetadata("Owaranai Uta", "The Blue Hearts", artworkUrl = "https://i.ytimg.com/big.jpg"), (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Resolved).metadata)
+        // Not in its answer, or no answer, it's not found, as before.
+        next = """{"contents":{}}"""
+        assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+        fake.handler = { request -> if (request.url.host == "music.youtube.com") throw java.io.IOException("offline") else FakeSpotify.html(request, "Forbidden", code = 403) }
+        assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+    }
+
     @Test
     fun shortLinksFromOtherServicesFollowRedirects() {
         fake.handler = { request ->

@@ -5,8 +5,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 import org.json.JSONException
@@ -91,6 +93,11 @@ internal class LinkResolver(
 
     private suspend fun resolveLink(link: MusicLink): Resolution = guarded(link) {
         val (response, body) = fetch(metadataUrl(link))
+        // A video its owner keeps from being embedded elsewhere, as many labels' are, has no oEmbed,
+        // but YouTube Music still says what it is.
+        if ((response.code == 401 || response.code == 403) && link.isYouTubeVideo()) {
+            youTubeMusicVideo(link.id)?.let { return@guarded Resolution.Resolved(link, it) }
+        }
         httpError(response)?.let { return@guarded Resolution.Failed(it, link) }
         // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
         if (link.service == MusicService.DEEZER) {
@@ -192,6 +199,25 @@ internal class LinkResolver(
     }
 
     /** Cancelling the calling coroutine cancels the HTTP call. */
+    private fun MusicLink.isYouTubeVideo() =
+        (service == MusicService.YOUTUBE || service == MusicService.YOUTUBE_MUSIC) && type == ItemType.TRACK
+
+    /** The video [id] as YouTube Music names it, or null when it can't. */
+    private suspend fun youTubeMusicVideo(id: String): MusicMetadata? = try {
+        val body = JSONObject()
+            .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
+            .put("videoId", id)
+        val request = Request.Builder().url(YOUTUBE_MUSIC_NEXT_URL).post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) return@use null
+            MetadataParsers.youtubeMusicVideo(JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() }), id)
+        }
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
+    }
+
     private suspend fun fetch(url: String): Pair<Response, String> {
         val request = Request.Builder().url(url).get().build()
         return client.newCall(request).executeAsync().use { response ->
@@ -208,5 +234,10 @@ internal class LinkResolver(
         response.code == 429 -> AppError.RATE_LIMITED
         response.code >= 500 -> AppError.SERVICE_UNAVAILABLE
         else -> AppError.METADATA_UNAVAILABLE
+    }
+
+    private companion object {
+        const val YOUTUBE_MUSIC_NEXT_URL = "https://music.youtube.com/youtubei/v1/next?prettyPrint=false"
+        const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
     }
 }
