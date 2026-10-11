@@ -1,8 +1,10 @@
 name: CI
 
 on:
-  # Validate PRs before merging; merging into main does not need another CI run.
   pull_request:
+  # A run on main saves the Gradle and native caches, which only main can save and every pull request starts from.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -31,11 +33,28 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
+      # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
+      # builds. ccache gives back the same objects for the same source, compiler and flags, so only
+      # what changed is compiled again. Saved from main, like Gradle's caches.
+      - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        with:
+          key: native
+          max-size: 1G
+          save: ${{ github.event_name == 'push' }}
+          evict-old-files: job
+          update-package-index: true
+
       # Same task as locally: unit tests with the 100% line coverage gate, lint, debug and release APKs.
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test, lint and build
         run: ./gradlew :app:ci --build-cache
+        env:
+          # CMake reads these to put ccache in front of the NDK's compilers.
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          # The NDK is installed again each run, so the compiler is told apart by its contents, not its date.
+          CCACHE_COMPILERCHECK: content
 
       - name: Upload test, coverage and lint reports
         if: always()

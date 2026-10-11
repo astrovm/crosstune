@@ -1,3 +1,5 @@
+import java.lang.management.ManagementFactory
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -194,6 +196,10 @@ tasks.named("check") {
 tasks.withType<Test>().configureEach {
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
+    // Two test processes, each with that heap, where there's room for them, like CI's runner:
+    // the tests take about half the time.
+    val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
+    maxParallelForks = if (Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
     // Robolectric's Android 16 runtime reaches into JDK internals.
     jvmArgs(
         "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
