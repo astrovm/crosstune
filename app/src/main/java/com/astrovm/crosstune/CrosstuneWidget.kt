@@ -127,7 +127,7 @@ class CrosstuneWidget : GlanceAppWidget() {
                     if (entry.link.type == ItemType.TRACK) "" else context.getString(entry.link.type.labelRes),
                     entry.metadata.artist,
                     entry.link.service?.let { context.getString(it.labelRes) }.orEmpty()
-                ).filter { it.isNotBlank() }.joinToString(" · ")
+                ).filter { it.isNotBlank() }.joinToString(", ")
                 val cover = entry.metadata.artworkUrl?.let { artwork.load(it) }?.asAndroidBitmap()?.scale(COVER_PIXELS, COVER_PIXELS)
                 WidgetSong(entry.metadata.title, details, entry.link.url, cover)
             }

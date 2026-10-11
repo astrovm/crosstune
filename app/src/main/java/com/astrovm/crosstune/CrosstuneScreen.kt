@@ -1502,7 +1502,7 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                         entry.link.service?.let { stringResource(it.labelRes) }.orEmpty()
                     )
                         .filter { it.isNotBlank() }
-                        .joinToString(" · "),
+                        .joinToString(", "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1706,7 +1706,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                         CoverArt(result.artworkUrl, loadArtwork, size = 48.dp)
                         Column(modifier = Modifier.padding(start = 12.dp)) {
                             Text(result.title, style = MaterialTheme.typography.titleMedium)
-                            Text(listOf(stringResource(result.type.labelRes), result.artist).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                            Text(listOf(stringResource(result.type.labelRes), result.artist).filter { it.isNotBlank() }.joinToString(", "), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
