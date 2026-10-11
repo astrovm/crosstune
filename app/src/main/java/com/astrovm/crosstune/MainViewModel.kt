@@ -384,8 +384,11 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
 internal sealed interface Effect {
-    /** [packageName] is null for custom destinations, which open in whatever app handles the URL. */
-    data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean) : Effect
+    /**
+     * [packageName] is null for custom destinations, which open in whatever app handles the URL.
+     * [atMs] is when it was asked, so one that waited while Crosstune was away isn't opened long after.
+     */
+    data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean, val atMs: Long = SystemClock.elapsedRealtime()) : Effect
     data class Share(val url: String) : Effect
 }
 

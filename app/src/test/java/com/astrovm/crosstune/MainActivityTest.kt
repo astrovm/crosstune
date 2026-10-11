@@ -1216,6 +1216,30 @@ class MainActivityTest {
     }
 
     @Test
+    fun anAppAskedToOpenLongAgoWhileAwayIsntOpenedOnComingBack() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Exact", "Artist · Song")) }
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/track/$TRACK_ID")
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        // Asked while away, and back a while later: it's not opened out of the blue.
+        controller!!.pause().stop()
+        composeRule.runOnIdle { model.openResult() }
+        composeRule.waitForIdle()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(61))
+        controller!!.restart().resume()
+        composeRule.waitForIdle()
+        assertNull(nextStartedActivity())
+        // Back soon after, it is.
+        controller!!.pause().stop()
+        composeRule.runOnIdle { model.openResult() }
+        composeRule.waitForIdle()
+        controller!!.restart().resume()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
+    }
+
+    @Test
     fun aLookupWithNoAnswerSearchesRatherThanSayingItsNotThereAndIsTriedAgain() {
         prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
         var deezerUp = false

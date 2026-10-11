@@ -20,6 +20,7 @@ import androidx.glance.appwidget.updateAll
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -200,6 +201,9 @@ class MainActivity : ComponentActivity() {
         /** Where the widget is drawn again, outliving the screen that asked. */
         private val widgetUpdates = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
+        /** How long an app may wait to be opened, while Crosstune is out of sight, before it's not. */
+        private const val STALE_OPEN_MS = 60_000L
+
         /** How long a song not found somewhere stays not found there, before it's looked for again. */
         private const val MISSING_FOR_MS = 30 * 60 * 1000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
@@ -292,7 +296,8 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.effects.collect { effect ->
                     when (effect) {
-                        is Effect.Open -> open(effect)
+                        // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
+                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
                         is Effect.Share -> {
                             startActivity(shareChooser(effect.url))
                             finish()
