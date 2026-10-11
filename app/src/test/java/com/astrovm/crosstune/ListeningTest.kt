@@ -447,6 +447,18 @@ class ListeningTest {
     }
 
     @Test
+    fun theMicrophoneTakenAwayWhileListeningAlongIsSaidOnTheWords() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
+        waitForText(string(AppError.MICROPHONE.messageRes))
+        // Still on the words, with a way to allow it.
+        assertTrue(lit("Demo one"))
+        click(string(R.string.open_settings_button))
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, shadowOf(app).nextStartedActivity.action)
+    }
+
+    @Test
     fun anotherSongHeardEarlyOnTakesOverThoughItsWhereTheSongShownIs() {
         val hearing = FakeHearing()
         demoWords(hearing)

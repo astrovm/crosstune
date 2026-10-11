@@ -244,6 +244,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // Signed in with ChatGPT, the song opens to what it's about.
             LyricsHeader(song.copy(artworkUrl = cover), actions, onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null })
             TranslationStatus(state.learning, actions)
+            MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
             AnimatedVisibility(
@@ -581,6 +582,26 @@ private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
                 modifier = Modifier.weight(1f).padding(vertical = 12.dp)
             )
             TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+        }
+    }
+}
+
+/** The microphone turned down, e.g. to listen along, said here where it was asked for, with a way to allow it. */
+@Composable
+private fun MicrophoneStatus(denied: Boolean, actions: ScreenActions) {
+    AnimatedVisibility(visible = denied, enter = Motion.appear, exit = Motion.disappear) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
+        ) {
+            Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Text(
+                stringResource(AppError.MICROPHONE.messageRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
+            )
+            TextButton(onClick = actions.onOpenMicrophoneSettings) { Text(stringResource(R.string.open_settings_button)) }
         }
     }
 }
