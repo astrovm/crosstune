@@ -197,6 +197,7 @@
     <string name="open_settings_button">Apri impostazioni</string>
     <string name="open_app_button">Apri %1$s</string>
     <string name="lyrics_button">Testo</string>
+    <string name="playing_now">In riproduzione</string>
     <string name="lyrics_loading">Ricerca del testo in corso…</string>
     <string name="lyrics_none">Nessun testo trovato per questo brano.</string>
     <string name="lyrics_sync_service">Sincronizzazione testi di Crosstune</string>

@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.ClipData
+import android.content.ClipDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -1640,6 +1641,79 @@ class MainActivityTest {
         waitForText("Shown Here")
         assertFalse(activity.isFinishing)
         assertNull(nextStartedActivity())
+    }
+
+    /** [text] on the clipboard, as Android marks it copied [agoMs] ago. */
+    private fun copied(text: String, agoMs: Long = 1_000) {
+        val clip = ClipData.newPlainText("copied", text)
+        app.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+        // Set after, as Robolectric marks it copied on its own clock.
+        ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType)
+            .invoke(clip.description, System.currentTimeMillis() - agoMs)
+    }
+
+    /** Back to Crosstune from another app. */
+    private fun comeBack() {
+        controller!!.windowFocusChanged(false)
+        controller!!.windowFocusChanged(true)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun aMusicLinkCopiedJustNowIsLookedUpOnComingBackOnce() {
+        respondWithTrack("Copied Song", "Artist · Song")
+        launch()
+        copied("Listen: https://open.spotify.com/track/$TRACK_ID?si=x")
+        comeBack()
+        waitForText("Copied Song")
+        assertResultShown()
+        // Looked up, not opened: what to do with it is still up to the user.
+        assertNull(nextStartedActivity())
+
+        // Cleared, the same copy isn't brought back.
+        click(string(R.string.clear_button))
+        val asked = fake.requestedUrls.size
+        comeBack()
+        composeRule.onNodeWithTag(RESULT_TAG).assertDoesNotExist()
+        assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun onlyAMusicLinkCopiedMomentsAgoIsLookedUp() {
+        respondWithTrack("Copied Song", "Artist · Song")
+        launch()
+        // Copied long ago, it's no longer what the user is after.
+        copied("https://open.spotify.com/track/$TRACK_ID", agoMs = 11 * 60 * 1000L)
+        comeBack()
+        // Other text is left alone, and a song typed in isn't replaced.
+        copied("just some words")
+        comeBack()
+        typeUrl("Some Song")
+        copied("https://open.spotify.com/track/$TRACK_ID")
+        comeBack()
+        assertTextAbsent("Copied Song")
+        assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aLinkCopiedInCrosstuneIsNotPastedBack() {
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        assertResultShown()
+        click(string(R.string.copy_link_button))
+        val clipboard = app.getSystemService(ClipboardManager::class.java)
+        assertNotNull(MusicLinks.parse(clipboard.primaryClip!!.getItemAt(0).text.toString()))
+        // Marked by Android as copied a moment before Crosstune noted it.
+        val description = clipboard.primaryClipDescription!!
+        ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType)
+            .invoke(description, System.currentTimeMillis() - 1_000)
+        click(string(R.string.clear_button))
+        val asked = fake.requestedUrls.size
+        comeBack()
+        assertEquals(asked, fake.requestedUrls.size)
     }
 
     @Test

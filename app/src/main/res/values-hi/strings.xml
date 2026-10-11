@@ -196,6 +196,7 @@
     <string name="open_settings_button">सेटिंग खोलें</string>
     <string name="open_app_button">%1$s खोलें</string>
     <string name="lyrics_button">बोल</string>
+    <string name="playing_now">अभी चल रहा है</string>
     <string name="lyrics_loading">बोल खोजे जा रहे हैं…</string>
     <string name="lyrics_none">इस गाने के बोल नहीं मिले।</string>
     <string name="lyrics_sync_service">Crosstune बोल सिंक</string>

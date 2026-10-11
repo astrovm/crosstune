@@ -9,6 +9,7 @@ import android.util.Rational
 import android.app.UiModeManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
@@ -22,6 +23,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.textclassifier.TextClassifier
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -199,6 +201,10 @@ class MainActivity : ComponentActivity() {
 
         /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
         private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
+        /** When the last clip Crosstune looked at, or copied itself, was copied. */
+        private const val KEY_CLIP_SEEN = "clip_seen_at"
+        /** How long after it's copied a link counts as just copied. */
+        private const val FRESH_COPY_MS = 10 * 60 * 1000L
 
         /** Where the widget is drawn again, outliving the screen that asked. */
         private val widgetUpdates = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
@@ -454,6 +460,7 @@ class MainActivity : ComponentActivity() {
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
                         onDismissNotices = viewModel::dismissNotices,
+                        onShowPlayingNow = viewModel::showPlayingNow,
                         onSettingsLeft = viewModel::settingsLeft,
                         loadArtwork = viewModel.artwork::load
                     )
@@ -478,6 +485,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // A song started meanwhile is offered at the top.
+        viewModel.checkPlayingNow()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
         // Or let Crosstune follow what music apps play.
@@ -619,9 +628,31 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus || !pendingClipboardRead) return
+        if (!hasFocus) return
+        if (!pendingClipboardRead) return pasteFreshCopy()
         pendingClipboardRead = false
         resolveShared(clipboardText(), fromClipboard = true)
+    }
+
+    /**
+     * A music link copied a moment ago, e.g. in another app just left, is looked up as if pasted, once.
+     * Android says when a clip was copied, and from Android 12 whether it's a link, without reading
+     * it, so other text isn't read, and Android's "pasted" note only shows for a link.
+     */
+    private fun pasteFreshCopy() {
+        val state = viewModel.uiState
+        if (!state.setupComplete || state.linkText.isNotBlank() || state.result != null || state.isLoading || state.listening || state.lyricsFor != null) return
+        val description = getSystemService(ClipboardManager::class.java)?.primaryClipDescription ?: return
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        val copiedAt = description.timestamp
+        if (copiedAt <= prefs.getLong(KEY_CLIP_SEEN, 0L) || System.currentTimeMillis() - copiedAt !in 0..FRESH_COPY_MS) return
+        prefs.edit().putLong(KEY_CLIP_SEEN, copiedAt).apply()
+        if (!description.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && description.classificationStatus == ClipDescription.CLASSIFICATION_COMPLETE &&
+            description.getConfidenceScore(TextClassifier.TYPE_URL) == 0f
+        ) return
+        val text = clipboardText() ?: return
+        if (MusicLinks.parse(text) != null) viewModel.pasteLink(text)
     }
 
     /**
@@ -729,6 +760,8 @@ class MainActivity : ComponentActivity() {
         text ?: return
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        // Copied here, it's not pasted back on coming back.
+        getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putLong(KEY_CLIP_SEEN, System.currentTimeMillis()).apply()
         // Android 13+ shows its own confirmation whenever the clipboard changes.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             Toast.makeText(this, getString(confirmationRes), Toast.LENGTH_SHORT).show()

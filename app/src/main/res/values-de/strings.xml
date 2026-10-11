@@ -196,6 +196,7 @@
     <string name="open_settings_button">Einstellungen öffnen</string>
     <string name="open_app_button">%1$s öffnen</string>
     <string name="lyrics_button">Songtext</string>
+    <string name="playing_now">Läuft gerade</string>
     <string name="lyrics_loading">Songtext wird gesucht…</string>
     <string name="lyrics_none">Für diesen Song wurde kein Songtext gefunden.</string>
     <string name="lyrics_sync_service">Crosstune-Liedtext-Sync</string>

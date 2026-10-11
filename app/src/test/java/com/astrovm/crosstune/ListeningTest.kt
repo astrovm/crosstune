@@ -188,6 +188,48 @@ class ListeningTest {
     }
 
     @Test
+    fun aSongPlayingAsTheAppOpensIsOfferedWithItsWordsAlreadyFetched() {
+        val playing = MusicMetadata("Demo", "Band")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime()) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""") }
+        launch()
+        waitForText(string(R.string.playing_now))
+        assertTrue(shown("Band"))
+        // Fetched before they're asked for, so asking shows them with no wait.
+        val kept = java.io.File(app.cacheDir, "lyrics.json")
+        waitUntil(TIMEOUT_MS) { kept.exists() && "Stars" in kept.readText() }
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky\nStars")
+        // Shown from what was kept: the sites the words come from were each asked once.
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://music.163.com/") })
+        // Named by the app, nothing was listened to.
+        assertEquals(0, microphone.opened)
+        assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun tappingTheSongPlayingShowsItAndItsOfferGoes() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitForText(string(R.string.playing_now))
+        click("Iris")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertFalse(shown(string(R.string.playing_now)))
+        assertEquals(0, microphone.opened)
+    }
+
+    @Test
+    fun withoutAccessToMusicAppsNothingIsOfferedAsPlaying() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = false; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(shown("Iris"))
+    }
+
+    @Test
     fun itListensThenShowsTheSongLikeAShazamLink() {
         allowMicrophone()
         launch()

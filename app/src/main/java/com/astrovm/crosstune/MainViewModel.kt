@@ -151,6 +151,8 @@ internal data class UiState(
     val showLinkSettingsHelper: Boolean = false,
     /** What the main screen's notices were about when the user closed them, by [noticeKeys]. */
     val dismissedNotices: Set<String> = emptySet(),
+    /** The song a music app on the phone plays as Crosstune comes into sight, one tap from showing. */
+    val playingNow: MusicMetadata? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
     val setupComplete: Boolean = true,
@@ -484,6 +486,11 @@ internal class MainViewModel(
     /** The last look at what Android says about apps and links, null until the first one finishes. */
     private var linkState: LinkState? = null
     private var systemJob: Job? = null
+    private var playingJob: Job? = null
+    /** What [UiState.playingNow] was heard as, with where in the song it was. */
+    private var playingHeard: Heard.Song? = null
+    /** The last song playing whose words were fetched ahead, so they're fetched once. */
+    private var fetchedAhead: MusicMetadata? = null
 
     var uiState by mutableStateOf(
         UiState(
@@ -959,21 +966,61 @@ internal class MainViewModel(
             when (heard) {
                 is Heard.Song -> {
                     retryListens = false
-                    val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
-                        ?: MusicLinks.recognizedSong(heard.metadata)
-                    uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
-                    resolve(input, openWhenReady = false)
-                    // Once it's shown, as showing it forgets what was heard for whatever was shown before.
-                    heardSong = heard.metadata
-                    heardClock = heard.clock
-                    heardAtMs = now()
-                    // Asked for its words, they open straight away, and keep listening along, song after song.
-                    if (lyrics) showLyricsFor(heard.metadata)
+                    showHeard(heard, lyrics)
                 }
                 Heard.Nothing -> showListenError(AppError.NO_MATCH)
                 is Heard.Failed -> showListenError(heard.error)
             }
         }
+    }
+
+    /**
+     * Asks what a music app plays, as Crosstune comes into sight, to offer it at the top; its words
+     * are fetched meanwhile, so they show at once. Only with the access following an app needs.
+     */
+    fun checkPlayingNow() {
+        playingJob?.cancel()
+        val source = playback?.takeIf { it.hasAccess() }
+        if (source == null) {
+            playingHeard = null
+            uiState = uiState.copy(playingNow = null)
+            return
+        }
+        playingJob = viewModelScope.launch {
+            val heard = withContext(systemDispatcher) { source.nowPlaying() }
+            playingHeard = heard
+            uiState = uiState.copy(playingNow = heard?.metadata)
+            val song = heard?.metadata ?: return@launch
+            if (fetchedAhead?.let { sameSong(it, song) } == true) return@launch
+            // Kept by the finder, so showing them later needs no lookup.
+            lyricsFinder?.firstLook(song) ?: return@launch
+            fetchedAhead = song
+        }
+    }
+
+    /** Shows the song playing now as if just heard, with its words when [lyrics], in time with the app. */
+    fun showPlayingNow(lyrics: Boolean) {
+        val heard = playingHeard ?: return
+        cancelContentWork()
+        retryListens = false
+        uiState = uiState.copy(
+            error = null, result = null, destinationUrls = emptyMap(), selectedDestination = null, link = null,
+            showDestinationPicker = false, handlingIncomingLink = false, handingOff = false, playingNow = null
+        )
+        showHeard(heard, lyrics)
+    }
+
+    private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+        val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
+            ?: MusicLinks.recognizedSong(heard.metadata)
+        uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
+        resolve(input, openWhenReady = false)
+        // Once it's shown, as showing it forgets what was heard for whatever was shown before.
+        heardSong = heard.metadata
+        heardClock = heard.clock
+        heardAtMs = now()
+        // Asked for its words, they open straight away, and keep listening along, song after song.
+        if (lyrics) showLyricsFor(heard.metadata)
     }
 
     fun stopListening() {

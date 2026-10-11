@@ -196,6 +196,7 @@
     <string name="open_settings_button">Ayarları aç</string>
     <string name="open_app_button">%1$s uygulamasını aç</string>
     <string name="lyrics_button">Sözler</string>
+    <string name="playing_now">Şimdi çalıyor</string>
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>

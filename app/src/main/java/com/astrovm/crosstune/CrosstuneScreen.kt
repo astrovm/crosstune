@@ -187,6 +187,8 @@ internal data class ScreenActions(
     val onShowAppsGuide: () -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val onDismissNotices: (Set<String>) -> Unit = {},
+    /** Shows the song a music app plays now, with its words when true. */
+    val onShowPlayingNow: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     /** Fetches the shown song's words and shows them. */
     val onShowLyrics: () -> Unit = {},
@@ -511,6 +513,15 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkNotices(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
+        val playing = state.playingNow.takeIf {
+            state.result == null && state.error == null && !state.isLoading && !state.listening && state.linkText.isBlank()
+        }
+        AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+            // Kept while it fades out, as the song goes when it's tapped.
+            val shown = remember { mutableStateOf(playing) }
+            if (playing != null) shown.value = playing
+            shown.value?.let { PlayingNow(it, actions) }
+        }
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
         // Covers found for a playlist's songs fill in where they are rather than bring a new result.
         AnimatedContent(targetState = state.result, contentKey = { it?.copy(tracks = emptyList()) }, transitionSpec = { swap() }, label = "result") { result ->
@@ -541,6 +552,40 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         // Keyed on whether there's any, so clearing it fades the last list out rather than an empty one.
         AnimatedContent(targetState = history, contentKey = { it.isEmpty() }, transitionSpec = { fade() }, label = "history") { shown ->
             if (shown.isNotEmpty()) Column { HistorySection(shown, state, actions) }
+        }
+    }
+}
+
+/** The song a music app plays right now: tapping shows it, and its words are a tap away. */
+@Composable
+private fun PlayingNow(song: MusicMetadata, actions: ScreenActions) {
+    Surface(
+        onClick = { actions.onShowPlayingNow(false) },
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverArt(song.artworkUrl, actions.loadArtwork, size = 48.dp)
+            Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp).weight(1f)) {
+                Text(stringResource(R.string.playing_now), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    song.artist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(onClick = { actions.onShowPlayingNow(true) }) {
+                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
+            }
         }
     }
 }

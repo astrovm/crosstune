@@ -196,6 +196,7 @@
     <string name="open_settings_button">Ouvrir les paramètres</string>
     <string name="open_app_button">Ouvrir %1$s</string>
     <string name="lyrics_button">Paroles</string>
+    <string name="playing_now">En cours de lecture</string>
     <string name="lyrics_loading">Recherche des paroles…</string>
     <string name="lyrics_none">Aucune parole trouvée pour ce titre.</string>
     <string name="lyrics_sync_service">Synchronisation des paroles de Crosstune</string>

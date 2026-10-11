@@ -196,6 +196,7 @@
     <string name="open_settings_button">打开设置</string>
     <string name="open_app_button">打开 %1$s</string>
     <string name="lyrics_button">歌词</string>
+    <string name="playing_now">正在播放</string>
     <string name="lyrics_loading">正在查找歌词…</string>
     <string name="lyrics_none">没有找到这首歌的歌词。</string>
     <string name="lyrics_sync_service">Crosstune 歌词同步</string>
