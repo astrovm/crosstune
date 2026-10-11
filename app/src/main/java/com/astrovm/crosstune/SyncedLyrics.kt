@@ -1,7 +1,13 @@
 package com.astrovm.crosstune
 
-/** One line of a song's words, and when in the song it's sung. */
-internal data class LyricLine(val timeMs: Long, val text: String)
+/**
+ * One line of a song's words, and when in the song it's sung; with when each of its [words] is,
+ * when the words are timed that closely. The words, put together, are the line.
+ */
+internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList())
+
+/** A word of a line, or a syllable, as it's timed, and when in the song it's sung. */
+internal data class TimedWord(val timeMs: Long, val text: String)
 
 /** Timed words, as LRCLIB and most players write them: "[01:02.34] A line". */
 internal object SyncedLyrics {
@@ -19,6 +25,13 @@ internal object SyncedLyrics {
 
     private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
 
+    /** A word's time in a line, as enhanced LRC writes it: "<01:02.34>". */
+    private val wordStamp = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
+
+    /** A line as NetEase times it word by word: "[start,length]" and then "(start,length,0)" before each word. */
+    private val netEaseLine = Regex("""^\[(\d+),\d+](.*)""")
+    private val netEaseWord = Regex("""\((\d+),\d+,\d+\)""")
+
     /** "[offset:+500]": how many milliseconds sooner every line comes, or later when it's less than none. */
     private val offsetTag = Regex("""^\[offset:\s*([+-]?\d+)\s*]""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 
@@ -31,10 +44,47 @@ internal object SyncedLyrics {
         val offset = offsetTag.find(lrc)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
         return lrc.lineSequence().flatMap { raw ->
             val stamps = generateSequence(stamp.matchAt(raw, 0)) { stamp.matchAt(raw, it.range.last + 1) }.toList()
-            val text = raw.substring(stamps.lastOrNull()?.range?.last?.plus(1) ?: return@flatMap emptySequence()).trim()
-            stamps.asSequence().map { LyricLine((it.toMillis() - offset).coerceAtLeast(0), text) }
+            val rest = raw.substring(stamps.lastOrNull()?.range?.last?.plus(1) ?: return@flatMap emptySequence())
+            // Enhanced LRC times each word too; a line sung more than once can't say which time they're for.
+            val words = if (stamps.size == 1) timedWords(rest, wordStamp) { it.toMillis() - offset } else emptyList()
+            val text = wordStamp.replace(rest, "").trim()
+            stamps.asSequence().map { LyricLine((it.toMillis() - offset).coerceAtLeast(0), text, words) }
         }.sortedBy { it.timeMs }.toList()
     }
+
+    /**
+     * The lines NetEase times word by word, "[12340,2000](12340,500,0)Hello (12840,600,0)world", in
+     * the order they're sung. The credits it opens with are written another way, and left out.
+     */
+    fun parseWordByWord(yrc: String): List<LyricLine> =
+        yrc.lineSequence().mapNotNull { raw ->
+            val (start, rest) = netEaseLine.matchEntire(raw.trim())?.destructured ?: return@mapNotNull null
+            val words = timedWords(rest, netEaseWord) { it.groupValues[1].toLong() }
+            LyricLine(start.toLong(), words.joinToString("") { it.text }.trim(), words)
+        }.filter { it.text.isNotEmpty() }.sortedBy { it.timeMs }.toList()
+
+    /**
+     * The words in [text], each after the stamp that times it, found by [stamps] and read by [timeOf]; none
+     * unless every word has one. Spaces stay with the word before them, so the words together are the line.
+     */
+    private fun timedWords(text: String, stamps: Regex, timeOf: (MatchResult) -> Long): List<TimedWord> {
+        val found = stamps.findAll(text).toList()
+        if (found.isEmpty() || text.substring(0, found.first().range.first).isNotBlank()) return emptyList()
+        val words = mutableListOf<TimedWord>()
+        found.forEachIndexed { index, match ->
+            val piece = text.substring(match.range.last + 1, found.getOrNull(index + 1)?.range?.first ?: text.length)
+            // Only a space, it goes with the word before; a last stamp with nothing after only says when the line ends.
+            if (piece.isNotBlank()) words += TimedWord(timeOf(match).coerceAtLeast(0), piece)
+            else if (words.isNotEmpty()) words[words.lastIndex] = words.last().let { it.copy(text = it.text + piece) }
+        }
+        if (words.isEmpty()) return emptyList()
+        words[0] = words[0].let { it.copy(text = it.text.trimStart()) }
+        words[words.lastIndex] = words.last().let { it.copy(text = it.text.trimEnd()) }
+        return words
+    }
+
+    /** How many of a line's [words] have been sung by [positionMs]. */
+    fun wordsSungBy(words: List<TimedWord>, positionMs: Long): Int = words.count { it.timeMs <= positionMs }
 
     /**
      * [lines] without the blank ones that only end a line, which most timed words have after each:

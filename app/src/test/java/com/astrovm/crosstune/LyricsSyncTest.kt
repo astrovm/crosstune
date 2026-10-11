@@ -37,6 +37,14 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun aLineTimedWordByWordMovesWithItsWords() {
+        val line = LyricLine(20_000, "Two words", listOf(TimedWord(20_000, "Two "), TimedWord(20_500, "words")))
+        val moved = LyricsSync.adjust(listOf(line), listOf(SyncPoint(20_000, 23_000))).single()
+        assertEquals(listOf(23_000L, 23_500L), moved.words.map { it.timeMs })
+        assertEquals(line.words.map { it.text }, moved.words.map { it.text })
+    }
+
+    @Test
     fun betweenTwoLinesPutInTimeTheOthersStretchToFit() {
         // "One" is right, "Three" came 10 seconds later: "Two" falls halfway, past "Three" all move by 10.
         val points = listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 40_000))

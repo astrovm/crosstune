@@ -444,7 +444,8 @@ internal class MainViewModel(
 
     /** [lines] as they show: in Japanese when found in romaji and written so, timed as found. */
     private fun shown(lines: List<LyricLine>): List<LyricLine> =
-        japanese?.let { written -> lines.mapIndexed { index, line -> line.copy(text = written.getOrElse(index) { line.text }) } } ?: lines
+        // Written otherwise, the line's words are no longer the ones timed.
+        japanese?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 

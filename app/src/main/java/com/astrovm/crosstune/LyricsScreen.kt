@@ -867,6 +867,8 @@ private fun TimedLyrics(
         itemsIndexed(lines) { index, line ->
             LyricLineText(
                 line.text,
+                words = line.words,
+                following = following,
                 place = following?.let { index.compareTo(active) },
                 // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
                 waiting = active < 0,
@@ -959,6 +961,8 @@ private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
 private fun LyricLineText(
     text: String,
     place: Int?,
+    words: List<TimedWord> = emptyList(),
+    following: Following? = null,
     onSeek: (() -> Unit)?,
     onStudy: () -> Unit,
     help: LineHelp? = null,
@@ -1011,6 +1015,8 @@ private fun LyricLineText(
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
             RubyLine(reading.parts, style)
+        } else if (lit && following != null && words.isNotEmpty()) {
+            SungWords(words, following, style)
         } else {
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
@@ -1023,6 +1029,24 @@ private fun LyricLineText(
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
     }
 }
+
+/** The line being sung, timed word by word: each word lights as it's sung, checked every frame while the song plays. */
+@Composable
+private fun SungWords(words: List<TimedWord>, following: Following, style: TextStyle) {
+    fun sung() = SyncedLyrics.wordsSungBy(words, following.clock.positionAt(SystemClock.elapsedRealtime()))
+    val sung by produceState(sung(), following, words) {
+        value = sung()
+        while (following.clock.playing) value = withInfiniteAnimationFrameMillis { sung() }
+    }
+    val color = MaterialTheme.colorScheme.onSurface
+    val text = buildAnnotatedString {
+        words.forEachIndexed { index, word -> withStyle(SpanStyle(color = if (index < sung) color else color.copy(alpha = UNSUNG_ALPHA))) { append(word.text) } }
+    }
+    Text(text, style = style)
+}
+
+/** How bright the words of the line being sung are before they're sung. */
+private const val UNSUNG_ALPHA = 0.45f
 
 /**
  * A line with each piece's reading over it, in small type, the way furigana sit over kanji. It

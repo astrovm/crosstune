@@ -107,4 +107,47 @@ class SyncedLyricsTest {
         assertEquals(true, SyncedLyrics.rushed(listOf(LyricLine(0, "사랑해요 정말로"), LyricLine(300, "我爱你中国人"), LyricLine(600, "끝"))))
         assertEquals(false, SyncedLyrics.rushed(emptyList()))
     }
+
+    @Test
+    fun enhancedLrcTimesEachWordToo() {
+        val lines = SyncedLyrics.parse("[offset:+100]\n[00:01.00] <00:01.00>Hello <00:01.50>big<00:01.80> <00:02.00>world<00:02.60>\n[00:03.00] Plain line")
+        assertEquals(
+            listOf(
+                LyricLine(900, "Hello big world", listOf(TimedWord(900, "Hello "), TimedWord(1_400, "big "), TimedWord(1_900, "world"))),
+                LyricLine(2_900, "Plain line")
+            ),
+            lines
+        )
+        // Words only partly timed, or a line sung twice, aren't timed word by word.
+        assertEquals(listOf(LyricLine(1_000, "Hello world")), SyncedLyrics.parse("[00:01.00] Hello <00:01.50>world"))
+        assertEquals(listOf(LyricLine(1_000, "Hi there"), LyricLine(5_000, "Hi there")), SyncedLyrics.parse("[00:01.00][00:05.00]<00:01.00>Hi <00:01.30>there"))
+    }
+
+    @Test
+    fun netEaseWordByWordLinesAreReadWithoutItsCredits() {
+        val yrc = """
+            {"t":0,"c":[{"tx":"作词: "},{"tx":"Someone"}]}
+            [23550,120](23550,120,0)Yeah
+            [27360,1290](27360,240,0)I've (27600,90,0)been (27690,360,0)tryna (28050,600,0)call
+            [30000,500](30000,500,0)
+            not a line
+        """.trimIndent()
+        assertEquals(
+            listOf(
+                LyricLine(23_550, "Yeah", listOf(TimedWord(23_550, "Yeah"))),
+                LyricLine(27_360, "I've been tryna call", listOf(TimedWord(27_360, "I've "), TimedWord(27_600, "been "), TimedWord(27_690, "tryna "), TimedWord(28_050, "call")))
+            ),
+            SyncedLyrics.parseWordByWord(yrc)
+        )
+        assertEquals(emptyList<LyricLine>(), SyncedLyrics.parseWordByWord(""))
+    }
+
+    @Test
+    fun aWordIsSungOnceItsTimeComes() {
+        val words = listOf(TimedWord(1_000, "Hello "), TimedWord(1_500, "world"))
+        assertEquals(0, SyncedLyrics.wordsSungBy(words, 999))
+        assertEquals(1, SyncedLyrics.wordsSungBy(words, 1_000))
+        assertEquals(1, SyncedLyrics.wordsSungBy(words, 1_499))
+        assertEquals(2, SyncedLyrics.wordsSungBy(words, 9_000))
+    }
 }

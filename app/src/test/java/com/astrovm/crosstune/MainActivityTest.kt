@@ -2813,6 +2813,37 @@ class MainActivityTest {
         assertResultShown()
     }
 
+    @Test
+    fun aLineTimedWordByWordLightsEachWordAsItsSung() {
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo words",""" +
+            """"syncedLyrics":"[00:01.00] <00:01.00>One\n[00:20.00] <00:20.00>Two <00:22.00>words"}]"""
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.lyrics_button))
+
+        // Paused between its words: the first is sung, the second still dim.
+        playback.playing.value = Following(PlaybackClock(21_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Two words") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf(true, false), sungAlphas("Two words").map { it == 1f })
+
+        // Playing on past it: both are sung.
+        playback.playing.value = Following(PlaybackClock(23_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { sungAlphas("Two words") == listOf(1f, 1f) }
+        // A line not being sung is shown whole, as before.
+        composeRule.onNodeWithText("One").assertExists()
+    }
+
+    /** How bright each word of a line being sung is. */
+    private fun sungAlphas(line: String): List<Float> =
+        composeRule.onNode(hasText(line), useUnmergedTree = true).fetchSemanticsNode().config[SemanticsProperties.Text]
+            .single().spanStyles.map { it.item.color.alpha }
+
     /** The line open to study, written once, its words to tap: not the line among the words behind it. */
     private fun sheetLine(text: String) = composeRule.onNode(hasText(text) and hasTestTag(STUDY_LINE_TAG))
 

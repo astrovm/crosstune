@@ -1,10 +1,13 @@
 package com.astrovm.crosstune
 
 import kotlin.math.abs
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -125,7 +128,7 @@ internal class LyricsFinder(
      * from a place that names recordings loosely, are timed for another take.
      */
     private suspend fun timedWell(metadata: MusicMetadata, found: Lyrics.Found, timeoutMs: Long): Lyrics.Found {
-        val wellTimed = timing(found) == WELL_TIMED
+        val wellTimed = timing(found) >= WELL_TIMED
         val bare = SongNames.bareTitle(metadata.title).takeIf { it != metadata.title }
         if (wellTimed && bare == null) return found
         val rough = found.lines.filter { it.text.isNotBlank() }
@@ -176,10 +179,13 @@ internal class LyricsFinder(
      * YouTube Music's words and those from everywhere else, asked for at once; the better of them.
      * YouTube Music only adds words: it not having them doesn't mean the song has none.
      */
-    private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = coroutineScope {
+    private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withContext(Answers()) {
         val official = async { fromYouTubeMusic(metadata, timeoutMs) }
+        // Words timed word by word beat any timed a line at a time, and only NetEase has them.
+        val byWord = async { fromNetEase(metadata, null, timeoutMs).takeIf { timing(it) == WORD_TIMED } }
         val elsewhere = anywhere(metadata, timeoutMs)
-        official.await()?.let { better(it, elsewhere) } ?: elsewhere
+        val found = official.await()?.let { better(it, elsewhere) } ?: elsewhere
+        byWord.await()?.let { better(it, found) } ?: found
     }
 
     /**
@@ -199,8 +205,18 @@ internal class LyricsFinder(
         JSONObject()
             .put("words", found.words)
             .apply { if (provisional) put("provisional", true) }
-            .put("lines", JSONArray().apply { found.lines.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+            .put("lines", JSONArray().apply { found.lines.forEach { put(lineToCache(it)) } })
             .toString()
+    }
+
+    /** A line as kept: when, what, and when each of its words is, when they're timed. */
+    private fun lineToCache(line: LyricLine): JSONArray = JSONArray().put(line.timeMs).put(line.text).apply {
+        if (line.words.isNotEmpty()) put(JSONArray().apply { line.words.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+    }
+
+    private fun lineFromCache(kept: JSONArray): LyricLine {
+        val words = kept.optJSONArray(2)?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { word -> TimedWord(word.getLong(0), word.getString(1)) } } }
+        return LyricLine(kept.getLong(0), kept.getString(1), words.orEmpty())
     }
 
     /** Words kept, and whether they're still to be timed better. */
@@ -209,7 +225,7 @@ internal class LyricsFinder(
         return try {
             val json = JSONObject(kept)
             val lines = json.getJSONArray("lines").let { list ->
-                (0 until list.length()).map { index -> list.getJSONArray(index).let { LyricLine(it.getLong(0), it.getString(1)) } }
+                (0 until list.length()).map { index -> lineFromCache(list.getJSONArray(index)) }
             }
             Lyrics.Found(json.getString("words"), lines) to json.optBoolean("provisional")
         } catch (_: JSONException) {
@@ -242,7 +258,7 @@ internal class LyricsFinder(
         val answers = mutableListOf(first)
         // Romaji is only bettered by words in Japanese, and untimed words by timed ones.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
-            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) == WELL_TIMED)
+            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) >= WELL_TIMED)
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
@@ -401,7 +417,7 @@ internal class LyricsFinder(
                 .addQueryParameter("type", "1")
                 .addQueryParameter("limit", "10")
                 .build()
-            val result = (parse(search.toString(), NETEASE_REFERER) as? JSONObject)?.optJSONObject("result")
+            val result = (fromNetEaseOnce(search.toString()) as? JSONObject)?.optJSONObject("result")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
             val id = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.firstOrNull { song ->
@@ -418,9 +434,13 @@ internal class LyricsFinder(
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
                 .addQueryParameter("lv", "1")
+                // Timed word by word as well, for the songs it has so.
+                .addQueryParameter("yv", "1")
                 .build()
-            val lrc = (parse(lyric.toString(), NETEASE_REFERER) as? JSONObject)?.optJSONObject("lrc")?.optString("lyric").orEmpty()
-            netEaseWords(lrc) ?: Lyrics.None
+            val answer = fromNetEaseOnce(lyric.toString()) as? JSONObject
+            val byWord = answer?.optJSONObject("yrc")?.optString("lyric").orEmpty()
+            val lrc = answer?.optJSONObject("lrc")?.optString("lyric").orEmpty()
+            netEaseWordByWord(byWord) ?: netEaseWords(lrc) ?: Lyrics.None
         } catch (_: IOException) {
             Lyrics.Unavailable
         } catch (_: JSONException) {
@@ -442,6 +462,13 @@ internal class LyricsFinder(
         val starts = all.map { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds")?.toLongOrNull() }
         if (starts.any { it == null }) return Lyrics.Found(words)
         return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }))
+    }
+
+    /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
+    private fun netEaseWordByWord(yrc: String): Lyrics.Found? {
+        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }
+        if (lines.isEmpty()) return null
+        return Lyrics.Found(lines.joinToString("\n") { it.text }, lines)
     }
 
     /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
@@ -467,6 +494,34 @@ internal class LyricsFinder(
         // "wouldn't answer" rests on it.
         val list = parse(url.toString()) as? JSONArray ?: return null
         return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
+    }
+
+    /**
+     * NetEase's answer, asked once in a lookup: it's asked for the words it times word by word and
+     * again under the song's names. LRCLIB isn't kept so, as its answer can be that it's busy.
+     */
+    private suspend fun fromNetEaseOnce(url: String): Any =
+        currentCoroutineContext()[Answers]?.of(url) { parse(url, NETEASE_REFERER) } ?: parse(url, NETEASE_REFERER)
+
+    /** What each address answered in one lookup. */
+    private class Answers : AbstractCoroutineContextElement(Answers) {
+        companion object Key : CoroutineContext.Key<Answers>
+
+        private val answers = mutableMapOf<String, CompletableDeferred<Any>>()
+
+        suspend fun of(url: String, ask: suspend () -> Any): Any {
+            val mine = CompletableDeferred<Any>()
+            val asked = synchronized(answers) { answers.getOrPut(url) { mine } }
+            if (asked !== mine) return asked.await()
+            return try {
+                ask().also { mine.complete(it) }
+            } catch (e: Throwable) {
+                // Not answered: asked again by whoever needs it next.
+                synchronized(answers) { answers.remove(url) }
+                mine.completeExceptionally(IOException("Not answered", e))
+                throw e
+            }
+        }
     }
 
     private suspend fun parse(url: String, referer: String? = null): Any {
@@ -542,8 +597,8 @@ internal class LyricsFinder(
         const val APP_CLIENT = "ANDROID_MUSIC"
         const val APP_CLIENT_VERSION = "7.21.50"
 
-        /** Bumped when words kept from before should be looked up again. */
-        const val CACHE_VERSION = 4
+        /** Bumped when words kept from before should be looked up again: 5 for words timed word by word. */
+        const val CACHE_VERSION = 5
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
@@ -575,11 +630,15 @@ private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")
 /** How well words are timed: well, so they follow the song; badly; or not at all. */
 private const val WELL_TIMED = 2
 
+/** Timed well, and word by word. */
+private const val WORD_TIMED = 3
+
 private fun timing(answer: LyricsFinder.Lyrics): Int {
     val lines = (answer as? LyricsFinder.Lyrics.Found)?.lines.orEmpty()
     return when {
         lines.isEmpty() -> 0
         SyncedLyrics.rushed(lines) -> 1
+        lines.all { it.text.isBlank() || it.words.isNotEmpty() } -> WORD_TIMED
         else -> WELL_TIMED
     }
 }

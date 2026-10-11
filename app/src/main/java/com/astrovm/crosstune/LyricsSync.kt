@@ -17,7 +17,9 @@ internal data class SyncPoint(val lineMs: Long, val songMs: Long)
 internal object LyricsSync {
     /** [lines] where the user says they are, by [points]. */
     fun adjust(lines: List<LyricLine>, points: List<SyncPoint>): List<LyricLine> =
-        if (points.isEmpty()) lines else lines.map { it.copy(timeMs = timeOf(it.timeMs, points)) }
+        if (points.isEmpty()) lines else lines.map { line ->
+            line.copy(timeMs = timeOf(line.timeMs, points), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points)) })
+        }
 
     /** Where in the song [lineMs] of the words is, by [points] in order. */
     fun timeOf(lineMs: Long, points: List<SyncPoint>): Long {
