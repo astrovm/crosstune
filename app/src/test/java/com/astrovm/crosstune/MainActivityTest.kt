@@ -40,6 +40,7 @@ import android.os.Bundle
 import android.os.Looper
 import android.Manifest
 import android.provider.Settings
+import android.view.textclassifier.TextClassifier
 import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -1643,13 +1644,22 @@ class MainActivityTest {
         assertNull(nextStartedActivity())
     }
 
-    /** [text] on the clipboard, as Android marks it copied [agoMs] ago. */
-    private fun copied(text: String, agoMs: Long = 1_000) {
-        val clip = ClipData.newPlainText("copied", text)
+    private var copies = 0L
+
+    /**
+     * [text] on the clipboard, as Android marks it copied [agoMs] ago, as [mimeType], and from
+     * Android 12 how sure it is that it's a link, [linkScore], once it's looked.
+     */
+    private fun copied(text: String, agoMs: Long = 1_000, mimeType: String = ClipDescription.MIMETYPE_TEXT_PLAIN, linkScore: Float? = null) {
+        val clip = ClipData(ClipDescription("copied", arrayOf(mimeType)), ClipData.Item(text))
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-        // Set after, as Robolectric marks it copied on its own clock.
-        ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType)
-            .invoke(clip.description, System.currentTimeMillis() - agoMs)
+        // Set after, as Robolectric marks it copied on its own clock; each a moment after the last.
+        val description = ClipDescription::class.java
+        description.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType).invoke(clip.description, System.currentTimeMillis() - agoMs + copies++)
+        if (linkScore != null) {
+            description.getDeclaredMethod("setConfidenceScores", Map::class.java).invoke(clip.description, mapOf(TextClassifier.TYPE_URL to linkScore))
+            description.getDeclaredMethod("setClassificationStatus", Int::class.javaPrimitiveType).invoke(clip.description, ClipDescription.CLASSIFICATION_COMPLETE)
+        }
     }
 
     /** Back to Crosstune from another app. */
@@ -1685,14 +1695,24 @@ class MainActivityTest {
         // Copied long ago, it's no longer what the user is after.
         copied("https://open.spotify.com/track/$TRACK_ID", agoMs = 11 * 60 * 1000L)
         comeBack()
-        // Other text is left alone, and a song typed in isn't replaced.
+        // Other text is left alone, as is anything that isn't text, or that Android says isn't a link.
         copied("just some words")
         comeBack()
+        copied("https://open.spotify.com/track/$TRACK_ID", mimeType = "image/png")
+        comeBack()
+        copied("https://open.spotify.com/track/$TRACK_ID", linkScore = 0f)
+        comeBack()
+        // And a song typed in isn't replaced.
         typeUrl("Some Song")
         copied("https://open.spotify.com/track/$TRACK_ID")
         comeBack()
         assertTextAbsent("Copied Song")
         assertTrue(fake.requestedUrls.isEmpty())
+        // Said to be a link, it's looked up.
+        click(string(R.string.clear_button))
+        copied("https://open.spotify.com/track/$TRACK_ID", linkScore = 0.9f)
+        comeBack()
+        waitForText("Copied Song")
     }
 
     @Test

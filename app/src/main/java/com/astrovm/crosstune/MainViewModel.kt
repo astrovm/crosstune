@@ -489,8 +489,6 @@ internal class MainViewModel(
     private var playingJob: Job? = null
     /** What [UiState.playingNow] was heard as, with where in the song it was. */
     private var playingHeard: Heard.Song? = null
-    /** The last song playing whose words were fetched ahead, so they're fetched once. */
-    private var fetchedAhead: MusicMetadata? = null
 
     var uiState by mutableStateOf(
         UiState(
@@ -964,10 +962,7 @@ internal class MainViewModel(
                 if (isActive) uiState = uiState.copy(listening = false)
             }
             when (heard) {
-                is Heard.Song -> {
-                    retryListens = false
-                    showHeard(heard, lyrics)
-                }
+                is Heard.Song -> showHeard(heard, lyrics)
                 Heard.Nothing -> showListenError(AppError.NO_MATCH)
                 is Heard.Failed -> showListenError(heard.error)
             }
@@ -990,11 +985,8 @@ internal class MainViewModel(
             val heard = withContext(systemDispatcher) { source.nowPlaying() }
             playingHeard = heard
             uiState = uiState.copy(playingNow = heard?.metadata)
-            val song = heard?.metadata ?: return@launch
-            if (fetchedAhead?.let { sameSong(it, song) } == true) return@launch
-            // Kept by the finder, so showing them later needs no lookup.
-            lyricsFinder?.firstLook(song) ?: return@launch
-            fetchedAhead = song
+            // Kept by the finder, so showing them later needs no lookup, nor fetching them ahead again.
+            heard?.let { lyricsFinder?.firstLook(it.metadata) }
         }
     }
 
@@ -1002,15 +994,15 @@ internal class MainViewModel(
     fun showPlayingNow(lyrics: Boolean) {
         val heard = playingHeard ?: return
         cancelContentWork()
-        retryListens = false
         uiState = uiState.copy(
             error = null, result = null, destinationUrls = emptyMap(), selectedDestination = null, link = null,
-            showDestinationPicker = false, handlingIncomingLink = false, handingOff = false, playingNow = null
+            showDestinationPicker = false, handlingIncomingLink = false, handingOff = false
         )
         showHeard(heard, lyrics)
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+        retryListens = false
         val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
             ?: MusicLinks.recognizedSong(heard.metadata)
         uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
