@@ -165,6 +165,12 @@ class ListeningTest {
 
     private fun waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
 
+    /** Whether [reading] is drawn over a line's words. */
+    private fun readingShown(reading: String) = composeRule.onAllNodes(
+        androidx.compose.ui.test.SemanticsMatcher("reads $reading") { reading in it.config.getOrElseNullable(ReadingsShown) { null }.orEmpty() },
+        useUnmergedTree = true
+    ).fetchSemanticsNodes().isNotEmpty()
+
     private fun recognize() = click(string(R.string.recognize_button))
 
     @Test
@@ -1623,8 +1629,8 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "君はアスファルト・レディ\\n夜の雨", openAi = openAi)
         // The dictionary reads 君 as くん here; ChatGPT puts it right.
-        waitUntil(TIMEOUT_MS) { shown("きみ") }
-        assertFalse(shown("くん"))
+        waitUntil(TIMEOUT_MS) { readingShown("きみ") }
+        assertFalse(readingShown("くん"))
     }
 
     @Test
@@ -1738,8 +1744,8 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        composeRule.onAllNodes(hasText("夜空")).onFirst().performTouchInput { longClick() }
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        composeRule.onAllNodes(hasText("夜空に星が")).onFirst().performTouchInput { longClick() }
         composeRule.waitForIdle()
         // In the sheet, the line as the lyrics show it: its kanji with their readings over them.
         val inSheet = androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
@@ -1932,9 +1938,9 @@ class ListeningTest {
         waitForText("食べる")
         learnMenu()
         click(string(R.string.lyrics_readings))
-        waitUntil(TIMEOUT_MS) { shown("よぞら") }
-        // The kana after it shows as written, each character free to wrap.
-        assertTrue(shown("べ") && shown("る"))
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        // Each line laid out as a whole, the kana after a kanji as written.
+        assertTrue(shown("食べる") && readingShown("た"))
         assertTrue(prefs().getBoolean("lyrics_readings", false))
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
@@ -1958,7 +1964,7 @@ class ListeningTest {
         click(string(R.string.lyrics_romanized))
         click(string(R.string.lyrics_translation))
         composeRule.waitForIdle()
-        assertFalse(shown("よぞら"))
+        assertFalse(readingShown("よぞら"))
         assertFalse(shown("[食べる]"))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
     }

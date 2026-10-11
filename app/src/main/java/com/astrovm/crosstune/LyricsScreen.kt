@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -150,6 +151,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
@@ -1015,7 +1017,9 @@ private fun LyricLineText(
     val style = MaterialTheme.typography.headlineSmall.copy(
         fontSize = if (place == null) 22.sp else 26.sp,
         lineHeight = if (place == null) 30.sp else 34.sp,
-        fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold
+        fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
+        // Rows of about even length, broken between words, so no word or kana is left alone on the last.
+        lineBreak = LineBreak.Heading
     )
     Column(
         modifier = Modifier
@@ -1163,30 +1167,81 @@ private fun chordPlaces(chords: List<Chord>, widths: List<Float>, words: TextLay
 /** How big chords are beside the words. */
 private const val CHORD_SCALE = 0.55f
 
+/** The readings drawn over a line's kanji, for tests to see; screen readers read the words as written. */
+internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
+
 /**
- * A line with each piece's reading over it, in small type, the way furigana sit over kanji. It
- * wraps between pieces, and between the words of a piece read as written.
+ * A line with each piece's reading over it, in small type, the way furigana sit over kanji. The
+ * line is laid out once, as a whole, rather than a piece at a time, so a screen of them shows at
+ * once, and each reading is drawn over where its piece landed.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RubyLine(parts: List<Ruby>, style: TextStyle) {
-    val over = style.copy(fontSize = style.fontSize * 0.45f, lineHeight = style.fontSize * 0.5f, fontWeight = FontWeight.Medium)
-    FlowRow {
-        parts.forEach { part ->
-            val reading = part.reading
-            if (reading == null) {
-                WORDS.findAll(part.text).forEach { word ->
-                    Text(word.value, style = style, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.align(Alignment.Bottom))
-                }
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.Bottom)) {
-                    Text(reading, style = over, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(part.text, style = style, color = MaterialTheme.colorScheme.onSurface)
+    val over = style.copy(
+        fontSize = style.fontSize * READING_SCALE,
+        lineHeight = style.fontSize * 0.5f,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    val text = remember(parts) { rubyText(parts) }
+    val measurer = rememberTextMeasurer()
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    Text(
+        text,
+        // Room over each row of the words for the readings on it.
+        style = style.copy(lineHeight = (style.lineHeight.value + over.lineHeight.value).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        color = MaterialTheme.colorScheme.onSurface,
+        onTextLayout = { layout = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { this[ReadingsShown] = parts.mapNotNull { it.reading } }
+            .drawWithCache {
+                val places = layout?.let { readingPlaces(parts, it) }.orEmpty()
+                val labels = places.map { measurer.measure(it.reading, over) }
+                onDrawBehind {
+                    places.forEachIndexed { index, place ->
+                        val width = labels[index].size.width.toFloat()
+                        val x = (place.center - width / 2).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
+                        drawText(labels[index], topLeft = Offset(x, place.top))
+                    }
                 }
             }
-        }
+    )
+}
+
+/**
+ * [parts] as one line, a piece whose reading is wider than it spaced out to make room for it. Kana
+ * and kanji are about as wide as they're tall, so their widths are told by how many there are.
+ */
+internal fun rubyText(parts: List<Ruby>): AnnotatedString = buildAnnotatedString {
+    parts.forEach { part ->
+        val reading = part.reading
+        val spare = if (reading == null) 0f else reading.length * READING_SCALE - part.text.length
+        if (spare > 0f) withStyle(SpanStyle(letterSpacing = (spare / part.text.length).em)) { append(part.text) } else append(part.text)
     }
 }
+
+/** A [reading] to draw centred on [center], at [top], the top of its piece's row. */
+internal data class ReadingPlace(val reading: String, val center: Float, val top: Float)
+
+/** Where each reading goes over [words]: over its piece, or over what of it fits on the row it starts on. */
+internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<ReadingPlace> {
+    val length = words.layoutInput.text.length
+    var start = 0
+    return parts.mapNotNull { part ->
+        val from = start
+        start += part.text.length
+        val reading = part.reading ?: return@mapNotNull null
+        if (part.text.isEmpty() || start > length) return@mapNotNull null
+        val row = words.getLineForOffset(from)
+        val left = words.getBoundingBox(from).left
+        val right = if (words.getLineForOffset(start - 1) == row) words.getBoundingBox(start - 1).right else words.getLineRight(row)
+        ReadingPlace(reading, (left + right) / 2, words.getLineTop(row))
+    }
+}
+
+/** How big readings are beside the words they're over. */
+internal const val READING_SCALE = 0.45f
 
 /**
  * What a line can wrap between: a word in Latin letters with the space after it, or, since

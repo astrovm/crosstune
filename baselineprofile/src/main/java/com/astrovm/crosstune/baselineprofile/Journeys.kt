@@ -15,6 +15,7 @@ internal const val PACKAGE_NAME = "com.astrovm.crosstune"
 private const val SCREEN_TIMEOUT_MS = 30_000L
 private const val RESOLVE_TIMEOUT_MS = 30_000L
 private const val LOOKUP_START_MS = 2_000L
+private const val STEP_MS = 1_000L
 
 // The device's language has to be English, since these find the app's screens by their text.
 private const val GET_STARTED = "Get started"
@@ -38,16 +39,13 @@ internal fun MacrobenchmarkScope.finishSetupIfShown() {
     getStarted.click()
     // The first step needs a choice before Next is enabled; any destination will do.
     waitFor(By.text("YouTube Music")).click()
-    // Which of the other steps show depends on the apps installed, so it's Next until Finish. Each
-    // step fades in, so it waits for either rather than checking for Finish mid-fade.
+    // Which of the other steps show depends on the apps installed, and the ones asking Android for
+    // something are skipped, so it's on to the next step until the main screen shows.
     while (true) {
-        val button = waitFor(By.text(Pattern.compile("Next|Finish")).enabled(true))
-        val finish = button.text == "Finish"
-        button.click()
+        waitFor(By.text(Pattern.compile("Next|Finish|Skip for now")).enabled(true)).click()
         device.waitForIdle()
-        if (finish) break
+        if (device.wait(Until.hasObject(By.text(LINK_FIELD_LABEL)), STEP_MS)) break
     }
-    waitFor(By.text(LINK_FIELD_LABEL))
 }
 
 /**
@@ -72,6 +70,48 @@ internal fun MacrobenchmarkScope.useMainScreen() {
     waitFor(By.text("Settings"))
     scrollDownAndUp()
     device.pressBack()
+    waitFor(By.text(LINK_FIELD_LABEL))
+}
+
+/** A Japanese song found by its name, so its words come with readings, romaji and chords. */
+private const val JAPANESE_SONG = "Plastic Love Mariya Takeuchi"
+private const val JAPANESE_TITLE = "Plastic Love"
+private const val LEARN_BUTTON = "Readings and translation"
+
+/**
+ * What people do with a song's words: find a song by its name, open its words, turn on readings
+ * over them, romaji and chords, scroll through them, and look a word up. Without a connection the
+ * words don't come, which still covers the search and the song's screen.
+ */
+internal fun MacrobenchmarkScope.useLyrics() {
+    val field = waitFor(By.clazz("android.widget.EditText").enabled(true))
+    field.text = JAPANESE_SONG
+    waitFor(By.text("Convert link").enabled(true)).click()
+    waitFor(By.text("Songs"))
+    waitFor(By.text(JAPANESE_TITLE)).click()
+    waitFor(By.text("Lyrics")).click()
+    // The button shows once the words have come, and only for words in another language.
+    val learn = device.wait(Until.findObject(By.desc(LEARN_BUTTON)), RESOLVE_TIMEOUT_MS)
+    if (learn != null) {
+        learn.click()
+        for (option in listOf("Readings over the words", "In Latin letters", "Chords")) {
+            // The row is what's checked, so an option left on from a run before stays on.
+            val row = waitFor(By.text(option)).parent
+            if (row != null && row.isCheckable && !row.isChecked) row.click()
+            device.waitForIdle()
+        }
+        device.pressBack()
+        device.waitForIdle()
+    }
+    scrollDownAndUp()
+    // A word with a reading, looked up, then put away.
+    device.findObject(By.text(Pattern.compile(".*[\\u4E00-\\u9FFF].*")))?.let { word ->
+        word.click()
+        device.waitForIdle()
+        device.pressBack()
+        device.waitForIdle()
+    }
+    waitFor(By.desc("Dismiss")).click()
     waitFor(By.text(LINK_FIELD_LABEL))
 }
 

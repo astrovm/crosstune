@@ -38,4 +38,13 @@ class BaselineProfileGenerator {
         finishSetupIfShown()
         useMainScreen()
     }
+
+    /** Finding a song by its name and reading its words, with readings, romaji and chords. */
+    @Test
+    fun lyrics() = rule.collect(packageName = PACKAGE_NAME, maxIterations = MAX_ITERATIONS) {
+        pressHome()
+        startActivityAndWait()
+        finishSetupIfShown()
+        useLyrics()
+    }
 }
