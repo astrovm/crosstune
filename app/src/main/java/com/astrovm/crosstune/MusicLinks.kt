@@ -71,7 +71,13 @@ internal object MusicLinks {
 
     fun parse(text: String): LinkInput? {
         nowPlayingSong(text)?.let { return it }
-        val value = (extractFirstUrl(text) ?: text).trim()
+        // Text with more than one link, e.g. a post sharing a song, is about the first that's music.
+        val urls = urlRegex.findAll(text).map { it.value.trimEnd(*URL_END) }.toList()
+        if (urls.isEmpty()) return parseOne(text.trim())
+        return urls.firstNotNullOfOrNull { parseOne(it.trim()) }
+    }
+
+    private fun parseOne(value: String): LinkInput? {
         spotifyUriOrId(value)?.let { return LinkInput.Link(it) }
 
         // People sometimes copy a link without its scheme, e.g. "open.spotify.com/track/...".
@@ -182,10 +188,10 @@ internal object MusicLinks {
     /** True for [domain] itself and its subdomains, but not look-alikes such as "notdeezer.com". */
     private fun String.isOn(domain: String) = this == domain || endsWith(".$domain")
 
-    fun extractFirstUrl(text: String): String? {
-        val match = urlRegex.find(text)?.value ?: return null
-        return match.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '、')
-    }
+    fun extractFirstUrl(text: String): String? = urlRegex.find(text)?.value?.trimEnd(*URL_END)
+
+    /** What ends a sentence around a link rather than the link. */
+    private val URL_END = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '、')
 
     /** Short-link landing pages sometimes redirect with JavaScript; the target URL is still in the HTML. */
     fun fromPage(html: String): MusicLink? {

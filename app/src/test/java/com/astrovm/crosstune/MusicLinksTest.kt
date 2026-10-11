@@ -345,6 +345,16 @@ class MusicLinksTest {
     }
 
     @Test
+    fun textWithSeveralLinksIsAboutTheFirstThatsMusic() {
+        assertLink(
+            "Look at this https://example.com/post/1 and this song: https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT, then https://www.deezer.com/track/1",
+            MusicService.SPOTIFY, ItemType.TRACK, "4cOdK2wGLETKBW3PvgPWqT", "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+        )
+        // None of them music is no link.
+        assertNull(link("https://example.com/a https://example.org/b"))
+    }
+
+    @Test
     fun youtubeAndYouTubeMusicPlaylistsAndWhereEachOpensAsItself() {
         val list = "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
         assertLink("https://www.youtube.com/playlist?list=$list", MusicService.YOUTUBE, ItemType.PLAYLIST, list, "https://www.youtube.com/playlist?list=$list")

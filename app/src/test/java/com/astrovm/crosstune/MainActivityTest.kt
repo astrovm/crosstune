@@ -2497,7 +2497,8 @@ class MainActivityTest {
             410 to R.string.error_not_found,
             429 to R.string.error_rate_limited,
             503 to R.string.error_service_unavailable,
-            403 to R.string.error_not_found,
+            // A page turned away says the service failed, not that the song's gone.
+            403 to R.string.error_service_unavailable,
             400 to R.string.error_metadata_unavailable
         )
         for ((code, message) in cases) {
