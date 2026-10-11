@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">원래 표기</string>
     <string name="lyrics_only_kana">가나만</string>
     <string name="lyrics_only_latin">로마자만</string>
+    <string name="lyrics_from_romaji">ChatGPT가 일본어로 표기</string>
 </resources>

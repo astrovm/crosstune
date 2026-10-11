@@ -236,6 +236,34 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
+     * [song]'s [lines], Japanese written in romaji, written in Japanese as its lyrics are, line by
+     * line; null when it couldn't be done.
+     */
+    suspend fun fromRomaji(song: MusicMetadata, lines: List<String>): List<String>? {
+        val model = chatGpt.model() ?: return null
+        val key = "romaji|$model|${song.title}|${song.artist}|${lines.size}"
+        val kept = cache.get(key) ?: run {
+            // Tried on real songs with GPT-6-Luna: Owaranai Uta and Gurenge came back as they're
+            // written, 終わらない歌を歌おう, 強くなれる理由を知った, a romaji typo put right and English
+            // kept, in about 2 s.
+            val reply = chatGpt.ask(
+                "You restore song lyrics written in romaji to Japanese. The user sends a song, as title and artist, and its lines as a JSON array of strings, in order. " +
+                    "Write each line in Japanese as the song's lyrics are officially written, in kanji and kana; keep words sung in English as they are. " +
+                    "Reply with only a JSON array of strings, the same length and in the same order. A line that isn't Japanese stays as it is.",
+                JSONObject().put("song", "${song.title} by ${song.artist}").put("lines", JSONArray(lines)).toString(),
+                effort = "low"
+            )
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+        }
+        val japanese = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it) } }
+        if (japanese.size != lines.size) return null
+        cache.put(key, kept)
+        cache.save()
+        // A line with no words, like a gap, stays one.
+        return japanese.mapIndexed { index, line -> if (lines[index].isBlank()) lines[index] else line.trim() }
+    }
+
+    /**
      * The words and phrases of [song], whose words are [lines], most worth learning before listening,
      * in the order they come, with what they mean there in [language]; null when it couldn't say.
      */

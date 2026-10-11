@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">जैसा लिखा है</string>
     <string name="lyrics_only_kana">सिर्फ़ काना</string>
     <string name="lyrics_only_latin">सिर्फ़ लैटिन अक्षर</string>
+    <string name="lyrics_from_romaji">ChatGPT ने जापानी में लिखा</string>
 </resources>

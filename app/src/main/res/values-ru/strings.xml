@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">Как написано</string>
     <string name="lyrics_only_kana">Только кана</string>
     <string name="lyrics_only_latin">Только латиница</string>
+    <string name="lyrics_from_romaji">Написано по-японски ChatGPT</string>
 </resources>

@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">Wie geschrieben</string>
     <string name="lyrics_only_kana">Nur Kana</string>
     <string name="lyrics_only_latin">Nur lateinische Buchstaben</string>
+    <string name="lyrics_from_romaji">Von ChatGPT auf Japanisch geschrieben</string>
 </resources>

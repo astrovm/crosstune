@@ -562,6 +562,12 @@ private fun WordsAsItem(@StringRes label: Int, wordsAs: WordsAs, learning: Learn
     val picked = learning.showsAs == wordsAs
     DropdownMenuItem(
         text = { Text(stringResource(label)) },
+        // Found in romaji, the words as written are ChatGPT's.
+        leadingIcon = if (wordsAs == WordsAs.WRITTEN && learning.fromRomaji) {
+            { AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.size(18.dp)) }
+        } else {
+            null
+        },
         trailingIcon = { RadioButton(selected = picked, onClick = null) },
         onClick = { actions.onWordsAsChange(wordsAs) },
         modifier = Modifier.semantics { selected = picked }

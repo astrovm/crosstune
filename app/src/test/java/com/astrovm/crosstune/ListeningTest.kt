@@ -1202,6 +1202,7 @@ class ListeningTest {
             val input = body.getJSONArray("input").getJSONObject(0).getString("content")
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
+                "restore song lyrics written in romaji" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMAJI_JAPANESE[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
                 "listening exercise" in instructions -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { lines.getString(it).substringAfterLast(' ') }) }.toString())
                 "CEFR" in instructions -> FakeOpenAi.stream("""{"level": "B1", "why": "Easy words.", "original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
@@ -1605,6 +1606,12 @@ class ListeningTest {
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
             """"hub":{"actions":[{"type":"applemusicplay","id":"1109658204"}]}}}"""
+
+        /** Timed words in romaji, as LRCLIB has some Japanese songs. */
+        const val ROMAJI = "[00:00.00] yoru ni kimi wa\\n[00:01.00] hoshi ga hikaru\\n[00:30.00] boku mo namida\\n[09:00.00] ashita no uta"
+
+        /** What ChatGPT writes the romaji lines of the tests in. */
+        val ROMAJI_JAPANESE = mapOf("yoru ni kimi wa" to "夜に君は", "hoshi ga hikaru" to "星が光る", "boku mo namida" to "僕も涙", "ashita no uta" to "明日の歌")
     }
 
     /** Waits for the words, shown whole when nothing helps read them. */
@@ -1810,5 +1817,40 @@ class ListeningTest {
         composeRule.waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
         assertFalse(shown(string(R.string.song_search_label_for, "calm rainy night songs")))
         assertFalse(shown(string(R.string.songs_like_label)))
+    }
+
+    @Test
+    fun japaneseFoundInRomajiIsWrittenInJapaneseSignedInKeepingItsTiming() {
+        val openAi = signedInWithChatGpt()
+        wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
+        // In Japanese, the line being sung still lit, and the menu says ChatGPT wrote it.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("夜に君は") && shown("明日の歌") }
+        composeRule.onNode(hasText("星が光る") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        assertFalse(shown("yoru ni kimi wa"))
+        learnMenu()
+        assertTrue(described(string(R.string.lyrics_from_romaji)))
+        // Read as Japanese now, it can show in kana, or its own romaji.
+        click(string(R.string.lyrics_only_kana))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("よるにきみは") }
+        click(string(R.string.lyrics_as_written))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("夜に君は") }
+    }
+
+    @Test
+    fun japaneseFoundInRomajiStaysSoSignedOut() {
+        wordsOf(ROMAJI, "yoru ni kimi wa")
+        composeRule.waitUntil(TIMEOUT_MS) { shown("yoru ni kimi wa") && shown("ashita no uta") }
+    }
+
+    @Test
+    fun japaneseFoundInRomajiStaysSoWhenChatGptCantWriteIt() {
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("restore song lyrics written in romaji" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.any { "restore song lyrics written in romaji" in it.getString("instructions") } }
+        composeRule.waitForIdle()
+        assertTrue(shown("yoru ni kimi wa") && shown("ashita no uta"))
+        assertFalse(shown("夜に君は"))
     }
 }

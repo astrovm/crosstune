@@ -328,4 +328,5 @@
     <string name="lyrics_as_written">表記どおり</string>
     <string name="lyrics_only_kana">かなのみ</string>
     <string name="lyrics_only_latin">ローマ字のみ</string>
+    <string name="lyrics_from_romaji">ChatGPTが日本語で表記</string>
 </resources>

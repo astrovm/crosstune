@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">Yazıldığı gibi</string>
     <string name="lyrics_only_kana">Sadece kana</string>
     <string name="lyrics_only_latin">Sadece Latin harfleri</string>
+    <string name="lyrics_from_romaji">ChatGPT tarafından Japonca yazıldı</string>
 </resources>

@@ -874,4 +874,30 @@ class ChatGptTest {
         assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
     }
 
+
+    @Test
+    fun japaneseInRomajiIsWrittenInJapaneseLineByLine() {
+        val tutor = tutor()
+        val song = MusicMetadata("Owaranai Uta", "Paranmaum")
+        val lines = listOf("owaranai uta o utaou", "", "kusottare no sekai no tame")
+        answering("[\" 終わらない歌を歌おう \", \"♪\", \"クソッタレの世界のため\"]")
+        // A line with no words stays as it was.
+        assertEquals(listOf("終わらない歌を歌おう", "", "クソッタレの世界のため"), runBlocking { tutor.fromRomaji(song, lines) })
+        val asked = openAi.asked.single()
+        val sent = JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("Owaranai Uta by Paranmaum", sent.getString("song"))
+        assertEquals(JSONArray(lines).toString(), sent.getJSONArray("lines").toString())
+        assertTrue(asked.getString("instructions").contains("keep words sung in English"))
+        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
+        // Kept for the song.
+        runBlocking { tutor.fromRomaji(song, lines) }
+        assertEquals(1, openAi.asked.size)
+        // Too few lines, or no answer, is none.
+        listOf("[\"終わらない歌を歌おう\"]", "No JSON").forEachIndexed { index, text ->
+            answering(text)
+            assertNull(runBlocking { tutor.fromRomaji(song.copy(title = "Song $index"), lines) })
+        }
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { tutor(chatGpt()).fromRomaji(song.copy(title = "Other"), lines) })
+    }
 }

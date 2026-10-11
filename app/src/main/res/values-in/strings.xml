@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">Seperti ditulis</string>
     <string name="lyrics_only_kana">Hanya kana</string>
     <string name="lyrics_only_latin">Hanya huruf Latin</string>
+    <string name="lyrics_from_romaji">Ditulis dalam bahasa Jepang oleh ChatGPT</string>
 </resources>

@@ -330,6 +330,8 @@ internal data class Learning(
     val blanks: Boolean = false,
     /** How the words show: as written, or in kana or Latin letters for a script that reads otherwise. */
     val wordsAs: WordsAs = WordsAs.WRITTEN,
+    /** Set when the words were found in romaji, and ChatGPT wrote them in Japanese. */
+    val fromRomaji: Boolean = false,
     /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
     val blankWords: List<String?> = emptyList(),
     /** The words most worth learning from the song, as ChatGPT finds them. */
@@ -430,6 +432,13 @@ internal class MainViewModel(
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
+
+    /** The words found in romaji, written in Japanese by ChatGPT, line by line, once they are. */
+    private var japanese: List<String>? = null
+
+    /** [lines] as they show: in Japanese when found in romaji and written so, timed as found. */
+    private fun shown(lines: List<LyricLine>): List<LyricLine> =
+        japanese?.let { written -> lines.mapIndexed { index, line -> line.copy(text = written.getOrElse(index) { line.text }) } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
@@ -1279,6 +1288,7 @@ internal class MainViewModel(
         stopLearning()
         stopFollowing()
         foundLines = emptyList()
+        japanese = null
         syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
             uiState = uiState.copy(
@@ -1296,6 +1306,8 @@ internal class MainViewModel(
                         )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
                         learn()
+                        // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
+                        if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                     }
                     LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                     LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
@@ -1602,8 +1614,31 @@ internal class MainViewModel(
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
         syncPoints = points
+        // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
-        uiState = uiState.copy(lyricLines = LyricsSync.adjust(foundLines, points), lyricsSynced = points.isNotEmpty())
+        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty())
+    }
+
+    private var romajiJob: Job? = null
+
+    /**
+     * Has ChatGPT write [song]'s words, found in romaji, in Japanese, each line timed as found; then
+     * they're worked out again as Japanese, with readings, kana and romaji of their own.
+     */
+    private fun writeInJapanese(song: MusicMetadata) {
+        val lines = wordLines()
+        romajiJob = viewModelScope.launch {
+            val written = tutor?.fromRomaji(song, lines) ?: return@launch
+            if (uiState.lyricsFor != song || wordLines() != lines) return@launch
+            japanese = written
+            stopLearning()
+            uiState = uiState.copy(
+                lyrics = written.joinToString("\n"),
+                lyricLines = shown(uiState.lyricLines),
+                learning = uiState.learning.fresh(Readings.scriptOf(written)).copy(fromRomaji = true)
+            )
+            learn()
+        }
     }
 
     /** Closes the words. The next song starts without them, rather than showing the last one's. */
@@ -1629,6 +1664,7 @@ internal class MainViewModel(
         readingsJob?.cancel()
         translationJob?.cancel()
         blanksJob?.cancel()
+        romajiJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()

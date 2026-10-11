@@ -327,4 +327,5 @@
     <string name="lyrics_as_written">按原文</string>
     <string name="lyrics_only_kana">仅假名</string>
     <string name="lyrics_only_latin">仅拉丁字母</string>
+    <string name="lyrics_from_romaji">由 ChatGPT 写成日文</string>
 </resources>
