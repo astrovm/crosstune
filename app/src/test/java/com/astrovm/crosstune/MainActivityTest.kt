@@ -2809,7 +2809,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.lyrics_save_line))
 
         // Then found among the lines kept, and let go there.
-        click(string(R.string.lyrics_learn))
+        click(string(R.string.lyrics_study))
         click(string(R.string.lyrics_saved_lines))
         assertTextShown("Dakare Ni Kita Onna")
         assertTextShown("Kingo Hamada")
@@ -2936,6 +2936,21 @@ class MainActivityTest {
         File(app.noBackupFilesDir, "chatgpt.json").delete()
         launch()
         click(string(R.string.settings_button))
+
+        // Android 13 asks about notifications first, without which some phones freeze Crosstune
+        // while the browser's open; turned down, it signs in all the same.
+        composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(android.content.pm.PackageManager.PERMISSION_DENIED))
+        composeRule.waitForIdle()
+        assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+        click(string(R.string.cancel_button))
+        // Allowed, it isn't asked again.
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
 
         /** Starts signing in, and returns once the browser's open for it. */
         fun startSigningIn() {

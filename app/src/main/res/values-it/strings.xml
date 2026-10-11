@@ -284,7 +284,6 @@
     <string name="lyrics_ask_line">Chiedi su questa riga</string>
     <string name="lyrics_ask_send">Invia</string>
     <string name="lyrics_ask_failed">Impossibile rispondere.</string>
-    <string name="lyrics_song_meaning">Cosa significa la canzone</string>
     <string name="lyrics_song_meaning_failed">Impossibile spiegare la canzone.</string>
     <string name="explanation_in_song">Nella canzone</string>
     <string name="explanation_language">Lingua</string>
@@ -300,11 +299,9 @@
     <string name="lyrics_saved_lines">Righe salvate</string>
     <string name="lyrics_word_failed">Impossibile trovare il significato ora.</string>
     <string name="lyrics_word_unknown">Nessuna voce di dizionario per questa parola.</string>
-    <string name="lyrics_words_to_know">Parole da sapere</string>
     <string name="lyrics_words_to_know_failed">Impossibile trovare le parole da sapere.</string>
     <string name="lyrics_save_word">Salva %1$s</string>
     <string name="lyrics_word_saved">%1$s salvata</string>
-    <string name="lyrics_about_artist">Sull\'artista</string>
     <string name="lyrics_about_artist_failed">Impossibile sapere di più sull\'artista.</string>
     <string name="lyrics_songs_like">Brani simili</string>
     <string name="lyrics_blanks">Riempi gli spazi</string>
@@ -321,4 +318,14 @@
     <string name="song_search_playlist">Crea una playlist</string>
     <string name="error_no_songs_like">Nessun brano simile trovato.</string>
     <string name="lyrics_show_blank">Mostra la parola</string>
+    <string name="lyrics_about_song">Sulla canzone</string>
+    <string name="lyrics_study">Studia</string>
+    <string name="practice_due">%1$d da ripassare</string>
+    <string name="song_tab_meaning">Significato</string>
+    <string name="song_tab_words">Parole</string>
+    <string name="song_tab_artist">Artista</string>
+    <string name="lyrics_blanks_hint">Tocca una riga per vedere la sua parola</string>
+    <string name="lyrics_as_written">Come è scritto</string>
+    <string name="lyrics_only_kana">Solo kana</string>
+    <string name="lyrics_only_latin">Solo lettere latine</string>
 </resources>

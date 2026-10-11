@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">Zapytaj o ten wers</string>
     <string name="lyrics_ask_send">Wyślij</string>
     <string name="lyrics_ask_failed">Nie udało się odpowiedzieć.</string>
-    <string name="lyrics_song_meaning">O czym jest piosenka</string>
     <string name="lyrics_song_meaning_failed">Nie udało się wyjaśnić piosenki.</string>
     <string name="explanation_in_song">W piosence</string>
     <string name="explanation_language">Język</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">Zapisane wiersze</string>
     <string name="lyrics_word_failed">Nie udało się teraz znaleźć znaczenia.</string>
     <string name="lyrics_word_unknown">Brak hasła w słowniku dla tego słowa.</string>
-    <string name="lyrics_words_to_know">Słowa do poznania</string>
     <string name="lyrics_words_to_know_failed">Nie udało się znaleźć słów do poznania.</string>
     <string name="lyrics_save_word">Zapisz %1$s</string>
     <string name="lyrics_word_saved">Zapisano %1$s</string>
-    <string name="lyrics_about_artist">O wykonawcy</string>
     <string name="lyrics_about_artist_failed">Nie udało się dowiedzieć niczego o wykonawcy.</string>
     <string name="lyrics_songs_like">Podobne utwory</string>
     <string name="lyrics_blanks">Uzupełnij luki</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">Utwórz playlistę</string>
     <string name="error_no_songs_like">Nie znaleziono podobnych utworów.</string>
     <string name="lyrics_show_blank">Pokaż słowo</string>
+    <string name="lyrics_about_song">O utworze</string>
+    <string name="lyrics_study">Nauka</string>
+    <string name="practice_due">%1$d do powtórki</string>
+    <string name="song_tab_meaning">Znaczenie</string>
+    <string name="song_tab_words">Słowa</string>
+    <string name="song_tab_artist">Wykonawca</string>
+    <string name="lyrics_blanks_hint">Dotknij wiersza, by zobaczyć słowo</string>
+    <string name="lyrics_as_written">Jak zapisano</string>
+    <string name="lyrics_only_kana">Tylko kana</string>
+    <string name="lyrics_only_latin">Tylko litery łacińskie</string>
 </resources>

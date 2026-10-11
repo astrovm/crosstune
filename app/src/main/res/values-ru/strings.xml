@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">Спросите об этой строке</string>
     <string name="lyrics_ask_send">Отправить</string>
     <string name="lyrics_ask_failed">Не удалось ответить.</string>
-    <string name="lyrics_song_meaning">О чём песня</string>
     <string name="lyrics_song_meaning_failed">Не удалось объяснить песню.</string>
     <string name="explanation_in_song">В песне</string>
     <string name="explanation_language">Язык</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">Сохранённые строки</string>
     <string name="lyrics_word_failed">Сейчас не удалось найти значение.</string>
     <string name="lyrics_word_unknown">Для этого слова нет словарной статьи.</string>
-    <string name="lyrics_words_to_know">Слова, которые стоит знать</string>
     <string name="lyrics_words_to_know_failed">Не удалось найти слова.</string>
     <string name="lyrics_save_word">Сохранить %1$s</string>
     <string name="lyrics_word_saved">%1$s сохранено</string>
-    <string name="lyrics_about_artist">Об исполнителе</string>
     <string name="lyrics_about_artist_failed">Не удалось узнать об исполнителе.</string>
     <string name="lyrics_songs_like">Похожие песни</string>
     <string name="lyrics_blanks">Заполни пропуски</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">Создать плейлист</string>
     <string name="error_no_songs_like">Похожие песни не найдены.</string>
     <string name="lyrics_show_blank">Показать слово</string>
+    <string name="lyrics_about_song">О песне</string>
+    <string name="lyrics_study">Учить</string>
+    <string name="practice_due">%1$d к повторению</string>
+    <string name="song_tab_meaning">Смысл</string>
+    <string name="song_tab_words">Слова</string>
+    <string name="song_tab_artist">Исполнитель</string>
+    <string name="lyrics_blanks_hint">Нажми на строку, чтобы увидеть слово</string>
+    <string name="lyrics_as_written">Как написано</string>
+    <string name="lyrics_only_kana">Только кана</string>
+    <string name="lyrics_only_latin">Только латиница</string>
 </resources>

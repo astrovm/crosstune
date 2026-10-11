@@ -34,6 +34,8 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
+    /** Whether to say how to see a word left blank, until one's been seen. */
+    val blanksHint: Boolean = true,
     /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
     val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
@@ -326,6 +328,8 @@ internal data class Learning(
     val questions: List<LineQuestion> = emptyList(),
     /** Signed in, one word of each line left blank, to listen for, until it's sung. */
     val blanks: Boolean = false,
+    /** How the words show: as written, or in kana or Latin letters for a script that reads otherwise. */
+    val wordsAs: WordsAs = WordsAs.WRITTEN,
     /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
     val blankWords: List<String?> = emptyList(),
     /** The words most worth learning from the song, as ChatGPT finds them. */
@@ -340,8 +344,25 @@ internal data class Learning(
     val examples: LineExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, blanks = blanks)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, blanks = blanks, wordsAs = wordsAs)
 }
+
+/** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
+internal enum class WordsAs { WRITTEN, KANA, LATIN }
+
+/**
+ * What shows instead of line [index] as the words are set to show: its kana, or its Latin letters,
+ * once its reading's worked out; null as written.
+ */
+internal fun Learning.insteadOf(index: Int): String? {
+    val reading = lines.getOrNull(index) ?: return null
+    if (showsAs == WordsAs.KANA) return reading.reading
+    if (showsAs == WordsAs.LATIN) return reading.romanized.takeIf { it.isNotBlank() }
+    return null
+}
+
+/** How the words show for the script they're in: only Japanese has kana, so the others show as written. */
+internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 
 /** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
 internal data class Asking<T>(val value: T? = null, val failed: Boolean = false) {
@@ -442,7 +463,8 @@ internal class MainViewModel(
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
-                blanks = preferences.getBoolean(KEY_BLANKS, false)
+                blanks = preferences.getBoolean(KEY_BLANKS, false),
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -457,6 +479,7 @@ internal class MainViewModel(
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             history = historyStore.load(),
+            blanksHint = !preferences.getBoolean(KEY_BLANK_SEEN, false),
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
             systemStateKnown = false
@@ -1958,7 +1981,7 @@ internal class MainViewModel(
         val learning = uiState.learning
         val lines = wordLines()
         val script = learning.script
-        if ((learning.readings || learning.romanized) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
+        if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
                 val read = withContext(systemDispatcher) { Readings.of(lines, script) }
@@ -2028,6 +2051,20 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_BLANKS, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(blanks = on))
         learn()
+    }
+
+    /** Shows the words as written, or only in kana or Latin letters, from now on. */
+    fun setWordsAs(wordsAs: WordsAs) {
+        preferences.edit { putString(KEY_WORDS_AS, wordsAs.name) }
+        uiState = uiState.copy(learning = uiState.learning.copy(wordsAs = wordsAs))
+        learn()
+    }
+
+    /** A word left blank was seen, or how to see them put away: it isn't said again. */
+    fun blankShown() {
+        if (!uiState.blanksHint) return
+        preferences.edit { putBoolean(KEY_BLANK_SEEN, true) }
+        uiState = uiState.copy(blanksHint = false)
     }
 
     /** Asks for the translation again, after it couldn't be done. */
@@ -2449,6 +2486,8 @@ internal class MainViewModel(
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_BLANKS = "lyrics_blanks"
+        private const val KEY_WORDS_AS = "lyrics_words_as"
+        private const val KEY_BLANK_SEEN = "lyrics_blank_seen"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
 
         /** Typed text of this many words or more may describe a song rather than name it. */

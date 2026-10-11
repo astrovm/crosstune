@@ -1177,6 +1177,14 @@ class ListeningTest {
 
     private fun learnMenu() = click(string(R.string.lyrics_learn))
 
+    private fun studyMenu() = click(string(R.string.lyrics_study))
+
+    /** Opens what the song's about, from the song at the top, at [tab]. */
+    private fun aboutSong(tab: Int? = null) {
+        click(string(R.string.lyrics_about_song))
+        tab?.let { click(string(it)) }
+    }
+
     /** Signed in with ChatGPT before Crosstune opens, which [openAi] answers for; it answers each feature as asked. */
     private fun signedInWithChatGpt(): FakeOpenAi {
         val openAi = FakeOpenAi(System::currentTimeMillis)
@@ -1288,8 +1296,7 @@ class ListeningTest {
         openAi.reply = { body -> if ("explain the song in four parts" in body.getString("instructions")) 500 to "" else explained(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
-        learnMenu()
-        click(string(R.string.lyrics_song_meaning))
+        aboutSong()
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_song_meaning_failed)) }
         // Asked again, it's explained.
         openAi.reply = explained
@@ -1302,8 +1309,7 @@ class ListeningTest {
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown("A night under the stars.") }
-        learnMenu()
-        click(string(R.string.lyrics_song_meaning))
+        aboutSong()
         waitForText("A night under the stars.")
         assertEquals(asked, openAi.asked.count { "explain the song in four parts" in it.getString("instructions") })
     }
@@ -1356,8 +1362,9 @@ class ListeningTest {
         // The sheet closed, back to the words.
         composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
-        learnMenu()
-        click(string(R.string.lyrics_saved_lines))
+        // Practised straight from the study menu, which says how many are due.
+        studyMenu()
+        assertTrue(shown(string(R.string.practice_due, 1)))
         click(string(R.string.saved_practice))
         // Its meaning among two wrong ones; picked, it's practised.
         composeRule.waitUntil(TIMEOUT_MS) { shown("Night rain") }
@@ -1375,7 +1382,7 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         wordsOf(null, "Night sky\\nStars")
         waitForText("[Stars]")
-        learnMenu()
+        studyMenu()
         click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         click(string(R.string.practice_show))
@@ -1436,6 +1443,39 @@ class ListeningTest {
             composeRule.waitForIdle()
             shown("yozora")
         }
+    }
+
+    @Test
+    fun japaneseWordsShowOnlyInKanaOrRomajiAlsoFloating() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        // Only in kana, readings over kanji have nothing to sit over; romaji can still go under.
+        click(string(R.string.lyrics_only_kana))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("よぞらにほしが") && shown("たべる") }
+        assertFalse(shown("夜空に星が"))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        assertEquals("KANA", prefs().getString("lyrics_words_as", null))
+        click(string(R.string.lyrics_romanized))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        // Only in romaji, it isn't said twice.
+        click(string(R.string.lyrics_only_latin))
+        composeRule.waitUntil(TIMEOUT_MS) { !shown("よぞらにほしが") }
+        assertEquals(1, composeRule.onAllNodes(hasText("yozora ni hoshi ga")).fetchSemanticsNodes().size)
+        assertFalse(shown(string(R.string.lyrics_romanized)))
+        // Floating, too.
+        val floating = floatNow()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertTrue(shown("yozora ni hoshi ga"))
+        assertFalse(shown("夜空に星が"))
+        floating.destroy()
+        controller!!.start().resume()
+        composeRule.waitForIdle()
+        // As written again.
+        learnMenu()
+        click(string(R.string.lyrics_as_written))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("夜空に星が") }
+        assertEquals("WRITTEN", prefs().getString("lyrics_words_as", null))
     }
 
     @Test
@@ -1523,9 +1563,12 @@ class ListeningTest {
         click(string(R.string.retry_button))
         composeRule.waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(shown(string(R.string.lyrics_translation_failed)))
-        // English has no readings to offer, only a translation; signed out, nothing says what the song means.
+        // English has no readings to offer, only a translation; signed out, with no lines kept, there's
+        // nothing to say about the song or study.
+        assertFalse(described(string(R.string.lyrics_about_song)))
+        assertFalse(described(string(R.string.lyrics_study)))
         learnMenu()
-        assertFalse(shown(string(R.string.lyrics_song_meaning)))
+        assertFalse(shown(string(R.string.lyrics_as_written)))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(shown(string(R.string.lyrics_romanized)))
     }
@@ -1536,8 +1579,9 @@ class ListeningTest {
         wordsOf(null, "사랑해\\n한국")
         waitForText("한국")
         learnMenu()
-        // Hangul reads as it's written, so there are only Latin letters.
+        // Hangul reads as it's written, so there are only Latin letters, and no kana.
         assertFalse(shown(string(R.string.lyrics_readings)))
+        assertFalse(shown(string(R.string.lyrics_only_kana)))
         click(string(R.string.lyrics_romanized))
         composeRule.waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))
@@ -1587,8 +1631,7 @@ class ListeningTest {
         openAi.reply = { body -> if ("6 to 10 words" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
-        learnMenu()
-        click(string(R.string.lyrics_words_to_know))
+        aboutSong(R.string.song_tab_words)
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_words_to_know_failed)) }
         openAi.reply = answers
         click(string(R.string.retry_button))
@@ -1605,8 +1648,7 @@ class ListeningTest {
         val asked = openAi.asked.size
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown("cielo") }
-        learnMenu()
-        click(string(R.string.lyrics_words_to_know))
+        aboutSong(R.string.song_tab_words)
         waitForText("cielo")
         assertEquals(asked, openAi.asked.size)
     }
@@ -1618,8 +1660,7 @@ class ListeningTest {
         openAi.reply = { body -> if ("get to know the artists" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
-        learnMenu()
-        click(string(R.string.lyrics_about_artist))
+        aboutSong(R.string.song_tab_artist)
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_about_artist_failed)) }
         openAi.reply = answers
         click(string(R.string.retry_button))
@@ -1629,8 +1670,7 @@ class ListeningTest {
         val asked = openAi.asked.size
         composeRule.onNode(hasText("A band from Rome.")).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown("A band from Rome.") }
-        learnMenu()
-        click(string(R.string.lyrics_about_artist))
+        aboutSong(R.string.song_tab_artist)
         waitForText("A band from Rome.")
         assertEquals(asked, openAi.asked.size)
     }
@@ -1640,8 +1680,7 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
-        learnMenu()
-        click(string(R.string.lyrics_song_meaning))
+        aboutSong()
         waitForText("A night under the stars.")
         // How hard it is, at a glance, and why; the song it covers and the one it samples.
         composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(string(R.string.song_level, "B1"))).fetchSemanticsNodes().isNotEmpty() }
@@ -1667,17 +1706,21 @@ class ListeningTest {
         val openAi = signedInWithChatGpt()
         wordsOf("[00:00.00] Night sky\\n[00:01.00] Stars\\n[09:00.00] Late song", "Night sky\\nStars\\nLate song", openAi = openAi)
         waitForText("Late song")
-        learnMenu()
+        studyMenu()
         click(string(R.string.lyrics_blanks))
         assertTrue(prefs().getBoolean("lyrics_blanks", false))
+        // Said how to see a word, until one's seen.
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_blanks_hint)) }
         // The line sung already shows its word; the one being sung and those to come don't.
         composeRule.waitUntil(TIMEOUT_MS) { shown("Late ____") }
         assertTrue(shown("_____") && shown("Night sky"))
         assertFalse(shown("Late song"))
-        // One to come shows its word once tapped.
+        // One to come shows its word once tapped, and then how needn't be said.
         composeRule.onNode(hasText("Late ____")).performClick()
         waitForText("Late song")
         assertTrue(shown("_____"))
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_blanks_hint)) }
+        assertTrue(prefs().getBoolean("lyrics_blank_seen", false))
         // Switched off, the words are whole again.
         click(string(R.string.lyrics_blanks))
         waitForText("Stars")
@@ -1691,6 +1734,10 @@ class ListeningTest {
         wordsOf(null, "夜の 雨\\nI go", openAi = openAi)
         composeRule.waitUntil(TIMEOUT_MS) { shown("夜の ＿＿＿") }
         assertTrue(shown("I ___"))
+        // How to see a word can be put away, for good.
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button)) and androidx.compose.ui.test.hasAnySibling(hasText(string(R.string.lyrics_blanks_hint)))).performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_blanks_hint)) }
+        assertTrue(prefs().getBoolean("lyrics_blank_seen", false))
         // Its romaji would give the blank away.
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText("yoru", substring = true)).fetchSemanticsNodes().isEmpty())
@@ -1727,8 +1774,8 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         withCatalogue(fake.handler)
-        learnMenu()
-        click(string(R.string.lyrics_songs_like))
+        aboutSong()
+        composeRule.onNode(hasText(string(R.string.lyrics_songs_like))).performScrollTo().performClick()
         // The words close for the songs, the one the catalogue doesn't have left out.
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
         assertTrue(shown("Luna") && shown("Demo"))
@@ -1743,8 +1790,8 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         withCatalogue(fake.handler)
-        learnMenu()
-        click(string(R.string.lyrics_songs_like))
+        aboutSong()
+        composeRule.onNode(hasText(string(R.string.lyrics_songs_like))).performScrollTo().performClick()
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.error_no_songs_like)) }
         assertFalse(shown(string(R.string.songs_like_label)))
     }

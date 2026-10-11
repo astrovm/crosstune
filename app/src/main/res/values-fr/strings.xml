@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">Posez une question sur cette ligne</string>
     <string name="lyrics_ask_send">Envoyer</string>
     <string name="lyrics_ask_failed">Impossible de répondre.</string>
-    <string name="lyrics_song_meaning">Ce que veut dire la chanson</string>
     <string name="lyrics_song_meaning_failed">Impossible d\'expliquer la chanson.</string>
     <string name="explanation_in_song">Dans la chanson</string>
     <string name="explanation_language">Langue</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">Lignes enregistrées</string>
     <string name="lyrics_word_failed">Impossible de trouver son sens pour le moment.</string>
     <string name="lyrics_word_unknown">Aucune entrée de dictionnaire pour ce mot.</string>
-    <string name="lyrics_words_to_know">Mots à connaître</string>
     <string name="lyrics_words_to_know_failed">Impossible de trouver les mots à connaître.</string>
     <string name="lyrics_save_word">Enregistrer %1$s</string>
     <string name="lyrics_word_saved">%1$s enregistré</string>
-    <string name="lyrics_about_artist">À propos de l\'artiste</string>
     <string name="lyrics_about_artist_failed">Impossible d\'en savoir plus sur l\'artiste.</string>
     <string name="lyrics_songs_like">Chansons similaires</string>
     <string name="lyrics_blanks">Texte à trous</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">Créer une playlist</string>
     <string name="error_no_songs_like">Aucune chanson similaire trouvée.</string>
     <string name="lyrics_show_blank">Afficher le mot</string>
+    <string name="lyrics_about_song">À propos de la chanson</string>
+    <string name="lyrics_study">Étudier</string>
+    <string name="practice_due">%1$d à revoir</string>
+    <string name="song_tab_meaning">Sens</string>
+    <string name="song_tab_words">Mots</string>
+    <string name="song_tab_artist">Artiste</string>
+    <string name="lyrics_blanks_hint">Touche une ligne pour voir son mot</string>
+    <string name="lyrics_as_written">Tel qu\'écrit</string>
+    <string name="lyrics_only_kana">Kana seulement</string>
+    <string name="lyrics_only_latin">Lettres latines seulement</string>
 </resources>

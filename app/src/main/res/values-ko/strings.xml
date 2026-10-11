@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">이 줄에 대해 질문</string>
     <string name="lyrics_ask_send">보내기</string>
     <string name="lyrics_ask_failed">답할 수 없어요.</string>
-    <string name="lyrics_song_meaning">이 노래의 의미</string>
     <string name="lyrics_song_meaning_failed">이 노래를 설명할 수 없어요.</string>
     <string name="explanation_in_song">노래 속에서</string>
     <string name="explanation_language">언어</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">저장한 줄</string>
     <string name="lyrics_word_failed">지금은 뜻을 찾을 수 없습니다.</string>
     <string name="lyrics_word_unknown">이 단어의 사전 항목이 없어요.</string>
-    <string name="lyrics_words_to_know">알아둘 단어</string>
     <string name="lyrics_words_to_know_failed">알아둘 단어를 찾지 못했어요.</string>
     <string name="lyrics_save_word">%1$s 저장</string>
     <string name="lyrics_word_saved">%1$s 저장됨</string>
-    <string name="lyrics_about_artist">아티스트 정보</string>
     <string name="lyrics_about_artist_failed">아티스트 정보를 찾지 못했어요.</string>
     <string name="lyrics_songs_like">비슷한 노래</string>
     <string name="lyrics_blanks">빈칸 채우기</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">플레이리스트 만들기</string>
     <string name="error_no_songs_like">비슷한 노래를 찾지 못했어요.</string>
     <string name="lyrics_show_blank">단어 보기</string>
+    <string name="lyrics_about_song">이 노래에 대해</string>
+    <string name="lyrics_study">공부</string>
+    <string name="practice_due">복습 %1$d개</string>
+    <string name="song_tab_meaning">의미</string>
+    <string name="song_tab_words">단어</string>
+    <string name="song_tab_artist">아티스트</string>
+    <string name="lyrics_blanks_hint">줄을 탭하면 단어가 보여요</string>
+    <string name="lyrics_as_written">원래 표기</string>
+    <string name="lyrics_only_kana">가나만</string>
+    <string name="lyrics_only_latin">로마자만</string>
 </resources>

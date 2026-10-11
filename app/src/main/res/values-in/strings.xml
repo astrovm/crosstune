@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">Tanya tentang baris ini</string>
     <string name="lyrics_ask_send">Kirim</string>
     <string name="lyrics_ask_failed">Tidak bisa menjawab.</string>
-    <string name="lyrics_song_meaning">Arti lagu ini</string>
     <string name="lyrics_song_meaning_failed">Tidak bisa menjelaskan lagu ini.</string>
     <string name="explanation_in_song">Dalam lagu</string>
     <string name="explanation_language">Bahasa</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">Baris tersimpan</string>
     <string name="lyrics_word_failed">Tidak bisa menemukan artinya sekarang.</string>
     <string name="lyrics_word_unknown">Tidak ada entri kamus untuk kata ini.</string>
-    <string name="lyrics_words_to_know">Kata yang perlu diketahui</string>
     <string name="lyrics_words_to_know_failed">Tidak dapat menemukan kata yang perlu diketahui.</string>
     <string name="lyrics_save_word">Simpan %1$s</string>
     <string name="lyrics_word_saved">%1$s disimpan</string>
-    <string name="lyrics_about_artist">Tentang artis</string>
     <string name="lyrics_about_artist_failed">Tidak dapat mengetahui tentang artis.</string>
     <string name="lyrics_songs_like">Lagu serupa</string>
     <string name="lyrics_blanks">Isi yang kosong</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">Buat playlist</string>
     <string name="error_no_songs_like">Tidak menemukan lagu serupa.</string>
     <string name="lyrics_show_blank">Tampilkan kata</string>
+    <string name="lyrics_about_song">Tentang lagu</string>
+    <string name="lyrics_study">Belajar</string>
+    <string name="practice_due">%1$d jatuh tempo</string>
+    <string name="song_tab_meaning">Arti</string>
+    <string name="song_tab_words">Kata</string>
+    <string name="song_tab_artist">Artis</string>
+    <string name="lyrics_blanks_hint">Ketuk baris untuk melihat katanya</string>
+    <string name="lyrics_as_written">Seperti ditulis</string>
+    <string name="lyrics_only_kana">Hanya kana</string>
+    <string name="lyrics_only_latin">Hanya huruf Latin</string>
 </resources>

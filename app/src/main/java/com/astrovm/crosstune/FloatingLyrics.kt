@@ -111,18 +111,21 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
             AnimatedContent(targetState = sung, transitionSpec = { rise(up = true) }, label = "floating line") { line ->
                 // A line going out may be from the song before, whose words are gone.
                 val current = lines.getOrNull(line)
+                // As the words are set to show: as written, or in kana or Latin letters.
+                val learning = state.learning
+                fun shown(index: Int) = lines.getOrNull(index)?.let { (learning.insteadOf(index) ?: it.text).ifBlank { "♪" } }
                 val (first, second) = if (current != null) {
-                    current.text.ifBlank { "♪" } to lines.getOrNull(line + 1)?.text?.ifBlank { "♪" }
+                    shown(line)!! to shown(line + 1)
                 } else {
                     song?.title.orEmpty() to song?.artist
                 }
-                val before = lines.getOrNull(line - 1)?.text?.ifBlank { "♪" }?.takeIf { options.previousLine }
+                val before = shown(line - 1)?.takeIf { options.previousLine }
                 // What helps read the line being sung, as switched on for the words: its reading, and its translation.
                 val help = state.learning.helpFor(line).takeIf { line >= 0 }
                 val reading = help?.reading
                 val helps = listOfNotNull(
                     reading?.reading?.takeIf { help.readings && it != first },
-                    reading?.romanized?.takeIf { help.romanized && it.isNotBlank() },
+                    reading?.romanized?.takeIf { help.romanized && it.isNotBlank() && it != first },
                     help?.translation
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {

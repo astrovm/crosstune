@@ -283,7 +283,6 @@
     <string name="lyrics_ask_line">Frag zu dieser Zeile</string>
     <string name="lyrics_ask_send">Senden</string>
     <string name="lyrics_ask_failed">Keine Antwort möglich.</string>
-    <string name="lyrics_song_meaning">Was der Song bedeutet</string>
     <string name="lyrics_song_meaning_failed">Der Song konnte nicht erklärt werden.</string>
     <string name="explanation_in_song">Im Song</string>
     <string name="explanation_language">Sprache</string>
@@ -299,11 +298,9 @@
     <string name="lyrics_saved_lines">Gespeicherte Zeilen</string>
     <string name="lyrics_word_failed">Konnte die Bedeutung gerade nicht finden.</string>
     <string name="lyrics_word_unknown">Kein Wörterbucheintrag für dieses Wort.</string>
-    <string name="lyrics_words_to_know">Wichtige Wörter</string>
     <string name="lyrics_words_to_know_failed">Die wichtigen Wörter wurden nicht gefunden.</string>
     <string name="lyrics_save_word">%1$s speichern</string>
     <string name="lyrics_word_saved">%1$s gespeichert</string>
-    <string name="lyrics_about_artist">Über die Band oder Person</string>
     <string name="lyrics_about_artist_failed">Über die Band oder Person wurde nichts gefunden.</string>
     <string name="lyrics_songs_like">Ähnliche Songs</string>
     <string name="lyrics_blanks">Lückentext</string>
@@ -320,4 +317,14 @@
     <string name="song_search_playlist">Playlist erstellen</string>
     <string name="error_no_songs_like">Keine ähnlichen Songs gefunden.</string>
     <string name="lyrics_show_blank">Wort zeigen</string>
+    <string name="lyrics_about_song">Über den Song</string>
+    <string name="lyrics_study">Lernen</string>
+    <string name="practice_due">%1$d fällig</string>
+    <string name="song_tab_meaning">Bedeutung</string>
+    <string name="song_tab_words">Wörter</string>
+    <string name="song_tab_artist">Künstler</string>
+    <string name="lyrics_blanks_hint">Tippe auf eine Zeile, um ihr Wort zu sehen</string>
+    <string name="lyrics_as_written">Wie geschrieben</string>
+    <string name="lyrics_only_kana">Nur Kana</string>
+    <string name="lyrics_only_latin">Nur lateinische Buchstaben</string>
 </resources>

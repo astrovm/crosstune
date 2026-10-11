@@ -224,6 +224,8 @@ internal data class ScreenActions(
     val onAskAboutSong: (String) -> Unit = {},
     /** A word of each line left blank to listen for, or none. */
     val onBlanksChange: (Boolean) -> Unit = {},
+    /** The words as written, or only in kana or Latin letters. */
+    val onWordsAsChange: (WordsAs) -> Unit = {},
     val onFindWordsToKnow: () -> Unit = {},
     /** Saves one of the song's words to know, or lets it go. */
     val onToggleSavedWord: (KeyWord) -> Unit = {},
@@ -234,6 +236,8 @@ internal data class ScreenActions(
     val onFindExamples: (Int) -> Unit = {},
     /** Opens a song ChatGPT named, by its title and artist. */
     val onOpenNamedSong: (String, String) -> Unit = { _, _ -> },
+    /** A word left blank was seen, so how to see them needn't be said again. */
+    val onBlankShown: () -> Unit = {},
     /** Lists the songs ChatGPT found for a description as a playlist. */
     val onPlaylistFromSearch: () -> Unit = {},
     val onDismissWord: () -> Unit = {},
