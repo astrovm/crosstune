@@ -1,4 +1,5 @@
 The song playing shows on open, its lyrics ready.
+Now in 繁體中文.
 A music link you just copied is looked up when you come back.
 Lyrics light up word by word as they're sung.
 Chords over the words, also from LaCuerda and for J-pop like Plastic Love.
@@ -6,5 +7,5 @@ Lyrics stop when the music stops.
 Romaji as it's sung: sensee, not sensei.
 Lyrics you open stay that song's.
 Readings show at once; long lines break evenly.
-Cleaner screens: notices close, Recent lists each song once.
+Notices close; Recent lists each song once.
 ChatGPT sign-in says it needs a paid plan.

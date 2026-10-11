@@ -21,6 +21,7 @@
 <link rel="alternate" hreflang="ja" href="https://crosstune.4st.li/ja/">
 <link rel="alternate" hreflang="ko" href="https://crosstune.4st.li/ko/">
 <link rel="alternate" hreflang="zh-CN" href="https://crosstune.4st.li/zh-cn/">
+<link rel="alternate" hreflang="zh-TW" href="https://crosstune.4st.li/zh-tw/">
 <link rel="alternate" hreflang="x-default" href="https://crosstune.4st.li/">
 <script>
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
@@ -216,7 +217,7 @@
 
   <footer>
     <span>Fatto con <svg class="heart" viewBox="0 0 960 960" width="14" height="14" role="img" aria-label="love"><path fill="#e34b5f" d="M480,840Q466,840 451.5,835Q437,830 426,819L357,756Q251,659 165.5,563.5Q80,468 80,354Q80,260 143,197Q206,134 300,134Q353,134 400,156.5Q447,179 480,218Q513,179 560,156.5Q607,134 660,134Q754,134 817,197Q880,260 880,354Q880,468 794.5,564Q709,660 602,757L534,819Q523,830 508.5,835Q494,840 480,840Z"/></svg> da astro</span>
-    <span class="links"><a href="/it/privacy/">Informativa sulla privacy</a> <a href="mailto:~@4st.li">~@4st.li</a> <select class="language" aria-label="Lingua" onchange="pickLanguage(this.value)"><option value="/">English</option><option value="/es/">Español</option><option value="/pt-br/">Português (Brasil)</option><option value="/de/">Deutsch</option><option value="/fr/">Français</option><option value="/it/" selected>Italiano</option><option value="/nl/">Nederlands</option><option value="/pl/">Polski</option><option value="/ru/">Русский</option><option value="/tr/">Türkçe</option><option value="/id/">Bahasa Indonesia</option><option value="/hi/">हिन्दी</option><option value="/ja/">日本語</option><option value="/ko/">한국어</option><option value="/zh-cn/">简体中文</option></select></span>
+    <span class="links"><a href="/it/privacy/">Informativa sulla privacy</a> <a href="mailto:~@4st.li">~@4st.li</a> <select class="language" aria-label="Lingua" onchange="pickLanguage(this.value)"><option value="/">English</option><option value="/es/">Español</option><option value="/pt-br/">Português (Brasil)</option><option value="/de/">Deutsch</option><option value="/fr/">Français</option><option value="/it/" selected>Italiano</option><option value="/nl/">Nederlands</option><option value="/pl/">Polski</option><option value="/ru/">Русский</option><option value="/tr/">Türkçe</option><option value="/id/">Bahasa Indonesia</option><option value="/hi/">हिन्दी</option><option value="/ja/">日本語</option><option value="/ko/">한국어</option><option value="/zh-cn/">简体中文</option><option value="/zh-tw/">繁體中文</option></select></span>
   </footer>
 </div>
 <script>
@@ -230,9 +231,10 @@
     try { saved = localStorage.getItem("language"); } catch (e) {}
     if (saved === "en") return;
     if (saved) { location.replace("/" + saved + "/" + ""); return; }
-    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/"};
+    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/", "zh-tw": "/zh-tw/"};
     for (const wanted of navigator.languages || [navigator.language]) {
-      const tag = wanted.toLowerCase();
+      // Hong Kong and Macau write Traditional Chinese, like Taiwan.
+      const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\b.*/, "zh-tw").replace(/^zh-hans\b.*/, "zh-cn");
       const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
       if (match === "/") return;
       if (match) { location.replace(match + ""); return; }

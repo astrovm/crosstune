@@ -14,7 +14,7 @@ SITE = ROOT / "site"
 DOCS = ROOT / "docs"
 BASE = "https://crosstune.4st.li"
 # URL folder for each strings file, in the order the language picker lists them.
-LANGS = ["en", "es", "pt-br", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-cn"]
+LANGS = ["en", "es", "pt-br", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-cn", "zh-tw"]
 HEART = '<svg class="heart" viewBox="0 0 960 960" width="14" height="14" role="img" aria-label="love"><path fill="#e34b5f" d="M480,840Q466,840 451.5,835Q437,830 426,819L357,756Q251,659 165.5,563.5Q80,468 80,354Q80,260 143,197Q206,134 300,134Q353,134 400,156.5Q447,179 480,218Q513,179 560,156.5Q607,134 660,134Q754,134 817,197Q880,260 880,354Q880,468 794.5,564Q709,660 602,757L534,819Q523,830 508.5,835Q494,840 480,840Z"/></svg>'
 
 # Material Symbols Rounded, in the same order as the cards in each strings file, each with its viewBox:
@@ -95,7 +95,8 @@ def script(strings, code, page):
     if (saved) {{ location.replace("/" + saved + "/" + {json.dumps(page)}); return; }}
     const homes = {json.dumps(homes)};
     for (const wanted of navigator.languages || [navigator.language]) {{
-      const tag = wanted.toLowerCase();
+      // Hong Kong and Macau write Traditional Chinese, like Taiwan.
+      const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\\b.*/, "zh-tw").replace(/^zh-hans\\b.*/, "zh-cn");
       const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
       if (match === "/") return;
       if (match) {{ location.replace(match + {json.dumps(page)}); return; }}

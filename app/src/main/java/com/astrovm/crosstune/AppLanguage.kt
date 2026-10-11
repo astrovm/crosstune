@@ -17,7 +17,7 @@ import java.util.Locale
  */
 internal object AppLanguage {
     /** The languages under res/values-*, in the order the picker lists them. */
-    val tags = listOf("en", "es", "pt-BR", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-CN")
+    val tags = listOf("en", "es", "pt-BR", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-CN", "zh-TW")
 
     /**
      * The languages lyrics are translated into: the app's, by where they're spoken where that
