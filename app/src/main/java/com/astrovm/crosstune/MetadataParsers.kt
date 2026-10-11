@@ -45,6 +45,12 @@ internal object MetadataParsers {
         RegexOption.IGNORE_CASE
     )
 
+    /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
+    private val trailingVideoNoiseRegex = Regex(
+        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video)\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+
     /**
      * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as
      * "Artist · album · Year · N songs", with a title like "Name - Album by Artist | Spotify".
@@ -158,7 +164,7 @@ internal object MetadataParsers {
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
-        val rawTitle = title.replace(videoNoiseRegex, "").trim().ifEmpty { return null }
+        val rawTitle = title.replace(videoNoiseRegex, "").replace(trailingVideoNoiseRegex, "").trim().ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".
@@ -166,8 +172,10 @@ internal object MetadataParsers {
             val (artist, song) = found.destructured
             return MusicMetadata(song.trim(), artist.trim().ifEmpty { author })
         }
-        // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011".
-        val separator = if (channel.endsWith(" - Topic")) -1 else rawTitle.indexOf(" - ")
+        // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011";
+        // anywhere, a dash before only such a tag is.
+        val tagOnly = SongNames.withoutEditionTag(rawTitle) != rawTitle && " - " !in SongNames.withoutEditionTag(rawTitle)
+        val separator = if (channel.endsWith(" - Topic") || tagOnly) -1 else rawTitle.indexOf(" - ")
         return if (separator > 0) {
             MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim())
         } else {

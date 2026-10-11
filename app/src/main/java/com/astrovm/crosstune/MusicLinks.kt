@@ -338,7 +338,7 @@ internal object MusicLinks {
     /** A song known only by name, kept as a Google search for it, as Now Playing shares it. */
     fun recognizedSong(metadata: MusicMetadata): LinkInput.RecognizedSong {
         val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
-            .addQueryParameter("q", "${metadata.title} by ${metadata.artist}").build().toString()
+            .addQueryParameter("q", if (metadata.artist.isBlank()) metadata.title else "${metadata.title} by ${metadata.artist}").build().toString()
         return LinkInput.RecognizedSong(canonical, metadata)
     }
 

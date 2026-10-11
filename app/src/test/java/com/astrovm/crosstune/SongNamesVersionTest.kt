@@ -32,6 +32,8 @@ class SongNamesVersionTest {
         assertEquals("Hotel California (Live; 2013 Remaster)", SongNames.withoutEditionTag("Hotel California (Live; 2013 Remaster)"))
         assertEquals("Song - Stereo MC's Remix", SongNames.withoutEditionTag("Song - Stereo MC's Remix"))
         assertEquals("Song - Acoustic Mono Demo", SongNames.withoutEditionTag("Song - Acoustic Mono Demo (feat. A)"))
+        // Only the last part after a dash is a tag: the name before it stays.
+        assertEquals("Band - Song", SongNames.withoutEditionTag("Band - Song - Remastered 2011"))
         assertFalse(SongNames.same("Hotel California (Live; 2013 Remaster)", "Hotel California"))
         assertFalse(SongNames.sameVersion("Hotel California", "Hotel California (Live; 2013 Remaster)"))
         // A remaster of the live take is still that live take.

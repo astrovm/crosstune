@@ -31,10 +31,13 @@ internal object SongNames {
      * recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|[^()\[\]]*\b(?:remaster(?:ed)?|mono|stereo)\b[^()\[\]]*)\s*[)\]]?$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed)?|mono|stereo)\b$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
+
+    /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
+    private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5

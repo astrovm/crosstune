@@ -345,6 +345,12 @@ class MusicLinksTest {
     }
 
     @Test
+    fun aSongRecognizedWithoutAnArtistIsLookedUpByItsNameAlone() {
+        assertEquals("https://www.google.com/search?q=Hallelujah", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "")).url)
+        assertEquals("https://www.google.com/search?q=Hallelujah%20by%20Jeff%20Buckley", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "Jeff Buckley")).url)
+    }
+
+    @Test
     fun textWithSeveralLinksIsAboutTheFirstThatsMusic() {
         assertLink(
             "Look at this https://example.com/post/1 and this song: https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT, then https://www.deezer.com/track/1",

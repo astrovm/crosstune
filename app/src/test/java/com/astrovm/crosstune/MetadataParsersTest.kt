@@ -108,6 +108,15 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band『Song』MV", "BandOfficial"))
         // Brackets alone leave the artist to the channel.
         assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("「曲名」", "アーティスト - Topic"))
+        // A dash before only an edition's tag is part of the song's name, on any channel.
+        assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.youtubeVideo("Song - Remastered 2011", "Band"))
+        assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.youtubeVideo("Band - Song - Remastered 2011", "Label"))
+        // What a title says of the video without brackets is left off too.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song Official Music Video", "BandVEVO"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song | Official Audio", "Label"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song - Lyric Video", "Label"))
+        // But not a song named so in the middle.
+        assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star", "Label"))
     }
 
     @Test
