@@ -1731,7 +1731,6 @@ internal class MainViewModel(
      */
     fun dismissLyrics() {
         heardSong = null
-        heardClock = null
         lyricsJob?.cancel()
         lyricsJob = null
         stopLearning()

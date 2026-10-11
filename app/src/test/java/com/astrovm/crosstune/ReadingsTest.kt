@@ -73,6 +73,7 @@ class ReadingsTest {
         fun romanized(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized
         // Long vowels are drawn out as they're sung, though the kana write them otherwise.
         assertEquals("sensee", romanized("先生"))
+        assertEquals("geejutsu", romanized("芸術"))
         assertEquals("koinu no yoo ni", romanized("仔犬のように"))
         assertEquals("yoo", Readings.words("仔犬のように", Script.JAPANESE).first { it.text == "よう" }.romanized)
         // Only within a word: 思う's う is said on its own.
