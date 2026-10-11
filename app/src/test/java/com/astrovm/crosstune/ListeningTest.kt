@@ -997,6 +997,20 @@ class ListeningTest {
     }
 
     @Test
+    fun turnedTheFloatingWordsFitTheScreensNewWidth() {
+        val floating = floatOverApps(FakeHearing())
+        val view = overlay(floating.get())
+        val wide = (view.layoutParams as WindowManager.LayoutParams).width
+        // Made as wide as they go, then the screen narrows, as turning it does.
+        prefs().edit().putInt("floating_width", wide).putInt("floating_left", 0).commit()
+        org.robolectric.RuntimeEnvironment.setQualifiers("w300dp-h700dp")
+        floating.get().onConfigurationChanged(app.resources.configuration)
+        val window = view.layoutParams as WindowManager.LayoutParams
+        assertTrue(window.width <= app.resources.displayMetrics.widthPixels)
+        assertTrue(window.x + window.width <= app.resources.displayMetrics.widthPixels)
+    }
+
+    @Test
     fun lockedWordsAlwaysHaveAWayOutEvenFloatingLockedFromLastTime() {
         // Locked when they last floated, and with no notification to unlock them from.
         prefs().edit().putBoolean("floating_locked", true).commit()

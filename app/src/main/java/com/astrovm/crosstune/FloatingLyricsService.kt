@@ -154,15 +154,27 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     private fun openIntent() = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
 
-    private fun show(host: FloatingHost) {
-        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
-        if (!Settings.canDrawOverlays(this)) return stopSelf()
-        val options = host.state.floating
+    /** Where the words go, as [options] keep them, on the screen as it is now, whichever way it's turned. */
+    private fun place(options: FloatingOptions) {
         val screen = resources.displayMetrics
         val margin = (MARGIN_DP * screen.density).toInt()
         params.width = options.width.takeIf { it > 0 }?.coerceAtMost(screen.widthPixels) ?: (screen.widthPixels - 2 * margin)
         params.x = options.left.takeIf { it >= 0 }?.coerceAtMost(screen.widthPixels - params.width) ?: ((screen.widthPixels - params.width) / 2)
         params.y = options.top.takeIf { it >= 0 } ?: (screen.heightPixels / 4)
+    }
+
+    /** Turned, the words fit the screen's new width, rather than run off its side. */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val view = view ?: return
+        place(host?.state?.floating ?: return)
+        windows.updateViewLayout(view, params)
+    }
+
+    private fun show(host: FloatingHost) {
+        // Taken back in Android's settings since Crosstune was left, so there's nothing to float on.
+        if (!Settings.canDrawOverlays(this)) return stopSelf()
+        place(host.state.floating)
         val content = ComposeView(this).apply {
             setContent {
                 val state = host.state
