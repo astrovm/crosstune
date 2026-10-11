@@ -1792,6 +1792,8 @@ class ListeningTest {
         val line = composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
         composeRule.waitUntil(TIMEOUT_MS) { runCatching { line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "Night" } }.isSuccess }
         waitForText("The time between sunset and sunrise.")
+        // Signed out, there are no examples to ask for.
+        assertFalse(shown(string(R.string.lyrics_examples)))
         line.performFirstLinkClick { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag == "sky" }
         waitForText(string(R.string.lyrics_word_unknown))
     }
