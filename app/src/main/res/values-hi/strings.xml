@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
+    <string name="lyrics_chords">कॉर्ड्स</string>
+    <string name="lyrics_chords_none">इस गाने के कॉर्ड्स नहीं मिले।</string>
+    <string name="lyrics_chords_failed">अभी कॉर्ड्स नहीं मिल सके।</string>
+    <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>
     <string name="translate_into_app_language">ऐप की भाषा</string>
     <string name="setting_translation_server">अनुवाद यहां से</string>

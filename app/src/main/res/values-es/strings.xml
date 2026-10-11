@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_translation">Traducción</string>
     <string name="lyrics_translation_failed">No se pudo traducir ahora.</string>
+    <string name="lyrics_chords">Acordes</string>
+    <string name="lyrics_chords_none">No se encontraron acordes para esta canción.</string>
+    <string name="lyrics_chords_failed">No se pudieron obtener los acordes ahora.</string>
+    <string name="lyrics_capo">Cejilla %1$d</string>
     <string name="setting_translate_into">Traducir al</string>
     <string name="translate_into_app_language">Idioma de la app</string>
     <string name="setting_translation_server">Traducciones de</string>

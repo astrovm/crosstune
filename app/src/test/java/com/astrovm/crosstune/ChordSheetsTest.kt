@@ -1,0 +1,121 @@
+package com.astrovm.crosstune
+
+import org.json.JSONArray
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+/** Runs under Robolectric for the real org.json implementation. */
+@RunWith(RobolectricTestRunner::class)
+class ChordSheetsTest {
+
+    private fun sheet(vararg lines: SheetLine) = ChordSheet(lines.toList(), site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/1")
+
+    @Test
+    fun uFretsChordsAreWhereTheyAreInTheWords() {
+        val lines = JSONArray(listOf("[Am]五月[Em]雨は\r", "[C]　[G]\r", "ただの[ ]行", "\r"))
+        assertEquals(
+            listOf(
+                SheetLine("五月雨は", listOf(Chord(0, "Am"), Chord(2, "Em"))),
+                SheetLine("　", listOf(Chord(0, "C"), Chord(1, "G"))),
+                // Brackets with no chord in them are nothing.
+                SheetLine("ただの行", emptyList()),
+                SheetLine("", emptyList())
+            ),
+            ChordSheets.fromUFret(lines)
+        )
+    }
+
+    @Test
+    fun ultimateGuitarsChordsAreOverTheLetterTheyStartOn() {
+        val content = "[Intro]\r\n[ch]G[/ch]  [ch]D[/ch]\r\n\r\n[Verse 1]\r\n[tab][ch]G[/ch]       [ch]C/B[/ch]\r\n  Walking down the road[/tab]\r\n" +
+            "[tab]                          [ch]D[/ch]\r\nSinging[/tab]\r\nJust words here   \r\n[ch]Em[/ch]\r\n[Chorus]\r\n[ch]A[/ch]\r\n[ch]B[/ch]"
+        assertEquals(
+            listOf(
+                SheetLine("", listOf(Chord(0, "G"), Chord(3, "D"))),
+                SheetLine("  Walking down the road", listOf(Chord(0, "G"), Chord(8, "C/B"))),
+                // Past the end of its words, it's played after them.
+                SheetLine("Singing", listOf(Chord(7, "D"))),
+                SheetLine("Just words here", emptyList()),
+                // With a heading, more chords or nothing under them, chords are played on their own.
+                SheetLine("", listOf(Chord(0, "Em"))),
+                SheetLine("", listOf(Chord(0, "A"))),
+                SheetLine("", listOf(Chord(0, "B")))
+            ),
+            ChordSheets.fromUltimateGuitar(content)
+        )
+    }
+
+    @Test
+    fun eachChordLandsOnTheLetterItsPlayedOnInTheLinesShown() {
+        val sheet = sheet(
+            SheetLine("", listOf(Chord(0, "G"), Chord(3, "D"))),
+            // The sheet spells it "Walking", the words shown "Walkin".
+            SheetLine("Walking down the river road", listOf(Chord(0, "G"), Chord(8, "C"))),
+            SheetLine("", listOf(Chord(0, "Bm"))),
+            SheetLine("Singing to the morning light", listOf(Chord(28, "D"))),
+            // A verse the song doesn't have.
+            SheetLine("Xylophones quack jazzily", listOf(Chord(0, "Em"))),
+            SheetLine("", listOf(Chord(0, "Am"))),
+            SheetLine("Coming home tonight", listOf(Chord(7, "G"), Chord(0, "F")))
+        )
+        val texts = listOf("Walkin down the river road", "Singing to the morning light", "", "Coming home tonight")
+        assertEquals(
+            listOf(
+                // The intro's chords before the first line.
+                LineChords(listOf("G", "D"), listOf(Chord(0, "G"), Chord(7, "C"))),
+                LineChords(listOf("Bm"), listOf(Chord(28, "D"))),
+                // Those played in a gap the words show, in it.
+                LineChords(listOf("Am")),
+                LineChords(over = listOf(Chord(0, "F"), Chord(7, "G")))
+            ),
+            ChordSheets.place(sheet, texts)
+        )
+        assertEquals(true, LineChords().isEmpty)
+        assertEquals(false, LineChords(listOf("Am")).isEmpty)
+        assertEquals(false, LineChords(over = listOf(Chord(0, "Am"))).isEmpty)
+    }
+
+    @Test
+    fun aChordOnALetterThatDoesntLineUpGoesByTheNearestThatDoes() {
+        val sheet = sheet(SheetLine("Walking home again tonight", listOf(Chord(6, "A7"))))
+        // "g" isn't in "Walkin": the chord goes one letter on from the "n" before it.
+        assertEquals(listOf(LineChords(over = listOf(Chord(7, "A7")))), ChordSheets.place(sheet, listOf("Walkin home again tonight")))
+        // Full-width letters are the same letters.
+        val wide = sheet(SheetLine("Ｗａｌｋｉｎｇ ｈｏｍｅ ａｇａｉｎ", listOf(Chord(8, "C"))))
+        assertEquals(listOf(LineChords(over = listOf(Chord(8, "C")))), ChordSheets.place(wide, listOf("walking home again")))
+    }
+
+    @Test
+    fun aSheetForOtherWordsIsntPlaced() {
+        val sheet = sheet(SheetLine("Walking down the river road", listOf(Chord(0, "G"))))
+        assertNull(ChordSheets.place(sheet, listOf("Nothing like it at all, honestly")))
+        // Too few letters to tell, no words shown, or too many to line up.
+        assertNull(ChordSheets.place(sheet(SheetLine("Hi you", listOf(Chord(0, "G")))), listOf("Hi you")))
+        assertNull(ChordSheets.place(sheet, emptyList()))
+        val long = "ab".repeat(2_000)
+        assertNull(ChordSheets.place(sheet(SheetLine(long, listOf(Chord(0, "G")))), listOf(long)))
+    }
+
+    @Test
+    fun aChordIsPlayedWhenItsLetterIsSung() {
+        val byWord = LyricLine(10_000, "Two words", listOf(TimedWord(10_000, "Two "), TimedWord(11_000, "words")))
+        assertEquals(10_000L, ChordSheets.timeOf(byWord, 0, 13_000))
+        assertEquals(11_000L, ChordSheets.timeOf(byWord, 4, 13_000))
+        // Two letters into the last word, two fifths of the way to the next line.
+        assertEquals(11_800L, ChordSheets.timeOf(byWord, 6, 13_000))
+        assertEquals(13_000L, ChordSheets.timeOf(byWord, 99, 13_000))
+        // A line timed as a whole: that far through it, up to the next line, or a moment a letter.
+        val whole = LyricLine(10_000, "abcd")
+        assertEquals(12_000L, ChordSheets.timeOf(whole, 2, 14_000))
+        assertEquals(10_300L, ChordSheets.timeOf(whole, 2, null))
+        assertEquals(10_000L, ChordSheets.timeOf(LyricLine(10_000, ""), 0, null))
+
+        val chords = listOf(Chord(0, "G"), Chord(4, "D"))
+        assertEquals(-1, ChordSheets.playing(byWord, chords, 13_000, 9_000))
+        assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_500))
+        assertEquals(1, ChordSheets.playing(byWord, chords, 13_000, 11_500))
+    }
+}

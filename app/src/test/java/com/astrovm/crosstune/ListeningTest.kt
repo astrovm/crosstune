@@ -1739,6 +1739,65 @@ class ListeningTest {
         assertEquals("WRITTEN", prefs().getString("lyrics_words_as", null))
     }
 
+    /** The chords over Demo's line [line], once they're drawn. */
+    private fun chordsOver(line: String): List<String>? =
+        composeRule.onAllNodes(hasText(line), useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ChordsShown) { null } }
+
+    @Test
+    fun chordsSwitchedOnShowOverTheWordsFromNowOn() {
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light")
+        waitForText("Walking down the river road\nSinging to the morning light")
+        val words = fake.handler
+        var up = false
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "")
+                "www.ultimate-guitar.com" -> if (up) {
+                    FakeSpotify.html(request, page("""{"results":[{"song_name":"Demo","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/demo-1"}]}"""))
+                } else {
+                    throw IOException("offline")
+                }
+                "tabs.ultimate-guitar.com" -> FakeSpotify.html(
+                    request,
+                    page("""{"tab_view":{"meta":{"capo":3},"wiki_tab":{"content":"[ch]G[/ch]      [ch]C[/ch]\nWalking down the river road\n[ch]D[/ch]\nSinging to the morning light"}}}""")
+                )
+                else -> words(request)
+            }
+        }
+        // A site that won't answer says so, and is asked again.
+        learnMenu()
+        click(string(R.string.lyrics_chords))
+        assertTrue(prefs().getBoolean("lyrics_chords", false))
+        waitForText(string(R.string.lyrics_chords_failed))
+        up = true
+        click(string(R.string.retry_button))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        assertTrue(shown(string(R.string.lyrics_capo, 3)))
+        assertEquals(listOf("D"), chordsOver("Singing to the morning light"))
+
+        // Switched off, they go; on again, they're back with no lookup.
+        val asked = fake.requestedUrls.size
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == null }
+        assertFalse(prefs().getBoolean("lyrics_chords", true))
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") != null }
+        assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun aSongWithoutChordsSaysSo() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        wordsOf("[00:01.00] Walking down the river road\\n[00:05.00] Singing to the morning light", "Walking down the river road\\nSinging to the morning light")
+        // On from before, they're looked up with the words; neither site has them.
+        waitForText(string(R.string.lyrics_chords_none))
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://www.ultimate-guitar.com/search.php") })
+    }
+
     @Test
     fun japaneseWordsShowTheirKanaRomajiAndTranslationAlsoFloating() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")

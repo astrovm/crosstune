@@ -286,6 +286,10 @@
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
+    <string name="lyrics_chords">Chords</string>
+    <string name="lyrics_chords_none">No chords found for this song.</string>
+    <string name="lyrics_chords_failed">Couldn\'t get chords just now.</string>
+    <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Translate into</string>
     <string name="translate_into_app_language">App language</string>
     <string name="setting_translation_server">Translations from</string>

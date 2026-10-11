@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_translation">Terjemahan</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
+    <string name="lyrics_chords">Kord</string>
+    <string name="lyrics_chords_none">Tidak ada kord untuk lagu ini.</string>
+    <string name="lyrics_chords_failed">Tidak bisa mengambil kord sekarang.</string>
+    <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Terjemahkan ke</string>
     <string name="translate_into_app_language">Bahasa aplikasi</string>
     <string name="setting_translation_server">Terjemahan dari</string>

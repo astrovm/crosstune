@@ -13,6 +13,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInVertically
 import kotlinx.coroutines.delay
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -241,6 +247,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // Signed in with ChatGPT, the song opens to what it's about.
             LyricsHeader(song.copy(artworkUrl = cover), actions, onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null })
             TranslationStatus(state.learning, actions)
+            ChordsStatus(state.chords, actions)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
             var followOffered by rememberSaveable { mutableStateOf(true) }
@@ -267,8 +274,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         LyricsMessage(stringResource(R.string.lyrics_none))
                     } else if (shown == LyricsShown.TIMED) {
                         TimedLyrics(state, actions, timedList, syncing, onStudy = { studying = it })
-                    } else if (state.learning.shows) {
-                        // Read line by line, each with what helps read it.
+                    } else if (state.learning.shows || (state.chords.on && state.chords.sheet != null)) {
+                        // Read line by line, each with what helps read it, or its chords.
                         LyricLines(state, onStudy = { studying = it })
                     } else {
                         PlainLyrics(state.lyrics)
@@ -416,7 +423,7 @@ private fun LyricsActions(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
-                    LearnButton(state.learning.translating, onClick = { menu = BarMenu.LEARN })
+                    LearnButton(state.learning.translating || state.chords.loading, onClick = { menu = BarMenu.LEARN })
                 }
                 // Lines kept are studied.
                 if (state.lyrics.isNotEmpty() && state.savedLines.isNotEmpty()) {
@@ -437,7 +444,7 @@ private fun LyricsActions(
         // The menus open from the bar rather than from their button, so they line up with it and
         // keep off the screen's edge.
         val close = { menu = null }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions, close)
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, close)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, onOpenSaved, onPractise, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
@@ -487,7 +494,7 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions, onClose: () -> Unit) {
+private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, actions: ScreenActions, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
         val script = learning.script
         // A script that reads otherwise can show as written, or only in kana for Japanese, or in Latin letters.
@@ -503,6 +510,8 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions,
         }
         if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        HorizontalDivider()
+        LearnItem(R.string.lyrics_chords, chords.on, actions.onChordsChange)
     }
 }
 
@@ -579,6 +588,31 @@ private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
                 modifier = Modifier.weight(1f).padding(vertical = 12.dp)
             )
             TextButton(onClick = actions.onRetryTranslation) { Text(stringResource(R.string.retry_button)) }
+        }
+    }
+}
+
+/** Where the chords are from, and the capo they're played with; or that there are none, or they couldn't be had. */
+@Composable
+private fun ChordsStatus(chords: ChordsState, actions: ScreenActions) {
+    val sheet = chords.sheet
+    val shows = chords.on && (sheet != null || chords.missing || chords.failed)
+    AnimatedVisibility(visible = shows, enter = Motion.appear, exit = Motion.disappear) {
+        val open = rememberWebOpener()
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            val said = when {
+                sheet != null -> sheet.capo.takeIf { it > 0 }?.let { stringResource(R.string.lyrics_capo, it) }.orEmpty()
+                chords.failed -> stringResource(R.string.lyrics_chords_failed)
+                else -> stringResource(R.string.lyrics_chords_none)
+            }
+            Text(
+                said,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (sheet != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(vertical = 12.dp)
+            )
+            if (sheet != null) TextButton(onClick = { open(sheet.url) }) { Text(sheet.site.label) }
+            if (chords.failed) TextButton(onClick = actions.onRetryChords) { Text(stringResource(R.string.retry_button)) }
         }
     }
 }
@@ -854,6 +888,7 @@ private fun TimedLyrics(
     val lines = state.lyricLines
     val following = state.following
     val active = rememberSungLine(lines, following)
+    val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     LaunchedEffect(active) {
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
@@ -868,6 +903,9 @@ private fun TimedLyrics(
             LyricLineText(
                 line.text,
                 words = line.words,
+                timeMs = line.timeMs,
+                nextMs = lines.getOrNull(index + 1)?.timeMs,
+                chords = chords.getOrNull(index),
                 following = following,
                 place = following?.let { index.compareTo(active) },
                 // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
@@ -889,15 +927,27 @@ private fun TimedLyrics(
 /** Words with no timings, line by line, when each has something under it to help read it. */
 @Composable
 private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
+    val lines = state.lyrics.lines()
+    val chords = rememberChords(state.chords, lines)
     LazyColumn(
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
-        itemsIndexed(state.lyrics.lines()) { index, line ->
-            LyricLineText(line, place = null, onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
+        itemsIndexed(lines) { index, line ->
+            LyricLineText(line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
         }
     }
+}
+
+/** Each of [texts]' chords while they show, worked out away from the screen, again whenever the lines change. */
+@Composable
+private fun rememberChords(chords: ChordsState, texts: List<String>): List<LineChords> {
+    val sheet = chords.sheet?.takeIf { chords.on }
+    val placed by produceState(emptyList<LineChords>(), sheet, texts) {
+        value = sheet?.let { withContext(Dispatchers.Default) { ChordSheets.place(it, texts) } }.orEmpty()
+    }
+    return placed
 }
 
 /** What helps read a line, as switched on. */
@@ -962,6 +1012,9 @@ private fun LyricLineText(
     text: String,
     place: Int?,
     words: List<TimedWord> = emptyList(),
+    timeMs: Long = 0,
+    nextMs: Long? = null,
+    chords: LineChords? = null,
     following: Following? = null,
     onSeek: (() -> Unit)?,
     onStudy: () -> Unit,
@@ -1013,6 +1066,9 @@ private fun LyricLineText(
         val reading = help?.reading
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
+        } else if (chords != null && !chords.isEmpty) {
+            // Chords sit over the letters they're played on, where readings would.
+            ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, following.takeIf { lit }, style)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
             RubyLine(reading.parts, style)
         } else if (lit && following != null && words.isNotEmpty()) {
@@ -1030,23 +1086,98 @@ private fun LyricLineText(
     }
 }
 
-/** The line being sung, timed word by word: each word lights as it's sung, checked every frame while the song plays. */
+/** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable
-private fun SungWords(words: List<TimedWord>, following: Following, style: TextStyle) {
-    fun sung() = SyncedLyrics.wordsSungBy(words, following.clock.positionAt(SystemClock.elapsedRealtime()))
-    val sung by produceState(sung(), following, words) {
-        value = sung()
-        while (following.clock.playing) value = withInfiniteAnimationFrameMillis { sung() }
+private fun rememberPosition(following: Following?): Long? {
+    if (following == null) return null
+    fun now() = following.clock.positionAt(SystemClock.elapsedRealtime())
+    val position by produceState(now(), following) {
+        value = now()
+        while (following.clock.playing) value = withInfiniteAnimationFrameMillis { now() }
     }
+    return position
+}
+
+/** [words], those sung by [positionMs] lit and the rest dim. */
+@Composable
+private fun sungText(words: List<TimedWord>, positionMs: Long): AnnotatedString {
+    val sung = SyncedLyrics.wordsSungBy(words, positionMs)
     val color = MaterialTheme.colorScheme.onSurface
-    val text = buildAnnotatedString {
+    return buildAnnotatedString {
         words.forEachIndexed { index, word -> withStyle(SpanStyle(color = if (index < sung) color else color.copy(alpha = UNSUNG_ALPHA))) { append(word.text) } }
     }
-    Text(text, style = style)
+}
+
+/** The line being sung, timed word by word: each word lights as it's sung. */
+@Composable
+private fun SungWords(words: List<TimedWord>, following: Following, style: TextStyle) {
+    Text(sungText(words, rememberPosition(following) ?: 0), style = style)
 }
 
 /** How bright the words of the line being sung are before they're sung. */
 private const val UNSUNG_ALPHA = 0.45f
+
+/** The chords shown over a line, by name, for tests to see what's drawn. */
+internal val ChordsShown = SemanticsPropertyKey<List<String>>("ChordsShown")
+
+/**
+ * A line with its chords: those played before it on a row of their own, then its words with each
+ * chord over the letter it's played on. While it's sung, a line timed word by word lights its
+ * words as they're sung, and the chord being played.
+ */
+@Composable
+private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle) {
+    val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
+    if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
+    val text = line.text.ifBlank { "♪" }
+    if (chords.over.isEmpty()) {
+        Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
+        return
+    }
+    // Only words timed one by one say when a chord's played closely enough to light it.
+    val position = rememberPosition(following.takeIf { line.words.isNotEmpty() })
+    val playing = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
+    val shown = position?.let { sungText(line.words, it) } ?: AnnotatedString(text)
+    val measurer = rememberTextMeasurer()
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    Text(
+        shown,
+        // Room over each row of the words for the chords played on it.
+        style = style.copy(lineHeight = (style.lineHeight.value + chordStyle.lineHeight.value).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        color = MaterialTheme.colorScheme.onSurface,
+        onTextLayout = { layout = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { this[ChordsShown] = chords.over.map { it.name } }
+            .drawBehind {
+                val words = layout ?: return@drawBehind
+                val labels = chords.over.map { measurer.measure(it.name, chordStyle) }
+                val gap = chordStyle.fontSize.toPx() / 3
+                chordPlaces(chords.over, labels.map { it.size.width.toFloat() }, words, size.width, gap).forEachIndexed { index, (x, y) ->
+                    drawText(labels[index], color = if (playing >= 0 && index != playing) dim else chordStyle.color, topLeft = Offset(x, y))
+                }
+            }
+    )
+}
+
+/**
+ * Where each chord's name goes over [words]: over its letter, on the row it's on, moved right past
+ * the one before so none overlap, and back left from the edge, the ones before it with it, to fit.
+ */
+private fun chordPlaces(chords: List<Chord>, widths: List<Float>, words: TextLayoutResult, width: Float, gap: Float): List<Offset> {
+    val rows = chords.map { words.getLineForOffset(it.at.coerceIn(0, words.layoutInput.text.length)) }
+    val xs = chords.mapIndexed { index, chord -> words.getHorizontalPosition(chord.at.coerceIn(0, words.layoutInput.text.length), usePrimaryDirection = true) }.toMutableList()
+    for (index in 1 until xs.size) if (rows[index] == rows[index - 1]) xs[index] = maxOf(xs[index], xs[index - 1] + widths[index - 1] + gap)
+    for (index in xs.indices.reversed()) {
+        val limit = if (index + 1 < xs.size && rows[index + 1] == rows[index]) xs[index + 1] - gap else width
+        xs[index] = minOf(xs[index], limit - widths[index]).coerceAtLeast(0f)
+    }
+    return xs.mapIndexed { index, x -> Offset(x, words.getLineTop(rows[index])) }
+}
+
+/** How big chords are beside the words. */
+private const val CHORD_SCALE = 0.55f
 
 /**
  * A line with each piece's reading over it, in small type, the way furigana sit over kanji. It

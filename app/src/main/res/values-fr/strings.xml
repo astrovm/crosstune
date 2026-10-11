@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">En lettres latines</string>
     <string name="lyrics_translation">Traduction</string>
     <string name="lyrics_translation_failed">Impossible de traduire pour le moment.</string>
+    <string name="lyrics_chords">Accords</string>
+    <string name="lyrics_chords_none">Aucun accord trouvé pour cette chanson.</string>
+    <string name="lyrics_chords_failed">Impossible d\'obtenir les accords pour le moment.</string>
+    <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Traduire en</string>
     <string name="translate_into_app_language">Langue de l\'appli</string>
     <string name="setting_translation_server">Traductions par</string>

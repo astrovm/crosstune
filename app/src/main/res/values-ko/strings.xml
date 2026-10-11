@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
+    <string name="lyrics_chords">코드</string>
+    <string name="lyrics_chords_none">이 노래의 코드를 찾을 수 없습니다.</string>
+    <string name="lyrics_chords_failed">지금은 코드를 가져올 수 없습니다.</string>
+    <string name="lyrics_capo">카포 %1$d</string>
     <string name="setting_translate_into">번역할 언어</string>
     <string name="translate_into_app_language">앱 언어</string>
     <string name="setting_translation_server">번역 제공</string>

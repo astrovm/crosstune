@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
+    <string name="lyrics_chords">Akkoorden</string>
+    <string name="lyrics_chords_none">Geen akkoorden gevonden voor dit nummer.</string>
+    <string name="lyrics_chords_failed">Kon de akkoorden nu niet ophalen.</string>
+    <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Vertalen naar</string>
     <string name="translate_into_app_language">App-taal</string>
     <string name="setting_translation_server">Vertalingen van</string>

@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
+    <string name="lyrics_chords">Akorlar</string>
+    <string name="lyrics_chords_none">Bu şarkı için akor bulunamadı.</string>
+    <string name="lyrics_chords_failed">Akorlar şu anda alınamadı.</string>
+    <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>
     <string name="translate_into_app_language">Uygulama dili</string>
     <string name="setting_translation_server">Çeviriler</string>

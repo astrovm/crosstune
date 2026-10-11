@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
+    <string name="lyrics_chords">Аккорды</string>
+    <string name="lyrics_chords_none">Аккорды для этой песни не найдены.</string>
+    <string name="lyrics_chords_failed">Сейчас не удалось получить аккорды.</string>
+    <string name="lyrics_capo">Каподастр %1$d</string>
     <string name="setting_translate_into">Переводить на</string>
     <string name="translate_into_app_language">Язык приложения</string>
     <string name="setting_translation_server">Переводы от</string>

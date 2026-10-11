@@ -267,6 +267,10 @@
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_translation">Tłumaczenie</string>
     <string name="lyrics_translation_failed">Nie udało się teraz przetłumaczyć.</string>
+    <string name="lyrics_chords">Akordy</string>
+    <string name="lyrics_chords_none">Nie znaleziono akordów do tej piosenki.</string>
+    <string name="lyrics_chords_failed">Nie udało się teraz pobrać akordów.</string>
+    <string name="lyrics_capo">Kapodaster %1$d</string>
     <string name="setting_translate_into">Tłumacz na</string>
     <string name="translate_into_app_language">Język aplikacji</string>
     <string name="setting_translation_server">Tłumaczenia z</string>
