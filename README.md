@@ -162,4 +162,26 @@ Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/andr
 
 The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
 
+#### Recording the app
+
+Screen recordings for the site, store and promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. Start the emulator with `-gpu host -cores 6 -memory 4096`, then:
+
+```bash
+scripts/record/emulator.sh setup es-AR 01:46   # dark, clean status bar, clock and language
+scripts/record/record.sh playlist.mp4 sh -c 'adb shell input tap 400 1005; sleep 7'
+scripts/record/emulator.sh restore
+```
+
+`record.sh` records with [scrcpy](https://github.com/Genymobile/scrcpy) while Android's animations run at half speed, and plays the take back at double speed, so each of its 60 frames a second is a real one. Drive it at half speed too: double the waits and swipe durations.
+
+[`scripts/milkdrop-render/render.py`](scripts/milkdrop-render/render.py) draws the MilkDrop visuals for any song into a 60 fps video, with the app's projectM, presets and settings:
+
+```bash
+python3 scripts/milkdrop-render/render.py song.mp3 visuals.mp4 --start 60 --seconds 8 --preset 17
+```
+
+Run it without `--preset` to list the presets. It builds projectM from `third_party/projectm` into `build/milkdrop-render/` the first time, with a clock that moves one frame per frame, so slow renders still keep time with the song. It needs ffmpeg, CMake, Ninja, and the EGL and OpenGL headers.
+
+When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
+
 </details>
