@@ -23,9 +23,21 @@ private val uFretSheet = Regex("""var ufret_chord_datas = (\[.*?]);""")
 private val titleBreak = Regex(""" [-–—/] |／""")
 private val ugData = Regex("""class="js-store" data-content="([^"]*)"""")
 
+/** In LaCuerda's results, an artist, or a song of theirs: its row, the kind of sheet each take is, and the takes best liked first. */
+private val laCuerdaResult = Regex(
+    """<a href="/([^/"]+)/">([^<]*)</a>|<li id='r(\d+)' lcd='([A-Z]*)-([^']*)'>\s*<a href="javascript:">([^<]*)</a>""",
+    RegexOption.IGNORE_CASE
+)
+private val laCuerdaFiles = Regex("""var fns=\[([^\]]*)];""")
+private val laCuerdaLast = Regex("""var NMAX=(\d+);""")
+private val laCuerdaSheet = Regex("""<div id=t_body><pre>(.*?)</pre>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+private val laCuerdaChord = Regex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
+private val markup = Regex("<[^>]*>")
+
 /**
  * A song's chords, from the sites guitarists share them on: U-FRET, which has most Japanese songs,
- * and Ultimate Guitar, which has most others. A sheet only counts when its words are the song's.
+ * Ultimate Guitar, which has most others, and LaCuerda, which has the Spanish ones it hasn't. A
+ * sheet only counts when its words are the song's.
  */
 internal class ChordFinder(
     private val client: OkHttpClient,
@@ -37,7 +49,7 @@ internal class ChordFinder(
     sealed interface Chords {
         data class Found(val sheet: ChordSheet) : Chords
 
-        /** Neither site has chords whose words are these. */
+        /** No site has chords whose words are these. */
         data object None : Chords
 
         /** A site wouldn't answer, so there may still be some. */
@@ -52,7 +64,7 @@ internal class ChordFinder(
         val sites = if (texts.any(::japanese)) {
             listOf(::fromUFret, ::fromUltimateGuitar)
         } else {
-            listOf(::fromUltimateGuitar, ::fromUFret)
+            listOf(::fromUltimateGuitar, ::fromLaCuerda, ::fromUFret)
         }
         var unavailable = false
         for (site in sites) {
@@ -155,6 +167,47 @@ internal class ChordFinder(
         return null
     }
 
+    /**
+     * LaCuerda's first sheet of words and chords for the song that [fits], by the artist first. It
+     * may name the artist otherwise, "Dos Minutos" for 2 Minutos, so then by the title alone.
+     */
+    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val urls = laCuerdaSheets(song, "${song.title} ${song.artist}").ifEmpty { laCuerdaSheets(song, song.title) }
+        for (url in urls) {
+            val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: continue
+            // Its chords as Ultimate Guitar marks them, over the words they're played on.
+            val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url).takeIf(fits)?.let { return it }
+        }
+        return null
+    }
+
+    /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
+    private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
+        val search = LA_CUERDA_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("exp", key).addQueryParameter("canc", "1").build()
+        val page = fetch(search.toString())
+        // Each song's page, by its row counted from the last.
+        val files = laCuerdaFiles.find(page)?.groupValues?.get(1)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
+        val last = laCuerdaLast.find(page)?.groupValues?.get(1)?.toInt() ?: return emptyList()
+        var artist: Pair<String, String>? = null
+        val found = mutableListOf<Pair<Boolean, String>>()
+        laCuerdaResult.findAll(page).forEach { match ->
+            val (folder, name, row, kinds, takes, title) = match.destructured
+            if (folder.isNotEmpty()) {
+                artist = folder to name
+                return@forEach
+            }
+            val (by, byName) = artist ?: return@forEach
+            val file = files.getOrNull(last - row.toInt()) ?: return@forEach
+            if (!SongNames.wordsMatch(unescape(title), song.title)) return@forEach
+            // Words and chords, not a tab or a bass part.
+            takes.filter(Char::isDigit).map { it.digitToInt() }.filter { kinds.getOrNull(it - 1) == 'R' }.forEach { take ->
+                found += !SongNames.sameArtist(byName, song.artist) to "$LA_CUERDA_URL$by/$file${if (take == 1) "" else "-$take"}.shtml"
+            }
+        }
+        return found.sortedBy { it.first }.map { it.second }.take(MAX_SHEETS)
+    }
+
     /** The other names [title] is in, when it's two put together, "プラスティック・ラブ - Plastic Love". */
     private fun titleParts(title: String): List<String> =
         title.split(titleBreak).map { it.trim() }.filter { it.length >= 2 && it != title }.distinct()
@@ -241,6 +294,8 @@ internal class ChordFinder(
         const val U_FRET_SEARCH_URL = "https://www.ufret.jp/search.php"
         const val U_FRET_SONG_URL = "https://www.ufret.jp/song.php?data="
         const val UG_SEARCH_URL = "https://www.ultimate-guitar.com/search.php"
+        const val LA_CUERDA_URL = "https://acordes.lacuerda.net/"
+        const val LA_CUERDA_SEARCH_URL = "${LA_CUERDA_URL}busca.php"
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
         val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
