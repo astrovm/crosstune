@@ -6,8 +6,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -623,6 +623,7 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
  * The app's color, picked from swatches in the look it has now, dark or light. The wallpaper's is
  * offered only where Android shares it.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -633,11 +634,13 @@ private fun PaletteRow(selected: Palette, onSelect: (Palette) -> Unit) {
             Text(text = stringResource(R.string.setting_color), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(text = stringResource(selected.labelRes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        // All in sight, spread across the row, onto another only on a screen too narrow for them.
+        FlowRow(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(top = 12.dp)
-                .horizontalScroll(rememberScrollState())
                 .selectableGroup()
         ) {
             Palette.entries.filter { it != Palette.WALLPAPER || wallpaperColors }.forEach { palette ->
@@ -666,13 +669,13 @@ private fun Swatch(color: Color, onColor: Color, name: String, isSelected: Boole
             .clip(CircleShape)
             .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = name }
-            .border(3.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
-            .padding(5.dp)
+            .border(2.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
+            .padding(6.dp)
             .clip(CircleShape)
             .background(color)
     ) {
         AnimatedVisibility(visible = isSelected, enter = Motion.pop, exit = fadeOut(Motion.fadeOut)) {
-            Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = onColor, modifier = Modifier.size(20.dp))
+            Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = onColor, modifier = Modifier.size(18.dp))
         }
     }
 }

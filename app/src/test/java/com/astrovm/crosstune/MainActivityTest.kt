@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.ClipData
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
@@ -2978,7 +2979,6 @@ class MainActivityTest {
     fun theAppsColorAndPureBlackArePickedInSettingsAndKept() {
         launch()
         click(string(R.string.settings_button))
-        // The swatches scroll sideways inside the page, so the page is scrolled to their row first.
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
         val ocean = composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo()
         ocean.assertIsNotSelected()
@@ -3001,6 +3001,23 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
         composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo().assertIsOn()
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2000dp")
+    fun everyColorFitsInItsRowOnANarrowPhone() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_pure_black)).performScrollTo()
+        // The picked one's name ends where the row does.
+        val rowEnd = composeRule.onNodeWithText(string(R.string.palette_wallpaper)).fetchSemanticsNode().boundsInRoot.right
+        val swatches = listOf(R.string.palette_wallpaper, R.string.palette_violet, R.string.palette_ocean, R.string.palette_forest, R.string.palette_sunset, R.string.palette_rose)
+            .map { composeRule.onNodeWithContentDescription(string(it)).fetchSemanticsNode().boundsInRoot }
+        // All whole, on one line, each still a full touch.
+        assertTrue(swatches.all { it.right <= rowEnd + 1f })
+        assertEquals(1, swatches.map { it.top }.distinct().size)
+        val touch = with(composeRule.density) { 48.dp.toPx() }
+        assertTrue(swatches.all { it.width >= touch - 1f })
     }
 
     @Test
