@@ -3110,6 +3110,11 @@ class MainActivityTest {
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.theme_dark)).assertExists()
+        // The menu ticks the one picked.
+        composeRule.onNodeWithText(string(R.string.setting_theme)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.theme_dark)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        composeRule.onNode(hasText(string(R.string.theme_light)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)).assertExists()
     }
 
     @Test

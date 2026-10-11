@@ -63,6 +63,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.CircularProgressIndicator
@@ -463,6 +465,8 @@ private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
             Button(
                 onClick = actions.onSignInWithChatGpt,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White),
+                // Edged, so it shows on a pure black ground too.
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.align(Alignment.End).padding(end = 8.dp, top = 4.dp)
             ) { Text(stringResource(R.string.chatgpt_continue)) }
         }
@@ -531,6 +535,8 @@ private fun RecognizerRow(actions: ScreenActions) {
                     DropdownMenuItem(
                         text = { Text(recognizer.label) },
                         leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
+                        trailingIcon = { PickedMark(recognizer == actions.recognizer) },
+                        modifier = Modifier.semantics { selected = recognizer == actions.recognizer },
                         onClick = {
                             expanded = false
                             actions.onRecognizerChange(recognizer)
@@ -568,6 +574,12 @@ private fun ThemeRow(theme: ThemeMode, onSelect: (ThemeMode) -> Unit) = ChoiceRo
     onSelect
 )
 
+/** A tick by the choice picked in a menu, so it's clear which it is; nothing by the others. */
+@Composable
+private fun PickedMark(picked: Boolean) {
+    if (picked) AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp))
+}
+
 /** A setting picked from a short list, with the one picked shown beside its name. */
 @Composable
 private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, icon: ((T) -> Int)? = null) {
@@ -595,6 +607,8 @@ private fun <T> ChoiceRow(label: String, choices: List<Pair<T, String>>, selecte
                     DropdownMenuItem(
                         text = { Text(name) },
                         leadingIcon = icon?.let { { AppIcon(it(choice), contentDescription = null, modifier = Modifier.size(20.dp)) } },
+                        trailingIcon = { PickedMark(choice == selected) },
+                        modifier = Modifier.semantics { this.selected = choice == selected },
                         onClick = {
                             expanded = false
                             onSelect(choice)
@@ -647,14 +661,16 @@ private fun Swatch(color: Color, onColor: Color, name: String, isSelected: Boole
     val ring by animateFloatAsState(if (isSelected) 1f else 0f, label = "swatch ring")
     Box(
         contentAlignment = Alignment.Center,
+        // Its whole round takes a touch, as big as Android asks of one.
         modifier = Modifier
-            .size(44.dp)
+            .size(48.dp)
+            .clip(CircleShape)
+            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = name }
             .border(3.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = ring), CircleShape)
             .padding(5.dp)
             .clip(CircleShape)
             .background(color)
-            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
-            .semantics { contentDescription = name }
     ) {
         AnimatedVisibility(visible = isSelected, enter = Motion.pop, exit = fadeOut(Motion.fadeOut)) {
             Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = onColor, modifier = Modifier.size(20.dp))
@@ -745,6 +761,8 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
                     DropdownMenuItem(
                         text = { Text(tag?.let(AppLanguage::displayName) ?: systemDefault) },
                         leadingIcon = { LanguageMark(tag) },
+                        trailingIcon = { PickedMark(tag == current) },
+                        modifier = Modifier.semantics { selected = tag == current },
                         onClick = {
                             expanded = false
                             onSelect(tag)
