@@ -679,9 +679,11 @@ class ChatGptTest {
         val sent = JSONArray(asked.getJSONArray("input").getJSONObject(0).getString("content")).getJSONObject(0)
         assertEquals(1, sent.getInt("line"))
         assertEquals("君=くん", sent.getJSONArray("readings").getString(0))
-        // Kept for the song.
+        // Kept for the song's words; another copy of its words is checked anew.
         assertEquals(checked, runBlocking { tutor.checkReadings(song, lines, read) })
         assertEquals(1, openAi.asked.size)
+        runBlocking { tutor.checkReadings(song, lines + "もう一度", read) }
+        assertEquals(2, openAi.asked.size)
         // Nothing wrong, or no answer.
         answering("[]")
         assertEquals(read, runBlocking { tutor.checkReadings(song.copy(title = "Other"), lines, read) })
@@ -717,6 +719,31 @@ class ChatGptTest {
     }
 
     @Test
+    fun eachLineTranslatedIsKeptApartFromTheOtherAnswers() {
+        val answers = LookupCache(File(folder.root, "answers.json"), Dispatchers.Unconfined)
+        val lines = LookupCache(File(folder.root, "lines.json"), Dispatchers.Unconfined)
+        val tutor = ChatGptTutor(signedIn(), answers, lines)
+        answering("[\"Hello\"]")
+        assertEquals(listOf("Hello"), runBlocking { tutor.translate(listOf("Hola"), "en") })
+        assertTrue(File(folder.root, "lines.json").readText().contains("Hello"))
+        assertFalse(File(folder.root, "answers.json").exists())
+    }
+
+    @Test
+    fun aQuestionIsAskedWithOnlyTheLastFewBeforeIt() {
+        val tutor = tutor()
+        val song = MusicMetadata("Song", "Band")
+        val earlier = (1..10).map { "Question $it?" to "Answer $it." }
+        runBlocking { tutor.askAboutSong(song, listOf("A line"), null, earlier, "Last?", "en") {} }
+        runBlocking { tutor.askAboutLine(song, listOf("A line"), 0, null, earlier, "Last?", "en") {} }
+        openAi.asked.map { it.getJSONArray("input").getJSONObject(0).getString("content") }.forEach { sent ->
+            assertFalse(sent.contains("Question 4?"))
+            assertTrue(sent.contains("Question: Question 5?\nAnswer: Answer 5."))
+            assertTrue(sent.endsWith("Question: Question 10?\nAnswer: Answer 10.\n\nQuestion: Last?"))
+        }
+    }
+
+    @Test
     fun songsAreNamedFromADescription() {
         val tutor = tutor()
         answering("[{\"title\": \"Plastic Love\", \"artist\": \"Mariya Takeuchi\"}, {\"title\": \" \", \"artist\": \"Nobody\"}]")
@@ -727,6 +754,9 @@ class ChatGptTest {
         assertEquals(1, openAi.asked.size)
         answering("[]")
         assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("nothing like it") })
+        // None found isn't kept: asked again, it may find some.
+        runBlocking { tutor.songsFor("nothing like it") }
+        assertEquals(3, openAi.asked.size)
         answering("No idea")
         assertNull(runBlocking { tutor.songsFor("something else") })
         openAi.models = { 500 to "" }
@@ -832,6 +862,12 @@ class ChatGptTest {
             answering(text)
             assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song $index"), emptyList(), "es") })
         }
+        // Nothing to say is kept, so the web isn't searched again for it; no answer isn't.
+        val askedBefore = openAi.asked.size
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 0"), emptyList(), "es") })
+        assertEquals(askedBefore, openAi.asked.size)
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 1"), emptyList(), "es") })
+        assertEquals(askedBefore + 1, openAi.asked.size)
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).songFacts(song.copy(title = "Fourth"), emptyList(), "es") })
     }

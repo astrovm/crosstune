@@ -67,7 +67,11 @@ class MainActivity : ComponentActivity() {
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
                 // What ChatGPT said is kept, so a song read again asks nothing.
-                val tutor = ChatGptTutor(chatGpt, LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000))
+                val tutor = ChatGptTutor(
+                    chatGpt,
+                    LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
+                    lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000)
+                )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 val playback = playbackFactory(applicationContext)

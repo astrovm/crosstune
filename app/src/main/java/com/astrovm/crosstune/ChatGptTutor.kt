@@ -8,9 +8,10 @@ import java.util.Locale
 /**
  * Lyrics translated, explained and looked up word by word by ChatGPT, on the user's plan, with
  * what they mean in the song they're in. Each answer is kept in [cache], so asking again costs
- * nothing.
+ * nothing; each line translated in [lines], so a song's many lines don't push out answers that
+ * took longer, e.g. from the web.
  */
-internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: LookupCache) {
+internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: LookupCache, private val lines: LookupCache = cache) {
 
     /**
      * [lines] in [language], translated together as the song they are, each line's translation, or
@@ -22,7 +23,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val model = chatGpt.model() ?: return null
         // Kept for [song]: the same line in another song may mean something else there.
         val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
-        val known = words.associateWith { cache.get(key(it)) }
+        val known = words.associateWith { this.lines.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val kept = known.filterValues { it != null }.mapValues { it.value!! }
         // A line already in [language] comes back as it was, and is no use under itself.
@@ -48,8 +49,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
             if (translated.length() != missing.size) return null
             missing.indices.associate { missing[it] to translated.getString(it).trim() }
         }
-        found.forEach { (line, translation) -> cache.put(key(line), translation) }
-        cache.save()
+        found.forEach { (line, translation) -> this.lines.put(key(line), translation) }
+        this.lines.save()
         return shown(kept + found)
     }
 
@@ -134,7 +135,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
             "You help someone learn a language through the songs they listen to. The user sends a song's lyrics, numbered, one line of it, what you already said about that line, and their question about it, maybe after earlier ones. Answer the last question in ${nameOf(language)}, about that line in this song, in at most 60 words of plain text, without headings or Markdown. If the question isn't about the song or learning its language, say briefly that you can only help with the song.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.mapIndexed { number, text -> "${number + 1}. $text" }.joinToString("\n")}" +
                 "\n\nLine ${index + 1}: $line\n\n" + explanation?.let { "What you said about it:\n$it\n\n" }.orEmpty() +
-                earlier.joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
+                earlier.takeLast(EARLIER_QUESTIONS).joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
             effort = "low",
             onText = onText
         )
@@ -146,7 +147,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      */
     suspend fun checkReadings(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<LineReading>? {
         val model = chatGpt.model() ?: return null
-        val key = "readings|$model|${song.title}|${song.artist}"
+        // Kept for these words: another copy of the song may have other lines.
+        val key = "readings|$model|${song.title}|${song.artist}|${lines.hashCode()}"
         val fixes = cache.get(key) ?: run {
             val asked = JSONArray()
             lines.forEachIndexed { index, line ->
@@ -210,8 +212,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                     "Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.",
                 description.trim()
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
-                cache.put(key, it)
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
                 cache.save()
             } ?: return null
         }
@@ -253,7 +254,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      */
     suspend fun fromRomaji(song: MusicMetadata, lines: List<String>): List<String>? {
         val model = chatGpt.model() ?: return null
-        val key = "romaji|$model|${song.title}|${song.artist}|${lines.size}"
+        val key = "romaji|$model|${song.title}|${song.artist}|${lines.hashCode()}"
         val kept = cache.get(key) ?: run {
             // Tried on real songs with GPT-6-Luna: Owaranai Uta and Gurenge came back as they're
             // written, 終わらない歌を歌おう, 強くなれる理由を知った, a romaji typo put right and English
@@ -332,9 +333,10 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val level = json.optString("level").trim().uppercase().takeIf { it in LEVELS }
         val original = json.optJSONObject("original")?.let(::named)
         val samples = json.optJSONArray("samples")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(::named) } }.orEmpty()
-        if (level == null && original == null && samples.isEmpty()) return null
+        // Nothing to say is kept too, so the web isn't searched again each time.
         cache.put(key, kept)
         cache.save()
+        if (level == null && original == null && samples.isEmpty()) return null
         return SongFacts(level, json.optString("why").trim().takeIf { level != null && it.isNotEmpty() }, original, samples)
     }
 
@@ -406,8 +408,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "${song.title} by ${song.artist}",
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
-                cache.put(key, it)
+            // None found isn't kept, so it's asked again another time.
+            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
                 cache.save()
             } ?: return null
         }
@@ -433,7 +435,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
             "If the question isn't about the song, its artist or learning its language, say briefly that you can only help with the song.",
         "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}\n\n" +
             explanation?.let { "What you said about it:\n$it\n\n" }.orEmpty() +
-            earlier.joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
+            earlier.takeLast(EARLIER_QUESTIONS).joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
         effort = "low",
         onText = onText
     )
@@ -516,6 +518,9 @@ private val LEVELS = listOf("A1", "A2", "B1", "B2", "C1", "C2")
 
 /** How many songs ChatGPT names for a mood, as a playlist. */
 private const val PLAYLIST_SONGS = 15
+
+/** How many earlier questions and answers a new question about a line or a song is asked with. */
+private const val EARLIER_QUESTIONS = 6
 
 /** What ChatGPT puts between the parts of an explanation. */
 internal const val PART_BREAK = "---"
