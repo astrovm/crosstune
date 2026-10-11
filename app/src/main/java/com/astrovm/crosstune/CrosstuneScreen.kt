@@ -212,9 +212,8 @@ internal data class ScreenActions(
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
     val onStartPractice: () -> Unit = {},
-    val onAnswerPractice: (Int) -> Unit = {},
-    val onRevealPractice: () -> Unit = {},
-    val onGradePractice: (Boolean) -> Unit = {},
+    val onTurnPractice: () -> Unit = {},
+    val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },

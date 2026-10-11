@@ -275,10 +275,10 @@
     <string name="lyrics_explain_failed">Bu satır açıklanamadı.</string>
     <string name="song_search_chatgpt">ChatGPT buldu</string>
     <string name="saved_practice">Pratik yap</string>
-    <string name="practice_show">Anlamı göster</string>
+    <string name="practice_show">Cevabı göster</string>
     <string name="practice_again">Tekrar</string>
-    <string name="practice_knew">Biliyordum</string>
-    <string name="practice_next">Sonraki</string>
+    <string name="practice_good">İyi</string>
+    <string name="practice_easy">Kolay</string>
     <string name="practice_caught_up">Hepsi tamam</string>
     <string name="lyrics_ask_line">Bu satır hakkında sor</string>
     <string name="lyrics_ask_send">Gönder</string>

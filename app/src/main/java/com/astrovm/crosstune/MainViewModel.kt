@@ -279,15 +279,15 @@ internal data class ChatGptState(
 )
 
 /**
- * A saved [line] being practised: its meaning to pick among [choices], or, without them, to show
- * when [revealed]; [picked], the choice picked. With no [line], none is due: all are caught up.
+ * A saved [line] being practised as a card: the line first, or its meaning when [meaningFirst], to
+ * think of the other side, which shows once [turned]. [due] are left, this one too. With no [line],
+ * none is due: all are caught up.
  */
 internal data class Practice(
     val line: SavedLine? = null,
-    val choices: List<String>? = null,
-    val loading: Boolean = false,
-    val picked: Int? = null,
-    val revealed: Boolean = false
+    val meaningFirst: Boolean = false,
+    val turned: Boolean = false,
+    val due: Int = 0
 )
 
 /** A question about a line, and ChatGPT's [answer] so far, until [done]; or why there's none. */
@@ -340,8 +340,8 @@ internal data class Learning(
     val songQuestions: List<LineQuestion> = emptyList(),
     /** Who the artist is, as ChatGPT is writing it, or has. */
     val artist: LineExplanation? = null,
-    /** Sentences using line [LineExamples.index]'s words, as ChatGPT writes them. */
-    val examples: LineExamples? = null
+    /** Sentences using the word tapped, as ChatGPT writes them. */
+    val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, wordsAs = wordsAs)
@@ -369,8 +369,8 @@ internal data class Asking<T>(val value: T? = null, val failed: Boolean = false)
     val loading get() = value == null && !failed
 }
 
-/** Sentences using line [index]'s words, once they've come, or that they couldn't be had. */
-internal data class LineExamples(val index: Int, val asking: Asking<List<Example>> = Asking())
+/** Sentences using [word], from line [index], once they've come, or that they couldn't be had. */
+internal data class WordExamples(val word: Word, val index: Int, val asking: Asking<List<Example>> = Asking())
 
 /**
  * A song not found in [destination], with its [original] link, which opens it where it is, when it has
@@ -1749,58 +1749,30 @@ internal class MainViewModel(
         uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
     }
 
-    private var practiceJob: Job? = null
-
     /**
-     * Practises the next saved line due, the one due longest: its meaning picked among two wrong
-     * ones, other lines' meanings, or with too few of those, signed in, ones ChatGPT makes up;
-     * otherwise, shown, then said whether it was known.
+     * Practises the next saved line due, the one due longest, as a card: the line or its meaning
+     * first, each in turn, the other side to think of before it's turned.
      */
     fun startPractice() {
-        val line = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }.minByOrNull { it.due }
-        practiceJob?.cancel()
-        val others = line?.let { practised -> uiState.savedLines.mapNotNull { it.translation?.trim() }.filter { !it.equals(practised.translation?.trim(), ignoreCase = true) }.distinct() }.orEmpty()
-        if (line != null && others.size >= QUIZ_WRONG_CHOICES) {
-            uiState = uiState.copy(practice = Practice(line, (others.shuffled().take(QUIZ_WRONG_CHOICES) + line.translation!!).shuffled()))
-            return
-        }
-        if (line == null || !usesChatGpt()) {
-            uiState = uiState.copy(practice = Practice(line))
-            return
-        }
-        uiState = uiState.copy(practice = Practice(line, loading = true))
-        practiceJob = viewModelScope.launch {
-            val meaning = line.translation!!
-            val wrong = tutor?.quizChoices(line.text, meaning)
-            val choices = wrong?.let { (it + meaning).shuffled() }
-            uiState = uiState.copy(practice = Practice(line, choices))
-        }
+        val due = uiState.savedLines.filter { it.translation != null && it.due <= wallClock() }
+        val line = due.minByOrNull { it.due }
+        uiState = uiState.copy(practice = Practice(line, meaningFirst = line != null && line.box % 2 == 1, due = due.size))
     }
 
-    /** Picks choice [index]: right or wrong, the line is practised. */
-    fun answerPractice(index: Int) {
-        val practice = uiState.practice ?: return
+    /** Turns the card, to say how well its other side was known. */
+    fun turnPractice() {
+        uiState = uiState.copy(practice = uiState.practice?.copy(turned = true))
+    }
+
+    /** Says how well the card turned was known, and goes on to the next. */
+    fun gradePractice(grade: Grade) {
+        val practice = uiState.practice?.takeIf { it.turned } ?: return
         val line = practice.line ?: return
-        val choices = practice.choices ?: return
-        if (practice.picked != null) return
-        val knew = choices.getOrNull(index) == line.translation
-        uiState = uiState.copy(practice = practice.copy(picked = index), savedLines = savedLinesStore.practised(line, knew, wallClock()))
-    }
-
-    /** Shows the meaning, to say whether it was known. */
-    fun revealPractice() {
-        uiState = uiState.copy(practice = uiState.practice?.copy(revealed = true))
-    }
-
-    /** Says whether the line shown was known, and goes on to the next. */
-    fun gradePractice(knew: Boolean) {
-        val line = uiState.practice?.line ?: return
-        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, knew, wallClock()))
+        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, grade, wallClock()))
         startPractice()
     }
 
     fun stopPractice() {
-        practiceJob?.cancel()
         uiState = uiState.copy(practice = null)
     }
 
@@ -1818,7 +1790,8 @@ internal class MainViewModel(
         val translator = translator ?: return
         val line = wordLines().getOrNull(index)
         wordJob?.cancel()
-        uiState = uiState.copy(word = WordMeaning(word, looking = true))
+        examplesJob?.cancel()
+        uiState = uiState.copy(word = WordMeaning(word, looking = true), learning = uiState.learning.copy(examples = null))
         wordJob = viewModelScope.launch {
             val language = translateInto()
             val inLine = if (usesChatGpt() && line != null) tutor?.meaning(word.lookup, line, language) else null
@@ -1836,7 +1809,8 @@ internal class MainViewModel(
 
     fun dismissWord() {
         wordJob?.cancel()
-        uiState = uiState.copy(word = null)
+        examplesJob?.cancel()
+        uiState = uiState.copy(word = null, learning = uiState.learning.copy(examples = null))
     }
 
     /** Signed in with ChatGPT, which the AI features ask. */
@@ -1993,20 +1967,21 @@ internal class MainViewModel(
 
     private var examplesJob: Job? = null
 
-    /** Has ChatGPT write sentences using line [index]'s words, the way it does. */
+    /** Has ChatGPT write sentences using the word tapped in line [index], the way the line does. */
     fun findExamples(index: Int) {
         val tutor = tutor ?: return
         val song = uiState.lyricsFor ?: return
+        val word = uiState.word?.word ?: return
         val line = wordLines().getOrNull(index) ?: return
         examplesJob?.cancel()
-        setExamples(LineExamples(index))
+        setExamples(WordExamples(word, index))
         examplesJob = viewModelScope.launch {
-            val examples = tutor.examples(line, song, translateInto())
-            setExamples(LineExamples(index, Asking(examples, failed = examples == null)))
+            val examples = tutor.examples(word.lookup, line, song, translateInto())
+            setExamples(WordExamples(word, index, Asking(examples, failed = examples == null)))
         }
     }
 
-    private fun setExamples(examples: LineExamples) {
+    private fun setExamples(examples: WordExamples?) {
         uiState = uiState.copy(learning = uiState.learning.copy(examples = examples))
     }
 
@@ -2605,7 +2580,6 @@ internal class MainViewModel(
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
 
         /** How many wrong meanings a practised line's right one is picked among. */
-        const val QUIZ_WRONG_CHOICES = 2
 
         /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
         const val QUIET_PAUSE_DOUBLINGS = 3

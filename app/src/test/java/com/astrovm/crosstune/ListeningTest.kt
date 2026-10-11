@@ -1428,7 +1428,6 @@ class ListeningTest {
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
                 "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
-                "You make a quiz" in instructions -> FakeOpenAi.stream("[\"Day sky\", \"Night rain\"]")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
                 "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
@@ -1570,7 +1569,7 @@ class ListeningTest {
     }
 
     @Test
-    fun savedLinesArePractisedPickingTheirMeaningSignedIn() {
+    fun aLineSavedIsPractisedStraightFromTheStudyMenu() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
@@ -1580,18 +1579,52 @@ class ListeningTest {
         // The sheet closed, back to the words.
         composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
         composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
-        // Practised straight from the study menu, which says how many are due.
+        // The study menu says how many are due.
         studyMenu()
         assertTrue(shown(string(R.string.practice_due, 1)))
         click(string(R.string.saved_practice))
-        // Its meaning among two wrong ones; picked, it's practised.
-        composeRule.waitUntil(TIMEOUT_MS) { shown("Night rain") }
-        assertTrue(shown("«Night sky»") && shown("Day sky"))
-        click("«Night sky»")
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)
-        click(string(R.string.practice_next))
         // Nothing else is due.
         waitForText(string(R.string.practice_caught_up))
+    }
+
+    @Test
+    fun savedLinesArePractisedAsCardsTurnedThenSaidHowWellTheyWereKnown() {
+        val saved = """[{"text":"Night sky","translation":"Cielo nocturno","title":"Demo","artist":"Band"},{"text":"Stars","translation":"Estrellas","title":"Demo","artist":"Band","box":1,"due":1}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", true).commit()
+        wordsOf(null, "Night sky\nStars")
+        waitForText("[Stars]")
+        studyMenu()
+        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.saved_practice))
+        // The one due longest first, the line on its face, its meaning to think of; with how many are left.
+        waitForText(string(R.string.practice_due, 2))
+        assertFalse(controllerModel().uiState.practice!!.meaningFirst)
+        assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
+        // Not turned yet, it can't be said how well it was known.
+        controllerModel().gradePractice(Grade.EASY)
+        assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
+        // Tapped, the card turns.
+        composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
+        waitForText("Cielo nocturno")
+        assertFalse(shown(string(R.string.practice_show)))
+        val before = System.currentTimeMillis()
+        click(string(R.string.practice_good))
+        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
+        assertEquals(1, good.box)
+        assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
+        // Known once before, the next shows its meaning first; known easily, it's back much later.
+        waitForText(string(R.string.practice_due, 1))
+        assertTrue(controllerModel().uiState.practice!!.meaningFirst && shown("Estrellas"))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_easy))
+        val easy = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
+        assertEquals(3, easy.box)
+        assertTrue(easy.due >= before + 7 * DAY_MS)
+        waitForText(string(R.string.practice_caught_up))
+        assertFalse(shown(string(R.string.practice_due, 0)))
     }
 
     @Test
@@ -1613,24 +1646,6 @@ class ListeningTest {
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.saved_practice)))
-    }
-
-    @Test
-    fun withOtherLinesSavedTheirMeaningsAreTheWrongChoicesWithoutChatGpt() {
-        val saved = listOf("Night sky" to "Cielo nocturno", "Stars" to "Estrellas", "Rain" to "Lluvia", "Sky" to "Cielo nocturno")
-            .joinToString(",") { (text, meaning) -> """{"text":"$text","translation":"$meaning","title":"Demo","artist":"Band","due":${if (text == "Night sky") 0 else Long.MAX_VALUE}}""" }
-        prefs().edit().putString("saved_lines", "[$saved]").putBoolean("lyrics_translation", true).commit()
-        wordsOf(null, "Night sky\nStars")
-        waitForText("[Stars]")
-        studyMenu()
-        click(string(R.string.lyrics_saved_lines))
-        click(string(R.string.saved_practice))
-        // Signed out, its meaning is picked among the other lines' meanings, each shown once.
-        waitForText("Estrellas")
-        assertTrue(shown("Lluvia"))
-        assertEquals(1, composeRule.onAllNodes(hasText("Cielo nocturno")).fetchSemanticsNodes().size)
-        click("Cielo nocturno")
-        assertEquals(1, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
     }
 
     @Test
@@ -1861,6 +1876,7 @@ class ListeningTest {
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+        const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
             """"hub":{"actions":[{"type":"applemusicplay","id":"1109658204"}]}}}"""
@@ -1969,7 +1985,7 @@ class ListeningTest {
 
 
     @Test
-    fun aLineCanBeSeenInExamplesAndSaysSoWhenItCant() {
+    fun aWordCanBeSeenInExamplesAndSaysSoWhenItCant() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         val answers = openAi.reply
@@ -1977,14 +1993,28 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        // A whole line has no examples: only a word in it does, once it's tapped and its meaning found.
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_save_line)) }
+        assertFalse(shown(string(R.string.lyrics_examples)))
+        val line = hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
+        composeRule.waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        composeRule.waitUntil(TIMEOUT_MS) { shown("the heavens") }
         click(string(R.string.lyrics_examples))
         composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_examples_failed)) }
         openAi.reply = answers
         click(string(R.string.lyrics_examples))
         waitForText("The sky is blue.")
         assertTrue(shown("El cielo es azul."))
+        val sent = org.json.JSONObject(openAi.asked.last { "example sentences" in it.getString("instructions") }.getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("Night", sent.getString("word"))
+        assertEquals("Night sky", sent.getString("line"))
+        val examplesButton = hasText(string(R.string.lyrics_examples)) and androidx.compose.ui.test.hasClickAction()
+        assertTrue(composeRule.onAllNodes(examplesButton).fetchSemanticsNodes().isEmpty())
+        // Tapped again, the word starts without them.
+        composeRule.onNode(line).performFirstLinkClick()
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(examplesButton).fetchSemanticsNodes().isNotEmpty() }
+        assertFalse(shown("The sky is blue."))
     }
-
 
     @Test
     fun songsLikeOneAreAPlaylistOfThoseInTheCatalogue() {

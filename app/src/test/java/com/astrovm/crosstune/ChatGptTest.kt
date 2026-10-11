@@ -696,29 +696,6 @@ class ChatGptTest {
     }
 
     @Test
-    fun aQuizHasTwoWrongMeaningsKeptForTheLine() {
-        val tutor = tutor()
-        answering("[\"La lluvia se lleva los rumores\", \"Los rumores traen el viento\"]")
-        assertEquals(listOf("La lluvia se lleva los rumores", "Los rumores traen el viento"), runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") })
-        val asked = openAi.asked.single()
-        assertEquals("El viento trae rumores", JSONObject(asked.getJSONArray("input").getJSONObject(0).getString("content")).getString("meaning"))
-        assertTrue(asked.getString("instructions").contains("Never a paraphrase"))
-        assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
-        // Kept for the line.
-        runBlocking { tutor.quizChoices("風が噂をはこんでく", "El viento trae rumores") }
-        assertEquals(1, openAi.asked.size)
-        // Fewer than two wrong ones, once the right one, blanks and repeats are left out, are none.
-        listOf("[\"El viento trae rumores\", \"Otra\"]", "[\"Una\", \"Una\", \" \"]", "[\"Una\"]", "No JSON").forEachIndexed { index, text ->
-            answering(text)
-            assertNull(text, runBlocking { tutor.quizChoices("Line $index", "El viento trae rumores") })
-        }
-        openAi.reply = { 500 to "" }
-        assertNull(runBlocking { tutor.quizChoices("Line 9", "El viento trae rumores") })
-        openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).quizChoices("Line 10", "El viento trae rumores") })
-    }
-
-    @Test
     fun eachLineTranslatedIsKeptApartFromTheOtherAnswers() {
         val answers = LookupCache(File(folder.root, "answers.json"), Dispatchers.Unconfined)
         val lines = LookupCache(File(folder.root, "lines.json"), Dispatchers.Unconfined)
@@ -889,22 +866,27 @@ class ChatGptTest {
     }
 
     @Test
-    fun aLinesWordsAreUsedInExamplesKeptForTheLine() {
+    fun aWordIsUsedInExamplesTheWayItsLineDoesKeptForIt() {
         val tutor = tutor()
         val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
         answering("[{\"sentence\": \"予定を狂わせないでね。\", \"meaning\": \"No me cambies los planes.\"}, {\"sentence\": \"ペース\", \"meaning\": \"\"}]")
-        assertEquals(listOf(Example("予定を狂わせないでね。", "No me cambies los planes.")), runBlocking { tutor.examples("恋のプログラムを 狂わせないでね", song, "es") })
+        assertEquals(listOf(Example("予定を狂わせないでね。", "No me cambies los planes.")), runBlocking { tutor.examples("狂わせ", "恋のプログラムを 狂わせないでね", song, "es") })
         val sent = JSONObject(openAi.asked.single().getJSONArray("input").getJSONObject(0).getString("content"))
+        assertEquals("狂わせ", sent.getString("word"))
         assertEquals("恋のプログラムを 狂わせないでね", sent.getString("line"))
         assertEquals("Plastic Love by Mariya Takeuchi", sent.getString("song"))
-        runBlocking { tutor.examples("恋のプログラムを 狂わせないでね", song, "es") }
+        runBlocking { tutor.examples("狂わせ", "恋のプログラムを 狂わせないでね", song, "es") }
         assertEquals(1, openAi.asked.size)
+        // Another word in the same line is asked anew.
+        answering("[{\"sentence\": \"恋をした。\", \"meaning\": \"Me enamoré.\"}]")
+        assertEquals(listOf(Example("恋をした。", "Me enamoré.")), runBlocking { tutor.examples("恋", "恋のプログラムを 狂わせないでね", song, "es") })
+        assertEquals(2, openAi.asked.size)
         listOf("[]", "No JSON").forEachIndexed { index, text ->
             answering(text)
-            assertNull(runBlocking { tutor.examples("Line $index", song, "es") })
+            assertNull(runBlocking { tutor.examples("Word", "Line $index", song, "es") })
         }
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).examples("Line 9", song, "es") })
+        assertNull(runBlocking { tutor(chatGpt()).examples("Word", "Line 9", song, "es") })
     }
 
     @Test

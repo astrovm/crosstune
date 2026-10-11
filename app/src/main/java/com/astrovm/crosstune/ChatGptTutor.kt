@@ -172,31 +172,6 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         })
     }
 
-    /**
-     * Two wrong meanings for [line], whose right one is [meaning], for a quiz: each clearly wrong
-     * to a careful reader. Null when they can't be had.
-     */
-    suspend fun quizChoices(line: String, meaning: String): List<String>? {
-        val model = chatGpt.model() ?: return null
-        val key = "quiz|$model|$line|$meaning"
-        val kept = cache.get(key) ?: run {
-            // Tried on real lines with GPT-6-Luna: asked only for wrong meanings, some were as right
-            // as the real one; held to getting a key word, who does what, or the tense wrong, each
-            // tested one word, 風 as rain, 遅れた as early, in about 3 s.
-            val reply = chatGpt.ask(
-                "You make a quiz for someone learning a language through song lyrics. The user sends a line from a song and what it means. Write two wrong meanings, in the same language and style as the right one and about as long. Each must be clearly wrong to someone who reads the line carefully: it gets a key word, who does what to whom, or the tense wrong. Never a paraphrase or a near synonym of the right meaning, and never silly. Reply with only a JSON array of the two strings.",
-                JSONObject().put("line", line).put("meaning", meaning).toString(),
-                effort = "low"
-            )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
-        }
-        val wrong = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it).trim() } }.filter { it.isNotEmpty() && it != meaning }.distinct()
-        if (wrong.size < 2) return null
-        cache.put(key, kept)
-        cache.save()
-        return wrong.take(2)
-    }
-
     /** Songs that match [description], what someone remembers about them, most likely first, as title to artist. */
     suspend fun songsFor(description: String): List<Pair<String, String>>? {
         val model = chatGpt.model() ?: return null
@@ -359,20 +334,21 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * Three everyday sentences using [line]'s most useful word or phrase the way it does, from
-     * [song], each with what it means in [language]; null when they can't be had.
+     * Three everyday sentences using [word] the way [line], from [song], does, each with what it
+     * means in [language]; null when they can't be had.
      */
-    suspend fun examples(line: String, song: MusicMetadata, language: String): List<Example>? {
+    suspend fun examples(word: String, line: String, song: MusicMetadata, language: String): List<Example>? {
         val model = chatGpt.model() ?: return null
-        val key = "examples|$model|$language|${song.title}|${song.artist}|$line"
+        val key = "examples2|$model|$language|${song.title}|${song.artist}|$line|$word"
         val kept = cache.get(key) ?: run {
-            // Tried on real lines with GPT-6-Luna: 恋のプログラムを 狂わせないでね gave 予定を狂わせないでね,
-            // "no me cambies los planes", and two more, in about 2 s.
+            // Tried on real words with GPT-6-Luna: 狂わせ in 恋のプログラムを 狂わせないでね gave 予定を狂わせないで,
+            // "no dejes que altere mis planes", and two more; "thumb" in "Under my thumb" gave "under his
+            // thumb" sentences. About 3 s each.
             val reply = chatGpt.ask(
-                "You help someone learn a language through song lyrics. The user sends a line from a song. " +
-                    "Write three short, everyday example sentences in the line's language that use its most useful word or phrase the same way, each with what it means in ${nameOf(language)}. " +
+                "You help someone learn a language through song lyrics. The user sends a word from a song and the line it's in. " +
+                    "Write three short, everyday example sentences in the line's language that use the word in the same sense, each with what it means in ${nameOf(language)}. " +
                     "Reply with only a JSON array of objects with \"sentence\" and \"meaning\".",
-                JSONObject().put("line", line).put("song", "${song.title} by ${song.artist}").toString(),
+                JSONObject().put("word", word).put("line", line).put("song", "${song.title} by ${song.artist}").toString(),
                 effort = "low"
             )
             (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null

@@ -15,7 +15,7 @@ internal data class SavedLine(
     val artist: String,
     /** What ChatGPT said the line means, when asked. */
     val explanation: String? = null,
-    /** How well it's known, from 0, after each time it's practised. */
+    /** How well it's known, from 0, after each time it's practised; odd, its meaning shows first. */
     val box: Int = 0,
     /** When it's next practised, in milliseconds since 1970; 0, right away. */
     val due: Long = 0
@@ -58,14 +58,18 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     }
 
     /**
-     * [line] practised at [now]: known, it comes back after longer each time, 1, 3, 7, 16 then 35
-     * days; not known, in ten minutes, from the start again.
+     * [line] practised at [now], as [grade] says: known, it comes back after longer each time, 1, 3,
+     * 7, 16, 35, 75 then 150 days, and known easily, a step further; missed, in ten minutes, from the
+     * start again.
      */
-    fun practised(line: SavedLine, knew: Boolean, now: Long): List<SavedLine> = save(
+    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = save(
         load().map {
             if (!it.isSame(line)) it
-            else if (knew) it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + PRACTICE_DAYS[minOf(it.box, PRACTICE_DAYS.lastIndex)] * DAY_MS)
-            else it.copy(box = 0, due = now + AGAIN_MS)
+            else when (grade) {
+                Grade.AGAIN -> it.copy(box = 0, due = now + AGAIN_MS)
+                Grade.GOOD -> it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + PRACTICE_DAYS[minOf(it.box, PRACTICE_DAYS.lastIndex)] * DAY_MS)
+                Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + PRACTICE_DAYS[minOf(it.box + 1, PRACTICE_DAYS.lastIndex)] * DAY_MS)
+            }
         }
     )
 
@@ -95,4 +99,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 }
 
 /** How many days a line known waits before it's practised again, the more times it's known in a row. */
-private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L)
+private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L, 75L, 150L)
+
+/** How a card was answered, once turned: missed, known, or known without a thought. */
+internal enum class Grade { AGAIN, GOOD, EASY }

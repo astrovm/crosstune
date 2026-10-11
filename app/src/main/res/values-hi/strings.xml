@@ -275,10 +275,10 @@
     <string name="lyrics_explain_failed">यह पंक्ति समझाई नहीं जा सकी।</string>
     <string name="song_search_chatgpt">ChatGPT ने ढूंढा</string>
     <string name="saved_practice">अभ्यास</string>
-    <string name="practice_show">मतलब देखें</string>
+    <string name="practice_show">जवाब देखें</string>
     <string name="practice_again">फिर से</string>
-    <string name="practice_knew">पता था</string>
-    <string name="practice_next">अगला</string>
+    <string name="practice_good">ठीक</string>
+    <string name="practice_easy">आसान</string>
     <string name="practice_caught_up">सब हो गया</string>
     <string name="lyrics_ask_line">इस पंक्ति के बारे में पूछें</string>
     <string name="lyrics_ask_send">भेजें</string>

@@ -40,7 +40,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1117,8 +1116,8 @@ private fun FollowStep(number: Int?, text: String, button: String, onClick: () -
 }
 
 /**
- * One line, open to study: what helps read it, its words to tap for their meaning, and what can be
- * done with it: signed in, explained or seen in examples by ChatGPT; while the words follow a music
+ * One line, open to study: what helps read it, its words to tap for their meaning and, signed in, examples, and what can be
+ * done with it: signed in, explained by ChatGPT; while the words follow a music
  * app, played over and over; and kept for later.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -1147,20 +1146,19 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             }
             reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
-            AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
-                if (meaning != null) WordCard(meaning)
-            }
             val signedIn = state.chatGpt.email != null
+            AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
+                if (meaning != null) {
+                    val examples = learning.examples?.takeIf { it.word == meaning.word && it.index == index }?.asking
+                    WordCard(meaning, examples, canFindExamples = signedIn) { actions.onFindExamples(index) }
+                }
+            }
             val explanation = learning.explanation?.takeIf { it.index == index }
-            val examples = learning.examples?.takeIf { it.index == index }?.asking
             // What can be done with the line, side by side, wrapping as they need: signed in, explained
-            // or seen in examples by ChatGPT, until they are; played again; and kept.
+            // by ChatGPT, until it is; played again; and kept.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 if (signedIn && (explanation == null || explanation.failed || explanation.limitReached)) {
                     LineAction(R.string.lyrics_explain_line, R.drawable.ic_info) { actions.onExplainLine(index) }
-                }
-                if (signedIn && (examples == null || examples.failed)) {
-                    LineAction(R.string.lyrics_examples, R.drawable.ic_language) { actions.onFindExamples(index) }
                 }
                 // Only a music app the words follow, and that can be moved, can play a line again.
                 if (state.following?.canSeek == true && index < state.lyricLines.size) {
@@ -1182,7 +1180,6 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                 // Explained, more can be asked about it.
                 if (explanation.done) LineQuestions(index, learning, actions)
             }
-            examples?.let { ExamplesCard(it) }
         }
     }
 }
@@ -1263,9 +1260,12 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
     }
 }
 
-/** A word tapped: how it reads, and what it means once found. */
+/**
+ * A word tapped: how it reads, and what it means once found; then, signed in, sentences using it
+ * the same way, once asked for.
+ */
 @Composable
-private fun WordCard(meaning: WordMeaning) {
+private fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, onFindExamples: () -> Unit) {
     val word = meaning.word
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1282,6 +1282,10 @@ private fun WordCard(meaning: WordMeaning) {
             } else if (meaning.meaning != null) {
                 meaning.type?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text(meaning.meaning, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                if (canFindExamples && (examples == null || examples.failed)) {
+                    Row(modifier = Modifier.padding(top = 4.dp)) { LineAction(R.string.lyrics_examples, R.drawable.ic_language, onClick = onFindExamples) }
+                }
+                examples?.let { Examples(it) }
             } else {
                 Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -1289,23 +1293,21 @@ private fun WordCard(meaning: WordMeaning) {
     }
 }
 
-/** Sentences using a line's words: on their way, each with its meaning, or that they couldn't be had. */
+/** Sentences using a word: on their way, each with its meaning, or that they couldn't be had. */
 @Composable
-private fun ExamplesCard(asking: Asking<List<Example>>) {
+private fun Examples(asking: Asking<List<Example>>) {
     if (asking.failed) {
         Text(stringResource(R.string.lyrics_examples_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         return
     }
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.lyrics_examples), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            val found = asking.value
-            if (found == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-            found?.forEach { example ->
-                Column {
-                    Text(example.sentence, style = MaterialTheme.typography.bodyLarge)
-                    Text(example.meaning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    Column(modifier = Modifier.padding(top = 8.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.lyrics_examples), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        val found = asking.value
+        if (found == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        found?.forEach { example ->
+            Column {
+                Text(example.sentence, style = MaterialTheme.typography.bodyLarge)
+                Text(example.meaning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1524,17 +1526,18 @@ private val ARTIST_PARTS = listOf(R.string.artist_who, R.string.artist_style, R.
 private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
 
 /**
- * A saved line to practise: its meaning picked among three, or shown and then said whether it was
- * known; or, with none due, a check that all are caught up.
+ * A saved line to practise as a card: the line or its meaning, tapped or shown to turn it to the
+ * other side, then said how well it was known; or, with none due, a check that all are caught up.
  */
 @Composable
 private fun PracticeScreen(practice: Practice, actions: ScreenActions) {
     BackHandler(onBack = actions.onStopPractice)
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 24.dp)) {
                 IconButton(onClick = actions.onStopPractice) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
-                Text(stringResource(R.string.saved_practice), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.saved_practice), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                if (practice.due > 0) Text(stringResource(R.string.practice_due, practice.due), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             val line = practice.line
             if (line == null) {
@@ -1545,47 +1548,55 @@ private fun PracticeScreen(practice: Practice, actions: ScreenActions) {
                 return@Column
             }
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
-                line.reading?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val choices = practice.choices
-                when {
-                    practice.loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
-                    choices != null -> {
-                        choices.forEachIndexed { index, choice ->
-                            val right = choice == line.translation
-                            // Picked, the right one lights, and a wrong pick shows it was.
-                            val color = when {
-                                practice.picked != null && right -> MaterialTheme.colorScheme.primaryContainer
-                                practice.picked == index -> MaterialTheme.colorScheme.errorContainer
-                                else -> Color.Transparent
-                            }
-                            OutlinedButton(
-                                onClick = { actions.onAnswerPractice(index) },
-                                colors = ButtonDefaults.outlinedButtonColors(containerColor = color, contentColor = MaterialTheme.colorScheme.onSurface),
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text(choice, modifier = Modifier.padding(vertical = 6.dp)) }
+                // The card: the side shown first, then, turned, the other under it.
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    onClick = actions.onTurnPractice,
+                    enabled = !practice.turned,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (practice.meaningFirst) CardMeaning(line) else CardLine(line)
+                        if (practice.turned) {
+                            HorizontalDivider()
+                            if (practice.meaningFirst) CardLine(line) else CardMeaning(line)
                         }
-                        if (practice.picked != null) {
-                            Button(onClick = actions.onStartPractice, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.practice_next)) }
-                        }
+                        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    !practice.revealed -> FilledTonalButton(onClick = actions.onRevealPractice, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_show)) }
-                    else -> {
-                        Text(line.translation.orEmpty(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End)) {
-                            OutlinedButton(onClick = { actions.onGradePractice(false) }) { Text(stringResource(R.string.practice_again)) }
-                            Button(onClick = { actions.onGradePractice(true) }) { Text(stringResource(R.string.practice_knew)) }
-                        }
-                    }
+                }
+            }
+            // How well it was known, once turned, sets when it comes back.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+                if (!practice.turned) {
+                    Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_show)) }
+                } else {
+                    OutlinedButton(onClick = { actions.onGradePractice(Grade.AGAIN) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_again)) }
+                    FilledTonalButton(onClick = { actions.onGradePractice(Grade.GOOD) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_good)) }
+                    Button(onClick = { actions.onGradePractice(Grade.EASY) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_easy)) }
                 }
             }
         }
     }
+}
+
+/** A card's side with the line, as kept: how it reads over it, and in Latin letters under it. */
+@Composable
+private fun CardLine(line: SavedLine) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        line.reading?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+/** A card's side with what the line means. */
+@Composable
+private fun CardMeaning(line: SavedLine) {
+    Text(line.translation.orEmpty(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
 }
 
 /** The lines kept, newest first, each with what helped read it and the song it's from. */

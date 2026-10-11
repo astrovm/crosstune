@@ -275,10 +275,10 @@
     <string name="lyrics_explain_failed">No se pudo explicar esta línea.</string>
     <string name="song_search_chatgpt">Encontrada por ChatGPT</string>
     <string name="saved_practice">Practicar</string>
-    <string name="practice_show">Ver significado</string>
+    <string name="practice_show">Ver respuesta</string>
     <string name="practice_again">Otra vez</string>
-    <string name="practice_knew">La sabía</string>
-    <string name="practice_next">Siguiente</string>
+    <string name="practice_good">Bien</string>
+    <string name="practice_easy">Fácil</string>
     <string name="practice_caught_up">Todo al día</string>
     <string name="lyrics_ask_line">Preguntá sobre esta línea</string>
     <string name="lyrics_ask_send">Enviar</string>
