@@ -307,7 +307,6 @@
     <string name="lyrics_examples">例文</string>
     <string name="lyrics_examples_failed">例文を作れませんでした。</string>
     <string name="lyrics_ask_song">この曲について質問</string>
-    <string name="song_level">レベル %1$s</string>
     <string name="song_original">カバー元</string>
     <string name="song_samples">サンプリング</string>
     <string name="artist_who">どんな人</string>

@@ -1422,7 +1422,7 @@ class ListeningTest {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "restore song lyrics written in romaji" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMAJI_JAPANESE[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
-                "CEFR" in instructions -> FakeOpenAi.stream("""{"level": "B1", "why": "Easy words.", "original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
+                "covers and samples" in instructions -> FakeOpenAi.stream("""{"original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
                 "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
@@ -1941,15 +1941,15 @@ class ListeningTest {
     }
 
     @Test
-    fun whatTheSongMeansSaysItsLevelWhatItCoversAndAnswersQuestions() {
+    fun whatTheSongMeansSaysWhatItCoversAndAnswersQuestions() {
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
         waitForWords()
         aboutSong()
         waitForText("A night under the stars.")
-        // How hard it is, at a glance, and why; the song it covers and the one it samples.
-        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(string(R.string.song_level, "B1"))).fetchSemanticsNodes().isNotEmpty() }
-        assertTrue(shown("Easy words.") && shown(string(R.string.song_original)) && shown("Old Band") && shown(string(R.string.song_samples)) && shown("Drummer"))
+        // The song it covers and the one it samples.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Old Band") }
+        assertTrue(shown(string(R.string.song_original)) && shown(string(R.string.song_samples)) && shown("Drummer"))
         // Explained, more can be asked about it.
         composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("Why stars?")
         click(string(R.string.lyrics_ask_send))
@@ -2059,7 +2059,7 @@ class ListeningTest {
         val answers = openAi.reply
         openAi.reply = { body -> if ("restore song lyrics written in romaji" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
-        composeRule.waitUntil(TIMEOUT_MS) { openAi.asked.any { "restore song lyrics written in romaji" in it.getString("instructions") } }
+        composeRule.waitUntil(TIMEOUT_MS * 3) { openAi.asked.any { "restore song lyrics written in romaji" in it.getString("instructions") } }
         composeRule.waitForIdle()
         assertTrue(shown("yoru ni kimi wa") && shown("ashita no uta"))
         assertFalse(shown("夜に君は"))

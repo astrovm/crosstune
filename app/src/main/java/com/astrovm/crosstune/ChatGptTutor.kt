@@ -307,37 +307,32 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return words
     }
 
-    /**
-     * How hard [song]'s words, [lines], are for a learner, and why, in [language]; the song it
-     * covers, when it's a cover; and the songs it samples, from the web. Null when it couldn't say.
-     */
-    suspend fun songFacts(song: MusicMetadata, lines: List<String>, language: String): SongFacts? {
+    /** The song [song] covers, when it's a cover, and the songs it samples, from the web. Null when it couldn't say, or neither. */
+    suspend fun songFacts(song: MusicMetadata): SongFacts? {
         val model = chatGpt.model() ?: return null
-        val key = "facts|$model|$language|${song.title}|${song.artist}"
+        val key = "facts2|$model|${song.title}|${song.artist}"
         val kept = cache.get(key) ?: run {
-            // Tried on real songs with GPT-6-Luna, searching the web: Johnny Cash's Hurt covers Nine
-            // Inch Nails', Amy Winehouse's Valerie The Zutons', Gold Digger samples I Got a Woman, and
-            // Plastic Love is an original; each in about 5 s.
+            // Tried on real songs with GPT-6-Luna, searching the web, by name alone: Johnny Cash's Hurt
+            // covers Nine Inch Nails', Gold Digger samples I Got a Woman, and Plastic Love and Kaneko
+            // Ayano's Romance Sengen are originals; in 5 to 10 s.
             val reply = chatGpt.ask(
-                "You help someone learn a language through songs. The user sends a song's lyrics. Search the web for this exact song: whether it's a cover of another song, and what songs it samples. " +
-                    "Only name songs a page you found gives for this song by name. Also rate how hard its lyrics are for a learner, by vocabulary, grammar, slang and how fast they're sung, as a CEFR level from A1 to C2. " +
-                    "Reply with only a JSON object with \"level\", the CEFR level, \"why\", written in ${nameOf(language)} in at most 15 words, " +
-                    "\"original\", an object with \"title\" and \"artist\" of the song it covers, or null when it's the original, and \"samples\", an array of objects with \"title\" and \"artist\" of the songs it samples, empty when none.",
-                "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
+                "You find what a song covers and samples. The user sends a song, as title and artist. Search the web for this exact song: whether it's a cover of another song, and what songs it samples. " +
+                    "Only name songs a page you found gives for this song by name. " +
+                    "Reply with only a JSON object with \"original\", an object with \"title\" and \"artist\" of the song it covers, or null when it's the original, and \"samples\", an array of objects with \"title\" and \"artist\" of the songs it samples, empty when none.",
+                "Song: ${song.title} by ${song.artist}",
                 webSearch = true,
                 effort = "low"
             )
             (reply as? ChatGptReply.Answer)?.text?.let(::jsonObject)?.toString() ?: return null
         }
         val json = JSONObject(kept)
-        val level = json.optString("level").trim().uppercase().takeIf { it in LEVELS }
         val original = json.optJSONObject("original")?.let(::named)
         val samples = json.optJSONArray("samples")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(::named) } }.orEmpty()
         // Nothing to say is kept too, so the web isn't searched again each time.
         cache.put(key, kept)
         cache.save()
-        if (level == null && original == null && samples.isEmpty()) return null
-        return SongFacts(level, json.optString("why").trim().takeIf { level != null && it.isNotEmpty() }, original, samples)
+        if (original == null && samples.isEmpty()) return null
+        return SongFacts(original, samples)
     }
 
     /**
@@ -511,10 +506,8 @@ internal data class Example(val sentence: String, val meaning: String)
  * What's known of a song beyond its words: how hard they are, as a CEFR [level], and [why]; the
  * song it covers, as title to artist, when it's a cover; and those it [samples].
  */
-internal data class SongFacts(val level: String?, val why: String?, val original: Pair<String, String>?, val samples: List<Pair<String, String>>)
+internal data class SongFacts(val original: Pair<String, String>?, val samples: List<Pair<String, String>>)
 
-/** The levels a song's words are rated at, easiest first. */
-private val LEVELS = listOf("A1", "A2", "B1", "B2", "C1", "C2")
 
 /** How many songs ChatGPT names for a mood, as a playlist. */
 private const val PLAYLIST_SONGS = 15

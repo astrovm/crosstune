@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Przykłady</string>
     <string name="lyrics_examples_failed">Nie udało się napisać przykładów.</string>
     <string name="lyrics_ask_song">Zapytaj o utwór</string>
-    <string name="song_level">Poziom %1$s</string>
     <string name="song_original">Cover utworu</string>
     <string name="song_samples">Sample</string>
     <string name="artist_who">Kto</string>

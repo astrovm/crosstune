@@ -325,7 +325,6 @@
     <string name="lyrics_examples">Examples</string>
     <string name="lyrics_examples_failed">Couldn\'t write examples.</string>
     <string name="lyrics_ask_song">Ask about the song</string>
-    <string name="song_level">Level %1$s</string>
     <string name="song_original">Cover of</string>
     <string name="song_samples">Samples</string>
     <string name="artist_who">Who</string>

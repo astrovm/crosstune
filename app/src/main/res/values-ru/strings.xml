@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Примеры</string>
     <string name="lyrics_examples_failed">Не удалось написать примеры.</string>
     <string name="lyrics_ask_song">Спроси о песне</string>
-    <string name="song_level">Уровень %1$s</string>
     <string name="song_original">Кавер на</string>
     <string name="song_samples">Семплы</string>
     <string name="artist_who">Кто</string>

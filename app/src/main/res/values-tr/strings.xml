@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Örnekler</string>
     <string name="lyrics_examples_failed">Örnek yazılamadı.</string>
     <string name="lyrics_ask_song">Şarkı hakkında sor</string>
-    <string name="song_level">Seviye %1$s</string>
     <string name="song_original">Cover:</string>
     <string name="song_samples">Sample\'lar</string>
     <string name="artist_who">Kim</string>

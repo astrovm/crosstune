@@ -306,7 +306,6 @@
     <string name="lyrics_examples">例句</string>
     <string name="lyrics_examples_failed">写不出例句。</string>
     <string name="lyrics_ask_song">问问这首歌</string>
-    <string name="song_level">级别 %1$s</string>
     <string name="song_original">翻唱自</string>
     <string name="song_samples">采样</string>
     <string name="artist_who">是谁</string>

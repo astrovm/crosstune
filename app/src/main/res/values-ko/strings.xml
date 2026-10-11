@@ -306,7 +306,6 @@
     <string name="lyrics_examples">예문</string>
     <string name="lyrics_examples_failed">예문을 쓰지 못했어요.</string>
     <string name="lyrics_ask_song">이 노래에 대해 질문</string>
-    <string name="song_level">레벨 %1$s</string>
     <string name="song_original">원곡</string>
     <string name="song_samples">샘플링</string>
     <string name="artist_who">누구</string>

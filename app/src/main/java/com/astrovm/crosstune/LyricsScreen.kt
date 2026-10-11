@@ -29,7 +29,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.items
@@ -1325,18 +1324,7 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
-            val facts = state.learning.songFacts
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f, fill = false))
-                // How hard its words are, at a glance.
-                facts?.level?.let { level ->
-                    val said = stringResource(R.string.song_level, level)
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.clearAndSetSemantics { contentDescription = said }) {
-                        Text(level, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                    }
-                }
-            }
-            facts?.why?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
             PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
                 SongTab.entries.forEach { shown ->
                     Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })

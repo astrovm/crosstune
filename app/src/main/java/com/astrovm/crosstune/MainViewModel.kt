@@ -1898,7 +1898,7 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         val song = uiState.lyricsFor ?: return
         val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
-        findSongFacts(song, lines)
+        findSongFacts(song)
         // Already explained, or on its way, it's just shown.
         if (uiState.learning.songExplanation?.let { it.done || it.writing } == true) return
         songExplanationJob?.cancel()
@@ -1913,13 +1913,13 @@ internal class MainViewModel(
 
     private var songFactsJob: Job? = null
 
-    /** Finds how hard the song's words are, and what it covers or samples, unless it's known. */
-    private fun findSongFacts(song: MusicMetadata, lines: List<String>) {
+    /** Finds what the song covers or samples, unless it's known. */
+    private fun findSongFacts(song: MusicMetadata) {
         val tutor = tutor ?: return
         if (uiState.learning.songFacts != null || songFactsJob?.isActive == true) return
         songFactsJob = viewModelScope.launch {
-            val facts = tutor.songFacts(song, lines, translateInto()) ?: return@launch
-            if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
+            val facts = tutor.songFacts(song) ?: return@launch
+            if (uiState.lyricsFor?.let { sameSong(it, song) } == true) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
         }
     }
 

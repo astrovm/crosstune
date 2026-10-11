@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Contoh</string>
     <string name="lyrics_examples_failed">Tidak dapat menulis contoh.</string>
     <string name="lyrics_ask_song">Tanya tentang lagu ini</string>
-    <string name="song_level">Level %1$s</string>
     <string name="song_original">Cover dari</string>
     <string name="song_samples">Sampel</string>
     <string name="artist_who">Siapa</string>

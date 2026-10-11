@@ -306,7 +306,6 @@
     <string name="lyrics_examples">Voorbeelden</string>
     <string name="lyrics_examples_failed">Kon geen voorbeelden schrijven.</string>
     <string name="lyrics_ask_song">Vraag over het nummer</string>
-    <string name="song_level">Niveau %1$s</string>
     <string name="song_original">Cover van</string>
     <string name="song_samples">Samples</string>
     <string name="artist_who">Wie</string>

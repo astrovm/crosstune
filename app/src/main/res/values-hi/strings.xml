@@ -306,7 +306,6 @@
     <string name="lyrics_examples">उदाहरण</string>
     <string name="lyrics_examples_failed">उदाहरण नहीं लिखे जा सके।</string>
     <string name="lyrics_ask_song">गाने के बारे में पूछें</string>
-    <string name="song_level">स्तर %1$s</string>
     <string name="song_original">इसका कवर</string>
     <string name="song_samples">सैंपल</string>
     <string name="artist_who">कौन</string>

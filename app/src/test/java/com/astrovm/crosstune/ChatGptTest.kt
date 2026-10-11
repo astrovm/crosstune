@@ -839,37 +839,31 @@ class ChatGptTest {
 
 
     @Test
-    fun aSongsLevelAndWhatItCoversOrSamplesAreFoundOnTheWeb() {
+    fun whatASongCoversOrSamplesIsFoundOnTheWebByItsName() {
         val tutor = tutor()
         val song = MusicMetadata("Hurt", "Johnny Cash")
-        answering("{\"level\": \"b1\", \"why\": \"Vocabulario común.\", \"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}, \"samples\": [{\"title\": \"I Got a Woman\", \"artist\": \"Ray Charles\"}, {\"title\": \"\"}]}")
-        assertEquals(
-            SongFacts("B1", "Vocabulario común.", "Hurt" to "Nine Inch Nails", listOf("I Got a Woman" to "Ray Charles")),
-            runBlocking { tutor.songFacts(song, listOf("I hurt myself today"), "es") }
-        )
+        answering("{\"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}, \"samples\": [{\"title\": \"I Got a Woman\", \"artist\": \"Ray Charles\"}, {\"title\": \"\"}]}")
+        assertEquals(SongFacts("Hurt" to "Nine Inch Nails", listOf("I Got a Woman" to "Ray Charles")), runBlocking { tutor.songFacts(song) })
         val asked = openAi.asked.single()
         assertEquals("web_search", asked.getJSONArray("tools").getJSONObject(0).getString("type"))
-        assertTrue(asked.getString("instructions").contains("written in Spanish") && asked.getString("instructions").contains("CEFR"))
-        runBlocking { tutor.songFacts(song, listOf("I hurt myself today"), "es") }
+        assertEquals("Song: Hurt by Johnny Cash", asked.getJSONArray("input").getJSONObject(0).getString("content"))
+        runBlocking { tutor.songFacts(song) }
         assertEquals(1, openAi.asked.size)
-        // An original with no samples still has its level; a level that isn't one is none, and so is its reason.
-        answering("{\"level\": \"A2\", \"why\": \"\", \"original\": null, \"samples\": []}")
-        assertEquals(SongFacts("A2", null, null, emptyList()), runBlocking { tutor.songFacts(song.copy(title = "Other"), emptyList(), "es") })
-        answering("{\"level\": \"Hard\", \"why\": \"Fast.\", \"original\": {\"title\": \"Hurt\", \"artist\": \"Nine Inch Nails\"}}")
-        assertEquals(SongFacts(null, null, "Hurt" to "Nine Inch Nails", emptyList()), runBlocking { tutor.songFacts(song.copy(title = "Third"), emptyList(), "es") })
-        // Nothing at all, or no answer, is none.
-        listOf("{\"level\": \"Z9\"}", "No JSON").forEachIndexed { index, text ->
+        answering("{\"original\": null, \"samples\": [{\"title\": \"Beat\", \"artist\": \"Drummer\"}]}")
+        assertEquals(SongFacts(null, listOf("Beat" to "Drummer")), runBlocking { tutor.songFacts(song.copy(title = "Other")) })
+        // Neither, or no answer, is none.
+        listOf("{\"original\": null, \"samples\": []}", "No JSON").forEachIndexed { index, text ->
             answering(text)
-            assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song $index"), emptyList(), "es") })
+            assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song $index")) })
         }
         // Nothing to say is kept, so the web isn't searched again for it; no answer isn't.
         val askedBefore = openAi.asked.size
-        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 0"), emptyList(), "es") })
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 0")) })
         assertEquals(askedBefore, openAi.asked.size)
-        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 1"), emptyList(), "es") })
+        assertNull(runBlocking { tutor.songFacts(song.copy(title = "Song 1")) })
         assertEquals(askedBefore + 1, openAi.asked.size)
         openAi.models = { 500 to "" }
-        assertNull(runBlocking { tutor(chatGpt()).songFacts(song.copy(title = "Fourth"), emptyList(), "es") })
+        assertNull(runBlocking { tutor(chatGpt()).songFacts(song.copy(title = "Fourth")) })
     }
 
     @Test
