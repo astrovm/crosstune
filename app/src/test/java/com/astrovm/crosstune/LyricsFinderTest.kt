@@ -774,6 +774,26 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun theWordsComeFirstAndTheirBetterTimesAfterAndAreKeptSo() {
+        val copies = arrayOf(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0)
+        )
+        remixTimedEarly(*copies, storeSeconds = 318.483)
+        val file = File.createTempFile("lyrics", ".json").apply { delete() }
+        val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        // First as found, to show at once, not yet kept.
+        val first = runBlocking { finder.firstLook(remix) }
+        assertEquals(LyricsFinder.FirstLook(Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early)), final = false), first)
+        // Then timed as the copies agree, and kept that way.
+        val better = runBlocking { finder.retimed(remix, first.lyrics) } as Lyrics.Found
+        better.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+        val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
+        assertEquals(LyricsFinder.FirstLook(better, final = true), again)
+        file.delete()
+    }
+
+    @Test
     fun wordsTimedWellAreKeptWithoutTwoCopiesAgainstThem() {
         // One copy alone.
         remixTimedEarly(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji))

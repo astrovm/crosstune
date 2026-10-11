@@ -183,9 +183,15 @@ class SongListenerTest {
         answers({ microphone.play(3.0); throw java.io.IOException("timed out") }, { MATCH })
         assertTrue(runBlocking { listener.listen() } is Heard.Song)
         assertEquals(2, fake.requestedUrls.size)
-        // Failing to the end, it says so.
+        // Failing twice in a row, it says so, without listening on.
         microphone.play(3.0)
         fake.handler = { microphone.play(3.0); throw java.io.IOException("offline") }
+        fake.requestedUrls.clear()
+        assertEquals(Heard.Failed(AppError.NETWORK), runBlocking { listener.listen() })
+        assertEquals(2, fake.requestedUrls.size)
+        // Or once, with no more sound to ask again with.
+        microphone.play(3.0)
+        fake.handler = { microphone.end(); throw java.io.IOException("offline") }
         assertEquals(Heard.Failed(AppError.NETWORK), runBlocking { listener.listen() })
     }
 

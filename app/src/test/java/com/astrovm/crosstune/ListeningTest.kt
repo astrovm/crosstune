@@ -256,7 +256,8 @@ class ListeningTest {
         fake.handler = { throw IOException("offline") }
         allowMicrophone()
         launch()
-        microphone.play(3.0)
+        // Asked again with more sound once, in case it was a moment, then it says so.
+        microphone.play(12.0)
         recognize()
         waitForText(string(R.string.error_network))
         // Try again listens again, rather than looking anything up.
@@ -915,6 +916,30 @@ class ListeningTest {
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
         override fun close() = Unit
+    }
+
+    @Test
+    fun wordsFoundUntimedTakeTheTimesOfATimedCopyOnceItsFound() {
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        var asked = 0
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                // Found untimed at first, shown as they are; a timed copy comes from asking again.
+                val timed = if (++asked == 1) "" else ""","syncedLyrics":"[00:01.00] Night sky\n[00:05.00] Stars""""
+                FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"$timed}]""")
+            } else {
+                FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        composeRule.waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricLines.isNotEmpty() }
+        assertEquals(listOf(LyricLine(1_000, "Night sky"), LyricLine(5_000, "Stars")), controllerModel().uiState.lyricLines)
+        assertEquals(2, asked)
     }
 
     @Test

@@ -71,16 +71,31 @@ internal class LyricsFinder(
      * shows, so those are asked for too, and NetEase, which has many more such songs, last. Words
      * found anywhere win; otherwise "none" from any of them is believed over one that wouldn't answer.
      */
-    suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics {
+    suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
+        firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
+
+    /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
+    data class FirstLook(val lyrics: Lyrics, val final: Boolean)
+
+    /**
+     * [lyricsOf] in two steps, so the words can show as soon as they're found: first what's kept, or
+     * found, then [retimed], which may take a while longer.
+     */
+    suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
-        if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return Lyrics.None
-        val key = cacheKey(metadata)
-        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return it } }
-        val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
-        // Words timed badly, or not at all, are timed as a well-timed copy of the song times them, when there's one.
+        if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { return FirstLook(it, final = true) } }
+        return FirstLook(withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable, final = false)
+    }
+
+    /**
+     * [found], timed as a well-timed copy of the song times them when they're timed badly or not at
+     * all and there's one, and kept so.
+     */
+    suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
         val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { timedWell(metadata, words, timeoutMs) } } ?: found
         cache?.let { cache ->
-            toCache(answer)?.let { cache.put(key, it) }
+            toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
         return answer

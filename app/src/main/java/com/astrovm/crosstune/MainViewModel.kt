@@ -1299,13 +1299,16 @@ internal class MainViewModel(
         japanese = null
         syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
+            var first: LyricsFinder.FirstLook? = null
             uiState = uiState.copy(
                 lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
-                // A lookup that failed says so, rather than claiming the song has no words.
-                when (val answer = finder.lyricsOf(song)) {
+                // A lookup that failed says so, rather than claiming the song has no words. The words
+                // show as soon as they're found, and their timing may get better after.
+                first = finder.firstLook(song)
+                when (val answer = first.lyrics) {
                     is LyricsFinder.Lyrics.Found -> {
                         foundLines = answer.lines
                         syncPoints = syncStore.load(song, answer.lines)
@@ -1324,9 +1327,21 @@ internal class MainViewModel(
                 if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
             }
             follow(song)
+            first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
         }
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
+    }
+
+    /**
+     * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
+     * of the song; kept as they are when they're put in time by hand meanwhile.
+     */
+    private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
+        val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
+        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty()) return
+        foundLines = better.lines
+        uiState = uiState.copy(lyricLines = better.lines)
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
