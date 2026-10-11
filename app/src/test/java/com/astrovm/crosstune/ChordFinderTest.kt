@@ -348,6 +348,16 @@ var NMAX=${files.size - 1};
         }
         assertEquals(ChordFinder.Chords.None, chords(river, english))
         assertTrue(fake.requestedUrls.none { ".shtml" in it })
+        // Nor are songs it doesn't say the artist of.
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))).replace("""<a href="/walkers/">The Walkers</A>""", ""))
+            } else {
+                answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertTrue(fake.requestedUrls.none { ".shtml" in it })
     }
 
     @Test
