@@ -38,15 +38,21 @@ internal class Translator(
         val key = { line: String -> "|$target|$line" }
         val known = words.associateWith { cache.get(key(it)) }
         val missing = words.filter { known[it] == null }
-        val found = try {
-            if (missing.isEmpty()) emptyMap() else myMemory(missing, target)
+        // Each batch translated is kept as it comes, so one failing later, e.g. out of the day's
+        // translations, doesn't lose those, and asking again only asks for the rest.
+        val found = mutableMapOf<String, String>()
+        val done = try {
+            missing.isEmpty() || myMemory(missing, target) { line, translation ->
+                found[line] = translation
+                cache.put(key(line), translation)
+            }
         } catch (_: IOException) {
-            return null
+            false
         } catch (_: JSONException) {
-            return null
-        } ?: return null
-        found.forEach { (line, translation) -> cache.put(key(line), translation) }
+            false
+        }
         cache.save()
+        if (!done) return null
         val all = known.filterValues { it != null }.mapValues { it.value!! } + found
         // A line already in [target] comes back as it was, and is no use under itself.
         return lines.map { line -> all[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
@@ -57,23 +63,23 @@ internal class Translator(
     /**
      * MyMemory takes up to [MYMEMORY_BYTES] at a time and keeps lines apart, so lines go in batches,
      * one per row. A batch that comes back with other rows than it went with is asked line by line.
+     * [onFound] hears each line translated; whether they all were.
      */
-    private suspend fun myMemory(lines: List<String>, target: String): Map<String, String>? {
+    private suspend fun myMemory(lines: List<String>, target: String, onFound: suspend (String, String) -> Unit): Boolean {
         val batches = mutableListOf(mutableListOf<String>())
         lines.forEach { line ->
             val batch = batches.last()
             if (batch.isNotEmpty() && (batch + line).joinToString("\n").toByteArray().size > MYMEMORY_BYTES) batches += mutableListOf(line) else batch += line
         }
-        val found = mutableMapOf<String, String>()
         for (batch in batches) {
-            val rows = myMemoryRows(batch.joinToString("\n"), target) ?: return null
+            val rows = myMemoryRows(batch.joinToString("\n"), target) ?: return false
             if (rows.size == batch.size) {
-                batch.zip(rows).forEach { (line, row) -> found[line] = row }
+                batch.zip(rows).forEach { (line, row) -> onFound(line, row) }
             } else {
-                batch.forEach { line -> found[line] = myMemoryRows(line, target)?.joinToString(" ") ?: return null }
+                batch.forEach { line -> onFound(line, myMemoryRows(line, target)?.joinToString(" ") ?: return false) }
             }
         }
-        return found
+        return true
     }
 
     private suspend fun myMemoryRows(text: String, target: String): List<String>? {
