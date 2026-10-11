@@ -556,11 +556,54 @@ class ExactMatcherTest {
     @Test
     fun aWordForAnotherVersionInTheSongsOwnNameDoesntCountAgainstIt() {
         val song = MusicMetadata("ギターと孤独と蒼い惑星", "Kessoku Band")
-        namesAndTabs(videos = listOf(
-            youTubeMusicRow("Kessoku Band - ギターと孤独と蒼い惑星 弾いてみた", "Fan • 1K views • 3:48", videoId = "played00000"),
-            youTubeMusicRow("Kessoku Band - ギターと孤独と蒼い惑星", "Fan • 1K views • 3:48", videoId = "song0000000")
-        ))
+        // Its name elsewhere doesn't have the word, but this one does, so it counts.
+        namesAndTabs(
+            videos = listOf(
+                youTubeMusicRow("Kessoku Band - ギターと孤独と蒼い惑星 弾いてみた", "Fan • 1K views • 3:48", videoId = "played00000"),
+                youTubeMusicRow("Kessoku Band - ギターと孤独と蒼い惑星 (ライブ)", "Fan • 1K views • 3:48", videoId = "live0000000"),
+                youTubeMusicRow("Kessoku Band - ギターと孤独と蒼い惑星", "Fan • 1K views • 3:48", videoId = "song0000000")
+            ),
+            apple = mapOf("AR" to appleSong("ギターと孤独と蒼い惑星", "Kessoku Band", 228_000)),
+            elsewhere = mapOf("KR" to appleSong("Guitar, Loneliness and Blue Planet", "Kessoku Band", 228_000))
+        )
         assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun wordsForAnotherVersionAreFoundInEveryScript() {
+        val song = MusicMetadata("Spring Day", "BTS")
+        fun finds(name: String): String? {
+            namesAndTabs(
+                videos = listOf(youTubeMusicRow(name, "Fan • 1K views • 4:34", videoId = "video000000")),
+                apple = mapOf("AR" to appleSong("Spring Day", "BTS", 274_000)),
+                elsewhere = mapOf("KR" to appleSong("봄날", "BTS", 274_000))
+            )
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        assertEquals("https://music.youtube.com/watch?v=video000000", finds("BTS - 봄날"))
+        listOf("BTS - 봄날 커버", "BTS - 봄날 라이브", "BTS - 봄날 노래방", "BTS - 봄날 ピアノ", "BTS - 봄날 ライブ").forEach { assertNull(it, finds(it)) }
+    }
+
+    @Test
+    fun oddResultsAreSkippedAndASongNotOnAppleIsAskedOnceFromTheUs() {
+        val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
+        // A song result without its video, or a video of one letter of the name, plays nothing of it.
+        namesAndTabs(songs = listOf(youTubeMusicRow("Owaranai Uta", "THE BLUE HEARTS • Album • 3:04", browseId = "MPREb_x")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        namesAndTabs(videos = listOf(youTubeMusicRow("YOASOBI - 夜に駆ける", "Fan • 1K views • 4:21", videoId = "yoru0000000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("夜", "YOASOBI")) })
+        // A video that doesn't say how long it is isn't held to the song's length.
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views", videoId = "nolength000")),
+            apple = mapOf("US" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000))
+        )
+        fake.requestedUrls.clear()
+        assertEquals("https://music.youtube.com/watch?v=nolength000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        // From the US, a song Apple doesn't have is asked about once there.
+        namesAndTabs()
+        fake.requestedUrls.clear()
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertEquals(1, fake.requestedUrls.count { "itunes.apple.com/search" in it })
     }
 
     @Test

@@ -786,11 +786,14 @@ internal class ExactMatcher(
             "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
         )
 
-        /** The same, as other scripts write them, found anywhere in a title. */
+        /**
+         * The same, as other scripts write them, found anywhere in a title; written as [SongNames.normalize]
+         * leaves them, which takes the marks off ブ and splits 커버 into its letters.
+         */
         private val VERSION_MARKS = listOf(
             "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
             "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "커버", "라이브", "노래방"
-        )
+        ).map(SongNames::normalize)
     }
 }
 
