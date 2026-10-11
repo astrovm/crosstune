@@ -1732,6 +1732,29 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsAreTranslatedIntoTheAppsLanguageAsItIsNow() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        MainActivity.listenAlongPauseMs = 0
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.mymemory.translated.net" -> translation(request, 200)
+                else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        // The app's language changed since Crosstune opened, as in its settings.
+        app.getSystemService(android.app.LocaleManager::class.java).applicationLocales = android.os.LocaleList.forLanguageTags("ja")
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky")
+        composeRule.waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "api.mymemory.translated.net" in it } }
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cja" in it })
+    }
+
+    @Test
     fun aTranslationThatCantBeDoneSaysSoAndIsTriedAgain() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars", translations = 503)

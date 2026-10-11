@@ -99,7 +99,10 @@ class MainActivity : ComponentActivity() {
                     quietPauseMs = quietPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.
                     translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
-                    translationLanguage = { Translator.languageOf(resources.configuration.locales[0]) },
+                    // Read each time, from the app rather than this screen, which a language change replaces.
+                    translationLanguage = {
+                        Translator.languageOf(AppLanguage.current(applicationContext)?.let(Locale::forLanguageTag) ?: Locale.getDefault())
+                    },
                     chatGpt = chatGpt,
                     tutor = tutor
                 )
