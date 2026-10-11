@@ -1166,7 +1166,7 @@ internal class MainViewModel(
             val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
             val service = destination.matchService
             // Not found there, as opposed to no answer, e.g. offline, which just searches.
-            if (match == ExactMatcher.Match.Missing && service != null && canMatchExactly(service, ItemType.TRACK)) {
+            if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
             effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))

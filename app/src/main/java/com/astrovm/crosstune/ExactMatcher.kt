@@ -889,7 +889,11 @@ internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
  * that could have been matched, or a playlist whose songs aren't known, which is someone's own and
- * so on no other service.
+ * so on no other service. Where only the artist's own page or account counts, a release on a
+ * label's page isn't found, though it's there, so it's searched for.
  */
 internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
-    canMatchExactly(target, item.type) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
+    (canMatchExactly(target, item.type) && target !in ownPagesOnly) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
+
+/** The apps a song is only matched on from its artist's own page or a verified account. */
+private val ownPagesOnly = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK)
