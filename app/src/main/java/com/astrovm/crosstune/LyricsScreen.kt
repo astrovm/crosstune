@@ -938,7 +938,7 @@ private fun LyricLineText(
     help: LineHelp? = null,
     waiting: Boolean = false,
     seekLabel: Int = R.string.lyrics_jump,
-    onReveal: () -> Unit = {}
+    onReveal: () -> Unit
 ) {
     val lit = place == 0
     // A word left blank shows once tapped, or once its line's sung.
