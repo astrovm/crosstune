@@ -298,9 +298,12 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     val guided = actions.copy(onShowAllowGuide = { guide = GUIDE_ALLOW }, onShowAppsGuide = { guide = GUIDE_APPS })
     val screen = when {
+        // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
+        // after; so are the words it was for.
+        state.listening -> Screen.LISTENING
+        !state.setupComplete && state.lyricsFor != null -> Screen.LYRICS
         // A link from another app is handled right away; setup waits for the next regular launch.
         !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
-        state.listening -> Screen.LISTENING
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF

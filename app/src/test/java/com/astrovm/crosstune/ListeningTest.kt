@@ -735,6 +735,24 @@ class ListeningTest {
     }
 
     @Test
+    fun listeningForWordsBeforeSetupShowsListeningThenTheWordsThenSetup() {
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        allowMicrophone()
+        launch(MainActivity.lyricsIntent(app))
+        // Listening is in sight, to be stopped, not hidden behind setup.
+        waitForText(string(R.string.listening_text))
+        hearing.song("Demo", 2.0)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        // Done with the words, setup's next.
+        controllerModel().dismissLyrics()
+        composeRule.waitForIdle()
+        assertFalse(shown("Demo one"))
+        waitForText(string(R.string.setup_get_started))
+    }
+
+    @Test
     fun lyricsFromAnywhereNameTheSongAndShowItsWordsListeningAlong() {
         val hearing = FakeHearing()
         listeningAlong(hearing)
