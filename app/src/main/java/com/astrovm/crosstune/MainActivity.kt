@@ -197,6 +197,9 @@ class MainActivity : ComponentActivity() {
         /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
         private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
 
+        /** Where the widget is drawn again, outliving the screen that asked. */
+        private val widgetUpdates = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
         /** How long a song not found somewhere stays not found there, before it's looked for again. */
         private const val MISSING_FOR_MS = 30 * 60 * 1000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
@@ -279,8 +282,9 @@ class MainActivity : ComponentActivity() {
                     .distinctUntilChanged()
                     .collectLatest { (recent, entries, app) ->
                         shortcuts.update(recent, entries, app)
-                        // The widget shows Recent too.
-                        CrosstuneWidget().updateAll(applicationContext)
+                        // The widget shows Recent too, drawn again even once Crosstune closes, e.g.
+                        // right after opening a link shared from another app.
+                        widgetUpdates.launch { CrosstuneWidget().updateAll(applicationContext) }
                     }
             }
         }

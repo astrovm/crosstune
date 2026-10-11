@@ -1,5 +1,10 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.astrovm.crosstune.ui.theme.withAccent
 import com.astrovm.crosstune.ui.theme.wallpaperColors
 import com.astrovm.crosstune.ui.theme.Palette
@@ -95,6 +100,9 @@ class CrosstuneWidget : GlanceAppWidget() {
         /** Covers are drawn at most this big, so a full Recent stays within a widget's memory. */
         const val COVER_PIXELS = 96
 
+        /** How many covers download at once. */
+        private const val COVERS_AT_ONCE = 6
+
         /** The color picked in the app, so the widgets wear it too. */
         fun widgetPalette(context: Context): Palette =
             savedPalette(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).getString(MainViewModel.KEY_PALETTE, null))
@@ -118,19 +126,23 @@ class CrosstuneWidget : GlanceAppWidget() {
             LyricsWidget().updateAll(context)
         }
 
-        /** Recent, newest first, with the covers the app already saved, or downloads them. */
-        suspend fun widgetSongs(context: Context): List<WidgetSong> {
+        /** One client for every update's covers, rather than a new one, with its own pool, each time. */
+        private val client by lazy { httpClient() }
+
+        /** Recent, newest first, with the covers the app already saved, or downloads them, a few at once. */
+        suspend fun widgetSongs(context: Context): List<WidgetSong> = coroutineScope {
             val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
-            val artwork = ArtworkLoader(httpClient(), cacheDir = File(context.cacheDir, "artwork"))
-            return HistoryStore(preferences).load().map { entry ->
+            val artwork = ArtworkLoader(client, cacheDir = File(context.cacheDir, "artwork"))
+            val downloads = Semaphore(COVERS_AT_ONCE)
+            HistoryStore(preferences).load().map { entry -> async {
                 val details = listOf(
                     if (entry.link.type == ItemType.TRACK) "" else context.getString(entry.link.type.labelRes),
                     entry.metadata.artist,
                     entry.link.service?.let { context.getString(it.labelRes) }.orEmpty()
                 ).filter { it.isNotBlank() }.joinToString(", ")
-                val cover = entry.metadata.artworkUrl?.let { artwork.load(it) }?.asAndroidBitmap()?.scale(COVER_PIXELS, COVER_PIXELS)
+                val cover = entry.metadata.artworkUrl?.let { url -> downloads.withPermit { artwork.load(url) } }?.asAndroidBitmap()?.scale(COVER_PIXELS, COVER_PIXELS)
                 WidgetSong(entry.metadata.title, details, entry.link.url, cover)
-            }
+            } }.awaitAll()
         }
     }
 }
