@@ -2819,6 +2819,35 @@ class MainActivityTest {
     }
 
     @Test
+    fun wordsPickedStayTheirsWhenTheAppMovesOnToAnotherSong() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
+        val playback = timedSong()
+        playback.access = true
+        controller!!.pause().resume()
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { lit("Two") }
+        // The app goes on to another song: the words stop where it left them, and stay this song's.
+        playback.onThePhone = Heard.Song(MusicMetadata("Other Song", "Someone Else"), null, 5_000, SystemClock.elapsedRealtime())
+        playback.playing.value = null
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isEmpty() }
+        assertLit("Two")
+        // Closed and opened again, and even listened along with, they're still this song's, not what plays now.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        waitForResult()
+        click(string(R.string.lyrics_button))
+        waitForText("Two")
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_stop_listening)).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(500)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Dakare Ni Kita Onna").assertExists()
+        assertTrue(fake.requestedUrls.none { "Other" in it })
+    }
+
+    private fun lit(line: String) =
+        composeRule.onAllNodes(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
     fun aLineTimedWordByWordLightsEachWordAsItsSung() {
         val playback = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { playback }

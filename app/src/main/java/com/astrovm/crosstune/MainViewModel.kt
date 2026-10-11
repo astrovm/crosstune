@@ -946,13 +946,14 @@ internal class MainViewModel(
             when (heard) {
                 is Heard.Song -> {
                     retryListens = false
-                    heardSong = heard.metadata
-                    heardClock = heard.clock
-                    heardAtMs = now()
                     val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
                         ?: MusicLinks.recognizedSong(heard.metadata)
                     uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
                     resolve(input, openWhenReady = false)
+                    // Once it's shown, as showing it forgets what was heard for whatever was shown before.
+                    heardSong = heard.metadata
+                    heardClock = heard.clock
+                    heardAtMs = now()
                     // Asked for its words, they open straight away, and keep listening along, song after song.
                     if (lyrics) showLyricsFor(heard.metadata)
                 }
@@ -1417,29 +1418,33 @@ internal class MainViewModel(
         }
     }
 
-    /** The song heard: the one shown keeps in time with it; another one takes over the words. */
+    /**
+     * The song heard: the one shown keeps in time with it; another one takes over the words, once
+     * the one shown was heard playing, as the next song. A song picked to read stays.
+     */
     private fun heardAlong(heard: Heard.Song) {
         val song = heard.metadata
-        val shown = uiState.lyricsFor
+        val shown = uiState.lyricsFor ?: return
+        if (!sameSong(song, shown) && heardSong?.let { sameSong(it, shown) } != true) return
         // While a music app plays the song shown, it says exactly what plays: a hearing naming it
         // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
-        if (shown != null && !sameSong(song, shown) && appFollowing?.clock?.playing == true) return
+        if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
         // Heard by another name right where the song shown is, well into it, it's the same recording
         // on another release, as Shazam sometimes names it, not the next song, which starts over.
         val clock = heardClock
         val at = heard.clock
-        if (shown != null && at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
+        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
             clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
         ) {
             heardClock = steadied(clock, at)
             return keepInTime()
         }
-        if (heardSong?.let { sameSong(it, song) } != true || shown == null || !sameSong(song, shown)) {
+        if (heardSong?.let { sameSong(it, song) } != true || !sameSong(song, shown)) {
             heardSong = song
             heardClock = heard.clock
             unconfirmed = null
-            if (shown == null || !sameSong(song, shown)) {
+            if (!sameSong(song, shown)) {
                 remember(heard)
                 return showLyricsFor(song)
             }
@@ -1546,14 +1551,11 @@ internal class MainViewModel(
                 if (playing?.clock?.playing == true && appFollowing?.clock?.playing != true) appPlaysAgain.tryEmit(Unit)
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
-                val left = inSong(appFollowing)?.clock
-                if (playing == null && left != null) {
-                    heardSong = song
-                    heardClock = PlaybackClock(left.positionAt(now()), now(), playing = false)
-                }
+                val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
+                if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
-                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song))
+                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) })
             }
         }
     }
@@ -1723,8 +1725,13 @@ internal class MainViewModel(
         }
     }
 
-    /** Closes the words. The next song starts without them, rather than showing the last one's. */
+    /**
+     * Closes the words. The next song starts without them, rather than showing the last one's, and
+     * what was heard is forgotten, so words opened later don't listen along to what plays by then.
+     */
     fun dismissLyrics() {
+        heardSong = null
+        heardClock = null
         lyricsJob?.cancel()
         lyricsJob = null
         stopLearning()
