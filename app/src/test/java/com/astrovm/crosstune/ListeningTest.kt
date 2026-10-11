@@ -626,6 +626,25 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsClosedAndOpenedAgainDontListenAlongToWhatPlaysByThen() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
+        click(string(R.string.dismiss_button))
+        waitForText(string(R.string.lyrics_button))
+        // The music moves on meanwhile; the words opened again are still the song shown, and don't listen.
+        hearing.song("Other", 1.0)
+        val listens = hearing.listens
+        click(string(R.string.lyrics_button))
+        waitForText("Demo one")
+        Thread.sleep(500)
+        composeRule.waitForIdle()
+        assertEquals(listens, hearing.listens)
+        assertFalse(shown("Other one"))
+        assertFalse(described(string(R.string.lyrics_stop_listening)))
+    }
+
+    @Test
     fun wordsOutOfTimeArePutInTimeByTappingTheLineHeard() {
         val synced = """[{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]"""
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
