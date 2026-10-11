@@ -1150,17 +1150,19 @@ internal class MainViewModel(
                 effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
                 return@launch
             }
-            val exactUrl = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
+            val match = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
                 uiState = uiState.copy(isMatching = true)
                 try {
-                    matcher.find(service, track)
+                    matcher.lookFor(service, track)
                 } finally {
                     if (isActive) uiState = uiState.copy(isMatching = false)
                 }
             }
+            val exactUrl = (match as? ExactMatcher.Match.Found)?.url
             val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(track))
             val service = destination.matchService
-            if (exactUrl == null && uiState.exactMatch && service != null && canMatchExactly(service, ItemType.TRACK)) {
+            // Not found there, as opposed to no answer, e.g. offline, which just searches.
+            if (match == ExactMatcher.Match.Missing && service != null && canMatchExactly(service, ItemType.TRACK)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
             effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
@@ -2154,16 +2156,23 @@ internal class MainViewModel(
         uiState.link?.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
         uiState.link?.takeIf { metadata.type == ItemType.TRACK }?.youtubeVideoOn(service)?.let { return destination.adapt(it) }
         uiState.destinationUrls[destination]?.let { return it.url.forSharing() }
-        val exactUrl = if (uiState.exactMatch && service != null) {
+        val match = if (uiState.exactMatch && service != null) {
             uiState = uiState.copy(isMatching = true)
-            matcher.find(service, metadata).also { uiState = uiState.copy(isMatching = false) }
+            matcher.lookFor(service, metadata).also { uiState = uiState.copy(isMatching = false) }
         } else {
             null
         }
+        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(metadata))
-        rememberDestination(destination, PreparedLink(url, exactUrl != null, uiState.exactMatch))
+        rememberDestination(destination, PreparedLink(url, exactUrl != null, matched(match)))
         return url.forSharing()
     }
+
+    /**
+     * Whether a link was prepared with exact matching: not when the lookup got no answer, e.g.
+     * offline, so it isn't taken as not being there, and is looked for again next time.
+     */
+    private fun matched(match: ExactMatcher.Match?) = uiState.exactMatch && match != ExactMatcher.Match.Failed
 
     /** Opens the link in the app it came from, e.g. when it can't be resolved or the user prefers it. */
     fun openOriginal() {
@@ -2256,9 +2265,10 @@ internal class MainViewModel(
             matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { return it }
         }
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
-        val exactUrl = if (uiState.exactMatch && service != null) matcher.find(service, entry.metadata) else null
+        val match = if (uiState.exactMatch && service != null) matcher.lookFor(service, entry.metadata) else null
+        val exactUrl = (match as? ExactMatcher.Match.Found)?.url
         val url = exactUrl?.let(destination::adapt) ?: destination.searchUrl(searchQuery(entry.metadata))
-        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, uiState.exactMatch))
+        val history = historyStore.remember(entry.link.url, destination.key, PreparedLink(url, exactUrl != null, matched(match)))
         uiState = uiState.copy(history = history)
         return url.forSharing()
     }

@@ -42,8 +42,27 @@ internal class ExactMatcher(
      * index; null for none. The last Boolean says the rows are videos anyone put up. Asked last, when
      * nothing matches by name: ChatGPT, when signed in.
      */
-    private val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, _, _ -> null }
+    private val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, _, _ -> null },
+    /**
+     * How long a song looked for and not found stays not found, so it isn't looked for again, and
+     * ChatGPT asked again, each time it's opened; none by default.
+     */
+    private val missingForMs: Long = 0,
+    private val now: () -> Long = System::currentTimeMillis,
+    /** How long a search has, and then ChatGPT to pick from what it found. */
+    private val timeoutMs: Long = TIMEOUT_MS,
+    private val pickTimeoutMs: Long = PICK_TIMEOUT_MS
 ) {
+
+    /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
+    sealed interface Match {
+        data class Found(val url: String) : Match
+        data object Missing : Match
+        data object Failed : Match
+    }
+
+    /** When each thing looked for and not found was, by its [cacheKey]. */
+    private val missing = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /** What an artist's own Bandcamp page name may add to their name. */
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
@@ -67,14 +86,17 @@ internal class ExactMatcher(
 
     private val musicVideoTypeRegex = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
 
-    suspend fun find(target: MusicService, metadata: MusicMetadata): String? = match(target, metadata).also { cache?.save() }
+    suspend fun find(target: MusicService, metadata: MusicMetadata): String? = (lookFor(target, metadata) as? Match.Found)?.url
 
-    private suspend fun match(target: MusicService, metadata: MusicMetadata): String? {
+    /** What [target] has for [metadata], telling a song that isn't there from one that couldn't be looked for. */
+    suspend fun lookFor(target: MusicService, metadata: MusicMetadata): Match = match(target, metadata).also { cache?.save() }
+
+    private suspend fun match(target: MusicService, metadata: MusicMetadata): Match {
         // A playlist whose songs aren't known may be an album put up as one, e.g. a SoundCloud set,
         // so it's found as that album, by the same artist, or not at all.
         val item = if (metadata.type == ItemType.PLAYLIST && metadata.tracks.isEmpty()) metadata.copy(type = ItemType.ALBUM) else metadata
         // Other apps need an account to search, so there's nothing to look up or remember.
-        if (!canMatchExactly(target, item.type)) return null
+        if (!canMatchExactly(target, item.type)) return Match.Missing
         return remembered("find", target.name, item) { lookUp(target, item) }
     }
 
@@ -85,56 +107,83 @@ internal class ExactMatcher(
      * which a single song is opened with.
      */
     private suspend fun matchForQueue(target: MusicService, metadata: MusicMetadata): String? {
-        if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) return match(target, metadata)
+        if (metadata.type != ItemType.TRACK || target !in setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE)) {
+            return (match(target, metadata) as? Match.Found)?.url
+        }
         metadata.url?.let(MusicLinks::linkFor)?.youtubeVideoOn(target)?.let { return it }
         cache?.get(cacheKey("find", target.name, metadata))?.let { return it }
-        return remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) }
+        return (remembered("queue", target.name, metadata) { lookUp(target, metadata, loosely = true, retrying = true) } as? Match.Found)?.url
     }
 
-    private class Answer(val url: String?)
+    /**
+     * A search's answer: what it found, or else, on YouTube, the songs and videos it turned up for
+     * ChatGPT to pick from, given its own while, as it takes a few seconds.
+     */
+    private class Answer(val url: String?, val toPick: ToPick? = null)
+
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Pair<String, String>>, val videos: List<Pair<String, String>>, val watchUrl: String)
 
     /**
-     * What [target] has for [metadata], null if nothing or no answer. A search that failed or timed
-     * out is asked once more when [retrying], e.g. for a queue, where one song in fifty must not be
-     * lost to a slow moment; an answer of "none" is final.
+     * What [target] has for [metadata]. A search that failed or timed out is asked once more when
+     * [retrying], e.g. for a queue, where one song in fifty must not be lost to a slow moment; an
+     * answer of "none" is final.
      */
-    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): String? {
+    private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Match {
         repeat(if (retrying) 2 else 1) {
-            val answer = withTimeoutOrNull(TIMEOUT_MS) {
+            val answer = withTimeoutOrNull(timeoutMs) {
                 try {
-                    Answer(
-                        when (target) {
-                            MusicService.APPLE_MUSIC -> findOnAppleMusic(metadata)
-                            MusicService.DEEZER -> findOnDeezer(metadata)
-                            MusicService.BANDCAMP -> findOnBandcamp(metadata)
-                            MusicService.TIDAL -> findOnTidal(metadata)
-                            MusicService.SOUNDCLOUD -> findOnSoundCloud(metadata)
-                            MusicService.AUDIOMACK -> findOnAudiomack(metadata)
-                            MusicService.QOBUZ -> findOnQobuz(metadata)
-                            MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
-                            // YouTube.
-                            else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
-                        }
-                    )
+                    when (target) {
+                        MusicService.APPLE_MUSIC -> Answer(findOnAppleMusic(metadata))
+                        MusicService.DEEZER -> Answer(findOnDeezer(metadata))
+                        MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
+                        MusicService.TIDAL -> Answer(findOnTidal(metadata))
+                        MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
+                        MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
+                        MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
+                        MusicService.YOUTUBE_MUSIC -> findOnYouTubeMusic(metadata, YOUTUBE_MUSIC_WATCH_URL, loosely)
+                        // YouTube.
+                        else -> findOnYouTubeMusic(metadata, YOUTUBE_WATCH_URL, loosely)
+                    }
                 } catch (_: IOException) {
                     null
                 } catch (_: JSONException) {
                     null
                 }
             }
-            if (answer != null) return answer.url
+            if (answer != null) return answer.url?.let(Match::Found) ?: answer.toPick?.let { picked(it) } ?: Match.Missing
         }
-        return null
+        return Match.Failed
+    }
+
+    /** The song ChatGPT picks among the songs, then the videos; no answer in time is no answer. */
+    private suspend fun picked(toPick: ToPick): Match {
+        val url = withTimeoutOrNull(pickTimeoutMs) {
+            Answer(
+                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false)
+                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true)
+            )
+        } ?: return Match.Failed
+        return url.url?.let(Match::Found) ?: Match.Missing
     }
 
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
         listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
 
-    /** What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found something. */
-    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> String?): String? {
+    /**
+     * What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found
+     * something; when it found nothing, that's kept for [missingForMs].
+     */
+    private suspend fun remembered(kind: String, target: String, metadata: MusicMetadata, lookUp: suspend () -> Match): Match {
         val key = cacheKey(kind, target, metadata)
-        cache?.get(key)?.let { return it }
-        return lookUp()?.also { cache?.put(key, it) }
+        cache?.get(key)?.let { return Match.Found(it) }
+        missing[key]?.takeIf { now() - it < missingForMs }?.let { return Match.Missing }
+        return lookUp().also { match ->
+            when (match) {
+                is Match.Found -> cache?.put(key, match.url)
+                Match.Missing -> if (missingForMs > 0) missing[key] = now()
+                Match.Failed -> Unit
+            }
+        }
     }
 
     /**
@@ -210,7 +259,10 @@ internal class ExactMatcher(
             .addQueryParameter("q", searchQuery(metadata))
             .addQueryParameter("limit", "10")
             .build()
-        return fetchJson(url.toString()).optJSONArray("data")?.objects().orEmpty()
+        val answer = fetchJson(url.toString())
+        // Deezer says it's busy, e.g. over its quota, with an error, not with no results.
+        if (answer.has("error")) throw IOException("Deezer answered ${answer.optJSONObject("error")?.optInt("code")}")
+        return answer.optJSONArray("data")?.objects().orEmpty()
     }
 
     /**
@@ -239,7 +291,7 @@ internal class ExactMatcher(
         }
     }
 
-    private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = remembered("cover", "", metadata) {
+    private suspend fun coverOf(metadata: MusicMetadata, timeoutMs: Long): String? = (remembered("cover", "", metadata) {
         withTimeoutOrNull(timeoutMs) {
             try {
                 // A Spotify song's own cover is known by its link, with no guessing by name. When Spotify
@@ -262,8 +314,8 @@ internal class ExactMatcher(
             } catch (_: JSONException) {
                 null
             }
-        }
-    }
+        }?.let(Match::Found) ?: Match.Failed
+    } as? Match.Found)?.url
 
     private suspend fun spotifyCover(url: String): String? {
         val oEmbed = "https://open.spotify.com/oembed".toHttpUrl().newBuilder().addQueryParameter("url", url).build()
@@ -447,14 +499,14 @@ internal class ExactMatcher(
      * YouTube Music's search, filtered to songs, albums or artists. Songs are also watchable on
      * YouTube itself, which has no such filter, so [watchUrl] picks the app the video id opens in.
      */
-    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): String? {
+    private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): Answer {
         val (params, isSong) = when (metadata.type) {
             ItemType.TRACK -> YOUTUBE_MUSIC_SONGS to true
             ItemType.ALBUM -> YOUTUBE_MUSIC_ALBUMS to false
             else -> YOUTUBE_MUSIC_ARTISTS to false
         }
         // Only songs can be opened in the YouTube app, and it would just be a search for the rest.
-        if (!isSong && watchUrl == YOUTUBE_WATCH_URL) return null
+        if (!isSong && watchUrl == YOUTUBE_WATCH_URL) return Answer(null)
         val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
             .put("hl", "en")
         val body = JSONObject()
@@ -483,9 +535,9 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        items.firstNotNullOfOrNull { found(it, loose = false) }?.let { return it }
-        if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) }?.let { return it }
-        if (!isSong) return null
+        items.firstNotNullOfOrNull { found(it, loose = false) }?.let { return Answer(it) }
+        if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) }?.let { return Answer(it) }
+        if (!isSong) return Answer(null)
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
         val (videos, names) = coroutineScope {
@@ -493,11 +545,10 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return watchUrl + it.id }
-        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return watchUrl + it.id }
+        items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
+        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        pickedFrom(metadata, playable(items).take(PICK_FROM), watchUrl, videos = false)?.let { return it }
-        return pickedFrom(metadata, playable(videos).take(PICK_FROM), watchUrl, videos = true)
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl))
     }
 
     /** The songs or videos among [items] that play, by their id, with their "title | details". */
@@ -702,6 +753,8 @@ internal class ExactMatcher(
             .apply { if (body == null) get() else post(body.toString().toRequestBody("application/json".toMediaType())) }
             .build()
         return client.newCall(request).executeAsync().use { response ->
+            // Busy, or down, it's no answer, and says nothing about whether it has the song.
+            if (!response.isSuccessful) throw IOException("${request.url.host} answered ${response.code}")
             JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
         }
     }
@@ -724,6 +777,9 @@ internal class ExactMatcher(
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+
+        /** How long ChatGPT has to pick a song, after the searches it picks from; it takes a few seconds. */
+        const val PICK_TIMEOUT_MS = 8_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"

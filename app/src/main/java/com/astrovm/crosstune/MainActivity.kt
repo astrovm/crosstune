@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
                 val playback = playbackFactory(applicationContext)
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
-                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong)
+                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     matcher,
@@ -180,6 +180,9 @@ class MainActivity : ComponentActivity() {
 
         /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
         private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
+
+        /** How long a song not found somewhere stays not found there, before it's looked for again. */
+        private const val MISSING_FOR_MS = 30 * 60 * 1000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_INCOMING_LINK = "incoming_link"
 

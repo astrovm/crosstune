@@ -451,6 +451,67 @@ class ExactMatcherTest {
         """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs}"""
 
     @Test
+    fun aBusyOrFailingServiceIsNoAnswerRatherThanNotThere() {
+        val song = MusicMetadata("Song", "Band")
+        fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""", code = 429) }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
+        fake.handler = { request -> FakeSpotify.html(request, """{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}""") }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
+        fake.handler = { throw IOException("offline") }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.APPLE_MUSIC, song) })
+        respond("""{"data":[]}""")
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
+        respond("""{"data":[{"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"}}]}""")
+        assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
+        // An app that can't be searched without an account has nothing to say either way.
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song) })
+    }
+
+    @Test
+    fun aSongNotFoundStaysNotFoundForAWhileButNoAnswerIsAskedAgain() {
+        var clock = 0L
+        var asked = 0
+        val matcher = ExactMatcher(fake.client(), "AR", missingForMs = 1_000, now = { clock })
+        val song = MusicMetadata("Song", "Band")
+        fake.handler = { request -> asked++; FakeSpotify.html(request, """{"data":[]}""") }
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
+        clock = 999
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
+        assertEquals(1, asked)
+        // A while later, it's looked for again, and found.
+        clock = 1_000
+        respond("""{"data":[{"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"}}]}""")
+        assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher.lookFor(MusicService.DEEZER, song) })
+        // No answer isn't kept: the next time asks again.
+        asked = 0
+        val other = MusicMetadata("Other", "Band")
+        fake.handler = { request -> asked++; FakeSpotify.html(request, "", code = 503) }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.DEEZER, other) })
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.DEEZER, other) })
+        assertEquals(2, asked)
+        // By default nothing not found is kept.
+        asked = 0
+        fake.handler = { request -> asked++; FakeSpotify.html(request, """{"data":[]}""") }
+        runBlocking { matcher().lookFor(MusicService.DEEZER, song) }
+        val again = matcher()
+        runBlocking { again.lookFor(MusicService.DEEZER, song); again.lookFor(MusicService.DEEZER, song) }
+        assertEquals(3, asked)
+    }
+
+    @Test
+    fun chatGptHasItsOwnWhileToPickAfterTheSearches() {
+        val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
+        youTubeMusicTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 5:26", videoId = "door0000000")), videos = emptyList())
+        // Slower than a search may take, but in its own time, it's still heard.
+        var pickMs = 700L
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> kotlinx.coroutines.delay(pickMs); 0 }, timeoutMs = 500, pickTimeoutMs = 1_500)
+        assertEquals(ExactMatcher.Match.Found("https://music.youtube.com/watch?v=door0000000"), runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, stayWithMe) })
+        // Past it, there's no answer, which isn't taken as not being there.
+        pickMs = 2_000
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher.lookFor(MusicService.YOUTUBE_MUSIC, stayWithMe.copy(title = "Mayonaka no Door")) })
+    }
+
+    @Test
     fun aSongIsFoundOnYouTubeMusicByTheNamesAppleGivesItInOtherStores() {
         val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
         val apple = mapOf("AR" to appleSong("Stay With Me", "Miki Matsubara"))
