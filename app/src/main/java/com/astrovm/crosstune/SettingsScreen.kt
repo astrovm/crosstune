@@ -57,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -106,7 +105,7 @@ private fun SettingsList(
     onOpenSource: (String?) -> Unit
 ) {
     var addingCustom by rememberSaveable { mutableStateOf(false) }
-    val uriHandler = LocalUriHandler.current
+    val openWebPage = rememberWebOpener()
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
 
@@ -255,7 +254,7 @@ private fun SettingsList(
             ChatGptRow(state.chatGpt, actions)
             if (state.chatGpt.email != null) {
                 GroupDivider()
-                ManageUsageRow(onClick = { uriHandler.openUri(ChatGpt.USAGE_URL) })
+                ManageUsageRow(onClick = { openWebPage(ChatGpt.USAGE_URL) })
             }
             // Signed in, which of the account's models to ask.
             val model = state.chatGpt.model?.takeIf { slug -> state.chatGpt.email != null && state.chatGpt.models.any { it.slug == slug } }
@@ -310,7 +309,7 @@ private fun SettingsList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { uriHandler.openUri(privacyUrl) }
+                    .clickable { openWebPage(privacyUrl) }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -325,7 +324,7 @@ private fun SettingsList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { uriHandler.openUri(githubUrl) }
+                    .clickable { openWebPage(githubUrl) }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

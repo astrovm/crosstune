@@ -2128,6 +2128,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun aWebPageWithNoBrowserToOpenItSaysSoRatherThanCrashing() {
+        launch()
+        click(string(R.string.settings_button))
+        shadowOf(app).checkActivities(true)
+        composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(string(R.string.error_no_app_to_open), ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test
     fun madeByLinkOpensRepository() {
         launch()
         click(string(R.string.settings_button))

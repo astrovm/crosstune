@@ -83,7 +83,6 @@ import androidx.compose.foundation.clickable
 import android.app.Activity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.animation.animateContentSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -1496,13 +1495,13 @@ private fun Questions(questions: List<LineQuestion>, @StringRes hint: Int, key: 
 /** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */
 @Composable
 private fun ExplanationCard(explanation: LineExplanation, labels: List<Int> = LINE_PARTS) {
-    val uriHandler = LocalUriHandler.current
+    val openWebPage = rememberWebOpener()
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             when {
                 explanation.limitReached -> {
                     Text(stringResource(R.string.chatgpt_limit_reached), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { uriHandler.openUri(ChatGpt.USAGE_URL) }, modifier = Modifier.align(Alignment.End)) {
+                    TextButton(onClick = { openWebPage(ChatGpt.USAGE_URL) }, modifier = Modifier.align(Alignment.End)) {
                         Text(stringResource(R.string.chatgpt_manage_usage))
                     }
                 }
