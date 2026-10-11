@@ -632,6 +632,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
+        val song = MusicMetadata("桜", "Band")
+        fun finds(name: String, channel: String = "Band - Topic"): String? {
+            namesAndTabs(videos = listOf(youTubeMusicRow(name, "$channel • 1K views • 4:00", videoId = "video000000")))
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        assertNull(finds("桜の雨"))
+        assertNull(finds("Band - 桜の雨", "Fan"))
+        // The song's name with the artist's, and tags in either script, is still it.
+        assertEquals("https://music.youtube.com/watch?v=video000000", finds("桜"))
+        assertEquals("https://music.youtube.com/watch?v=video000000", finds("Band「桜」歌詞付き", "Fan"))
+        assertEquals("https://music.youtube.com/watch?v=video000000", finds("Band - 桜【公式】 Official Video", "Fan"))
+        // Named both ways, the other way is its name too, but only beside a name it has.
+        val plastic = MusicMetadata("Plastic Love", "Mariya Takeuchi")
+        namesAndTabs(videos = listOf(youTubeMusicRow("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi • 79M views • 5:09", videoId = "plastic0000")))
+        assertEquals("https://music.youtube.com/watch?v=plastic0000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, plastic) })
+        namesAndTabs(videos = listOf(youTubeMusicRow("プラスティック・ラブ Plastic Love", "Mariya Takeuchi • 79M views • 5:09", videoId = "plastic0000")))
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, plastic) })
+    }
+
+    @Test
     fun wordsForAnotherVersionAreFoundInEveryScript() {
         val song = MusicMetadata("Spring Day", "BTS")
         fun finds(name: String): String? {
@@ -649,7 +670,7 @@ class ExactMatcherTest {
     @Test
     fun oddResultsAreSkippedAndASongNotOnAppleIsAskedOnceFromTheUs() {
         val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
-        // A song result without its video, or a video of one letter of the name, plays nothing of it.
+        // A song result without its video plays nothing of it, nor does a video of a longer name with the same letter.
         namesAndTabs(songs = listOf(youTubeMusicRow("Owaranai Uta", "THE BLUE HEARTS • Album • 3:04", browseId = "MPREb_x")))
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(youTubeMusicRow("YOASOBI - 夜に駆ける", "Fan • 1K views • 4:21", videoId = "yoru0000000")))

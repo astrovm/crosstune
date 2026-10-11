@@ -700,8 +700,17 @@ internal class ExactMatcher(
         if (names.titles.none { titleIn(it, row.name) }) return false
         if (names.titles.all { hasVersionWords(row.name, it) }) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val rest = SongNames.words(row.name.replace(BRACKETED, " ")) - said.toSet() - VIDEO_TAGS
+        val outside = row.name.replace(BRACKETED, " ")
+        val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
+        // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
+        // both ways, "プラスティック・ラブ - Plastic Love", the other way is the song's name too.
+        val known = names.titles.map { SongNames.normalize(SongNames.withoutEditionTag(it)) }
+        val bothWays = SongNames.titleNames(outside.trim()).drop(1).takeIf { halves -> halves.any { SongNames.normalize(it) in known } }.orEmpty()
+        val written = (known + bothWays.map(SongNames::normalize) +
+            names.artists.flatMap(SongNames::artistNames).map { SongNames.normalize(SongNames.withoutArticle(it)) } + VIDEO_TAG_MARKS)
+            .filter { it.isNotEmpty() }.sortedByDescending { it.length }
+        if (written.fold(SongNames.normalize(outside)) { left, name -> left.replace(name, "") }.any { it.code > 0x7f }) return false
         // A channel is the artist's own by its whole name, maybe with what YouTube adds to one:
         // "Band - Topic", "BandVEVO".
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
@@ -711,14 +720,15 @@ internal class ExactMatcher(
 
     /**
      * [title] is in [name]: all its words, or, written in another script, the whole of it. A title
-     * that's only a tag, or one letter, says too little to go on.
+     * that's only a tag, or one Latin letter, says too little to go on; "桜" says enough, as what
+     * else a video's title says in that script is looked at too.
      */
     private fun titleIn(title: String, name: String): Boolean {
         val bare = SongNames.withoutEditionTag(title)
         val words = SongNames.words(bare)
         val letters = SongNames.normalize(bare)
         return when {
-            letters.length < 2 -> false
+            letters.isEmpty() -> false
             letters.any { it.code > 0x7f } -> letters in SongNames.normalize(name)
             else -> words.isNotEmpty() && SongNames.words(name).containsAll(words)
         }
@@ -822,6 +832,9 @@ internal class ExactMatcher(
             "remaster", "sub", "subs", "subtitles", "subtitulado", "subtitulada", "legendado", "letra", "traduccion",
             "traducida", "translation", "espanol", "english", "eng", "romaji", "kanji"
         )
+
+        /** The same, as other scripts write them: "歌詞付き", "公式". */
+        private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = Regex("""(?:19|20)\d\d""")
