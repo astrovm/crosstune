@@ -19,16 +19,22 @@ internal object SyncedLyrics {
 
     private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
 
+    /** "[offset:+500]": how many milliseconds sooner every line comes, or later when it's less than none. */
+    private val offsetTag = Regex("""^\[offset:\s*([+-]?\d+)\s*]""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+
     /**
-     * The timed lines in [lrc], in the order they're sung. A line sung more than once carries a stamp
-     * for each time; tags such as "[ar: Artist]" and lines with no stamp aren't words, and are left out.
+     * The timed lines in [lrc], in the order they're sung, moved as its offset tag says. A line sung
+     * more than once carries a stamp for each time; tags such as "[ar: Artist]" and lines with no
+     * stamp aren't words, and are left out.
      */
-    fun parse(lrc: String): List<LyricLine> =
-        lrc.lineSequence().flatMap { raw ->
+    fun parse(lrc: String): List<LyricLine> {
+        val offset = offsetTag.find(lrc)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        return lrc.lineSequence().flatMap { raw ->
             val stamps = generateSequence(stamp.matchAt(raw, 0)) { stamp.matchAt(raw, it.range.last + 1) }.toList()
             val text = raw.substring(stamps.lastOrNull()?.range?.last?.plus(1) ?: return@flatMap emptySequence()).trim()
-            stamps.asSequence().map { LyricLine(it.toMillis(), text) }
+            stamps.asSequence().map { LyricLine((it.toMillis() - offset).coerceAtLeast(0), text) }
         }.sortedBy { it.timeMs }.toList()
+    }
 
     /**
      * [lines] without the blank ones that only end a line, which most timed words have after each:

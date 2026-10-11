@@ -31,6 +31,19 @@ class SyncedLyricsTest {
     }
 
     @Test
+    fun anOffsetTagMovesEveryLine() {
+        // Sooner by half a second, never before the start.
+        assertEquals(
+            listOf(LyricLine(0, "First"), LyricLine(9_500, "Second")),
+            SyncedLyrics.parse("[ar: Band]\n[offset:+500]\n[00:00.20] First\n[00:10.00] Second")
+        )
+        // Later, written however.
+        assertEquals(listOf(LyricLine(10_250, "Line")), SyncedLyrics.parse("[OFFSET: -250]\n[00:10.00] Line"))
+        // A broken one changes nothing.
+        assertEquals(listOf(LyricLine(10_000, "Line")), SyncedLyrics.parse("[offset:soon]\n[00:10.00] Line"))
+    }
+
+    @Test
     fun aBlankLineStaysOnlyWhereNothingIsSungForAWhile() {
         val lines = listOf(
             LyricLine(0, ""),
