@@ -49,6 +49,8 @@ internal interface FloatingHost {
     fun toggleListening()
     /** How the words look and where they are, kept when [save]d, e.g. once a drag is done. */
     fun update(options: FloatingOptions, save: Boolean = true)
+    /** The words were closed, with Crosstune still out of sight, so nothing listens along any more. */
+    fun closed()
 }
 
 /**
@@ -101,6 +103,12 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** Closed from its notification or its own button, rather than by Crosstune coming back in sight. */
+    private fun close() {
+        host?.closed()
+        stopSelf()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val host = host
         when (intent?.action) {
@@ -111,7 +119,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 if (host == null) stopSelf() else if (view == null) show(host)
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
-            else -> stopSelf()
+            else -> close()
         }
         return START_NOT_STICKY
     }
@@ -165,7 +173,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,
                             onLock = { host.update(host.state.floating.copy(locked = true)) },
-                            onClose = ::stopSelf,
+                            onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
                             onSlidersAt = { sliders = it }

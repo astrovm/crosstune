@@ -1201,6 +1201,24 @@ class ListeningTest {
     }
 
     @Test
+    fun closingTheFloatingWordsStopsListeningAlongTillCrosstuneIsBack() {
+        val hearing = FakeHearing()
+        val floating = floatOverApps(hearing)
+        // Floating, they listen along, out of sight.
+        hearing.song("Demo", 3.0)
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        floating.command(FloatingLyricsService.ACTION_CLOSE)
+        composeRule.waitForIdle()
+        hearing.song("Demo", 4.0)
+        Thread.sleep(200)
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        // Back in sight, they listen along again.
+        controller!!.restart()
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens > 3 }
+    }
+
+    @Test
     fun withoutAnythingToFloatOutOfOrAllowedTheWindowStopsAtOnce() {
         FloatingLyricsService.host = null
         val alone = Robolectric.buildService(FloatingLyricsService::class.java).create().startCommand(0, 1)
