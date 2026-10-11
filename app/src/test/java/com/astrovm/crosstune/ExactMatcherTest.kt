@@ -419,7 +419,7 @@ class ExactMatcherTest {
     /** YouTube Music answers its songs tab with [songs] and its videos tab with [videos]. */
     private fun youTubeMusicTabs(songs: List<String>, videos: List<String>) {
         fake.handler = { request ->
-            val asked = fake.requestBodies.last()
+            val asked = FakeSpotify.bodyOf(request)
             FakeSpotify.html(request, youTubeMusicPage(*(if (asked.contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
         }
     }
@@ -443,7 +443,7 @@ class ExactMatcherTest {
                 request.url.host == "itunes.apple.com" -> elsewhere[store]?.let { FakeSpotify.html(request, """{"results":[$it]}""") }
                     ?: throw IOException("no such store")
                 request.url.host == "api.deezer.com" -> FakeSpotify.html(request, """{"data":$deezer}""")
-                else -> FakeSpotify.html(request, youTubeMusicPage(*(if (fake.requestBodies.last().contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
+                else -> FakeSpotify.html(request, youTubeMusicPage(*(if (FakeSpotify.bodyOf(request).contains(VIDEOS_TAB)) videos else songs).toTypedArray()))
             }
         }
     }

@@ -3728,7 +3728,7 @@ class MainActivityTest {
         prefs().edit().putBoolean("exact_match", true).commit()
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") {
-                val title = if (fake.requestBodies.last().contains("Second")) "Second" else "First"
+                val title = if (FakeSpotify.bodyOf(request).contains("Second")) "Second" else "First"
                 val videoId = if (title == "Second") "second00000" else "first000000"
                 FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                     "flexColumns":[

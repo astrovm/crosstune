@@ -38,7 +38,7 @@ class FakeSpotify : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         requestedUrls += request.url.toString()
-        requestBodies += request.body?.let { body -> Buffer().also(body::writeTo).readUtf8() }.orEmpty()
+        requestBodies += bodyOf(request)
         request.headers.forEach { (name, value) -> requestHeaders += name to value }
         if (delayMillis > 0) Thread.sleep(delayMillis)
         return handler(request)
@@ -48,6 +48,12 @@ class FakeSpotify : Interceptor {
 
     companion object {
         private val HTML = "text/html; charset=utf-8".toMediaType()
+
+        /**
+         * What [request] sent, empty for a GET. A handler reads this rather than the last of [requestBodies],
+         * which may be another request's when lookups run at the same time.
+         */
+        fun bodyOf(request: Request): String = request.body?.let { body -> Buffer().also(body::writeTo).readUtf8() }.orEmpty()
 
         fun html(request: Request, body: String, finalUrl: String? = null, code: Int = 200): Response {
             val servedRequest = finalUrl?.let { request.newBuilder().url(it).build() } ?: request
