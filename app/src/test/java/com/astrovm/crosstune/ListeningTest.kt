@@ -4,6 +4,8 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 
@@ -220,6 +222,31 @@ class ListeningTest {
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
         assertFalse(shown(string(R.string.playing_now)))
         assertEquals(0, microphone.opened)
+    }
+
+    @Test
+    fun theSongPlayingIsOfferedOnlyWhileNothingElseIsOnScreen() {
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        shazamAnswers(NO_MATCH)
+        allowMicrophone()
+        launch()
+        waitForText(string(R.string.playing_now))
+        // Typing a song in, it gives way.
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Other Song")
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextClearance()
+        waitForText(string(R.string.playing_now))
+        // Stopped meanwhile, Crosstune listens itself, and what it heard is shown alone.
+        phone.onThePhone = null
+        recognize()
+        waitForText(string(R.string.listening_text))
+        assertFalse(shown(string(R.string.playing_now)))
+        microphone.play(1.0)
+        microphone.end()
+        waitForText(string(R.string.error_no_match))
+        assertFalse(shown(string(R.string.playing_now)))
     }
 
     @Test

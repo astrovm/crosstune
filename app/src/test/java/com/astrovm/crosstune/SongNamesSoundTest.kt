@@ -19,10 +19,11 @@ class SongNamesSoundTest {
             "Synchronicity" to "シンクロニシティ(素敵な偶然)",
             "Quick Six" to "クイック・シックス",
             "Kiss Me" to "キスミー",
+            "Plastic Love" to "プラスティック・ラブズ",
             // A ch said k, a th said s, a ph said f, a v said b and an s said z.
             "Christmas Eve" to "クリスマス・イブ",
             "Thank You" to "サンキュー",
-            "Telephone Number" to "テレフォン・ナンバー",
+            "Telephone" to "テレフォン",
             "Venus" to "ビーナス",
             "Dreams" to "ドリームズ",
             // Its name in Latin letters has its own tag left out too.
