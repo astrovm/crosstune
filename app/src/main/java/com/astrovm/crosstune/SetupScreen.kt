@@ -369,7 +369,7 @@ private fun DestinationStep(state: UiState, actions: ScreenActions) {
         val only = (state.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)
         if (only != null && only in state.destinations) actions.onTargetChange(only)
     }
-    StepHeader(R.string.setup_destination_title, R.string.setup_destination_body)
+    StepHeader(R.string.setup_destination_title, null)
     Group {
         state.destinations.installedFirst(state.installed) { (it as? Destination.Service)?.service }
             .forEachIndexed { index, destination ->
@@ -469,11 +469,11 @@ private fun FollowSetupStep(state: UiState, actions: ScreenActions) {
 }
 
 /**
- * A real screenshot of the Android screen to use, with what to tap circled, and a line under it:
- * by default that phones vary, or what to do when that's shorter said there.
+ * A real screenshot of the Android screen to use, with what to tap circled, and a line under it
+ * when what to do is shorter said there.
  */
 @Composable
-internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier, caption: String? = stringResource(R.string.guide_may_differ)) {
+internal fun GuideShot(@DrawableRes image: Int, modifier: Modifier = Modifier, caption: String? = null) {
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         // The steps around it say the same in words, for TalkBack.
         Image(

@@ -1300,11 +1300,7 @@ private fun FollowStep(number: Int?, text: String, button: String, onClick: () -
         Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
-            // Phones vary, which is said once, under the first step's screenshots.
-            images.forEachIndexed { index, image ->
-                val first = number == null || number == 1
-                GuideShot(image, Modifier.padding(top = 12.dp), caption = if (first && index == images.lastIndex) stringResource(R.string.guide_may_differ) else null)
-            }
+            images.forEach { image -> GuideShot(image, Modifier.padding(top = 12.dp)) }
         }
     }
 }

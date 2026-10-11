@@ -3,6 +3,7 @@
     <string name="spotify_link_label">음악 링크</string>
     <string name="spotify_link_placeholder">음악 링크 또는 노래 제목을 붙여넣으세요</string>
     <string name="resolve_button">링크 변환</string>
+    <string name="search_button">검색</string>
     <string name="paste_button">붙여넣기</string>
     <string name="recognize_button">노래 인식</string>
     <string name="setting_recognizer">노래 인식 앱</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">링크를 열 앱</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
-    <string name="settings_links_description">여기 서비스의 링크를 탭하면 Crosstune에서 열려요. 공유와 붙여넣기는 항상 돼요.</string>
     <string name="rule_opens_in">%1$s에서 열기</string>
     <string name="rule_default">기본값(%1$s)</string>
     <string name="settings_custom_title">다른 앱 및 사이트</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">%1$s에서 듣고 있으니 그 링크는 이미 그곳에서 열립니다.</string>
     <string name="settings_listening_locked">%1$s에서 듣고 있으니 그 링크는 이미 그곳에서 열립니다. 켜려면 아래에서 다른 앱을 고르세요.</string>
     <string name="setup_destination_title">어디서 음악을 들으세요?</string>
-    <string name="setup_destination_body">나중에 변경할 수 있어요.</string>
     <string name="setup_allow_title">링크 허용</string>
-    <string name="setup_allow_none">선택한 서비스가 없어서 허용할 항목이 없어요. 링크를 Crosstune에 공유하거나 붙여넣는 것은 그대로 가능해요.</string>
+    <string name="setup_allow_none">선택한 서비스가 없어요. 링크 공유나 붙여넣기는 가능해요.</string>
     <string name="setup_allow_step_add">링크 추가를 탭하세요.</string>
     <string name="setup_allow_step_in_app">\'앱에서\'를 선택하세요.</string>
     <string name="setup_allow_step_tick">모든 링크를 선택한 다음 추가를 탭하세요.</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">노래 먼저 보기</string>
     <string name="show_song_short">노래 보기</string>
     <string name="setting_exact_match">정확한 항목 열기</string>
-    <string name="setting_exact_match_description">앱이 지원하면 해당 곡을 바로 열고, 아니면 검색해요.</string>
+    <string name="setting_exact_match_description">아니면 검색해요.</string>
     <string name="setting_not_found">곡을 찾지 못했을 때</string>
     <string name="not_found_ask">물어보기</string>
     <string name="not_found_original">원래 앱에서 열기</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">%1$s에 없음</string>
     <string name="search_anyway">그래도 %1$s에서 검색</string>
     <string name="setting_clean_links">링크에서 추적 정보 제거</string>
-    <string name="setting_clean_links_description">열거나 복사하거나 공유하는 링크에서 ?si=, utm_ 같은 추적 정보를 지워요.</string>
+    <string name="setting_clean_links_description">\?si=, utm_ 같은 부분을 지워요.</string>
     <string name="setting_share_sheet_apps">공유 메뉴의 앱</string>
     <string name="setting_share_sheet_apps_description">공유할 때 음악 앱을 표시해요.</string>
     <string name="setting_language">언어</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">열기 앱 선택</string>
     <string name="cancel_button">취소</string>
     <string name="retry_button">다시 시도</string>
+    <string name="more_button">더보기</string>
     <string name="history_title">최근</string>
     <string name="search_recent">최근 항목 검색</string>
     <string name="close_recent_search">검색 닫기</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">astro가 %1$s을 담아 만들었어요</string>
 
     <string name="error_invalid_url">곡, 앨범, 아티스트, 재생목록 링크가 아니에요.</string>
-    <string name="error_network">연결할 수 없어요. 인터넷 연결을 확인하고 다시 시도하세요.</string>
-    <string name="error_not_found">서비스에서 찾을 수 없어요. 비공개이거나 삭제되었을 수 있어요.</string>
-    <string name="error_rate_limited">서비스가 혼잡해요. 잠시 후 다시 시도하세요.</string>
+    <string name="error_network">연결할 수 없어요.</string>
+    <string name="error_not_found">찾을 수 없어요. 비공개이거나 삭제됐을 수 있어요.</string>
+    <string name="error_rate_limited">서비스가 혼잡해요.</string>
     <string name="error_service_unavailable">서비스가 응답하지 않아요. 잠시 후 다시 시도하세요.</string>
     <string name="error_no_app_to_open">이 링크를 열 수 있는 설치된 앱이 없어요.</string>
     <string name="error_metadata_unavailable">이 링크의 정보를 읽을 수 없어요.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">탭한 링크가 Crosstune이 아닌 브라우저에서 열려요</string>
     <string name="allow_button">허용</string>
     <string name="notice_app_still_opens">%1$s 앱이 아직 자체 링크를 열어요</string>
+    <string name="notice_apps_still_open">%1$s 앱이 아직 자체 링크를 열어요</string>
     <string name="fix_button">해결</string>
     <string name="history_cleared">기록을 지웠어요</string>
     <string name="history_removed">삭제했어요</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">음악</string>
     <string name="setup_sources_videos">동영상</string>
     <string name="setting_only_music_videos_note">음악 동영상만 앱으로 보내요. 다른 동영상은 평소처럼 열려요.</string>
-    <string name="guide_may_differ">휴대전화에 따라 조금 다르게 보일 수 있어요.</string>
     <string name="setup_apps_stop_body">\'브라우저에서\'를 선택하거나 \'지원되는 링크 열기\'를 끄세요.</string>
     <string name="setup_apps_progress">앱 %1$d/%2$d</string>
     <string name="setup_apps_all_done">완료했어요. 이제 다른 앱이 링크를 열지 않아요.</string>
@@ -190,13 +190,12 @@
     <string name="choose_app_button">앱 선택</string>
     <string name="make_default_named">%1$s을(를) 기본으로 설정</string>
     <string name="listening_text">듣는 중…</string>
-    <string name="error_no_match">노래를 인식하지 못했어요. 음악에 더 가까이 가서 다시 시도하세요.</string>
+    <string name="error_no_match">노래를 인식하지 못했어요.</string>
     <string name="error_microphone">노래를 인식하려면 Crosstune에 마이크 권한이 필요해요.</string>
     <string name="error_recognition_unavailable">지금은 노래 인식을 사용할 수 없어요.</string>
     <string name="open_settings_button">설정 열기</string>
     <string name="open_app_button">%1$s 열기</string>
     <string name="lyrics_button">가사</string>
-    <string name="lyrics_title">가사</string>
     <string name="lyrics_loading">가사를 찾는 중…</string>
     <string name="lyrics_none">이 노래의 가사를 찾지 못했습니다.</string>
     <string name="lyrics_sync_service">Crosstune 가사 동기화</string>
@@ -230,7 +229,6 @@
     <string name="palette_sunset">선셋</string>
     <string name="palette_rose">로즈</string>
     <string name="setting_pure_black">완전한 검정</string>
-    <string name="setting_pure_black_description">다크 모드에서 진짜 검정을 씁니다. OLED 화면과 배터리에 더 좋습니다.</string>
     <string name="follow_help_title">가사가 음악을 따라가게 하기</string>
     <string name="follow_help_try">스위치를 탭한 다음 닫기를 탭하세요.</string>
     <string name="follow_help_restricted">⋮을 탭한 다음 제한된 설정 허용을 탭하세요.</string>
@@ -239,12 +237,11 @@
     <string name="follow_turn_on">켜기</string>
     <string name="follow_help_simple">켜고 허용을 탭하세요.</string>
     <string name="setting_lyrics_follow">가사가 음악 앱을 따라감</string>
-    <string name="setting_lyrics_follow_description">알림 접근이 필요합니다. 알림 내용은 절대 읽지 않습니다.</string>
+    <string name="setting_lyrics_follow_description">알림 접근이 필요합니다.</string>
     <string name="follow_help_app_info">앱 정보</string>
     <string name="follow_help_access_button">알림 접근</string>
     <string name="song_search_title">노래</string>
     <string name="song_search_none">“%1$s”에 해당하는 노래가 없어요.</string>
-    <string name="song_search_label_for">“%1$s” 검색 결과</string>
     <string name="floating_background">배경</string>
     <string name="floating_text_size">글자 크기</string>
     <string name="floating_float">다른 앱 위에 띄우기</string>

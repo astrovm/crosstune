@@ -3,6 +3,7 @@
     <string name="spotify_link_label">Link musik</string>
     <string name="spotify_link_placeholder">Tempel tautan musik atau nama lagu</string>
     <string name="resolve_button">Konversi link</string>
+    <string name="search_button">Cari</string>
     <string name="paste_button">Tempel</string>
     <string name="recognize_button">Kenali lagu</string>
     <string name="setting_recognizer">Aplikasi pengenal lagu</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">Buka link di</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
-    <string name="settings_links_description">Tautan dari layanan ini yang kamu ketuk terbuka di Crosstune. Berbagi dan menempel selalu berfungsi.</string>
     <string name="rule_opens_in">Dibuka di %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
     <string name="settings_custom_title">Aplikasi dan situs lain</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana.</string>
     <string name="settings_listening_locked">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana. Pilih aplikasi lain di bawah untuk menyalakannya.</string>
     <string name="setup_destination_title">Kamu dengar musik di mana?</string>
-    <string name="setup_destination_body">Bisa diubah nanti.</string>
     <string name="setup_allow_title">Izinkan link</string>
-    <string name="setup_allow_none">Kamu belum memilih layanan, jadi tidak ada yang perlu diizinkan. Kamu tetap bisa membagikan atau menempel link ke Crosstune.</string>
+    <string name="setup_allow_none">Tidak ada layanan dipilih. Kamu tetap bisa membagikan atau menempel link.</string>
     <string name="setup_allow_step_add">Ketuk Tambahkan link.</string>
     <string name="setup_allow_step_in_app">Pilih “Di aplikasi”.</string>
     <string name="setup_allow_step_tick">Centang semua link, lalu ketuk Tambahkan.</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">Tampilkan lagunya dulu</string>
     <string name="show_song_short">Lihat lagu</string>
     <string name="setting_exact_match">Buka yang persis sama</string>
-    <string name="setting_exact_match_description">Membuka lagunya langsung jika aplikasinya mendukung. Jika tidak, mencarinya.</string>
+    <string name="setting_exact_match_description">Jika tidak, mencarinya.</string>
     <string name="setting_not_found">Saat lagu tidak ditemukan</string>
     <string name="not_found_ask">Tanya saya</string>
     <string name="not_found_original">Buka di tempat asalnya</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">Tidak ada di %1$s</string>
     <string name="search_anyway">Tetap cari di %1$s</string>
     <string name="setting_clean_links">Hapus pelacakan dari link</string>
-    <string name="setting_clean_links_description">Membuang bagian pelacak seperti ?si= atau utm_ dari link yang kamu buka, salin, atau bagikan.</string>
+    <string name="setting_clean_links_description">Membuang ?si=, utm_, dan sejenisnya.</string>
     <string name="setting_share_sheet_apps">Aplikasi di menu bagikan</string>
     <string name="setting_share_sheet_apps_description">Tampilkan aplikasi musik saat berbagi.</string>
     <string name="setting_language">Bahasa</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">Buka dengan</string>
     <string name="cancel_button">Batal</string>
     <string name="retry_button">Coba lagi</string>
+    <string name="more_button">Lainnya</string>
     <string name="history_title">Terbaru</string>
     <string name="search_recent">Cari di Terbaru</string>
     <string name="close_recent_search">Tutup pencarian</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">Dibuat dengan %1$s oleh astro</string>
 
     <string name="error_invalid_url">Itu bukan tautan lagu, album, artis, atau playlist.</string>
-    <string name="error_network">Tidak bisa terhubung. Periksa koneksi internet dan coba lagi.</string>
-    <string name="error_not_found">Layanan tidak menemukannya. Mungkin bersifat pribadi atau sudah dihapus.</string>
-    <string name="error_rate_limited">Layanan sedang sibuk. Tunggu sebentar lalu coba lagi.</string>
+    <string name="error_network">Tidak bisa terhubung.</string>
+    <string name="error_not_found">Tidak ditemukan. Mungkin pribadi atau dihapus.</string>
+    <string name="error_rate_limited">Layanan sedang sibuk.</string>
     <string name="error_service_unavailable">Layanan tidak merespons. Coba lagi sebentar lagi.</string>
     <string name="error_no_app_to_open">Tidak ada aplikasi terinstal yang bisa membuka link ini.</string>
     <string name="error_metadata_unavailable">Tidak bisa membaca detail link ini.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">Link yang diketuk terbuka di browser, bukan di Crosstune</string>
     <string name="allow_button">Izinkan</string>
     <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
+    <string name="notice_apps_still_open">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
     <string name="history_cleared">Riwayat dihapus</string>
     <string name="history_removed">Dihapus</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">Musik</string>
     <string name="setup_sources_videos">Video</string>
     <string name="setting_only_music_videos_note">Hanya video musik yang masuk ke aplikasimu. Video lain terbuka seperti biasa.</string>
-    <string name="guide_may_differ">Tampilan di ponselmu mungkin sedikit berbeda.</string>
     <string name="setup_apps_stop_body">Pilih “Di browser” atau nonaktifkan “Buka link yang didukung”.</string>
     <string name="setup_apps_progress">Aplikasi %1$d dari %2$d</string>
     <string name="setup_apps_all_done">Beres. Sekarang tidak ada aplikasi lain yang membuka link itu.</string>
@@ -190,13 +190,12 @@
     <string name="choose_app_button">Pilih aplikasi</string>
     <string name="make_default_named">Jadikan %1$s default</string>
     <string name="listening_text">Mendengarkan…</string>
-    <string name="error_no_match">Lagu tidak dikenali. Coba lagi lebih dekat ke musiknya.</string>
+    <string name="error_no_match">Lagu tidak dikenali.</string>
     <string name="error_microphone">Crosstune memerlukan mikrofon untuk mengenali lagu.</string>
     <string name="error_recognition_unavailable">Pengenalan lagu tidak tersedia saat ini.</string>
     <string name="open_settings_button">Buka setelan</string>
     <string name="open_app_button">Buka %1$s</string>
     <string name="lyrics_button">Lirik</string>
-    <string name="lyrics_title">Lirik</string>
     <string name="lyrics_loading">Mencari lirik…</string>
     <string name="lyrics_none">Lirik lagu ini tidak ditemukan.</string>
     <string name="lyrics_sync_service">Sinkronisasi lirik Crosstune</string>
@@ -230,7 +229,6 @@
     <string name="palette_sunset">Senja</string>
     <string name="palette_rose">Mawar</string>
     <string name="setting_pure_black">Hitam pekat</string>
-    <string name="setting_pure_black_description">Hitam sungguhan di mode gelap. Lebih hemat untuk layar OLED dan baterainya.</string>
     <string name="follow_help_title">Biarkan lirik mengikuti musikmu</string>
     <string name="follow_help_try">Ketuk tombolnya, lalu Tutup.</string>
     <string name="follow_help_restricted">Ketuk ⋮, lalu Izinkan setelan terbatas.</string>
@@ -239,12 +237,11 @@
     <string name="follow_turn_on">Aktifkan</string>
     <string name="follow_help_simple">Aktifkan dan ketuk Izinkan.</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>
-    <string name="setting_lyrics_follow_description">Perlu akses notifikasi. Notifikasimu tidak pernah dibaca.</string>
+    <string name="setting_lyrics_follow_description">Perlu akses notifikasi.</string>
     <string name="follow_help_app_info">Info aplikasi</string>
     <string name="follow_help_access_button">Akses notifikasi</string>
     <string name="song_search_title">Lagu</string>
     <string name="song_search_none">Tidak ada lagu untuk “%1$s”.</string>
-    <string name="song_search_label_for">Ditemukan untuk “%1$s”</string>
     <string name="floating_background">Latar</string>
     <string name="floating_text_size">Ukuran teks</string>
     <string name="floating_float">Mengambang di atas aplikasi lain</string>

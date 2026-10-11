@@ -242,6 +242,12 @@ class MainActivityTest {
         assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(resultActionText(text)) > 0)
     }
 
+    /** An icon that says [description] to screen readers, in place of words on screen. */
+    private fun assertMarked(description: String) {
+        assertTrue("'$description' not marked", composeRule.onAllNodes(hasContentDescription(description), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("'$description' written out", composeRule.onAllNodesWithTextCount(description) == 0)
+    }
+
     /** Neither shown nor read out: a button with a short label says its whole name to screen readers. */
     private fun assertTextAbsent(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).assertDoesNotExist()
@@ -775,7 +781,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         click(string(R.string.settings_button))
-        assertTextShown(string(R.string.settings_where_you_listen))
+        assertMarked(string(R.string.settings_where_you_listen))
     }
 
     private fun collectionWithSongs(title: String = "Road Trip", type: String = "playlist") {
@@ -1711,7 +1717,9 @@ class MainActivityTest {
         // on screen is now the songs that name turned up rather than a result to open.
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
         typeUrl("just some words")
-        click(string(R.string.resolve_button))
+        // Searched for, so the button says so rather than offering to convert a link.
+        composeRule.onNodeWithText(string(R.string.resolve_button)).assertDoesNotExist()
+        click(string(R.string.search_button))
 
         assertResultAbsent()
         assertTextShown(string(R.string.song_search_title))
@@ -1889,6 +1897,8 @@ class MainActivityTest {
         )
         for (input in invalid) {
             typeUrl(input)
+            // Each is a link, even one Crosstune can't open, so it's not searched for as a name.
+            composeRule.onNodeWithText(string(R.string.search_button)).assertDoesNotExist()
             click(string(R.string.resolve_button))
             assertTextShown(string(R.string.error_invalid_url))
             click(string(R.string.clear_button))
@@ -1910,14 +1920,14 @@ class MainActivityTest {
     }
 
     @Test
-    fun aPastedNowPlayingShareKeepsTheSongTextSoConvertWorksAgain() {
+    fun aPastedNowPlayingShareShowsTheSongWithoutRepeatingItInTheBox() {
         launch()
         app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("song", NOW_PLAYING_SHARE))
         click(string(R.string.paste_button))
         waitForText("A Song")
-        // Just its name, no search link cut off after it.
-        composeRule.onNode(hasSetTextAction()).assert(hasText("A Song by Example Band", substring = false)).performImeAction()
-        waitForText("A Song")
+        // The song shows right under the box, so the box doesn't say it again.
+        val box = composeRule.onNode(hasSetTextAction()).fetchSemanticsNode()
+        assertEquals("", box.config[SemanticsProperties.EditableText].text)
         assertTextAbsent(string(R.string.error_invalid_url))
         assertOnlyCoverSearches()
     }
@@ -1929,7 +1939,7 @@ class MainActivityTest {
         fake.handler = { throw IOException("offline") }
         launch()
         typeUrl("A Song by Example Band")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         assertResultShown()
         // Read back as the saved song: searched for by name while offline, nothing would show.
         assertTextShown("A Song")
@@ -3294,11 +3304,11 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         typeUrl("Kingo Hamada")
-        click(string(R.string.resolve_button))
+        // A name, not a link, is searched for.
+        click(string(R.string.search_button))
 
-        // The sheet says what the songs were found for, and offers the song with its artist.
+        // The sheet offers the song with its artist.
         waitForText(string(R.string.song_search_title))
-        assertTextShown(string(R.string.song_search_label_for, "Kingo Hamada"))
         composeRule.onNodeWithText("Machi No Dorufin").performScrollTo().performClick()
         waitForResult()
 
@@ -3334,7 +3344,7 @@ class MainActivityTest {
         }
         launch()
         typeUrl("japanese 80s plastic song")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         waitForText("City Pop Night")
         // ChatGPT's real pick comes first, marked; one the catalogue doesn't have is left out.
         waitUntil { composeRule.onAllNodesWithText("Plastic Love").fetchSemanticsNodes().isNotEmpty() }
@@ -3351,7 +3361,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         composeRule.onNode(hasSetTextAction()).performTextClearance()
         typeUrl("Plastic Love")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         waitForText(string(R.string.song_search_title))
         assertEquals(asked, openAi.asked.size)
     }
@@ -3371,7 +3381,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         typeUrl("Kingo Hamada")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         waitForText(string(R.string.song_search_title))
         composeRule.onNodeWithText("Machi No Dorufin").performScrollTo().performClick()
         waitForResult()
@@ -3385,7 +3395,7 @@ class MainActivityTest {
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
         launch()
         typeUrl("zzzznotarealsong")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
 
         waitForText(string(R.string.song_search_none, "zzzznotarealsong"))
         assertResultAbsent()
@@ -4288,7 +4298,7 @@ class MainActivityTest {
 
         assertTextShown(string(R.string.notice_links_not_allowed))
         click(string(R.string.settings_button))
-        assertTextShown(string(R.string.setup_not_allowed))
+        assertMarked(string(R.string.setup_not_allowed))
         states = Frontend.INVIDIOUS.sites.associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
@@ -4622,6 +4632,48 @@ class MainActivityTest {
     }
 
     @Test
+    fun aClosedNoticeStaysClosedUntilSomethingElseKeepsLinks() {
+        val hosts = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY) + LinkInterception.HOSTS.getValue(MusicService.TIDAL)
+        // Crosstune isn't allowed any links; the apps keep all of theirs.
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            if (packageName == app.packageName) emptyMap() else hosts.associateWith { DomainVerificationUserState.DOMAIN_STATE_VERIFIED }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+        val spotify = string(R.string.notice_app_still_opens, "Spotify")
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        assertTextShown(spotify)
+        repeat(2) {
+            composeRule.onAllNodesWithContentDescription(string(R.string.dismiss_button)).onFirst().performClick()
+            composeRule.waitForIdle()
+        }
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        assertTextAbsent(spotify)
+        // Settings still says what's left to fix, with nothing to close.
+        click(string(R.string.settings_button))
+        assertTextShown(spotify)
+        assertTextAbsent(string(R.string.dismiss_button))
+        click(string(R.string.back_button))
+
+        // Closed for good, not just until the app opens again.
+        controller!!.pause().stop().destroy()
+        launch()
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        assertTextAbsent(spotify)
+
+        // Another app in the way is news, so both come back, the apps in one line.
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.TIDAL.packageName, "TIDAL"))
+        LinkInterception(app).setEnabled(MusicService.TIDAL, true)
+        controller!!.pause().stop().destroy()
+        launch()
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        assertTextShown(string(R.string.notice_apps_still_open, "Spotify, TIDAL"))
+        assertTextAbsent(spotify)
+    }
+
+    @Test
     fun crosstuneSetToOpenLinksInTheBrowserIsFlaggedEverywhereWithHowToFixIt() {
         var ownLinksOn = false
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it != app.packageName || ownLinksOn }) {
@@ -4673,7 +4725,7 @@ class MainActivityTest {
         // Settings marks the service itself rather than repeating the notice.
         click(string(R.string.settings_button))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
-        assertTextShown(string(R.string.setup_not_allowed))
+        assertMarked(string(R.string.setup_not_allowed))
         openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
         click(string(R.string.open_link_settings_button))
@@ -5395,6 +5447,11 @@ class MainActivityTest {
         waitForText(string(R.string.picker_title))
         assertTextShown("Picker summary")
         composeRule.onNodeWithTag("destination-icon:YOUTUBE", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("destination-icon:" + custom.key, useUnmergedTree = true).assertExists()
+        // Apps that aren't on the phone wait behind More.
+        composeRule.onNodeWithTag("destination-icon:APPLE_MUSIC", useUnmergedTree = true).assertDoesNotExist()
+        click(string(R.string.more_button))
+        assertTextAbsent(string(R.string.more_button))
         // Each service's icon is in the picker; the screen behind may show some too.
         MusicService.entries.forEach { service ->
             assertTrue(service.name, composeRule.onAllNodesWithTag("destination-icon:" + service.name, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())

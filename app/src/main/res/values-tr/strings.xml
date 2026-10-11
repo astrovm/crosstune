@@ -3,6 +3,7 @@
     <string name="spotify_link_label">Müzik bağlantısı</string>
     <string name="spotify_link_placeholder">Bir müzik bağlantısı veya şarkı adı yapıştırın</string>
     <string name="resolve_button">Bağlantıyı dönüştür</string>
+    <string name="search_button">Ara</string>
     <string name="paste_button">Yapıştır</string>
     <string name="recognize_button">Şarkıyı tanı</string>
     <string name="setting_recognizer">Şarkı tanıma uygulaması</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">Bağlantıları şurada aç</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
-    <string name="settings_links_description">Bunlardan dokunduğun bağlantılar Crosstune\'da açılır. Paylaşma ve yapıştırma her zaman çalışır.</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
     <string name="rule_default">Varsayılan (%1$s)</string>
     <string name="settings_custom_title">Diğer uygulamalar ve siteler</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor.</string>
     <string name="settings_listening_locked">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor. Açmak için aşağıdan başka bir uygulama seç.</string>
     <string name="setup_destination_title">Nerede dinliyorsunuz?</string>
-    <string name="setup_destination_body">Daha sonra değiştirebilirsiniz.</string>
     <string name="setup_allow_title">Bağlantılara izin verin</string>
-    <string name="setup_allow_none">Hiçbir servis seçmediniz, bu yüzden izin verilecek bir şey yok. Yine de bağlantıları Crosstune\'a paylaşabilir veya yapıştırabilirsiniz.</string>
+    <string name="setup_allow_none">Servis seçilmedi. Bağlantıları yine de paylaşabilir veya yapıştırabilirsiniz.</string>
     <string name="setup_allow_step_add">“Bağlantı ekle”ye dokunun.</string>
     <string name="setup_allow_step_in_app">“Uygulamada” seçeneğini seç.</string>
     <string name="setup_allow_step_tick">Tüm bağlantıları işaretleyin, sonra “Ekle”ye dokunun.</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">Önce şarkıyı göster</string>
     <string name="show_song_short">Şarkıyı göster</string>
     <string name="setting_exact_match">Tam eşleşmeyi aç</string>
-    <string name="setting_exact_match_description">Uygulama destekliyorsa şarkının kendisini açar. Desteklemiyorsa arar.</string>
+    <string name="setting_exact_match_description">Desteklemiyorsa arar.</string>
     <string name="setting_not_found">Bir şarkı bulunamadığında</string>
     <string name="not_found_ask">Bana sor</string>
     <string name="not_found_original">Geldiği yerde aç</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">%1$s içinde yok</string>
     <string name="search_anyway">Yine de %1$s içinde ara</string>
     <string name="setting_clean_links">Bağlantılardan izlemeyi kaldır</string>
-    <string name="setting_clean_links_description">Açtığınız, kopyaladığınız veya paylaştığınız bağlantılardan ?si= veya utm_ gibi izleme parçalarını kaldırır.</string>
+    <string name="setting_clean_links_description">\?si=, utm_ gibi kısımları kaldırır.</string>
     <string name="setting_share_sheet_apps">Paylaşım menüsünde uygulamalar</string>
     <string name="setting_share_sheet_apps_description">Paylaşım menüsünde müzik uygulamalarını göster.</string>
     <string name="setting_language">Dil</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">Şununla aç</string>
     <string name="cancel_button">İptal</string>
     <string name="retry_button">Tekrar dene</string>
+    <string name="more_button">Daha fazla</string>
     <string name="history_title">Son kullanılanlar</string>
     <string name="search_recent">Son kullanılanlarda ara</string>
     <string name="close_recent_search">Aramayı kapat</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">astro tarafından %1$s ile yapıldı</string>
 
     <string name="error_invalid_url">Bu bir şarkı, albüm, sanatçı veya çalma listesi bağlantısı değil.</string>
-    <string name="error_network">Bağlanılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.</string>
-    <string name="error_not_found">Servis bunu bulamadı. Gizli olabilir veya silinmiş olabilir.</string>
-    <string name="error_rate_limited">Servis yoğun. Biraz bekleyip tekrar deneyin.</string>
+    <string name="error_network">Bağlanılamadı.</string>
+    <string name="error_not_found">Bulunamadı. Gizli ya da silinmiş olabilir.</string>
+    <string name="error_rate_limited">Servis yoğun.</string>
     <string name="error_service_unavailable">Servis yanıt vermiyor. Biraz sonra tekrar deneyin.</string>
     <string name="error_no_app_to_open">Yüklü hiçbir uygulama bu bağlantıyı açamıyor.</string>
     <string name="error_metadata_unavailable">Bu bağlantının ayrıntıları okunamadı.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">Dokunulan bağlantılar Crosstune yerine tarayıcıda açılıyor</string>
     <string name="allow_button">İzin ver</string>
     <string name="notice_app_still_opens">%1$s kendi bağlantılarını hâlâ açıyor</string>
+    <string name="notice_apps_still_open">%1$s kendi bağlantılarını hâlâ açıyor</string>
     <string name="fix_button">Düzelt</string>
     <string name="history_cleared">Geçmiş temizlendi</string>
     <string name="history_removed">Kaldırıldı</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">Müzik</string>
     <string name="setup_sources_videos">Videolar</string>
     <string name="setting_only_music_videos_note">Yalnızca müzik videoları uygulamana gider. Diğerleri her zamanki gibi açılır.</string>
-    <string name="guide_may_differ">Telefonunda biraz farklı görünebilir.</string>
     <string name="setup_apps_stop_body">“Tarayıcıda” seçeneğini seç veya “Desteklenen bağlantıları aç” seçeneğini kapat.</string>
     <string name="setup_apps_progress">Uygulama %1$d / %2$d</string>
     <string name="setup_apps_all_done">Tamam. Artık başka hiçbir uygulama bağlantıları açmıyor.</string>
@@ -190,13 +190,12 @@
     <string name="choose_app_button">Uygulama seç</string>
     <string name="make_default_named">%1$s varsayılan olsun</string>
     <string name="listening_text">Dinleniyor…</string>
-    <string name="error_no_match">Şarkı tanınamadı. Müziğe daha yakın tekrar deneyin.</string>
+    <string name="error_no_match">Şarkı tanınamadı.</string>
     <string name="error_microphone">Crosstune\'un şarkıları tanımak için mikrofona ihtiyacı var.</string>
     <string name="error_recognition_unavailable">Şarkı tanıma şu anda kullanılamıyor.</string>
     <string name="open_settings_button">Ayarları aç</string>
     <string name="open_app_button">%1$s uygulamasını aç</string>
     <string name="lyrics_button">Sözler</string>
-    <string name="lyrics_title">Sözler</string>
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>
@@ -230,7 +229,6 @@
     <string name="palette_sunset">Gün batımı</string>
     <string name="palette_rose">Gül</string>
     <string name="setting_pure_black">Saf siyah</string>
-    <string name="setting_pure_black_description">Koyu modda gerçek siyah. OLED ekranlar ve pilleri için daha iyi.</string>
     <string name="follow_help_title">Sözler müziğini takip etsin</string>
     <string name="follow_help_try">Düğmeye, sonra Kapat\'a dokun.</string>
     <string name="follow_help_restricted">⋮ simgesine, sonra Kısıtlanmış ayarlara izin ver\'e dokun.</string>
@@ -239,12 +237,11 @@
     <string name="follow_turn_on">Aç</string>
     <string name="follow_help_simple">Aç ve İzin ver\'e dokun.</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>
-    <string name="setting_lyrics_follow_description">Bildirim erişimi gerekir. Bildirimlerin asla okunmaz.</string>
+    <string name="setting_lyrics_follow_description">Bildirim erişimi gerekir.</string>
     <string name="follow_help_app_info">Uygulama bilgileri</string>
     <string name="follow_help_access_button">Bildirim erişimi</string>
     <string name="song_search_title">Şarkılar</string>
     <string name="song_search_none">“%1$s” için şarkı bulunamadı.</string>
-    <string name="song_search_label_for">“%1$s” için bulundu</string>
     <string name="floating_background">Arka plan</string>
     <string name="floating_text_size">Yazı boyutu</string>
     <string name="floating_float">Diğer uygulamaların üzerinde göster</string>

@@ -3,6 +3,7 @@
     <string name="spotify_link_label">Lien musical</string>
     <string name="spotify_link_placeholder">Collez un lien musical ou un titre de chanson</string>
     <string name="resolve_button">Convertir le lien</string>
+    <string name="search_button">Rechercher</string>
     <string name="paste_button">Coller</string>
     <string name="recognize_button">Reconnaître un titre</string>
     <string name="setting_recognizer">Application de reconnaissance musicale</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">Ouvrir les liens dans</string>
     <string name="settings_about_title">À propos</string>
     <string name="settings_links_title">Ouvrir les liens de</string>
-    <string name="settings_links_description">Les liens de ces services que vous touchez s’ouvrent dans Crosstune. Partager et coller fonctionnent toujours.</string>
     <string name="rule_opens_in">Ouvre dans : %1$s</string>
     <string name="rule_default">Par défaut (%1$s)</string>
     <string name="settings_custom_title">Autres applications et sites</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà.</string>
     <string name="settings_listening_locked">Vous écoutez sur %1$s, donc ses liens s’y ouvrent déjà. Choisissez une autre appli ci-dessous pour l’activer.</string>
     <string name="setup_destination_title">Où écoutez-vous ?</string>
-    <string name="setup_destination_body">Vous pourrez la changer plus tard.</string>
     <string name="setup_allow_title">Autoriser les liens</string>
-    <string name="setup_allow_none">Vous n\'avez choisi aucun service, il n\'y a donc rien à autoriser. Vous pouvez toujours partager ou coller des liens dans Crosstune.</string>
+    <string name="setup_allow_none">Aucun service choisi. Vous pouvez toujours partager ou coller des liens.</string>
     <string name="setup_allow_step_add">Appuyez sur Ajouter un lien.</string>
     <string name="setup_allow_step_in_app">Choisissez « Dans l’application ».</string>
     <string name="setup_allow_step_tick">Cochez tous les liens, puis appuyez sur Ajouter.</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">Afficher d’abord le titre</string>
     <string name="show_song_short">Voir le titre</string>
     <string name="setting_exact_match">Ouvrir le résultat exact</string>
-    <string name="setting_exact_match_description">Ouvre directement le morceau quand l’application le permet. Sinon, lance une recherche.</string>
+    <string name="setting_exact_match_description">Sinon, lance une recherche.</string>
     <string name="setting_not_found">Quand une chanson est introuvable</string>
     <string name="not_found_ask">Me demander</string>
     <string name="not_found_original">L\'ouvrir là d\'où elle vient</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">Pas sur %1$s</string>
     <string name="search_anyway">Rechercher sur %1$s quand même</string>
     <string name="setting_clean_links">Retirer le pistage des liens</string>
-    <string name="setting_clean_links_description">Retire les éléments de pistage, comme ?si= ou utm_, des liens que vous ouvrez, copiez ou partagez.</string>
+    <string name="setting_clean_links_description">Retire ?si=, utm_ et autres.</string>
     <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
     <string name="setting_share_sheet_apps_description">Afficher les applis de musique dans le menu de partage.</string>
     <string name="setting_language">Langue</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">Ouvrir avec</string>
     <string name="cancel_button">Annuler</string>
     <string name="retry_button">Réessayer</string>
+    <string name="more_button">Plus</string>
     <string name="history_title">Récents</string>
     <string name="search_recent">Rechercher dans Récents</string>
     <string name="close_recent_search">Fermer la recherche</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">Fait avec %1$s par astro</string>
 
     <string name="error_invalid_url">Ce n’est pas un lien vers un morceau, un album, un artiste ou une playlist.</string>
-    <string name="error_network">Connexion impossible. Vérifiez votre connexion Internet et réessayez.</string>
-    <string name="error_not_found">Le service n\'a pas trouvé ce contenu. Il est peut-être privé ou supprimé.</string>
-    <string name="error_rate_limited">Le service est surchargé. Patientez un instant et réessayez.</string>
+    <string name="error_network">Connexion impossible.</string>
+    <string name="error_not_found">Introuvable. Peut-être privé ou supprimé.</string>
+    <string name="error_rate_limited">Le service est surchargé.</string>
     <string name="error_service_unavailable">Le service ne répond pas. Réessayez dans un instant.</string>
     <string name="error_no_app_to_open">Aucune application installée ne peut ouvrir ce lien.</string>
     <string name="error_metadata_unavailable">Impossible de lire les détails de ce lien.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">Les liens touchés s’ouvrent dans le navigateur, pas dans Crosstune</string>
     <string name="allow_button">Autoriser</string>
     <string name="notice_app_still_opens">%1$s ouvre encore ses propres liens</string>
+    <string name="notice_apps_still_open">%1$s ouvrent encore leurs propres liens</string>
     <string name="fix_button">Corriger</string>
     <string name="history_cleared">Historique effacé</string>
     <string name="history_removed">Supprimé</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">Musique</string>
     <string name="setup_sources_videos">Vidéos</string>
     <string name="setting_only_music_videos_note">Seules les vidéos musicales vont dans votre application. Les autres s’ouvrent comme d’habitude.</string>
-    <string name="guide_may_differ">Votre téléphone peut être un peu différent.</string>
     <string name="setup_apps_stop_body">Choisissez « Dans votre navigateur » ou désactivez « Ouvrir les liens compatibles ».</string>
     <string name="setup_apps_progress">Application %1$d sur %2$d</string>
     <string name="setup_apps_all_done">C’est fait. Aucune autre appli n’ouvre plus les liens.</string>
@@ -190,13 +190,12 @@
     <string name="choose_app_button">Choisir l’application</string>
     <string name="make_default_named">Définir %1$s par défaut</string>
     <string name="listening_text">Écoute…</string>
-    <string name="error_no_match">Titre non reconnu. Réessayez plus près de la musique.</string>
+    <string name="error_no_match">Titre non reconnu.</string>
     <string name="error_microphone">Crosstune a besoin du micro pour reconnaître les titres.</string>
     <string name="error_recognition_unavailable">La reconnaissance de titres n\'est pas disponible pour le moment.</string>
     <string name="open_settings_button">Ouvrir les paramètres</string>
     <string name="open_app_button">Ouvrir %1$s</string>
     <string name="lyrics_button">Paroles</string>
-    <string name="lyrics_title">Paroles</string>
     <string name="lyrics_loading">Recherche des paroles…</string>
     <string name="lyrics_none">Aucune parole trouvée pour ce titre.</string>
     <string name="lyrics_sync_service">Synchronisation des paroles de Crosstune</string>
@@ -230,7 +229,6 @@
     <string name="palette_sunset">Coucher de soleil</string>
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Noir pur</string>
-    <string name="setting_pure_black_description">Du vrai noir en mode sombre. Mieux pour les écrans OLED et leur batterie.</string>
     <string name="follow_help_title">Faire suivre votre musique aux paroles</string>
     <string name="follow_help_try">Touchez l\'interrupteur, puis Fermer.</string>
     <string name="follow_help_restricted">Touchez ⋮, puis Autoriser les paramètres restreints.</string>
@@ -239,12 +237,11 @@
     <string name="follow_turn_on">Activer</string>
     <string name="follow_help_simple">Activez-le et touchez Autoriser.</string>
     <string name="setting_lyrics_follow">Les paroles suivent votre app de musique</string>
-    <string name="setting_lyrics_follow_description">Nécessite l\'accès aux notifications. Vos notifications ne sont jamais lues.</string>
+    <string name="setting_lyrics_follow_description">Nécessite l\'accès aux notifications.</string>
     <string name="follow_help_app_info">Infos sur l\'appli</string>
     <string name="follow_help_access_button">Accès aux notifications</string>
     <string name="song_search_title">Titres</string>
     <string name="song_search_none">Aucun titre trouvé pour « %1$s ».</string>
-    <string name="song_search_label_for">Trouvées pour « %1$s »</string>
     <string name="floating_background">Arrière-plan</string>
     <string name="floating_text_size">Taille du texte</string>
     <string name="floating_float">Faire flotter par-dessus les autres applis</string>

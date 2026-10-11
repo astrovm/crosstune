@@ -3,6 +3,7 @@
     <string name="spotify_link_label">Muzieklink</string>
     <string name="spotify_link_placeholder">Plak een muzieklink of een songnaam</string>
     <string name="resolve_button">Link omzetten</string>
+    <string name="search_button">Zoeken</string>
     <string name="paste_button">Plakken</string>
     <string name="recognize_button">Nummer herkennen</string>
     <string name="setting_recognizer">App voor muziekherkenning</string>
@@ -23,7 +24,6 @@
     <string name="settings_default_label">Links openen in</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
-    <string name="settings_links_description">Aangetikte links van deze diensten openen in Crosstune. Delen en plakken werken altijd.</string>
     <string name="rule_opens_in">Opent in %1$s</string>
     <string name="rule_default">Standaard (%1$s)</string>
     <string name="settings_custom_title">Andere apps en sites</string>
@@ -61,9 +61,8 @@
     <string name="setup_sources_listening_note">Je luistert in %1$s, dus de links ervan openen daar al.</string>
     <string name="settings_listening_locked">Je luistert in %1$s, dus de links ervan openen daar al. Kies hieronder een andere app om dit aan te zetten.</string>
     <string name="setup_destination_title">Waar luister je?</string>
-    <string name="setup_destination_body">Je kunt dit later wijzigen.</string>
     <string name="setup_allow_title">Links toestaan</string>
-    <string name="setup_allow_none">Je hebt geen services gekozen, dus er is niets toe te staan. Je kunt nog steeds links delen met of plakken in Crosstune.</string>
+    <string name="setup_allow_none">Geen services gekozen. Je kunt nog steeds links delen of plakken.</string>
     <string name="setup_allow_step_add">Tik op Link toevoegen.</string>
     <string name="setup_allow_step_in_app">Kies ‘In de app’.</string>
     <string name="setup_allow_step_tick">Vink alle links aan en tik op Toevoegen.</string>
@@ -85,7 +84,7 @@
     <string name="show_song_first">Eerst het nummer tonen</string>
     <string name="show_song_short">Nummer tonen</string>
     <string name="setting_exact_match">Exacte match openen</string>
-    <string name="setting_exact_match_description">Opent het nummer zelf als de app dat ondersteunt. Anders wordt er gezocht.</string>
+    <string name="setting_exact_match_description">Anders wordt er gezocht.</string>
     <string name="setting_not_found">Als een nummer niet wordt gevonden</string>
     <string name="not_found_ask">Vraag het mij</string>
     <string name="not_found_original">Open het waar het vandaan komt</string>
@@ -93,7 +92,7 @@
     <string name="not_found_on">Niet op %1$s</string>
     <string name="search_anyway">Toch zoeken op %1$s</string>
     <string name="setting_clean_links">Tracking uit links halen</string>
-    <string name="setting_clean_links_description">Haalt trackingonderdelen zoals ?si= of utm_ uit links die je opent, kopieert of deelt.</string>
+    <string name="setting_clean_links_description">Haalt ?si=, utm_ en dergelijke weg.</string>
     <string name="setting_share_sheet_apps">Apps in het deelmenu</string>
     <string name="setting_share_sheet_apps_description">Muziekapps tonen bij het delen.</string>
     <string name="setting_language">Taal</string>
@@ -102,6 +101,7 @@
     <string name="picker_title">Openen met</string>
     <string name="cancel_button">Annuleren</string>
     <string name="retry_button">Opnieuw proberen</string>
+    <string name="more_button">Meer</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Zoeken in Recent</string>
     <string name="close_recent_search">Zoeken sluiten</string>
@@ -138,9 +138,9 @@
     <string name="made_with_love">Gemaakt met %1$s door astro</string>
 
     <string name="error_invalid_url">Dat is geen link naar een nummer, album, artiest of afspeellijst.</string>
-    <string name="error_network">Geen verbinding. Controleer je internet en probeer het opnieuw.</string>
-    <string name="error_not_found">De service kan dit niet vinden. Het is misschien privé of verwijderd.</string>
-    <string name="error_rate_limited">De service is druk bezig. Wacht even en probeer het opnieuw.</string>
+    <string name="error_network">Geen verbinding.</string>
+    <string name="error_not_found">Niet gevonden. Misschien privé of verwijderd.</string>
+    <string name="error_rate_limited">De service is druk bezig.</string>
     <string name="error_service_unavailable">De service reageert niet. Probeer het zo opnieuw.</string>
     <string name="error_no_app_to_open">Geen geïnstalleerde app kan deze link openen.</string>
     <string name="error_metadata_unavailable">De gegevens van deze link kunnen niet worden gelezen.</string>
@@ -154,6 +154,7 @@
     <string name="notice_own_links_off">Getikte links openen in je browser, niet in Crosstune</string>
     <string name="allow_button">Toestaan</string>
     <string name="notice_app_still_opens">%1$s opent zijn eigen links nog</string>
+    <string name="notice_apps_still_open">%1$s openen hun eigen links nog</string>
     <string name="fix_button">Oplossen</string>
     <string name="history_cleared">Geschiedenis gewist</string>
     <string name="history_removed">Verwijderd</string>
@@ -180,7 +181,6 @@
     <string name="setup_sources_music">Muziek</string>
     <string name="setup_sources_videos">Video\'s</string>
     <string name="setting_only_music_videos_note">Alleen muziekvideo\'s gaan naar je app. Andere openen zoals altijd.</string>
-    <string name="guide_may_differ">Op je telefoon kan het er iets anders uitzien.</string>
     <string name="setup_apps_stop_body">Kies ‘In je browser’ of zet ‘Ondersteunde links openen’ uit.</string>
     <string name="setup_apps_progress">App %1$d van %2$d</string>
     <string name="setup_apps_all_done">Klaar. Geen andere app opent de links nog.</string>
@@ -190,13 +190,12 @@
     <string name="choose_app_button">App kiezen</string>
     <string name="make_default_named">%1$s als standaard instellen</string>
     <string name="listening_text">Luisteren…</string>
-    <string name="error_no_match">Nummer niet herkend. Probeer het opnieuw dichter bij de muziek.</string>
+    <string name="error_no_match">Nummer niet herkend.</string>
     <string name="error_microphone">Crosstune heeft de microfoon nodig om nummers te herkennen.</string>
     <string name="error_recognition_unavailable">Nummerherkenning is nu niet beschikbaar.</string>
     <string name="open_settings_button">Instellingen openen</string>
     <string name="open_app_button">%1$s openen</string>
     <string name="lyrics_button">Tekst</string>
-    <string name="lyrics_title">Tekst</string>
     <string name="lyrics_loading">Tekst opzoeken…</string>
     <string name="lyrics_none">Geen tekst gevonden voor dit nummer.</string>
     <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
@@ -230,7 +229,6 @@
     <string name="palette_sunset">Zonsondergang</string>
     <string name="palette_rose">Roos</string>
     <string name="setting_pure_black">Puur zwart</string>
-    <string name="setting_pure_black_description">Echt zwart in de donkere modus. Beter voor OLED-schermen en hun batterij.</string>
     <string name="follow_help_title">Laat de songtekst je muziek volgen</string>
     <string name="follow_help_try">Tik op de schakelaar en dan op Sluiten.</string>
     <string name="follow_help_restricted">Tik op ⋮ en dan op Beperkte instellingen toestaan.</string>
@@ -239,12 +237,11 @@
     <string name="follow_turn_on">Aanzetten</string>
     <string name="follow_help_simple">Zet hem aan en tik op Toestaan.</string>
     <string name="setting_lyrics_follow">Songtekst volgt je muziek-app</string>
-    <string name="setting_lyrics_follow_description">Heeft toegang tot meldingen nodig. Je meldingen worden nooit gelezen.</string>
+    <string name="setting_lyrics_follow_description">Heeft toegang tot meldingen nodig.</string>
     <string name="follow_help_app_info">App-info</string>
     <string name="follow_help_access_button">Toegang tot meldingen</string>
     <string name="song_search_title">Nummers</string>
     <string name="song_search_none">Geen nummers gevonden voor “%1$s”.</string>
-    <string name="song_search_label_for">Gevonden voor “%1$s”</string>
     <string name="floating_background">Achtergrond</string>
     <string name="floating_text_size">Tekstgrootte</string>
     <string name="floating_float">Zwevend boven andere apps</string>

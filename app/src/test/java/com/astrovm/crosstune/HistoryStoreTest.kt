@@ -58,9 +58,34 @@ class HistoryStoreTest {
         assertEquals(listOf(onItsOwn, entry(1)), HistoryStore(preferences).load())
 
         // The same id on another service, or of another kind, is something else.
-        store.add(entry(1, service = MusicService.SPOTIFY))
+        store.add(entry(1, service = MusicService.SPOTIFY).let { it.copy(metadata = it.metadata.copy(title = "Another Song")) })
         store.add(entry(1, type = ItemType.ALBUM))
         assertEquals(4, HistoryStore(preferences).load().size)
+    }
+
+    @Test
+    fun oneSongFromTwoAppsOrSearchedForIsOneEntry() {
+        val searched = "https://www.google.com/search?q=Plastic%20Love"
+        val deezer = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "1", "https://www.deezer.com/track/1"), MusicMetadata("Plastic Love", "Mariya Takeuchi"))
+        val apple = HistoryEntry(MusicLink(MusicService.APPLE_MUSIC, ItemType.TRACK, "2", "https://music.apple.com/song/2"), MusicMetadata("Plastic love", "Mariya Takeuchi"))
+        val found = HistoryEntry(MusicLink(null, ItemType.TRACK, searched, searched), MusicMetadata("Plastic Love", "Mariya Takeuchi"))
+        store.add(deezer)
+        store.add(entry(1))
+        store.add(apple)
+        store.add(found)
+        assertEquals(listOf(found, entry(1)), HistoryStore(preferences).load())
+        // Another artist's song of that name, an album of it, or a name with no letters to tell, are others.
+        val cover = found.copy(link = found.link.copy(url = "$searched%20cover", id = "cover"), metadata = found.metadata.copy(artist = "Someone"))
+        val album = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.ALBUM, "3", "https://www.deezer.com/album/3"), MusicMetadata("Plastic Love", "Mariya Takeuchi", ItemType.ALBUM))
+        val noLetters = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "4", "https://www.deezer.com/track/4"), MusicMetadata("!!!", "Mariya Takeuchi"))
+        val noLettersEither = HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "5", "https://www.deezer.com/track/5"), MusicMetadata("???", "Mariya Takeuchi"))
+        listOf(cover, album, noLetters, noLettersEither).forEach(store::add)
+        assertEquals(6, HistoryStore(preferences).load().size)
+
+        // Kept twice by an older version, it's listed once, the latest.
+        val older = org.json.JSONArray(preferences.getString("history", null))
+        preferences.edit { putString("history", org.json.JSONArray().put(older.get(0)).put(older.get(0)).put(older.get(4)).toString()) }
+        assertEquals(listOf(noLettersEither, found), HistoryStore(preferences).load())
     }
 
     @Test

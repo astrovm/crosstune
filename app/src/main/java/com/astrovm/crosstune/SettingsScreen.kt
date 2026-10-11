@@ -117,7 +117,7 @@ private fun SettingsList(
             }
         }
     ) {
-        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, includeNotAllowed = false) }
+        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
 
         // "Open links in" says what this is, also when it's set to ask or show first.
         Spacer(Modifier.height(16.dp))
@@ -134,10 +134,7 @@ private fun SettingsList(
             )
         }
 
-        SectionHeader(
-            title = stringResource(R.string.settings_links_title),
-            description = stringResource(R.string.settings_links_description)
-        )
+        SectionHeader(title = stringResource(R.string.settings_links_title))
         Group {
             sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
@@ -278,7 +275,7 @@ private fun SettingsList(
             GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_pure_black),
-                description = stringResource(R.string.setting_pure_black_description),
+                description = null,
                 checked = state.pureBlack,
                 onCheckedChange = actions.onPureBlackChange
             )
@@ -878,22 +875,9 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
             verticalAlignment = Alignment.CenterVertically
         ) {
             DestinationIcon(item.icon, installed)
-            Column(modifier = Modifier.padding(start = 16.dp)) {
+            Column(modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp)) {
             Text(item.label, style = MaterialTheme.typography.bodyLarge)
-            if (item.notAllowed) {
-                Text(
-                    stringResource(R.string.setup_not_allowed),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            } else if (item.locked) {
-                // The switch is off and can't be turned on; the reason is on the source's page.
-                Text(
-                    stringResource(R.string.settings_where_you_listen),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else if (item.on && item.rule != null) {
+            if (item.on && item.rule != null && !item.notAllowed && !item.locked) {
                 // Only when it differs from the default, so the list stays quiet.
                 Text(
                     stringResource(R.string.rule_opens_in, item.rule.label()),
@@ -901,6 +885,19 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            }
+            // Marks, not words, so a list of them stays quiet: the notice above says what to do.
+            if (item.notAllowed) {
+                AppIcon(
+                    R.drawable.ic_error, contentDescription = stringResource(R.string.setup_not_allowed),
+                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 8.dp).size(18.dp)
+                )
+            } else if (item.locked) {
+                // The switch is off and can't be turned on; the reason is on the source's page.
+                AppIcon(
+                    R.drawable.ic_lock, contentDescription = stringResource(R.string.settings_where_you_listen),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp).size(18.dp)
+                )
             }
         }
         Switch(

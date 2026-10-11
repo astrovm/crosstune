@@ -30,6 +30,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+/** The notice key for Crosstune's own links set to open in the browser. */
+internal const val OWN_LINKS_OFF = "own-links-off"
+
 internal data class UiState(
     val linkText: String = "",
     val isLoading: Boolean = false,
@@ -146,6 +149,8 @@ internal data class UiState(
     /** How many of [songSearch], from the first, ChatGPT named. */
     val songsFromChatGpt: Int = 0,
     val showLinkSettingsHelper: Boolean = false,
+    /** What the main screen's notices were about when the user closed them, by [noticeKeys]. */
+    val dismissedNotices: Set<String> = emptySet(),
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
     val setupComplete: Boolean = true,
@@ -222,6 +227,14 @@ internal data class UiState(
     val someLinksNotAllowed: Boolean
         get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
             frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
+
+    /** What keeps links from Crosstune now: each host not allowed, links set to the browser. */
+    val notAllowedKeys: Set<String>
+        get() = buildSet {
+            if (ownLinksOff && interceptsAnything) add(OWN_LINKS_OFF)
+            intercepted.forEach { service -> unapprovedHosts?.get(service).orEmpty().forEach { add("host:$it") } }
+            frontendSources.forEach { frontend -> unapprovedFrontendHosts?.get(frontend).orEmpty().forEach { add("host:$it") } }
+        }
 
     /**
      * Set when the app the result goes to was searched for it and doesn't have it, e.g. a song only on
@@ -509,6 +522,7 @@ internal class MainViewModel(
                 visuals = preferences.getBoolean(KEY_FLOATING_VISUALS, false)
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
+            dismissedNotices = preferences.getStringSet(KEY_DISMISSED_NOTICES, null).orEmpty().toSet(),
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
@@ -832,9 +846,8 @@ internal class MainViewModel(
     /** Opens a song ChatGPT named, by [title] and [artist], like one picked from a search. */
     fun openNamedSong(title: String, artist: String) = chooseSong(MusicMetadata(title, artist))
 
-    /** A recognized song keeps its "Song by Artist" text, so Convert reads it again from the box. */
-    private fun fieldText(link: MusicLink, metadata: MusicMetadata) =
-        if (link.service == null) LinkInput.RecognizedSong(link.url, metadata).text else link.url
+    /** A link stays in the box; a song found by its name leaves it empty, as the song shows right under it. */
+    private fun fieldText(link: MusicLink) = if (link.service == null) "" else link.url
 
     /**
      * A recognized song shows only its name in the field, so the name reads back as the song just
@@ -1046,7 +1059,7 @@ internal class MainViewModel(
             result = resolution.metadata,
             songsLike = false,
             link = resolution.link,
-            linkText = fieldText(resolution.link, resolution.metadata),
+            linkText = fieldText(resolution.link),
             destinationUrls = savedDestinations(entry),
             history = history
         )
@@ -2260,7 +2273,7 @@ internal class MainViewModel(
         lastRequest = null
         pendingOpen = false
         uiState = uiState.copy(
-            linkText = fieldText(entry.link, entry.metadata),
+            linkText = fieldText(entry.link),
             isLoading = false,
             isMatching = false,
             result = entry.metadata,
@@ -2578,6 +2591,13 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
     }
 
+    /** Closes the main screen's notices about [keys]; one about anything else still shows. */
+    fun dismissNotices(keys: Set<String>) {
+        val dismissed = uiState.dismissedNotices + keys
+        uiState = uiState.copy(dismissedNotices = dismissed)
+        preferences.edit { putStringSet(KEY_DISMISSED_NOTICES, dismissed) }
+    }
+
     fun showError(error: AppError) {
         retryListens = false
         uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
@@ -2589,6 +2609,7 @@ internal class MainViewModel(
         private const val COVER_TIMEOUT_MS = 5_000L
         private const val VIDEO_COVER_TIMEOUT_MS = 2_000L
         private const val KEY_LINK_SETTINGS_HELPER_DISMISSED = "link_settings_helper_dismissed"
+        private const val KEY_DISMISSED_NOTICES = "dismissed_notices"
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"

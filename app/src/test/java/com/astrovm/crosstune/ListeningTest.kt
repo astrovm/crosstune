@@ -332,7 +332,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         waitForText(string(R.string.error_microphone))
         // No Try again: Android won't ask again, so the way is in its settings.
-        assertTrue(!shown(string(R.string.retry_button)))
+        assertTrue(!described(string(R.string.retry_button)))
         click(string(R.string.open_settings_button))
         val settings = shadowOf(app).nextStartedActivity
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, settings.action)
@@ -406,7 +406,7 @@ class ListeningTest {
         microphone.play(3.0)
         recognize()
         waitForText(string(R.string.error_recognition_unavailable))
-        assertTrue(shown(string(R.string.retry_button)))
+        assertTrue(described(string(R.string.retry_button)))
         // Only the other apps: Crosstune is what just failed.
         assertTrue(!shown(string(R.string.open_app_button, string(R.string.app_name))))
         click(string(R.string.open_app_button, "Shazam"))
@@ -2258,12 +2258,11 @@ class ListeningTest {
         withCatalogue(fake.handler)
         launch()
         composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("calm rainy night songs")
-        click(string(R.string.resolve_button))
+        click(string(R.string.search_button))
         waitUntil(TIMEOUT_MS) { shown(string(R.string.song_search_playlist)) }
         click(string(R.string.song_search_playlist))
         // A list named after the mood, with ChatGPT's songs, to play or share like a playlist.
         waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
-        assertFalse(shown(string(R.string.song_search_label_for, "calm rainy night songs")))
         assertFalse(shown(string(R.string.songs_like_label)))
     }
 

@@ -453,6 +453,7 @@ class MainActivity : ComponentActivity() {
                         onOpenLinkSettings = ::openAppLinkSettings,
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
+                        onDismissNotices = viewModel::dismissNotices,
                         onSettingsLeft = viewModel::settingsLeft,
                         loadArtwork = viewModel.artwork::load
                     )
