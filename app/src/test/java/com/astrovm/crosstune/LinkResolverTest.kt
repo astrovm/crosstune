@@ -160,6 +160,11 @@ class LinkResolverTest {
 
         respond("Unauthorized", code = 401)
         assertEquals(AppError.NOT_FOUND, (resolve("https://youtu.be/4NRXx6U8ABQ") as Resolution.Failed).error)
+        // A page turned away, as a bot would be, says nothing about the song: the service is what failed.
+        respond("Forbidden", code = 403)
+        assertEquals(AppError.SERVICE_UNAVAILABLE, (resolve("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT") as Resolution.Failed).error)
+        assertEquals(AppError.SERVICE_UNAVAILABLE, (resolve("https://band.bandcamp.com/track/song") as Resolution.Failed).error)
+        assertEquals(AppError.NOT_FOUND, (resolve("https://soundcloud.com/band/song") as Resolution.Failed).error)
     }
 
     /** YouTube Music's answer about video [id], as its next song list has it. */

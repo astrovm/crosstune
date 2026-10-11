@@ -98,7 +98,7 @@ internal class LinkResolver(
         if ((response.code == 401 || response.code == 403) && link.isYouTubeVideo()) {
             youTubeMusicVideo(link.id)?.let { return@guarded Resolution.Resolved(link, it) }
         }
-        httpError(response)?.let { return@guarded Resolution.Failed(it, link) }
+        httpError(response, privateWhenRefused = link.isOEmbed())?.let { return@guarded Resolution.Failed(it, link) }
         // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
         if (link.service == MusicService.DEEZER) {
             MetadataParsers.deezerError(JSONObject(body))?.let { return@guarded Resolution.Failed(it, link) }
@@ -225,12 +225,22 @@ internal class LinkResolver(
         }
     }
 
-    /** Error pages still carry generic metadata, so any non-2xx status must fail before parsing. */
-    private fun httpError(response: Response): AppError? = when {
+    /** Whether [metadataUrl] asks an oEmbed endpoint, which turns away what's private. */
+    private fun MusicLink.isOEmbed() = when (service) {
+        MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC -> type != ItemType.PLAYLIST
+        MusicService.SOUNDCLOUD, MusicService.AUDIOMACK -> true
+        else -> false
+    }
+
+    /**
+     * Error pages still carry generic metadata, so any non-2xx status must fail before parsing.
+     * Turned away, an oEmbed endpoint means it's private, as [privateWhenRefused] says; a page means
+     * the service won't answer, e.g. it takes Crosstune for a bot, which says nothing about the song.
+     */
+    private fun httpError(response: Response, privateWhenRefused: Boolean = true): AppError? = when {
         response.isSuccessful -> null
         response.code == 404 || response.code == 410 -> AppError.NOT_FOUND
-        // oEmbed answers private or embedding-disabled videos with 401/403.
-        response.code == 401 || response.code == 403 -> AppError.NOT_FOUND
+        response.code == 401 || response.code == 403 -> if (privateWhenRefused) AppError.NOT_FOUND else AppError.SERVICE_UNAVAILABLE
         response.code == 429 -> AppError.RATE_LIMITED
         response.code >= 500 -> AppError.SERVICE_UNAVAILABLE
         else -> AppError.METADATA_UNAVAILABLE
