@@ -335,6 +335,48 @@ class ListeningTest {
     }
 
     @Test
+    fun theMicrophoneAskedForToListenAlongIsForThatThoughTheScreenTurns() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        click(string(R.string.lyrics_stop_listening))
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        click(string(R.string.lyrics_listen_along))
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+        // Turned while Android asks, then allowed: it listens along, rather than for a new song.
+        controller!!.recreate()
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        hearing.song("Demo", 3.0)
+        composeRule.waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
+        assertFalse(controllerModel().uiState.listening)
+    }
+
+    @Test
+    fun theFloatingWordsMicrophoneAsksForItBackInCrosstune() {
+        val hearing = FakeHearing()
+        floatOverApps(hearing)
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_stop_listening))
+        // Taken back meanwhile, the microphone is asked for in Crosstune, which comes to the front.
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        click(string(R.string.lyrics_listen_along))
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component!!.className)
+        val before = hearing.listens
+        controller!!.restart()
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        composeRule.waitUntil(TIMEOUT_MS) { hearing.listens > before }
+        // Asked once: back again, it isn't asked again.
+        controller!!.pause().stop()
+        controller!!.restart()
+        assertEquals(asked, shadowOf(controller!!.get()).lastRequestedPermission)
+    }
+
+    @Test
     fun whenShazamIsBusyTheOtherAppsAreOffered() {
         val pm = shadowOf(app.packageManager)
         pm.installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
