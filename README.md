@@ -54,7 +54,7 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Shortcuts.** One-tap paste, home screen widgets with your Recent songs or one tap to name a song or show its lyrics, Quick Settings tiles, and a long-press shortcut on the app icon.
 - **Recent.** Search it, and swipe a song away to remove it.
 - **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
-- **15 languages.** Follows your phone, or pick one in Settings.
+- **16 languages.** Follows your phone, or pick one in Settings.
 
 ## Supported links
 

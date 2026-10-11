@@ -37,6 +37,7 @@ class TranslationsTest {
         "values-ja" to "ja-JP",
         "values-ko" to "ko-KR",
         "values-zh-rCN" to "zh-CN",
+        "values-zh-rTW" to "zh-TW",
         "values-hi" to "hi-IN",
         "values-pl" to "pl-PL",
         "values-nl" to "nl-NL"
@@ -149,6 +150,29 @@ class TranslationsTest {
     fun indonesianIsFoundUnderItsCurrentCode() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         assertEquals(strings("values-in").getValue("settings_title"), app.getString(R.string.settings_title))
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rTW")
+    fun taiwanGetsTraditionalChinese() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        assertEquals(strings("values-zh-rTW").getValue("settings_title"), app.getString(R.string.settings_title))
+        assertNotEquals(strings("values-zh-rCN").getValue("settings_title"), app.getString(R.string.settings_title))
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rHK")
+    fun hongKongGetsTraditionalChineseToo() {
+        // Hong Kong writes Traditional, so Android picks Taiwan's over China's Simplified.
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        assertEquals(strings("values-zh-rTW").getValue("settings_title"), app.getString(R.string.settings_title))
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN")
+    fun chinaKeepsSimplifiedChinese() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        assertEquals(strings("values-zh-rCN").getValue("settings_title"), app.getString(R.string.settings_title))
     }
 
     @Test

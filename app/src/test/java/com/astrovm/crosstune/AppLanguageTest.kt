@@ -63,5 +63,8 @@ class AppLanguageTest {
         assertNull(AppLanguage.translationTag("sv"))
         // Each has a flag.
         AppLanguage.translationTags.forEach { assertNotNull(it, AppLanguage.flag(it)) }
+        // Each app language has a flag, and lyrics can be translated into it.
+        AppLanguage.tags.forEach { assertNotNull(it, AppLanguage.flag(it)); assertNotNull(it, AppLanguage.translationTag(it)) }
+        assertEquals("zh-TW", AppLanguage.translationTag("zh-TW"))
     }
 }

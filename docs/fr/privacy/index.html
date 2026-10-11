@@ -19,6 +19,7 @@
 <link rel="alternate" hreflang="ja" href="https://crosstune.4st.li/ja/privacy/">
 <link rel="alternate" hreflang="ko" href="https://crosstune.4st.li/ko/privacy/">
 <link rel="alternate" hreflang="zh-CN" href="https://crosstune.4st.li/zh-cn/privacy/">
+<link rel="alternate" hreflang="zh-TW" href="https://crosstune.4st.li/zh-tw/privacy/">
 <link rel="alternate" hreflang="x-default" href="https://crosstune.4st.li/privacy/">
 <script>
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.style.colorScheme = t; } catch (e) {}
@@ -75,7 +76,7 @@
 <p>Pour toute question sur la confidentialité, écrivez à <a href="mailto:~@4st.li">~@4st.li</a>. Si vous envoyez un e-mail au développeur, le service de messagerie traite votre adresse et votre message pour que le développeur puisse répondre. Merci de ne pas inclure d'informations sensibles que vous n'avez pas besoin de partager.</p>
 <p>Cette politique peut être mise à jour si le fonctionnement de l'application change. Les mises à jour apparaîtront sur cette page avec une nouvelle date.</p>
 </main>
-<footer> <select class="language" aria-label="Langue" onchange="pickLanguage(this.value)"><option value="/privacy/">English</option><option value="/es/privacy/">Español</option><option value="/pt-br/privacy/">Português (Brasil)</option><option value="/de/privacy/">Deutsch</option><option value="/fr/privacy/" selected>Français</option><option value="/it/privacy/">Italiano</option><option value="/nl/privacy/">Nederlands</option><option value="/pl/privacy/">Polski</option><option value="/ru/privacy/">Русский</option><option value="/tr/privacy/">Türkçe</option><option value="/id/privacy/">Bahasa Indonesia</option><option value="/hi/privacy/">हिन्दी</option><option value="/ja/privacy/">日本語</option><option value="/ko/privacy/">한국어</option><option value="/zh-cn/privacy/">简体中文</option></select></footer>
+<footer> <select class="language" aria-label="Langue" onchange="pickLanguage(this.value)"><option value="/privacy/">English</option><option value="/es/privacy/">Español</option><option value="/pt-br/privacy/">Português (Brasil)</option><option value="/de/privacy/">Deutsch</option><option value="/fr/privacy/" selected>Français</option><option value="/it/privacy/">Italiano</option><option value="/nl/privacy/">Nederlands</option><option value="/pl/privacy/">Polski</option><option value="/ru/privacy/">Русский</option><option value="/tr/privacy/">Türkçe</option><option value="/id/privacy/">Bahasa Indonesia</option><option value="/hi/privacy/">हिन्दी</option><option value="/ja/privacy/">日本語</option><option value="/ko/privacy/">한국어</option><option value="/zh-cn/privacy/">简体中文</option><option value="/zh-tw/privacy/">繁體中文</option></select></footer>
 <script>
   function pickLanguage(url) {
     try { localStorage.setItem("language", url.split("/")[1] && url.split("/")[1] !== "privacy" ? url.split("/")[1] : "en"); } catch (e) {}
@@ -87,9 +88,10 @@
     try { saved = localStorage.getItem("language"); } catch (e) {}
     if (saved === "en") return;
     if (saved) { location.replace("/" + saved + "/" + "privacy/"); return; }
-    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/"};
+    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/", "zh-tw": "/zh-tw/"};
     for (const wanted of navigator.languages || [navigator.language]) {
-      const tag = wanted.toLowerCase();
+      // Hong Kong and Macau write Traditional Chinese, like Taiwan.
+      const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\b.*/, "zh-tw").replace(/^zh-hans\b.*/, "zh-cn");
       const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
       if (match === "/") return;
       if (match) { location.replace(match + "privacy/"); return; }

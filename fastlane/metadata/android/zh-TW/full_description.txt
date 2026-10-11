@@ -1,0 +1,21 @@
+在你喜歡的應用程式中開啟任意音樂連結。
+
+有人發來某個音樂服務的連結，但你用的是另一個。輕觸連結，同一首歌就會在你喜歡的應用程式中開啟。Spotify 到 YouTube Music，Apple Music 到 Deezer，TIDAL 到 Spotify：隨你搭配。支援歌曲、專輯、藝人和播放清單。
+
+<b>功能</b>
+<ul>
+<li>可讀取 Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack 的連結，並在其中任意一個或 Amazon Music 和 Qobuz 中開啟。</li>
+<li>播放清單和專輯會顯示其中的歌曲：可在你的應用程式中開啟任意一首，複製或分享清單，或在 YouTube Music 或 YouTube 中全部播放。</li>
+<li>為每個服務指定不同的去向，例如 YouTube 連結用 YouTube Music 開啟，其餘都用 Apple Music 開啟。</li>
+<li>詢問使用哪個應用程式：每次輕觸或分享連結時選擇應用程式。</li>
+<li>開啟完全相符的結果：Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud 和 Audiomack 可直接開啟歌曲、專輯或藝人本身，而不是搜尋結果，Bandcamp 和 Qobuz 可直接開啟歌曲或專輯，YouTube 可直接開啟歌曲。</li>
+<li>新增其他帶搜尋頁面的應用程式和網站。</li>
+<li>一鍵貼上，搜尋並重新開啟最近的連結，或透過主畫面小工具、快速設定圖塊或長按應用程式圖示來開啟已複製的連結。</li>
+<li>辨識附近正在播放的歌曲：Crosstune 可以自己聆聽，也可以開啟 Shazam 或 Google 歌曲搜尋。還可開啟 Shazam 連結和從 Pixel 的 Now Playing 分享的歌曲。</li>
+<li>無法讀取連結？可在連結來源的應用程式中開啟，也可以複製搜尋文字或分享搜尋連結。</li>
+<li>輸入歌名代替連結來查詢歌曲，還可以閱讀所開啟歌曲的歌詞。</li>
+<li>Android 12 以上版本支援 Material You 動態配色。</li>
+</ul>
+
+<b>隱私</b>
+沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。開啟「開啟完全相符的結果」後，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞時，歌曲的標題和藝人會傳送到 LRCLIB。
