@@ -299,4 +299,25 @@
     <string name="lyrics_saved_lines">Baris tersimpan</string>
     <string name="lyrics_word_failed">Tidak bisa menemukan artinya sekarang.</string>
     <string name="lyrics_word_unknown">Tidak ada entri kamus untuk kata ini.</string>
+    <string name="lyrics_words_to_know">Kata yang perlu diketahui</string>
+    <string name="lyrics_words_to_know_failed">Tidak dapat menemukan kata yang perlu diketahui.</string>
+    <string name="lyrics_save_word">Simpan %1$s</string>
+    <string name="lyrics_word_saved">%1$s disimpan</string>
+    <string name="lyrics_about_artist">Tentang artis</string>
+    <string name="lyrics_about_artist_failed">Tidak dapat mengetahui tentang artis.</string>
+    <string name="lyrics_songs_like">Lagu serupa</string>
+    <string name="lyrics_literal">Kata demi kata</string>
+    <string name="lyrics_blanks">Isi yang kosong</string>
+    <string name="lyrics_examples">Contoh</string>
+    <string name="lyrics_examples_failed">Tidak dapat menulis contoh.</string>
+    <string name="lyrics_ask_song">Tanya tentang lagu ini</string>
+    <string name="song_level">Level %1$s</string>
+    <string name="song_original">Cover dari</string>
+    <string name="song_samples">Sampel</string>
+    <string name="artist_who">Siapa</string>
+    <string name="artist_style">Gaya</string>
+    <string name="artist_known_for">Dikenal lewat</string>
+    <string name="songs_like_label">Lagu seperti</string>
+    <string name="song_search_playlist">Buat playlist</string>
+    <string name="error_no_songs_like">Tidak menemukan lagu serupa.</string>
 </resources>

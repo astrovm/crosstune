@@ -220,6 +220,24 @@ internal data class ScreenActions(
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
     val onExplainSong: () -> Unit = {},
+    /** Asks ChatGPT a question about the whole song. */
+    val onAskAboutSong: (String) -> Unit = {},
+    /** ChatGPT translates word for word, or as it would naturally be said. */
+    val onLiteralChange: (Boolean) -> Unit = {},
+    /** A word of each line left blank to listen for, or none. */
+    val onBlanksChange: (Boolean) -> Unit = {},
+    val onFindWordsToKnow: () -> Unit = {},
+    /** Saves one of the song's words to know, or lets it go. */
+    val onToggleSavedWord: (KeyWord) -> Unit = {},
+    val onAboutArtist: () -> Unit = {},
+    /** Lists songs like this one, as ChatGPT finds them. */
+    val onSongsLike: (MusicMetadata) -> Unit = {},
+    /** Has ChatGPT write sentences using a line's words, by the line's index. */
+    val onFindExamples: (Int) -> Unit = {},
+    /** Opens a song ChatGPT named, by its title and artist. */
+    val onOpenNamedSong: (String, String) -> Unit = { _, _ -> },
+    /** Lists the songs ChatGPT found for a description as a playlist. */
+    val onPlaylistFromSearch: () -> Unit = {},
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
@@ -456,7 +474,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     }
     // Only while a name is being looked up: a song picked or dismissed leaves nothing to show.
     if (state.isSearchingSongs || state.songSearch.isNotEmpty() || state.songSearchQuery.isNotBlank()) {
-        SongSearchSheet(state, actions.loadArtwork, actions.onPickSong, actions.onDismissSongSearch)
+        SongSearchSheet(state, actions.loadArtwork, actions.onPickSong, actions.onDismissSongSearch, actions.onPlaylistFromSearch)
     }
     val snackbar = remember { SnackbarHostState() }
     val clearedMessage = stringResource(if (state.removedOneFromHistory) R.string.history_removed else R.string.history_cleared)
@@ -806,7 +824,13 @@ internal fun DefaultDestinationMenu(
  * The name searched for is on the sheet, so a list of songs says what it is a list of.
  */
 @Composable
-private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, onPick: (MusicMetadata) -> Unit, onDismiss: () -> Unit) {
+private fun SongSearchSheet(
+    state: UiState,
+    loadArtwork: suspend (String) -> ImageBitmap?,
+    onPick: (MusicMetadata) -> Unit,
+    onDismiss: () -> Unit,
+    onPlaylist: () -> Unit = {}
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -838,6 +862,13 @@ private fun SongSearchSheet(state: UiState, loadArtwork: suspend (String) -> Ima
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     // ChatGPT's picks come in a moment later, ahead of the others.
                     if (state.isAskingForSongs) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                    // A mood, more than one song, makes a playlist of ChatGPT's picks.
+                    if (state.songsFromChatGpt >= MainViewModel.MIN_PLAYLIST) {
+                        FilledTonalButton(onClick = onPlaylist, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(stringResource(R.string.song_search_playlist), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
                     state.songSearch.forEachIndexed { index, song ->
                         Row(
                             modifier = Modifier
@@ -1039,7 +1070,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             // A song needs no saying; an album, playlist or artist does.
             if (result.type != ItemType.TRACK) {
                 Text(
-                    text = stringResource(result.type.labelRes),
+                    text = stringResource(if (state.songsLike) R.string.songs_like_label else result.type.labelRes),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,

@@ -299,4 +299,25 @@
     <string name="lyrics_saved_lines">Gespeicherte Zeilen</string>
     <string name="lyrics_word_failed">Konnte die Bedeutung gerade nicht finden.</string>
     <string name="lyrics_word_unknown">Kein Wörterbucheintrag für dieses Wort.</string>
+    <string name="lyrics_words_to_know">Wichtige Wörter</string>
+    <string name="lyrics_words_to_know_failed">Die wichtigen Wörter wurden nicht gefunden.</string>
+    <string name="lyrics_save_word">%1$s speichern</string>
+    <string name="lyrics_word_saved">%1$s gespeichert</string>
+    <string name="lyrics_about_artist">Über die Band oder Person</string>
+    <string name="lyrics_about_artist_failed">Über die Band oder Person wurde nichts gefunden.</string>
+    <string name="lyrics_songs_like">Ähnliche Songs</string>
+    <string name="lyrics_literal">Wort für Wort</string>
+    <string name="lyrics_blanks">Lückentext</string>
+    <string name="lyrics_examples">Beispiele</string>
+    <string name="lyrics_examples_failed">Beispiele konnten nicht geschrieben werden.</string>
+    <string name="lyrics_ask_song">Frag zum Song</string>
+    <string name="song_level">Niveau %1$s</string>
+    <string name="song_original">Coverversion von</string>
+    <string name="song_samples">Samples</string>
+    <string name="artist_who">Wer</string>
+    <string name="artist_style">Stil</string>
+    <string name="artist_known_for">Bekannt für</string>
+    <string name="songs_like_label">Songs wie</string>
+    <string name="song_search_playlist">Playlist erstellen</string>
+    <string name="error_no_songs_like">Keine ähnlichen Songs gefunden.</string>
 </resources>

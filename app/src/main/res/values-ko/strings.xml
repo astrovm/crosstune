@@ -299,4 +299,25 @@
     <string name="lyrics_saved_lines">저장한 줄</string>
     <string name="lyrics_word_failed">지금은 뜻을 찾을 수 없습니다.</string>
     <string name="lyrics_word_unknown">이 단어의 사전 항목이 없어요.</string>
+    <string name="lyrics_words_to_know">알아둘 단어</string>
+    <string name="lyrics_words_to_know_failed">알아둘 단어를 찾지 못했어요.</string>
+    <string name="lyrics_save_word">%1$s 저장</string>
+    <string name="lyrics_word_saved">%1$s 저장됨</string>
+    <string name="lyrics_about_artist">아티스트 정보</string>
+    <string name="lyrics_about_artist_failed">아티스트 정보를 찾지 못했어요.</string>
+    <string name="lyrics_songs_like">비슷한 노래</string>
+    <string name="lyrics_literal">직역</string>
+    <string name="lyrics_blanks">빈칸 채우기</string>
+    <string name="lyrics_examples">예문</string>
+    <string name="lyrics_examples_failed">예문을 쓰지 못했어요.</string>
+    <string name="lyrics_ask_song">이 노래에 대해 질문</string>
+    <string name="song_level">레벨 %1$s</string>
+    <string name="song_original">원곡</string>
+    <string name="song_samples">샘플링</string>
+    <string name="artist_who">누구</string>
+    <string name="artist_style">스타일</string>
+    <string name="artist_known_for">대표작</string>
+    <string name="songs_like_label">비슷한 노래:</string>
+    <string name="song_search_playlist">플레이리스트 만들기</string>
+    <string name="error_no_songs_like">비슷한 노래를 찾지 못했어요.</string>
 </resources>

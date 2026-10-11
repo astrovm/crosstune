@@ -1194,6 +1194,14 @@ class ListeningTest {
             val input = body.getJSONArray("input").getJSONObject(0).getString("content")
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
+                "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
+                "listening exercise" in instructions -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { lines.getString(it).substringAfterLast(' ') }) }.toString())
+                "CEFR" in instructions -> FakeOpenAi.stream("""{"level": "B1", "why": "Easy words.", "original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
+                "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
+                "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
+                "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
+                "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
+                "word order" in instructions -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "‹${lines.getString(it)}›" }) }.toString())
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
                 "You make a quiz" in instructions -> FakeOpenAi.stream("[\"Day sky\", \"Night rain\"]")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
@@ -1554,5 +1562,209 @@ class ListeningTest {
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
             """"hub":{"actions":[{"type":"applemusicplay","id":"1109658204"}]}}}"""
+    }
+
+    /** Waits for the words, shown whole when nothing helps read them. */
+    private fun waitForWords() = composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Stars", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+
+    /** The catalogue has Moon by Luna, and whatever else ChatGPT names isn't found; otherwise as [before]. */
+    private fun withCatalogue(before: (okhttp3.Request) -> okhttp3.Response) {
+        fake.handler = { request ->
+            val q = request.url.queryParameter("q").orEmpty()
+            when {
+                request.url.host == "api.deezer.com" && "Moon" in q -> FakeSpotify.html(request, """{"data":[{"id":1,"title":"Moon","link":"https://www.deezer.com/track/1","artist":{"name":"Luna"}}]}""")
+                request.url.host == "api.deezer.com" && "Rain" in q -> FakeSpotify.html(request, """{"data":[{"id":2,"title":"Rain","link":"https://www.deezer.com/track/2","artist":{"name":"Cloud"}}]}""")
+                request.url.host == "api.deezer.com" && "Sun" in q -> FakeSpotify.html(request, """{"data":[{"id":3,"title":"Sun","link":"https://www.deezer.com/track/3","artist":{"name":"Day"}}]}""")
+                request.url.host == "api.deezer.com" || request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"data":[],"results":[]}""")
+                else -> before(request)
+            }
+        }
+    }
+
+    @Test
+    fun theWordsToKnowAreSavedToPractiseAndAskedAgainAfterFailing() {
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("6 to 10 words" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitForWords()
+        learnMenu()
+        click(string(R.string.lyrics_words_to_know))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_words_to_know_failed)) }
+        openAi.reply = answers
+        click(string(R.string.retry_button))
+        waitForText("cielo")
+        assertTrue(shown("estrellas"))
+        // Saved, it's practised like a line, with its meaning.
+        click(string(R.string.lyrics_save_word, "sky"))
+        assertEquals(SavedLine("sky", translation = "cielo", title = "Demo", artist = "Band"), SavedLinesStore(prefs()).load().single())
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_word_saved, "sky"))).fetchSemanticsNodes().isNotEmpty())
+        // Tapped again, it's let go.
+        click(string(R.string.lyrics_word_saved, "sky"))
+        assertTrue(SavedLinesStore(prefs()).load().isEmpty())
+        // Closed and opened again, they're there, not asked again.
+        val asked = openAi.asked.size
+        composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
+        composeRule.waitUntil(TIMEOUT_MS) { !shown("cielo") }
+        learnMenu()
+        click(string(R.string.lyrics_words_to_know))
+        waitForText("cielo")
+        assertEquals(asked, openAi.asked.size)
+    }
+
+    @Test
+    fun theArtistIsToldInPartsAndAskedAgainAfterFailing() {
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("get to know the artists" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitForWords()
+        learnMenu()
+        click(string(R.string.lyrics_about_artist))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_about_artist_failed)) }
+        openAi.reply = answers
+        click(string(R.string.retry_button))
+        waitForText("A band from Rome.")
+        assertTrue(shown("Night pop.") && shown("Demo (2020).") && shown(string(R.string.artist_who)) && shown(string(R.string.artist_style)) && shown(string(R.string.artist_known_for)))
+        // Asked about again, it's there already.
+        val asked = openAi.asked.size
+        composeRule.onNode(hasText("A band from Rome.")).performTouchInput { swipeDown() }
+        composeRule.waitUntil(TIMEOUT_MS) { !shown("A band from Rome.") }
+        learnMenu()
+        click(string(R.string.lyrics_about_artist))
+        waitForText("A band from Rome.")
+        assertEquals(asked, openAi.asked.size)
+    }
+
+    @Test
+    fun whatTheSongMeansSaysItsLevelWhatItCoversAndAnswersQuestions() {
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitForWords()
+        learnMenu()
+        click(string(R.string.lyrics_song_meaning))
+        waitForText("A night under the stars.")
+        // How hard it is, at a glance, and why; the song it covers and the one it samples.
+        composeRule.waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(string(R.string.song_level, "B1"))).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(shown("Easy words.") && shown(string(R.string.song_original)) && shown("Old Band") && shown(string(R.string.song_samples)) && shown("Drummer"))
+        // Explained, more can be asked about it.
+        composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("Why stars?")
+        click(string(R.string.lyrics_ask_send))
+        waitForText("It's about stars.")
+        val asked = openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content")
+        assertTrue(asked, asked.contains("What you said about it:\nFrom 1985.") && asked.endsWith("Question: Why stars?"))
+        // The next goes with it; failing says so.
+        openAi.reply = { 500 to "" }
+        composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("And night?")
+        click(string(R.string.lyrics_ask_send))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
+        // The song it covers opens like a song looked up, leaving the words.
+        composeRule.onNode(hasText("First Demo")).performScrollTo().performClick()
+        composeRule.waitUntil(TIMEOUT_MS) { !shown(string(R.string.song_original)) && shown("First Demo") && shown("Old Band") }
+    }
+
+    @Test
+    fun aWordOfEachLineIsBlankUntilItsSung() {
+        val openAi = signedInWithChatGpt()
+        wordsOf("[00:00.00] Night sky\\n[00:01.00] Stars\\n[09:00.00] Late song", "Night sky\\nStars\\nLate song", openAi = openAi)
+        waitForText("Late song")
+        learnMenu()
+        click(string(R.string.lyrics_blanks))
+        assertTrue(prefs().getBoolean("lyrics_blanks", false))
+        // The line sung already shows its word; the one being sung and those to come don't.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("Late ____") }
+        assertTrue(shown("_____") && shown("Night sky"))
+        assertFalse(shown("Late song"))
+        // Switched off, the words are whole again.
+        click(string(R.string.lyrics_blanks))
+        waitForText("Late song")
+        assertFalse(prefs().getBoolean("lyrics_blanks", true))
+    }
+
+    @Test
+    fun wordsWithNoTimingsKeepTheirBlanksAndWideWordsGetWideOnes() {
+        prefs().edit().putBoolean("lyrics_blanks", true).putBoolean("lyrics_romanized", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "夜の 雨\\nI go", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("夜の ＿＿＿") }
+        assertTrue(shown("I ___"))
+        // Its romaji would give the blank away.
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("yoru", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aLineCanBeSeenInExamplesAndSaysSoWhenItCant() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("example sentences" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        click(string(R.string.lyrics_examples))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_examples_failed)) }
+        openAi.reply = answers
+        click(string(R.string.lyrics_examples))
+        waitForText("The sky is blue.")
+        assertTrue(shown("El cielo es azul."))
+    }
+
+    @Test
+    fun wordForWordIsAChatGptTranslationOfItsOwn() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        learnMenu()
+        click(string(R.string.lyrics_literal))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("‹Stars›") }
+        assertTrue(prefs().getBoolean("translation_literal", false))
+        click(string(R.string.lyrics_literal))
+        composeRule.waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+    }
+
+    @Test
+    fun songsLikeOneAreAPlaylistOfThoseInTheCatalogue() {
+        val openAi = signedInWithChatGpt()
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitForWords()
+        withCatalogue(fake.handler)
+        learnMenu()
+        click(string(R.string.lyrics_songs_like))
+        // The words close for the songs, the one the catalogue doesn't have left out.
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.songs_like_label)) && shown("Moon") }
+        assertTrue(shown("Luna") && shown("Demo"))
+        assertFalse(shown("Made Up"))
+    }
+
+    @Test
+    fun songsLikeOneThatArentFoundSaySo() {
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("You recommend songs" in body.getString("instructions")) 200 to FakeOpenAi.stream("[]") else answers(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitForWords()
+        withCatalogue(fake.handler)
+        learnMenu()
+        click(string(R.string.lyrics_songs_like))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.error_no_songs_like)) }
+        assertFalse(shown(string(R.string.songs_like_label)))
+    }
+
+    @Test
+    fun aMoodSearchedMakesAPlaylistOfChatGptsPicks() {
+        val openAi = signedInWithChatGpt()
+        openAi.reply = { 200 to FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Rain", "artist": "Cloud"}, {"title": "Sun", "artist": "Day"}]""") }
+        withCatalogue(fake.handler)
+        launch()
+        composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("calm rainy night songs")
+        click(string(R.string.resolve_button))
+        composeRule.waitUntil(TIMEOUT_MS) { shown(string(R.string.song_search_playlist)) }
+        click(string(R.string.song_search_playlist))
+        // A list named after the mood, with ChatGPT's songs, to play or share like a playlist.
+        composeRule.waitUntil(TIMEOUT_MS) { shown("calm rainy night songs") && shown("Rain") && shown("Sun") }
+        assertFalse(shown(string(R.string.song_search_label_for, "calm rainy night songs")))
+        assertFalse(shown(string(R.string.songs_like_label)))
     }
 }

@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -32,6 +34,8 @@ internal data class UiState(
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,
+    /** Set when [result] lists songs like the one it's named after, as ChatGPT found them. */
+    val songsLike: Boolean = false,
     /** Prepared direct links or search fallbacks, reused by Open, Copy and Share for this result. */
     val destinationUrls: Map<Destination, PreparedLink> = emptyMap(),
     /** The link [result] came from, or the incoming link that failed, so it can still be opened as is. */
@@ -319,11 +323,35 @@ internal data class Learning(
     val songExplanation: LineExplanation? = null,
     /** Questions asked about line [questionsAbout], in order, with their answers. */
     val questionsAbout: Int? = null,
-    val questions: List<LineQuestion> = emptyList()
+    val questions: List<LineQuestion> = emptyList(),
+    /** Translated word for word by ChatGPT, rather than as it would naturally be said. */
+    val literal: Boolean = false,
+    /** Signed in, one word of each line left blank, to listen for, until it's sung. */
+    val blanks: Boolean = false,
+    /** The word left blank in each line, or null where none is, once ChatGPT picked them. */
+    val blankWords: List<String?> = emptyList(),
+    /** The words most worth learning from the song, as ChatGPT finds them. */
+    val wordsToKnow: Asking<List<KeyWord>>? = null,
+    /** How hard the song's words are, and what it covers or samples, once ChatGPT found out. */
+    val songFacts: SongFacts? = null,
+    /** Questions asked about the whole song, in order, with their answers. */
+    val songQuestions: List<LineQuestion> = emptyList(),
+    /** Who the artist is, as ChatGPT is writing it, or has. */
+    val artist: LineExplanation? = null,
+    /** Sentences using line [LineExamples.index]'s words, as ChatGPT writes them. */
+    val examples: LineExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, script, literal = literal, blanks = blanks)
 }
+
+/** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
+internal data class Asking<T>(val value: T? = null, val failed: Boolean = false) {
+    val loading get() = value == null && !failed
+}
+
+/** Sentences using line [index]'s words, once they've come, or that they couldn't be had. */
+internal data class LineExamples(val index: Int, val asking: Asking<List<Example>> = Asking())
 
 /**
  * A song not found in [destination], with its [original] link, which opens it where it is, when it has
@@ -415,7 +443,9 @@ internal class MainViewModel(
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
                 translation = preferences.getBoolean(KEY_TRANSLATION, false),
                 chatGptTranslation = preferences.getBoolean(KEY_TRANSLATION_CHATGPT, true),
-                into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag)
+                into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
+                literal = preferences.getBoolean(KEY_TRANSLATION_LITERAL, false),
+                blanks = preferences.getBoolean(KEY_BLANKS, false)
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -662,19 +692,67 @@ internal class MainViewModel(
             )
             if (!describes) return@launch
             val named = try {
-                tutor?.songsFor(words).orEmpty().mapNotNull { (title, artist) ->
-                    // Each looked up, so it's a real song with its link; titles and artists swapped happen.
-                    searcher.search("$title $artist").firstOrNull { found ->
-                        (SongNames.same(found.title, title) && SongNames.sameArtist(found.artist, artist)) ||
-                            (SongNames.same(found.title, artist) && SongNames.sameArtist(found.artist, title))
-                    }
-                }.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+                found(searcher, tutor?.songsFor(words).orEmpty())
             } finally {
                 if (isActive) uiState = uiState.copy(isAskingForSongs = false)
             }
             val rest = songs.filterNot { song -> named.any { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) } }
             uiState = uiState.copy(songSearch = named + rest, songsFromChatGpt = named.size)
         }
+    }
+
+    /**
+     * The songs [named], as title to artist, each looked up all at once, so they're real songs with
+     * their links, in the order named; those not found are left out.
+     */
+    private suspend fun found(searcher: SongSearcher, named: List<Pair<String, String>>): List<MusicMetadata> = coroutineScope {
+        named.map { (title, artist) ->
+            async {
+                // Titles and artists swapped happen.
+                searcher.search("$title $artist").firstOrNull { found ->
+                    (SongNames.same(found.title, title) && SongNames.sameArtist(found.artist, artist)) ||
+                        (SongNames.same(found.title, artist) && SongNames.sameArtist(found.artist, title))
+                }
+            }
+        }.awaitAll().filterNotNull().distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+    }
+
+    /** The songs ChatGPT named for the description searched, as a playlist to play or share. */
+    fun playlistFromSearch() {
+        val songs = uiState.songSearch.take(uiState.songsFromChatGpt).takeIf { it.size >= MIN_PLAYLIST } ?: return
+        val title = uiState.songSearchQuery
+        cancelContentWork()
+        showSongList(title, songs)
+    }
+
+    /** Songs like [song], from ChatGPT, each found in the catalogue, as a playlist. */
+    fun songsLike(song: MusicMetadata) {
+        val searcher = songSearcher ?: return
+        val tutor = tutor ?: return
+        cancelContentWork()
+        uiState = uiState.copy(isLoading = true, result = null, link = null, error = null, linkText = "")
+        job = viewModelScope.launch {
+            val songs = tutor.songsLike(song)?.let { found(searcher, it) }.orEmpty()
+            uiState = uiState.copy(isLoading = false)
+            if (songs.isEmpty()) return@launch showError(AppError.NO_SONGS_LIKE)
+            showSongList(song.title, songs, like = true)
+        }
+    }
+
+    /**
+     * [songs] shown as a list named [title], to play all at once, open one by one, copy or share,
+     * like a playlist; [like] when they're songs like the one [title] names. Not kept in Recent:
+     * there's no link to open it again by.
+     */
+    private fun showSongList(title: String, songs: List<MusicMetadata>, like: Boolean = false) {
+        uiState = uiState.copy(
+            result = MusicMetadata(title, "", ItemType.PLAYLIST, songs.firstNotNullOfOrNull { it.artworkUrl }, songs),
+            link = null,
+            songsLike = like,
+            linkText = "",
+            destinationUrls = emptyMap(),
+            error = null
+        )
     }
 
     /** Closes the songs offered, leaving the typed text as it was. */
@@ -700,6 +778,9 @@ internal class MainViewModel(
         uiState = uiState.copy(linkText = input.text)
         resolve(input, openWhenReady = false)
     }
+
+    /** Opens a song ChatGPT named, by [title] and [artist], like one picked from a search. */
+    fun openNamedSong(title: String, artist: String) = chooseSong(MusicMetadata(title, artist))
 
     /** A recognized song keeps its "Song by Artist" text, so Convert reads it again from the box. */
     private fun fieldText(link: MusicLink, metadata: MusicMetadata) =
@@ -912,6 +993,7 @@ internal class MainViewModel(
         uiState = uiState.copy(
             isLoading = false,
             result = resolution.metadata,
+            songsLike = false,
             link = resolution.link,
             linkText = fieldText(resolution.link, resolution.metadata),
             destinationUrls = savedDestinations(entry),
@@ -1520,15 +1602,22 @@ internal class MainViewModel(
 
     private var readingsJob: Job? = null
     private var translationJob: Job? = null
+    private var blanksJob: Job? = null
 
     /** What was being worked out is for words no longer shown. */
     private fun stopLearning() {
         readingsJob?.cancel()
         translationJob?.cancel()
+        blanksJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()
+        songFactsJob?.cancel()
         questionJob?.cancel()
+        songQuestionJob?.cancel()
+        wordsToKnowJob?.cancel()
+        artistJob?.cancel()
+        examplesJob?.cancel()
         stopRepeating()
         uiState = uiState.copy(word = null)
     }
@@ -1653,11 +1742,7 @@ internal class MainViewModel(
                 // Written as it comes, unless it's done by the time this is shown.
                 viewModelScope.launch { if (uiState.learning.explanation?.let { it.index == index && it.writing } == true) setExplanation(LineExplanation(index, text)) }
             }
-            val explanation = when (reply) {
-                is ChatGptReply.Answer -> LineExplanation(index, reply.text.trim(), done = true)
-                ChatGptReply.LimitReached -> LineExplanation(index, limitReached = true)
-                ChatGptReply.Failed -> LineExplanation(index, failed = true)
-            }
+            val explanation = explained(index, reply)
             setExplanation(explanation)
             // A line kept already keeps its explanation too.
             if (explanation.done) uiState = uiState.copy(savedLines = savedLinesStore.explain(line, song.title, song.artist, explanation.text))
@@ -1683,14 +1768,7 @@ internal class MainViewModel(
                     if (uiState.learning.questions.lastOrNull()?.writing == true) setQuestions(index, before + LineQuestion(asked, text))
                 }
             }
-            setQuestions(
-                index,
-                before + when (reply) {
-                    is ChatGptReply.Answer -> LineQuestion(asked, reply.text.trim(), done = true)
-                    ChatGptReply.LimitReached -> LineQuestion(asked, limitReached = true)
-                    ChatGptReply.Failed -> LineQuestion(asked, failed = true)
-                }
-            )
+            setQuestions(index, before + answered(asked, reply))
         }
     }
 
@@ -1705,6 +1783,7 @@ internal class MainViewModel(
         val tutor = tutor ?: return
         val song = uiState.lyricsFor ?: return
         val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
+        findSongFacts(song, lines)
         // Already explained, or on its way, it's just shown.
         if (uiState.learning.songExplanation?.let { it.done || it.writing } == true) return
         songExplanationJob?.cancel()
@@ -1713,14 +1792,121 @@ internal class MainViewModel(
             val reply = tutor.explainSong(song, lines, translateInto()) { text ->
                 viewModelScope.launch { if (uiState.learning.songExplanation?.writing == true) setSongExplanation(LineExplanation(SONG, text)) }
             }
-            setSongExplanation(
-                when (reply) {
-                    is ChatGptReply.Answer -> LineExplanation(SONG, reply.text.trim(), done = true)
-                    ChatGptReply.LimitReached -> LineExplanation(SONG, limitReached = true)
-                    ChatGptReply.Failed -> LineExplanation(SONG, failed = true)
-                }
-            )
+            setSongExplanation(explained(SONG, reply))
         }
+    }
+
+    private var songFactsJob: Job? = null
+
+    /** Finds how hard the song's words are, and what it covers or samples, unless it's known. */
+    private fun findSongFacts(song: MusicMetadata, lines: List<String>) {
+        val tutor = tutor ?: return
+        if (uiState.learning.songFacts != null || songFactsJob?.isActive == true) return
+        songFactsJob = viewModelScope.launch {
+            val facts = tutor.songFacts(song, lines, translateInto()) ?: return@launch
+            if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(songFacts = facts))
+        }
+    }
+
+    private var songQuestionJob: Job? = null
+
+    /** Asks ChatGPT [question] about the whole song, after what it said about it and what was asked before. */
+    fun askAboutSong(question: String) {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val asked = question.trim().takeIf { it.isNotEmpty() } ?: return
+        val before = uiState.learning.songQuestions.filter { it.done }
+        val explanation = uiState.learning.songExplanation?.takeIf { it.done }?.text
+        songQuestionJob?.cancel()
+        setSongQuestions(before + LineQuestion(asked))
+        songQuestionJob = viewModelScope.launch {
+            val reply = tutor.askAboutSong(song, wordLines(), explanation, before.map { it.question to it.answer }, asked, translateInto()) { text ->
+                viewModelScope.launch { if (uiState.learning.songQuestions.lastOrNull()?.writing == true) setSongQuestions(before + LineQuestion(asked, text)) }
+            }
+            setSongQuestions(before + answered(asked, reply))
+        }
+    }
+
+    private fun setSongQuestions(questions: List<LineQuestion>) {
+        uiState = uiState.copy(learning = uiState.learning.copy(songQuestions = questions))
+    }
+
+    private var wordsToKnowJob: Job? = null
+
+    /** Has ChatGPT pick the song's words most worth learning, unless it has or is. */
+    fun findWordsToKnow() {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val lines = wordLines().takeIf { it.isNotEmpty() } ?: return
+        if (uiState.learning.wordsToKnow?.failed == false) return
+        setWordsToKnow(Asking())
+        wordsToKnowJob = viewModelScope.launch {
+            val words = tutor.wordsToKnow(song, lines, translateInto())
+            setWordsToKnow(Asking(words, failed = words == null))
+        }
+    }
+
+    private fun setWordsToKnow(asking: Asking<List<KeyWord>>) {
+        uiState = uiState.copy(learning = uiState.learning.copy(wordsToKnow = asking))
+    }
+
+    /** Keeps [word], one of the song's words to know, to practise with the saved lines, or lets it go. */
+    fun toggleSavedWord(word: KeyWord) {
+        val song = uiState.lyricsFor ?: return
+        uiState = uiState.copy(savedLines = savedLinesStore.toggle(SavedLine(word.word, word.reading, translation = word.meaning, title = song.title, artist = song.artist)))
+    }
+
+    private var artistJob: Job? = null
+
+    /** Has ChatGPT say who the song's artist is, unless it has or is. */
+    fun aboutArtist() {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        if (uiState.learning.artist?.let { it.done || it.writing } == true) return
+        setArtist(LineExplanation(SONG))
+        artistJob = viewModelScope.launch {
+            val reply = tutor.aboutArtist(song, translateInto()) { text ->
+                viewModelScope.launch { if (uiState.learning.artist?.writing == true) setArtist(LineExplanation(SONG, text)) }
+            }
+            setArtist(explained(SONG, reply))
+        }
+    }
+
+    private fun setArtist(explanation: LineExplanation) {
+        uiState = uiState.copy(learning = uiState.learning.copy(artist = explanation))
+    }
+
+    private var examplesJob: Job? = null
+
+    /** Has ChatGPT write sentences using line [index]'s words, the way it does. */
+    fun findExamples(index: Int) {
+        val tutor = tutor ?: return
+        val song = uiState.lyricsFor ?: return
+        val line = wordLines().getOrNull(index) ?: return
+        examplesJob?.cancel()
+        setExamples(LineExamples(index))
+        examplesJob = viewModelScope.launch {
+            val examples = tutor.examples(line, song, translateInto())
+            setExamples(LineExamples(index, Asking(examples, failed = examples == null)))
+        }
+    }
+
+    private fun setExamples(examples: LineExamples) {
+        uiState = uiState.copy(learning = uiState.learning.copy(examples = examples))
+    }
+
+    /** A question [asked], answered as [reply] says. */
+    private fun answered(asked: String, reply: ChatGptReply) = when (reply) {
+        is ChatGptReply.Answer -> LineQuestion(asked, reply.text.trim(), done = true)
+        ChatGptReply.LimitReached -> LineQuestion(asked, limitReached = true)
+        ChatGptReply.Failed -> LineQuestion(asked, failed = true)
+    }
+
+    /** Line [index], or the song, explained as [reply] says. */
+    private fun explained(index: Int, reply: ChatGptReply) = when (reply) {
+        is ChatGptReply.Answer -> LineExplanation(index, reply.text.trim(), done = true)
+        ChatGptReply.LimitReached -> LineExplanation(index, limitReached = true)
+        ChatGptReply.Failed -> LineExplanation(index, failed = true)
     }
 
     private fun setSongExplanation(explanation: LineExplanation) {
@@ -1788,6 +1974,13 @@ internal class MainViewModel(
                 }
             }
         }
+        val song = uiState.lyricsFor
+        if (learning.blanks && usesChatGpt() && song != null && lines.isNotEmpty() && learning.blankWords.isEmpty() && blanksJob?.isActive != true) {
+            blanksJob = viewModelScope.launch {
+                val blanks = tutor?.blanks(song, lines) ?: return@launch
+                if (wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(blankWords = blanks))
+            }
+        }
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
@@ -1796,7 +1989,7 @@ internal class MainViewModel(
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
                     if (usesChatGpt() && learning.chatGptTranslation) {
-                        tutor?.translate(lines, language, uiState.lyricsFor) { so ->
+                        tutor?.translate(lines, language, uiState.lyricsFor, learning.literal) { so ->
                             // Shown line by line as they come, while it's still translating these words.
                             viewModelScope.launch {
                                 if (uiState.learning.translating && wordLines() == lines) uiState = uiState.copy(learning = uiState.learning.copy(translations = so))
@@ -1830,6 +2023,22 @@ internal class MainViewModel(
     fun setTranslation(on: Boolean) {
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
+        learn()
+    }
+
+    /** Translates word for word with ChatGPT, or as it would naturally be said, from now on. */
+    fun setLiteral(on: Boolean) {
+        preferences.edit { putBoolean(KEY_TRANSLATION_LITERAL, on) }
+        // One kind of translation is no answer for the other.
+        translationJob?.cancel()
+        uiState = uiState.copy(learning = uiState.learning.copy(literal = on, translations = emptyList(), translating = false, translationFailed = false))
+        learn()
+    }
+
+    /** Leaves a word of each line blank to listen for, or shows them whole, from now on. */
+    fun setBlanks(on: Boolean) {
+        preferences.edit { putBoolean(KEY_BLANKS, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(blanks = on))
         learn()
     }
 
@@ -2251,10 +2460,15 @@ internal class MainViewModel(
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
+        private const val KEY_TRANSLATION_LITERAL = "translation_literal"
+        private const val KEY_BLANKS = "lyrics_blanks"
         private const val KEY_CHATGPT_MODEL = "chatgpt_model"
 
         /** Typed text of this many words or more may describe a song rather than name it. */
         const val DESCRIPTION_WORDS = 3
+
+        /** The fewest songs ChatGPT names for a description that make a playlist. */
+        const val MIN_PLAYLIST = 3
 
         /** Where a song's explanation, which is no line's, says it's from. */
         const val SONG = -1
