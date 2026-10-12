@@ -63,10 +63,11 @@ internal object Readings {
         return LineReading(joined(parts), pieces.joinToString("") { it.kana }, romajiWords(pieces).joinToString(" ") { romaji(it) })
     }
 
-    private fun pieces(line: String): List<Piece> = tokenizer.tokenize(line).map { token ->
+    // Kanji in their old forms, as 燈 for 灯, read as the new ones the dictionary knows, and stay as written.
+    private fun pieces(line: String): List<Piece> = tokenizer.tokenize(line.map { NEW_FORMS[it] ?: it }.joinToString("")).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             Piece(
-                token.surface,
+                line.substring(token.position, token.position + token.surface.length),
                 token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface,
                 token.partOfSpeechLevel1,
                 token.partOfSpeechLevel2,
@@ -74,6 +75,12 @@ internal object Readings {
                 token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) }
             )
         }
+
+    /** Old forms of kanji, each before its new one, as lyrics keep them for their feel. */
+    private val NEW_FORMS = ("燈灯戀恋櫻桜聲声體体國国學学氣気會会來来晝昼黑黒發発傳伝實実廣広獨独歸帰圓円驛駅舊旧" +
+        "樂楽萬万與与爭争戰戦繪絵戲戯聽聴譯訳變変邊辺鐵鉄靜静顏顔惠恵濱浜擧挙寫写對対數数斷断曉暁歡歓歲歳殘残滿満" +
+        "燒焼爲為畫画當当盡尽眞真禮礼經経綠緑總総續続處処號号螢蛍觀観讀読豐豊賣売輕軽辭辞醉酔黃黄齒歯淚涙")
+        .chunked(2).associate { it[0] to it[1] }
 
     /** The dictionary draws out おう as おー, but not えい, as in せんせい, said せんせー. */
     private fun drawnOutE(kana: String) = kana.replace(Regex("([えけげせぜてでねへべぺめれ])い"), "$1ー")

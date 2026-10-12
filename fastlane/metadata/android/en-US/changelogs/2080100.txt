@@ -1,1 +1,2 @@
 Korean floating lyrics show their Latin letters once, not twice.
+Kanji in their old forms, like 燈, get their kana and romaji.

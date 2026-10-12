@@ -55,6 +55,17 @@ class ReadingsTest {
     }
 
     @Test
+    fun kanjiInTheirOldFormsReadAsTheirNewOnes() {
+        // 燈 is how 灯 was written before, and lyrics keep it for its feel.
+        val (old) = Readings.of(listOf("ガス燈が夜を"), Script.JAPANESE)
+        val (new) = Readings.of(listOf("ガス灯が夜を"), Script.JAPANESE)
+        assertEquals(new.romanized, old.romanized)
+        assertEquals(new.reading, old.reading)
+        assertEquals(new.parts.map { it.text.replace('灯', '燈') to it.reading }, old.parts.map { it.text to it.reading })
+        assertEquals("gasutoo ga yoru o", old.romanized)
+    }
+
+    @Test
     fun romajiKeepsAVerbWithItsEndingsAndMarksAgainstTheirWords() {
         fun romanized(line: String) = Readings.of(listOf(line), Script.JAPANESE).single().romanized
         assertEquals("wakatta", romanized("分かった"))
