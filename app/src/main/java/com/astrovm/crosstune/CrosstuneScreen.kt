@@ -520,7 +520,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkField(state, actions)
         StatusSection(state, actions)
         // Over a song shown too, unless it's that song; not while a link is typed in.
-        val playing = state.playingNow.takeIf { now ->
+        val playing = state.playingNow?.takeIf { now ->
             state.error == null && !state.isLoading && !state.listening &&
                 state.result?.let { SongNames.same(it.title, now.title) && SongNames.sameArtist(it.artist, now.artist) } != true &&
                 (state.result != null || state.linkText.isBlank())

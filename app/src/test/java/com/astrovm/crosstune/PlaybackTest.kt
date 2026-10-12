@@ -298,7 +298,7 @@ class PlaybackTest {
         shadowOf(sessions).addController(player(app.packageName, "Crosstune", "Its Own Preview", "Someone"))
         assertNull(playback.nowPlaying())
 
-        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
         assertEquals(song, playback.nowPlaying()?.metadata)
     }
 
@@ -306,8 +306,8 @@ class PlaybackTest {
     fun anAppThatStillSaysItPlaysLongAfterItStoppedIsNotBelieved() {
         allow()
         // A browser tab left saying it plays, and the app really playing, which said where it is since.
-        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Cuando Perriabas", "Bad Bunny", at = PLAYED_AT - 10_000_000))
-        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        shadowOf(sessions).addController(player("com.brave.browser", "Brave", "Cuando Perriabas", "Bad Bunny", album = "Single", at = PLAYED_AT - 10_000_000))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
         // Nothing sounding: neither is, really.
         sounding(false)
         assertNull(playback.nowPlaying())
@@ -365,7 +365,7 @@ class PlaybackTest {
         val cover = "https://i.scdn.co/image/cover"
         // A cover only the app itself can open is left out; the album's is used when the song has none.
         shadowOf(sessions).addController(
-            player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to "content://com.spotify/cover", MediaMetadata.METADATA_KEY_ALBUM_ART_URI to cover))
+            player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours", art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to "content://com.spotify/cover", MediaMetadata.METADATA_KEY_ALBUM_ART_URI to cover))
         )
         assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
     }
