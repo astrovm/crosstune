@@ -2,6 +2,7 @@ package com.astrovm.crosstune.shots
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
 import android.graphics.drawable.BitmapDrawable
 import android.os.SystemClock
 import android.view.View
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -88,12 +91,14 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w412dp-h915dp-night")
-abstract class Shots(private val lang: String) {
+abstract class Shots(private val lang: String, private val darkTheme: Boolean = true) {
+
+    private val theme = if (darkTheme) "dark" else "light"
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private val out = File(System.getProperty("shots.out") ?: "build/shots", lang).apply { mkdirs() }
+    private val out = File(File(System.getProperty("shots.out") ?: "build/shots", lang), theme).apply { mkdirs() }
     private val visualsDir = File(System.getProperty("shots.visuals") ?: "build/shots/visuals")
 
     // Each test's density and each class's language are set before the screen opens: changing them
@@ -149,13 +154,13 @@ abstract class Shots(private val lang: String) {
     private fun homeClip() {
         var state by mutableStateOf(home(null, resolved = false))
         show { state }
-        Video(File(out, "home-dark.mp4"), width, height).use { video ->
+        Video(File(out, "home-$theme.mp4"), width, height).use { video ->
             record(video, 13_300) { at ->
                 when (at) {
                     1_000L -> state = state.copy(linkText = apple.url)
                     1_800L -> state = state.copy(isLoading = true)
                     2_600L -> state = home(apple, resolved = true)
-                    5_000L -> save(File(out, "home-dark.png"))
+                    5_000L -> save(File(out, "home-$theme.png"))
                     6_000L -> state = home(null, resolved = false, recentFirst = true).copy(linkText = deezer.url)
                     6_800L -> state = state.copy(isLoading = true)
                     7_600L -> state = home(deezer, resolved = true, recentFirst = true)
@@ -171,9 +176,9 @@ abstract class Shots(private val lang: String) {
     private fun lyricsClip() {
         var state by mutableStateOf(lyrics())
         show { state }
-        Video(File(out, "lyrics-dark.mp4"), width, height).use { video ->
+        Video(File(out, "lyrics-$theme.mp4"), width, height).use { video ->
             record(video, 11_400) { at ->
-                if (at == 500L) save(File(out, "lyrics-dark.png"))
+                if (at == 500L) save(File(out, "lyrics-$theme.png"))
                 if (at == 4_600L) {
                     composeRule.onNodeWithContentDescription(string(R.string.visuals_show)).performTouchInput { click() }
                 }
@@ -288,6 +293,7 @@ abstract class Shots(private val lang: String) {
         WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         val statusBar = bitmap("statusbar.png").asImageBitmap()
         val listening = bitmap("statusbar-listening.png").asImageBitmap()
+        val lightListening = lightBar(bitmap("statusbar-listening.png")).asImageBitmap()
         val handle = bitmap("handle.png").asImageBitmap()
         val actions = ScreenActions(
             recognizers = SongRecognizers.available(activity),
@@ -295,7 +301,7 @@ abstract class Shots(private val lang: String) {
         )
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
-            CrosstuneTheme(darkTheme = true, palette = Palette.VIOLET) {
+            CrosstuneTheme(darkTheme = darkTheme, palette = Palette.VIOLET) {
                 CompositionLocalProvider(LocalVisuals provides { _, modifier -> VisualFrame(modifier) }) {
                     Box(Modifier.fillMaxSize()) {
                         // Always reading the bars' room keeps it: once nothing does, Compose forgets it,
@@ -303,8 +309,13 @@ abstract class Shots(private val lang: String) {
                         Box(Modifier.windowInsetsPadding(WindowInsets.systemBars))
                         key(sceneId) { CrosstuneScreen(scene(), actions) }
                         // Cut from a real screenshot at 420 dpi, so 2.625 pixels a dp.
-                        Image(if (listeningBar) listening else statusBar, null, Modifier.fillMaxWidth().align(Alignment.TopCenter), contentScale = ContentScale.FillWidth)
-                        Image(handle, null, Modifier.align(Alignment.BottomCenter).size((320 / 2.625f).dp, (40 / 2.625f).dp), contentScale = ContentScale.FillBounds)
+                        val lightBars = !darkTheme && !scene().visuals
+                        val barTint = if (lightBars) ColorFilter.tint(Color.Black) else null
+                        Image(if (listeningBar) (if (lightBars) lightListening else listening) else statusBar, null,
+                            Modifier.fillMaxWidth().align(Alignment.TopCenter), contentScale = ContentScale.FillWidth,
+                            colorFilter = if (listeningBar) null else barTint)
+                        Image(handle, null, Modifier.align(Alignment.BottomCenter).size((320 / 2.625f).dp, (40 / 2.625f).dp),
+                            contentScale = ContentScale.FillBounds, colorFilter = barTint)
                     }
                 }
             }
@@ -470,6 +481,23 @@ abstract class Shots(private val lang: String) {
 
     private fun bitmap(name: String): Bitmap = resource(name).use { BitmapFactory.decodeStream(it) }
 
+    /** Dark system icons for light screens, keeping Android's green microphone indicator. */
+    private fun lightBar(source: Bitmap): Bitmap {
+        val result = source.copy(Bitmap.Config.ARGB_8888, true)
+        val pixels = IntArray(result.width * result.height)
+        result.getPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
+        for (i in pixels.indices) {
+            val color = pixels[i]
+            val red = AndroidColor.red(color)
+            if (red == AndroidColor.green(color) && red == AndroidColor.blue(color)) {
+                val shade = 255 - red
+                pixels[i] = AndroidColor.argb(AndroidColor.alpha(color), shade, shade, shade)
+            }
+        }
+        result.setPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
+        return result
+    }
+
     /** A video's frames one after another, scaled to fill [width] by [height], as the visuals were drawn ahead. */
     private class Frames(file: File, private val width: Int, private val height: Int) : AutoCloseable {
         private val process = ProcessBuilder(
@@ -586,3 +614,37 @@ class ShotsTr : Shots("tr")
 class ShotsZhCn : Shots("zh-cn")
 @Config(qualifiers = "+zh-rTW")
 class ShotsZhTw : Shots("zh-tw")
+
+// Explicit qualifiers select light Android resources before the activity is created.
+@Config(qualifiers = "+notnight")
+class ShotsEnLight : Shots("en", darkTheme = false)
+@Config(qualifiers = "+de-notnight")
+class ShotsDeLight : Shots("de", darkTheme = false)
+@Config(qualifiers = "+es-notnight")
+class ShotsEsLight : Shots("es", darkTheme = false)
+@Config(qualifiers = "+fr-notnight")
+class ShotsFrLight : Shots("fr", darkTheme = false)
+@Config(qualifiers = "+hi-notnight")
+class ShotsHiLight : Shots("hi", darkTheme = false)
+@Config(qualifiers = "+in-notnight")
+class ShotsIdLight : Shots("id", darkTheme = false)
+@Config(qualifiers = "+it-notnight")
+class ShotsItLight : Shots("it", darkTheme = false)
+@Config(qualifiers = "+ja-notnight")
+class ShotsJaLight : Shots("ja", darkTheme = false)
+@Config(qualifiers = "+ko-notnight")
+class ShotsKoLight : Shots("ko", darkTheme = false)
+@Config(qualifiers = "+nl-notnight")
+class ShotsNlLight : Shots("nl", darkTheme = false)
+@Config(qualifiers = "+pl-notnight")
+class ShotsPlLight : Shots("pl", darkTheme = false)
+@Config(qualifiers = "+pt-rBR-notnight")
+class ShotsPtBrLight : Shots("pt-br", darkTheme = false)
+@Config(qualifiers = "+ru-notnight")
+class ShotsRuLight : Shots("ru", darkTheme = false)
+@Config(qualifiers = "+tr-notnight")
+class ShotsTrLight : Shots("tr", darkTheme = false)
+@Config(qualifiers = "+zh-rCN-notnight")
+class ShotsZhCnLight : Shots("zh-cn", darkTheme = false)
+@Config(qualifiers = "+zh-rTW-notnight")
+class ShotsZhTwLight : Shots("zh-tw", darkTheme = false)
