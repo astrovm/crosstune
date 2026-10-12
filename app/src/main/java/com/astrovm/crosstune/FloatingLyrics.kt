@@ -127,13 +127,14 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                 }
                 val before = shown(line - 1)?.takeIf { options.previousLine }
                 // What helps read the line being sung, as switched on for the words: its reading, and its translation.
+                // Hangul's reading is its Latin letters, shown once.
                 val help = state.learning.helpFor(line).takeIf { line >= 0 }
                 val reading = help?.reading
                 val helps = listOfNotNull(
                     reading?.reading?.takeIf { help.readings && it != first },
                     reading?.romanized?.takeIf { help.romanized && it.isNotBlank() && it != first },
                     help?.translation
-                )
+                ).distinct()
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     before?.let { Line(it, lit = false, options.scale, ink, outline) }
                     Line(first, lit = true, options.scale, ink, outline)

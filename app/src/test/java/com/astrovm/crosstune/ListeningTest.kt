@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
@@ -2105,6 +2106,21 @@ class ListeningTest {
         assertFalse(shown("[食べる]"))
         assertFalse(prefs().getBoolean("lyrics_readings", true))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
+    }
+
+    @Test
+    fun koreanWordsFloatTheirLatinLettersOnce() {
+        wordsOf("[00:00.00] 사랑해\\n[00:30.00] 좋아", "사랑해\\n좋아")
+        waitForText("사랑해")
+        learnMenu()
+        click(string(R.string.lyrics_romanized))
+        waitUntil(TIMEOUT_MS) { shown("saranghae") }
+
+        // Hangul's reading is its Latin letters, so floating, they show once, not as both.
+        val floating = floatNow()
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
+        assertEquals(1, composeRule.onAllNodesWithText("saranghae", useUnmergedTree = true).fetchSemanticsNodes().size)
+        floating.destroy()
     }
 
     @Test
