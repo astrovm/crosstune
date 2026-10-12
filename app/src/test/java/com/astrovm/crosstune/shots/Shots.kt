@@ -530,8 +530,17 @@ abstract class Shots(private val lang: String) {
         }
 
         override fun close() {
-            pipe.close()
-            check(process.waitFor() == 0) { "ffmpeg failed" }
+            try {
+                pipe.close()
+                check(process.waitFor(30, TimeUnit.SECONDS)) { "ffmpeg timed out" }
+                check(process.exitValue() == 0) { "ffmpeg failed" }
+            } finally {
+                if (process.isAlive) {
+                    process.destroy()
+                    if (!process.waitFor(2, TimeUnit.SECONDS)) process.destroyForcibly()
+                }
+                process.waitFor()
+            }
         }
     }
 

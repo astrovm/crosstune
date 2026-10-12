@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import signal
 import sys
 import unittest
 
@@ -22,6 +23,14 @@ class EncoderCleanupTest(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             render.encode_frames(child, [sys.executable, '-c', 'import sys; sys.exit(7)'])
         self.assertIsNotNone(child.returncode)
+        self.assertTrue(child.stdout.closed)
+
+    def test_encoder_failure_kills_renderer_that_ignores_termination(self):
+        child = subprocess.Popen([sys.executable, '-c', "import signal,sys,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); sys.stdout.buffer.write(b'ready'); sys.stdout.flush(); time.sleep(60)"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.assertEqual(child.stdout.read(5), b'ready')
+        with self.assertRaises(subprocess.CalledProcessError):
+            render.encode_frames(child, [sys.executable, '-c', 'import sys; sys.exit(7)'])
+        self.assertEqual(child.returncode, -signal.SIGKILL)
         self.assertTrue(child.stdout.closed)
 
     def test_renderer_failure_is_reported(self):
