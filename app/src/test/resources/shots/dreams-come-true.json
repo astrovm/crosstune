@@ -1,0 +1,187 @@
+{
+ "lrc": "[00:34.50](Ah-hah)\n[00:37.33]내가 원하는 대로\n[00:40.16]자신 있는 모습 그대로 (ah-hah)\n[00:46.56]이제껏 숨겨 왔던 비밀을\n[00:50.19]네게 모두 말하고 싶어 baby\n[00:56.62]Funny how all dreams come true\n[01:00.28]나를 지켜줄 거야, 아껴왔던 작은 사랑도\n[01:06.96]Funny how I feel for you\n[01:10.53]너의 곁에 그려질 꿈결 같은 나의 미래도\n[01:16.00](Whoa-whoa-whoa, yeah)\n[01:18.08]\n[01:43.74]처음 느낌 그대로\n[01:46.27]짜릿했던 느낌 그대로",
+ "translations": {
+  "en": {
+   "내가 원하는 대로": "Just the way I want",
+   "자신 있는 모습 그대로 (ah-hah)": "Just as confident as I am (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "The secrets I've kept hidden until now",
+   "네게 모두 말하고 싶어 baby": "I want to tell you everything, baby",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "You'll protect me, even the little love I've always cared for",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "And my dreamlike future, drawn by your side",
+   "처음 느낌 그대로": "Just like the first feeling",
+   "짜릿했던 느낌 그대로": "Just like that thrilling feeling"
+  },
+  "de": {
+   "내가 원하는 대로": "Genau so, wie ich es will",
+   "자신 있는 모습 그대로 (ah-hah)": "So selbstbewusst, wie ich bin (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Die Geheimnisse, die ich bisher versteckt habe",
+   "네게 모두 말하고 싶어 baby": "Ich will dir alles erzählen, Baby",
+   "Funny how all dreams come true": "Seltsam, wie alle Träume wahr werden",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Du wirst mich beschützen, auch die kleine Liebe, die ich gehütet habe",
+   "Funny how I feel for you": "Seltsam, was ich für dich fühle",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "Und meine traumhafte Zukunft an deiner Seite",
+   "처음 느낌 그대로": "Genau wie das erste Gefühl",
+   "짜릿했던 느낌 그대로": "Genau wie dieses aufregende Gefühl"
+  },
+  "es": {
+   "내가 원하는 대로": "Tal como yo quiero",
+   "자신 있는 모습 그대로 (ah-hah)": "Tan segura como soy (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Los secretos que guardé hasta ahora",
+   "네게 모두 말하고 싶어 baby": "Quiero contártelo todo, baby",
+   "Funny how all dreams come true": "Qué curioso que todos los sueños se cumplan",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Me vas a proteger, y también al pequeño amor que cuidé",
+   "Funny how I feel for you": "Qué curioso lo que siento por ti",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "Y mi futuro de ensueño, dibujado a tu lado",
+   "처음 느낌 그대로": "Igual que la primera vez",
+   "짜릿했던 느낌 그대로": "Igual que esa emoción"
+  },
+  "fr": {
+   "내가 원하는 대로": "Exactement comme je le veux",
+   "자신 있는 모습 그대로 (ah-hah)": "Aussi sûre de moi que je le suis (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Les secrets que j'ai cachés jusqu'ici",
+   "네게 모두 말하고 싶어 baby": "Je veux tout te dire, baby",
+   "Funny how all dreams come true": "C'est drôle comme tous les rêves se réalisent",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Tu me protégeras, et le petit amour que j'ai chéri aussi",
+   "Funny how I feel for you": "C'est drôle ce que je ressens pour toi",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "Et mon avenir de rêve, dessiné à tes côtés",
+   "처음 느낌 그대로": "Comme la première fois",
+   "짜릿했던 느낌 그대로": "Comme ce frisson d'avant"
+  },
+  "hi": {
+   "내가 원하는 대로": "जैसे मैं चाहूँ",
+   "자신 있는 모습 그대로 (ah-hah)": "पूरे आत्मविश्वास के साथ, जैसी मैं हूँ (आह-हा)",
+   "이제껏 숨겨 왔던 비밀을": "अब तक छिपाकर रखे अपने राज़",
+   "네게 모두 말하고 싶어 baby": "तुमसे सब कुछ कहना चाहती हूँ, बेबी",
+   "Funny how all dreams come true": "हैरानी है, सारे ख़्वाब सच हो जाते हैं",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "मेरा ख़याल रखना, उस छोटे-से प्यार का भी जिसे मैंने सँजोकर रखा है",
+   "Funny how I feel for you": "हैरानी है, मैं तुमसे कितना प्यार करती हूँ",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "और मेरा सपनों जैसा भविष्य, जो तुम्हारे साथ बनेगा",
+   "처음 느낌 그대로": "पहले एहसास की तरह",
+   "짜릿했던 느낌 그대로": "उस रोमांचक एहसास की तरह"
+  },
+  "id": {
+   "내가 원하는 대로": "Persis seperti yang kumau",
+   "자신 있는 모습 그대로 (ah-hah)": "Percaya diri apa adanya (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Rahasia yang selama ini kusembunyikan",
+   "네게 모두 말하고 싶어 baby": "Aku ingin menceritakan semuanya padamu, baby",
+   "Funny how all dreams come true": "Lucu ya, semua mimpi jadi nyata",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Kau akan menjagaku, juga cinta kecil yang selama ini kujaga",
+   "Funny how I feel for you": "Lucu ya, perasaanku padamu",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "Dan masa depanku yang seperti mimpi, terlukis di sisimu",
+   "처음 느낌 그대로": "Seperti perasaan pertama",
+   "짜릿했던 느낌 그대로": "Seperti debaran itu"
+  },
+  "it": {
+   "내가 원하는 대로": "Proprio come voglio io",
+   "자신 있는 모습 그대로 (ah-hah)": "Sicura di me come sono (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "I segreti che ho nascosto finora",
+   "네게 모두 말하고 싶어 baby": "Voglio dirti tutto, baby",
+   "Funny how all dreams come true": "Buffo come tutti i sogni si avverino",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Mi proteggerai, anche il piccolo amore che ho custodito",
+   "Funny how I feel for you": "Buffo quello che provo per te",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "E il mio futuro da sogno, disegnato accanto a te",
+   "처음 느낌 그대로": "Proprio come la prima volta",
+   "짜릿했던 느낌 그대로": "Proprio come quell'emozione"
+  },
+  "ja": {
+   "내가 원하는 대로": "私の望むままに",
+   "자신 있는 모습 그대로 (ah-hah)": "自信に満ちた姿のままで（あはっ）",
+   "이제껏 숨겨 왔던 비밀을": "今まで隠してきた秘密を",
+   "네게 모두 말하고 싶어 baby": "あなたに全部話したいの、ベイビー",
+   "Funny how all dreams come true": "夢って全部かなうんだね",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "私を守ってくれる、ずっと大切にしてきた小さな愛も",
+   "Funny how I feel for you": "あなたに恋するこの気持ち、不思議なくらい",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "あなたのそばで描かれる、夢のような私の未来も",
+   "처음 느낌 그대로": "初めての気持ちのまま",
+   "짜릿했던 느낌 그대로": "ときめいたあの気持ちのまま"
+  },
+  "ko": {
+   "Funny how all dreams come true": "신기하게도 모든 꿈이 이뤄져",
+   "Funny how I feel for you": "신기하게도 너를 향한 내 마음"
+  },
+  "nl": {
+   "내가 원하는 대로": "Precies zoals ik het wil",
+   "자신 있는 모습 그대로 (ah-hah)": "Zo zelfverzekerd als ik ben (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "De geheimen die ik tot nu toe verborg",
+   "네게 모두 말하고 싶어 baby": "Ik wil je alles vertellen, baby",
+   "Funny how all dreams come true": "Grappig hoe alle dromen uitkomen",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Je zult me beschermen, ook de kleine liefde die ik koesterde",
+   "Funny how I feel for you": "Grappig wat ik voor je voel",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "En mijn droomtoekomst, getekend aan jouw zij",
+   "처음 느낌 그대로": "Net als het eerste gevoel",
+   "짜릿했던 느낌 그대로": "Net als dat spannende gevoel"
+  },
+  "pl": {
+   "내가 원하는 대로": "Dokładnie tak, jak chcę",
+   "자신 있는 모습 그대로 (ah-hah)": "Pewna siebie, taka, jaka jestem (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Sekrety, które dotąd ukrywałam",
+   "네게 모두 말하고 싶어 baby": "Chcę ci wszystko powiedzieć, baby",
+   "Funny how all dreams come true": "Zabawne, jak wszystkie marzenia się spełniają",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Ochronisz mnie i tę małą miłość, którą pielęgnowałam",
+   "Funny how I feel for you": "Zabawne, co do ciebie czuję",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "I moją wymarzoną przyszłość, narysowaną u twego boku",
+   "처음 느낌 그대로": "Tak jak za pierwszym razem",
+   "짜릿했던 느낌 그대로": "Tak jak to ekscytujące uczucie"
+  },
+  "pt-br": {
+   "내가 원하는 대로": "Do jeito que eu quero",
+   "자신 있는 모습 그대로 (ah-hah)": "Confiante do jeito que sou (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Os segredos que escondi até agora",
+   "네게 모두 말하고 싶어 baby": "Quero te contar tudo, baby",
+   "Funny how all dreams come true": "Engraçado como todos os sonhos se realizam",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Você vai me proteger, e também o pequeno amor que guardei",
+   "Funny how I feel for you": "Engraçado o que sinto por você",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "E meu futuro de sonho, desenhado ao seu lado",
+   "처음 느낌 그대로": "Como a primeira sensação",
+   "짜릿했던 느낌 그대로": "Como aquela emoção"
+  },
+  "ru": {
+   "내가 원하는 대로": "Так, как я хочу",
+   "자신 있는 모습 그대로 (ah-hah)": "Уверенная в себе, какая есть (а-ха)",
+   "이제껏 숨겨 왔던 비밀을": "Секреты, что я прятала до сих пор",
+   "네게 모두 말하고 싶어 baby": "Хочу рассказать тебе всё, baby",
+   "Funny how all dreams come true": "Забавно, как все мечты сбываются",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Ты защитишь меня и ту маленькую любовь, что я берегла",
+   "Funny how I feel for you": "Забавно, что я чувствую к тебе",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "И моё сказочное будущее рядом с тобой",
+   "처음 느낌 그대로": "Как в первый раз",
+   "짜릿했던 느낌 그대로": "Как то волнующее чувство"
+  },
+  "tr": {
+   "내가 원하는 대로": "Tam istediğim gibi",
+   "자신 있는 모습 그대로 (ah-hah)": "Olduğum gibi, kendimden emin (ah-hah)",
+   "이제껏 숨겨 왔던 비밀을": "Şimdiye dek sakladığım sırları",
+   "네게 모두 말하고 싶어 baby": "Sana her şeyi anlatmak istiyorum, bebeğim",
+   "Funny how all dreams come true": "Ne tuhaf, bütün hayaller gerçek oluyor",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "Beni koruyacaksın, özenle sakladığım küçük aşkımı da",
+   "Funny how I feel for you": "Ne tuhaf, sana karşı hissettiklerim",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "Ve yanında çizilecek rüya gibi geleceğimi de",
+   "처음 느낌 그대로": "İlk hissettiğim gibi",
+   "짜릿했던 느낌 그대로": "O heyecanlı his gibi"
+  },
+  "zh-cn": {
+   "내가 원하는 대로": "就像我想要的那样",
+   "자신 있는 모습 그대로 (ah-hah)": "就像自信满满的我（啊哈）",
+   "이제껏 숨겨 왔던 비밀을": "一直以来藏在心里的秘密",
+   "네게 모두 말하고 싶어 baby": "我想全都告诉你，宝贝",
+   "Funny how all dreams come true": "真奇妙，所有梦想都会成真",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "你会守护我，还有我珍惜的小小爱情",
+   "Funny how I feel for you": "真奇妙，我对你的感觉",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "还有在你身边描绘的、梦一般的未来",
+   "처음 느낌 그대로": "就像最初的感觉",
+   "짜릿했던 느낌 그대로": "就像那心动的感觉"
+  },
+  "zh-tw": {
+   "내가 원하는 대로": "就像我想要的那樣",
+   "자신 있는 모습 그대로 (ah-hah)": "就像自信滿滿的我（啊哈）",
+   "이제껏 숨겨 왔던 비밀을": "一直以來藏在心裡的祕密",
+   "네게 모두 말하고 싶어 baby": "我想全都告訴你，寶貝",
+   "Funny how all dreams come true": "真奇妙，所有夢想都會成真",
+   "나를 지켜줄 거야, 아껴왔던 작은 사랑도": "你會守護我，還有我珍惜的小小愛情",
+   "Funny how I feel for you": "真奇妙，我對你的感覺",
+   "너의 곁에 그려질 꿈결 같은 나의 미래도": "還有在你身邊描繪的、夢一般的未來",
+   "처음 느낌 그대로": "就像最初的感覺",
+   "짜릿했던 느낌 그대로": "就像那心動的感覺"
+  }
+ }
+}

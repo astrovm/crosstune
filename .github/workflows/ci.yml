@@ -47,6 +47,9 @@ jobs:
       # Same task as locally: unit tests with the 100% line coverage gate, lint, debug and release APKs.
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
+      - name: Test renderer process cleanup
+        run: python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
+
       - name: Test, lint and build
         run: ./gradlew :app:ci --build-cache
         env:

@@ -9,6 +9,7 @@ import android.opengl.EGLConfig
 import android.opengl.EGLExt
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.TextureView
@@ -344,6 +345,11 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
         if (context != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, context)
         EGL14.eglTerminate(display)
     }
+}
+
+/** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
+internal val LocalVisuals = staticCompositionLocalOf<@Composable (skips: Int, modifier: Modifier) -> Unit> {
+    { skips, modifier -> MilkdropVisuals(skips, modifier) }
 }
 
 /** MilkDrop visuals, moving to what the phone plays; each time [skips] goes up, on to the next. */

@@ -169,9 +169,20 @@ Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/andr
 
 The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
 
+#### Screenshots and clips
+
+The store's screenshots and the site's clips, in every language, come from [`scripts/shots/shots.py`](scripts/shots/shots.py), with no phone or emulator:
+
+```bash
+python3 scripts/shots/shots.py          # every language
+python3 scripts/shots/shots.py ja ko    # only these
+```
+
+It draws the app's real screens with Robolectric on a clock that moves one frame at a time, so every run gives the same pictures, and copies them into `docs/img/` and `fastlane/metadata/android/`. The MilkDrop visuals behind the lyrics are drawn ahead with `render.py`, below, from a made-up beat. The scenes live in [`Shots.kt`](app/src/test/java/com/astrovm/crosstune/shots/Shots.kt).
+
 #### Recording the app
 
-Screen recordings for the site, store and promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. Start the emulator with `-gpu host -cores 6 -memory 4096`, then:
+Screen recordings for promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. Start the emulator with `-gpu host -cores 6 -memory 4096`, then:
 
 ```bash
 scripts/record/emulator.sh setup es-AR 01:46   # dark, clean status bar, clock and language
