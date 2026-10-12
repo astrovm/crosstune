@@ -764,8 +764,8 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         placeholder = { Text(stringResource(R.string.spotify_link_placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { AppIcon(R.drawable.ic_link, contentDescription = null) },
         trailingIcon = {
-            // Paste turns into clear as soon as there's text or a song shown, and back.
-            val bare = state.linkText.isEmpty() && state.result == null && state.error == null
+            // Paste turns into clear as soon as there's text or a song open, and back.
+            val bare = state.linkText.isEmpty() && state.result == null
             AnimatedContent(targetState = bare, transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
                     Row {
