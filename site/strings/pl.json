@@ -32,10 +32,6 @@
   "features_h2": "Co robi",
   "cards": [
     [
-      "Jedna aplikacja na serwis",
-      "Linki z YouTube do YouTube Music, reszta do Apple Music, albo jak chcesz."
-    ],
-    [
       "Całe playlisty",
       "Zobacz wszystkie utwory i odtwórz je naraz."
     ],
@@ -48,10 +44,6 @@
       "Podąża za twoją aplikacją muzyczną albo słucha razem z tobą, utwór po utworze."
     ],
     [
-      "Pływający tekst",
-      "Nad każdą aplikacją, przezroczysty, w dowolnym rozmiarze."
-    ],
-    [
       "Wizualizacje MilkDrop",
       "Za tekstem, w rytm tego, co gra telefon."
     ],
@@ -62,22 +54,6 @@
     [
       "ChatGPT, jeśli go masz",
       "Tłumacz całe utwory, wyjaśniaj wiersze, szukaj utworów po opisie."
-    ],
-    [
-      "Gotowe w minutę",
-      "Jedna lista do odhaczenia albo jedno dotknięcie z Shizuku."
-    ],
-    [
-      "Skróty",
-      "Widżety, kafelki Szybkich ustawień i wklejanie jednym dotknięciem."
-    ],
-    [
-      "Czyste linki",
-      "Śledzenie typu ?si= znika z każdego udostępnianego linku."
-    ],
-    [
-      "Prywatność",
-      "Bez konta Crosstune i śledzenia. Historia zostaje na Twoim telefonie."
     ]
   ],
   "play_button": "Google Play",

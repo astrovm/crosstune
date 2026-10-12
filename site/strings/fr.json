@@ -32,10 +32,6 @@
   "features_h2": "Ce qu'elle fait",
   "cards": [
     [
-      "Une app par service",
-      "Les liens YouTube vers YouTube Music, le reste vers Apple Music, ou comme vous voulez."
-    ],
-    [
       "Playlists entières",
       "Voyez tous les titres et lisez-les d'un coup."
     ],
@@ -48,10 +44,6 @@
       "Elles suivent votre appli de musique, ou écoutent avec vous, chanson après chanson."
     ],
     [
-      "Paroles flottantes",
-      "Par-dessus n'importe quelle appli, transparentes, à la taille voulue."
-    ],
-    [
       "Visuels MilkDrop",
       "Derrière les paroles, au rythme de ce que joue votre téléphone."
     ],
@@ -62,22 +54,6 @@
     [
       "ChatGPT, si vous l'avez",
       "Traduisez des chansons entières, expliquez des lignes, trouvez des chansons en les décrivant."
-    ],
-    [
-      "Prêt en une minute",
-      "Une liste à cocher, ou un geste avec Shizuku."
-    ],
-    [
-      "Raccourcis",
-      "Widgets, tuiles des réglages rapides et coller en un geste."
-    ],
-    [
-      "Liens propres",
-      "Le pistage comme ?si= retiré de chaque lien que vous partagez."
-    ],
-    [
-      "Privé",
-      "Sans compte Crosstune ni pistage. L'historique reste sur votre téléphone."
     ]
   ],
   "play_button": "Google Play",

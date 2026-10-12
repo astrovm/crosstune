@@ -32,10 +32,6 @@
   "features_h2": "What it does",
   "cards": [
     [
-      "One app per service",
-      "YouTube links to YouTube Music, the rest to Apple Music, or any mix."
-    ],
-    [
       "Playlists too",
       "See every song and play them all at once."
     ],
@@ -48,10 +44,6 @@
       "They follow your music app, or listen along, song after song."
     ],
     [
-      "Floating lyrics",
-      "Over any app, see-through, at any size."
-    ],
-    [
       "MilkDrop visuals",
       "Behind the lyrics, moving to what your phone plays."
     ],
@@ -62,22 +54,6 @@
     [
       "ChatGPT, if you have it",
       "Translate whole songs, explain lines, find songs by describing them."
-    ],
-    [
-      "Set up in a minute",
-      "One checklist, or one tap with Shizuku."
-    ],
-    [
-      "Shortcuts",
-      "Widgets, Quick Settings tiles and one-tap paste."
-    ],
-    [
-      "Clean links",
-      "Tracking like ?si= gone from every link you share."
-    ],
-    [
-      "Private",
-      "No Crosstune account, no tracking. History stays on your phone."
     ]
   ],
   "play_button": "Google Play",
