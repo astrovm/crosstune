@@ -1,11 +1,11 @@
-The song playing shows on open, its lyrics ready.
-Now in 繁體中文.
-A music link you just copied is looked up when you come back.
-Lyrics light up word by word as they're sung.
-Chords over the words, also from LaCuerda and for J-pop like Plastic Love.
-Lyrics stop when the music stops.
+Setup: one list to check off, or one tap with Shizuku.
+Lyrics light up word by word, with chords over them.
+54 more MilkDrop visuals.
+The song playing shows on open, lyrics ready.
+Copied music links are looked up when you come back.
+Now in 繁體中文. Languages you read stay untranslated.
+Readings and visuals on from the start; readings can be bigger.
+Taller floating lyrics.
 Romaji as it's sung: sensee, not sensei.
-Lyrics you open stay that song's.
-Readings show at once; long lines break evenly.
-Notices close; Recent lists each song once.
-ChatGPT sign-in says it needs a paid plan.
+Lyrics stop when the music stops.
+Fixes for notices, Recent and ChatGPT sign-in.
