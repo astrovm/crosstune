@@ -5,12 +5,14 @@ No phone or emulator: the app's real screens are drawn by Robolectric on a clock
 one frame at a time, so every run gives the same pictures. The MilkDrop visuals behind the words
 are drawn ahead by scripts/milkdrop-render, from a made-up beat, with the same visual every time.
 
-  python3 scripts/shots/shots.py          # everything, then copies it into docs/ and fastlane/
+  python3 scripts/shots/shots.py          # both themes, then copies into docs/, fastlane/ and screenshots/
   python3 scripts/shots/shots.py ja ko    # only these languages
+  python3 scripts/shots/shots.py --theme light  # only the light set
 
 Needs ffmpeg, and what scripts/milkdrop-render needs the first time. Run scripts/build-site.py
 after, if the site's pages changed too.
 """
+import argparse
 import shutil
 import subprocess
 import sys
@@ -52,26 +54,48 @@ def visuals():
         list(pool.map(lambda job: run([*render, job[0], "--seconds", job[2], "--size", job[1], "--preset", PRESET]), todo))
 
 
-def main():
-    langs = sys.argv[1:] or list(LANGS)
-    unknown = [lang for lang in langs if lang not in LANGS]
+def arguments(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("langs", nargs="*", help="language folders, all by default")
+    parser.add_argument("--theme", choices=("dark", "light", "both"), default="both")
+    args = parser.parse_args(argv)
+    args.langs = args.langs or list(LANGS)
+    unknown = [lang for lang in args.langs if lang not in LANGS]
     if unknown:
-        sys.exit(f"No such language: {', '.join(unknown)}. These are: {', '.join(LANGS)}")
+        parser.error(f"No such language: {', '.join(unknown)}. These are: {', '.join(LANGS)}")
+    return args
+
+
+def publish(lang, theme):
+    made = OUT / lang / theme
+    site = ROOT / "docs/img" / lang
+    site.mkdir(parents=True, exist_ok=True)
+    for name in ("home", "lyrics"):
+        clip = f"{name}-{theme}"
+        shutil.copy(made / f"{clip}.mp4", site / f"{clip}.mp4")
+        run(["ffmpeg", "-v", "error", "-y", "-i", made / f"{clip}.png", "-q:v", "4", site / f"{clip}.jpg"])
+    locale = LANGS[lang][1]
+    store = (ROOT / "fastlane/metadata/android" / locale / "images/phoneScreenshots"
+             if theme == "dark" else ROOT / "screenshots/light" / locale)
+    shots = sorted((made / "store").glob("*.png"))
+    if len(shots) != 8:
+        raise RuntimeError(f"Expected 8 {theme} screenshots for {lang}, got {len(shots)}")
+    store.mkdir(parents=True, exist_ok=True)
+    for shot in shots:
+        shutil.copy(shot, store / shot.name)
+    print(f"{lang} {theme}: 2 clips, {len(shots)} store shots", flush=True)
+
+
+def main():
+    args = arguments()
+    themes = ("dark", "light") if args.theme == "both" else (args.theme,)
     visuals()
-    tests = [arg for lang in langs for arg in ("--tests", f"com.astrovm.crosstune.shots.Shots{LANGS[lang][0]}")]
-    run([*LOW, ROOT / "gradlew", "-q", ":app:shots", f"-PshotsVisuals={VISUALS}", *tests])
-    for lang in langs:
-        made = OUT / lang
-        site = ROOT / "docs/img" / lang
-        site.mkdir(parents=True, exist_ok=True)
-        for clip in ("home-dark", "lyrics-dark"):
-            shutil.copy(made / f"{clip}.mp4", site / f"{clip}.mp4")
-            run(["ffmpeg", "-v", "error", "-y", "-i", made / f"{clip}.png", "-q:v", "4", site / f"{clip}.jpg"])
-        store = ROOT / "fastlane/metadata/android" / LANGS[lang][1] / "images/phoneScreenshots"
-        store.mkdir(parents=True, exist_ok=True)
-        for shot in sorted((made / "store").glob("*.png")):
-            shutil.copy(shot, store / shot.name)
-        print(f"{lang}: 2 clips, {len(list((made / 'store').glob('*.png')))} store shots")
+    tests = [arg for lang in args.langs for theme in themes
+             for arg in ("--tests", f"com.astrovm.crosstune.shots.Shots{LANGS[lang][0]}{'Light' if theme == 'light' else ''}")]
+    run([*LOW, ROOT / "gradlew", "-q", ":app:shots", f"-PshotsVisuals={VISUALS}", "--max-workers=2", *tests])
+    for lang in args.langs:
+        for theme in themes:
+            publish(lang, theme)
 
 
 if __name__ == "__main__":
