@@ -32,8 +32,8 @@
   "features_h2": "Cosa fa",
   "cards": [
     [
-      "Un'app per servizio",
-      "I link di YouTube su YouTube Music, il resto su Apple Music, o come preferisci."
+      "Playlist intere",
+      "Vedi tutti i brani e riproducili tutti insieme."
     ],
     [
       "Che brano è?",
@@ -44,16 +44,16 @@
       "Seguono la tua app musicale, o ascoltano con te, brano dopo brano."
     ],
     [
+      "Effetti visivi MilkDrop",
+      "Dietro al testo, a ritmo di ciò che suona sul telefono."
+    ],
+    [
       "Impara il testo",
       "Kana, pinyin, romaji e traduzioni, parola per parola."
     ],
     [
-      "Pronta in un minuto",
-      "Una lista da spuntare, o un tocco con Shizuku."
-    ],
-    [
-      "Privata",
-      "Niente account Crosstune né tracciamento. La cronologia resta sul tuo telefono."
+      "ChatGPT, se ce l'hai",
+      "Traduci brani interi, spiega le righe, trova brani descrivendoli."
     ]
   ],
   "play_button": "Google Play",

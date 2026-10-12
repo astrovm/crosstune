@@ -32,8 +32,8 @@
   "features_h2": "Was die App kann",
   "cards": [
     [
-      "Eine App pro Dienst",
-      "YouTube-Links zu YouTube Music, der Rest zu Apple Music, oder ganz wie du willst."
+      "Ganze Playlists",
+      "Sieh alle Songs und spiel alle auf einmal ab."
     ],
     [
       "Welcher Song ist das?",
@@ -44,16 +44,16 @@
       "Sie folgen deiner Musik-App oder hören mit, Song für Song."
     ],
     [
+      "MilkDrop-Visuals",
+      "Hinter dem Songtext, im Takt dessen, was dein Handy spielt."
+    ],
+    [
       "Lerne die Texte",
       "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort."
     ],
     [
-      "In einer Minute eingerichtet",
-      "Eine Checkliste, oder ein Tipp mit Shizuku."
-    ],
-    [
-      "Privat",
-      "Kein Crosstune-Konto, kein Tracking. Der Verlauf bleibt auf deinem Handy."
+      "ChatGPT, wenn du es hast",
+      "Ganze Songs übersetzen, Zeilen erklären, Songs per Beschreibung finden."
     ]
   ],
   "play_button": "Google Play",

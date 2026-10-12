@@ -32,8 +32,8 @@
   "features_h2": "Neler yapar",
   "cards": [
     [
-      "Her hizmete bir uygulama",
-      "YouTube bağlantıları YouTube Music'e, gerisi Apple Music'e, ya da nasıl istersen."
+      "Çalma listelerinin tamamı",
+      "Tüm şarkıları görün, hepsini birden çalın."
     ],
     [
       "Bu şarkı ne?",
@@ -44,16 +44,16 @@
       "Müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı."
     ],
     [
+      "MilkDrop görselleri",
+      "Şarkı sözlerinin arkasında, telefonunda çalanın ritminde."
+    ],
+    [
       "Sözleri öğren",
       "Kana, pinyin, romaji ve çeviriler, kelime kelime."
     ],
     [
-      "Bir dakikada hazır",
-      "Tek bir kontrol listesi ya da Shizuku ile tek dokunuş."
-    ],
-    [
-      "Gizli",
-      "Crosstune hesabı yok, izleme yok. Geçmiş telefonunda kalır."
+      "ChatGPT'n varsa",
+      "Şarkıları baştan sona çevir, satırları açıklat, şarkıları tarif ederek bul."
     ]
   ],
   "play_button": "Google Play",

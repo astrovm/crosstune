@@ -32,8 +32,8 @@
   "features_h2": "Wat het doet",
   "cards": [
     [
-      "Eén app per dienst",
-      "YouTube-links naar YouTube Music, de rest naar Apple Music, of hoe je maar wilt."
+      "Hele playlists",
+      "Zie alle nummers en speel ze allemaal af."
     ],
     [
       "Welk nummer is dit?",
@@ -44,16 +44,16 @@
       "Ze volgen je muziekapp, of luisteren mee, nummer na nummer."
     ],
     [
+      "MilkDrop-visuals",
+      "Achter de songtekst, op het ritme van wat je telefoon speelt."
+    ],
+    [
       "Leer de tekst",
       "Kana, pinyin, romaji en vertalingen, woord voor woord."
     ],
     [
-      "In een minuut klaar",
-      "Eén checklist, of één tik met Shizuku."
-    ],
-    [
-      "Privé",
-      "Geen Crosstune-account, geen tracking. Je geschiedenis blijft op je telefoon."
+      "ChatGPT, als je het hebt",
+      "Vertaal hele nummers, laat regels uitleggen, vind nummers door ze te beschrijven."
     ]
   ],
   "play_button": "Google Play",

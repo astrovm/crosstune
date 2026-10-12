@@ -32,8 +32,8 @@
   "features_h2": "Yang bisa dilakukan",
   "cards": [
     [
-      "Satu aplikasi per layanan",
-      "Link YouTube ke YouTube Music, sisanya ke Apple Music, atau sesukamu."
+      "Satu playlist penuh",
+      "Lihat semua lagu dan putar semuanya sekaligus."
     ],
     [
       "Lagu apa ini?",
@@ -44,16 +44,16 @@
       "Mengikuti aplikasi musikmu, atau ikut mendengarkan, lagu demi lagu."
     ],
     [
+      "Visual MilkDrop",
+      "Di balik lirik, mengikuti irama yang diputar ponselmu."
+    ],
+    [
       "Pelajari liriknya",
       "Kana, pinyin, romaji, dan terjemahan, kata demi kata."
     ],
     [
-      "Siap dalam semenit",
-      "Satu daftar periksa, atau sekali ketuk dengan Shizuku."
-    ],
-    [
-      "Privat",
-      "Tanpa akun Crosstune, tanpa pelacakan. Riwayat tetap di ponselmu."
+      "ChatGPT, kalau kamu punya",
+      "Terjemahkan lagu utuh, jelaskan baris, temukan lagu dengan mendeskripsikannya."
     ]
   ],
   "play_button": "Google Play",
