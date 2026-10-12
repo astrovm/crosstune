@@ -253,6 +253,23 @@ class ListeningTest {
     }
 
     @Test
+    fun anotherSongOpenKeepsTheSongPlayingOfferedAndClosesWithItsBoxEmpty() {
+        val url = "https://www.google.com/search?q=A%20Song%20by%20Example%20Band"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitForText(string(R.string.playing_now))
+        // Found by its name, the song leaves the box empty, yet still closes.
+        click("A Song")
+        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        assertTrue(shown(string(R.string.playing_now)))
+        click(string(R.string.clear_button))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(RESULT_TAG).assertDoesNotExist()
+        assertTrue(shown(string(R.string.playing_now)))
+    }
+
+    @Test
     fun withoutAccessToMusicAppsNothingIsOfferedAsPlaying() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }

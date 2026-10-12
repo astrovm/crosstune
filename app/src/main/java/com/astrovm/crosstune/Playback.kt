@@ -150,10 +150,11 @@ internal class MediaSessionPlayback(
         // by its address, under its site, e.g. "example.com/song.mp3" by "example.com": no song either.
         if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
         // With no album it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
-        // named as a song the way a YouTube link is. A music app's "Song - Remastered" stays whole.
+        // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
+        // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         val named = if (metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()) {
-            MetadataParsers.youtubeVideo(title, artist) ?: return null
+            MetadataParsers.musicVideo(title, artist) ?: return null
         } else {
             MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
         }

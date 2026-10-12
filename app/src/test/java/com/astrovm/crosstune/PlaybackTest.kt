@@ -328,6 +328,14 @@ class PlaybackTest {
     }
 
     @Test
+    fun aVideoThatDoesntSayItsMusicIsNoSong() {
+        allow()
+        sounding()
+        shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", "A New Approach To An Ancient Linux Terminal Problem", "Brodie Robertson"))
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     fun aMusicAppsSongIsTakenAsItsNamed() {
         allow()
         sounding()
