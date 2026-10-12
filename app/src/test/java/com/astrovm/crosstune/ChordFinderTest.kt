@@ -267,6 +267,38 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aSheetByTheArtistNamedWithOtherSmallWordsIsTheSongs() {
+        val vahos = MusicMetadata("Vahos del Ayer", "Flema")
+        val words = listOf("Brindo una vez más por mis amigos", "Los que solo están en mi corazón")
+        val sheet = laCuerdaSheet("<div></div><A>D</A>                       <A>B</A>\nBrindo una vez mas por mis amigos\n<div></div> <A>G</A>                     <A>A</A>\nlos que solo estan en mi corazon")
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(
+                    request,
+                    laCuerdaSearch(
+                        // Someone else's, named the same way, isn't looked at.
+                        Triple("otros", "Otros", listOf(LaCuerdaSong("Vahos de ayer", "R-1", "vahos_otros"))),
+                        Triple("flema", "Flema", listOf(LaCuerdaSong("Vahos de ayer", "RBT-123", "vahos_de_ayer")))
+                    )
+                )
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        // Ultimate Guitar's, by another artist, needs every word.
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/otros/vahos", "Vahos de ayer", "Otros", 50)),
+                        "https://acordes.lacuerda.net/flema/vahos_de_ayer.shtml" to sheet,
+                        "https://acordes.lacuerda.net/otros/vahos_otros.shtml" to sheet
+                    )
+                )
+            }
+        }
+        val found = chords(vahos, words) as ChordFinder.Chords.Found
+        assertEquals("https://acordes.lacuerda.net/flema/vahos_de_ayer.shtml", found.sheet.url)
+        assertEquals(listOf("https://acordes.lacuerda.net/flema/vahos_de_ayer.shtml"), fake.requestedUrls.filter { ".shtml" in it || "/tab/" in it })
+    }
+
+    @Test
     fun aSongUltimateGuitarHasNoChordsForComesFromLaCuerdasBestLikedSheetByTheArtist() {
         val searches = mutableListOf<String?>()
         fake.handler = { request ->

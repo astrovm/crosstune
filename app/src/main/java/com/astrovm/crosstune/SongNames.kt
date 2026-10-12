@@ -39,6 +39,9 @@ internal object SongNames {
     /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
     private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
+    /** Words this short, "de" and "del", "el" and "la", are the ones a title may say either way. */
+    private const val SMALL_WORD = 3
+
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5
 
@@ -58,9 +61,11 @@ internal object SongNames {
     fun withoutArticle(name: String): String = name.replace(leadingArticle, "")
 
     /** The words written in letters and digits: another script's are what the other title spells out. */
-    fun words(title: String): Set<String> =
+    fun words(title: String): Set<String> = wordList(title).toSet()
+
+    private fun wordList(title: String): List<String> =
         Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
-            .split(wordSplit).filter { it.isNotEmpty() }.toSet()
+            .split(wordSplit).filter { it.isNotEmpty() }
 
     /**
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
@@ -197,6 +202,20 @@ internal object SongNames {
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
+    }
+
+    /**
+     * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
+     * for "Vahos del Ayer". Word for word, in order, with at least two longer words alike; numbers
+     * are never small words, so "Song 2" is still not "Song 3".
+     */
+    fun sameButSmallWords(one: String, other: String): Boolean {
+        if (wordsMatch(one, other)) return true
+        val ours = wordList(withoutEditionTag(one))
+        val theirs = wordList(withoutEditionTag(other))
+        fun small(word: String) = word.length <= SMALL_WORD && word.none(Char::isDigit)
+        return ours.size == theirs.size && ours.count { !small(it) } >= 2 &&
+            ours.zip(theirs).all { (our, their) -> our == their || (small(our) && small(their)) }
     }
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */
