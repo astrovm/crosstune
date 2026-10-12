@@ -162,6 +162,20 @@ internal object MetadataParsers {
         else -> null
     }
 
+    /**
+     * A video that says it's music, read as its song: "Artist - Song", "Artist「Song」", a tag like
+     * "(Official Video)", or a "- Topic" or VEVO channel. Any other video, e.g. "A New Approach To
+     * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song.
+     */
+    fun musicVideo(title: String, channel: String): MusicMetadata? {
+        val song = youtubeVideo(title, channel) ?: return null
+        val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
+            bracketedSongRegex.matches(title) || song.artist != channel.trim()
+        return song.takeIf { says }
+    }
+
+    private val musicVideoSign = Regex("""\b(official|lyrics?|visuali[sz]er|mv|m/v|audio|music\s+video|remaster(ed)?|remix|feat\.|ft\.)(\b|\s|$)""", RegexOption.IGNORE_CASE)
+
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
         val rawTitle = title.replace(videoNoiseRegex, "").replace(trailingVideoNoiseRegex, "").trim().ifEmpty { return null }

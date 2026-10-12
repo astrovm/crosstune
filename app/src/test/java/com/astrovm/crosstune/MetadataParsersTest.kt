@@ -103,6 +103,20 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun onlyAVideoThatSaysItsMusicIsASong() {
+        assertNull(MetadataParsers.musicVideo("A New Approach To An Ancient Linux Terminal Problem", "Brodie Robertson"))
+        assertNull(MetadataParsers.musicVideo("My Morning Routine (4K)", "Someone"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Band - Song", "Label"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Official Video)", "Band"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song", "Band - Topic"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song", "BandVEVO"))
+        assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.musicVideo("アーティスト「曲名」", "Label"))
+        assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.musicVideo("Song - Remastered 2011", "Band"))
+        assertEquals(MusicMetadata("Song (feat. A)", "Band"), MetadataParsers.musicVideo("Song (feat. A)", "Band"))
+        assertNull(MetadataParsers.musicVideo("(Official Video)", "Band"))
+    }
+
+    @Test
     fun japaneseVideoTitlesNameTheSongInBrackets() {
         assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("アーティスト「曲名」 Official Music Video", "アーティスト"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band『Song』MV", "BandOfficial"))

@@ -519,8 +519,11 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         LinkNotices(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
-        val playing = state.playingNow.takeIf {
-            state.result == null && state.error == null && !state.isLoading && !state.listening && state.linkText.isBlank()
+        // Over a song shown too, unless it's that song; not while a link is typed in.
+        val playing = state.playingNow?.takeIf { now ->
+            state.error == null && !state.isLoading && !state.listening &&
+                state.result?.let { SongNames.same(it.title, now.title) && SongNames.sameArtist(it.artist, now.artist) } != true &&
+                (state.result != null || state.linkText.isBlank())
         }
         AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
             // Kept while it fades out, as the song goes when it's tapped.
@@ -761,8 +764,9 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         placeholder = { Text(stringResource(R.string.spotify_link_placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { AppIcon(R.drawable.ic_link, contentDescription = null) },
         trailingIcon = {
-            // Paste turns into clear as soon as there's text, and back.
-            AnimatedContent(targetState = state.linkText.isEmpty(), transitionSpec = { swap() }, label = "trailing") { empty ->
+            // Paste turns into clear as soon as there's text or a song open, and back.
+            val bare = state.linkText.isEmpty() && state.result == null
+            AnimatedContent(targetState = bare, transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
                     Row {
                         IconButton(onClick = actions.onLyricsNow, enabled = !busy) {
