@@ -178,7 +178,7 @@ internal class ChordFinder(
             .build()
         val results = ugStore(fetch(search.toString()))?.optJSONObject("data")?.optJSONArray("results") ?: return null
         val urls = (0 until results.length()).mapNotNull { results.optJSONObject(it) }
-            .filter { it.optString("type") == "Chords" && SongNames.wordsMatch(it.optString("song_name"), title) }
+            .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
             .map { it.optString("tab_url") }.take(MAX_SHEETS)
         for (url in urls) {
@@ -222,7 +222,7 @@ internal class ChordFinder(
             }
             val (by, byName) = artist ?: return@forEach
             val file = files.getOrNull(last - row.toInt()) ?: return@forEach
-            if (!SongNames.wordsMatch(unescape(title), song.title)) return@forEach
+            if (!named(unescape(title), song.title, byArtist(byName, song))) return@forEach
             // Words and chords, not a tab or a bass part.
             takes.filter(Char::isDigit).map { it.digitToInt() }.filter { kinds.getOrNull(it - 1) == 'R' }.forEach { take ->
                 found += !SongNames.sameArtist(byName, song.artist) to "$LA_CUERDA_URL$by/$file${if (take == 1) "" else "-$take"}.shtml"
@@ -230,6 +230,16 @@ internal class ChordFinder(
         }
         return found.sortedBy { it.first }.map { it.second }.take(MAX_SHEETS)
     }
+
+    /**
+     * Whether a site's [title] is the song's, [ours]: by the artist, also written with other small
+     * words, "Vahos de ayer" for "Vahos del Ayer", as its words still have to be the song's.
+     */
+    private fun named(title: String, ours: String, byArtist: Boolean) =
+        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours)
+
+    /** [artist] is the song's, [song]: one with no artist is nobody's. */
+    private fun byArtist(artist: String, song: MusicMetadata) = song.artist.isNotBlank() && SongNames.sameArtist(artist, song.artist)
 
     /** The other names [title] is in, when it's two put together, "プラスティック・ラブ - Plastic Love". */
     private fun titleParts(title: String): List<String> =

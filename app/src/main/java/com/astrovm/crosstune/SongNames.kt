@@ -39,6 +39,15 @@ internal object SongNames {
     /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
     private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
+    /**
+     * The small words a title may say either way, "de" or "del", "el" or "la": articles and
+     * prepositions, not short words with a meaning of their own, so "Blue Sky" is never "Blue Sun".
+     */
+    private val smallWords = setOf(
+        "a", "al", "an", "and", "au", "d", "da", "das", "de", "del", "der", "des", "di", "do", "dos", "du", "e", "el", "en", "et",
+        "il", "in", "l", "la", "las", "le", "les", "lo", "los", "of", "the", "un", "una", "une", "uno", "y"
+    )
+
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5
 
@@ -58,9 +67,11 @@ internal object SongNames {
     fun withoutArticle(name: String): String = name.replace(leadingArticle, "")
 
     /** The words written in letters and digits: another script's are what the other title spells out. */
-    fun words(title: String): Set<String> =
+    fun words(title: String): Set<String> = wordList(title).toSet()
+
+    private fun wordList(title: String): List<String> =
         Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
-            .split(wordSplit).filter { it.isNotEmpty() }.toSet()
+            .split(wordSplit).filter { it.isNotEmpty() }
 
     /**
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
@@ -197,6 +208,18 @@ internal object SongNames {
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
         return shorter.isNotEmpty() && (shorter.size >= 2 || shorter == longer) && longer.containsAll(shorter)
+    }
+
+    /**
+     * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
+     * for "Vahos del Ayer". Word for word, in order, with at least two other words alike.
+     */
+    fun sameButSmallWords(one: String, other: String): Boolean {
+        if (wordsMatch(one, other)) return true
+        val ours = wordList(withoutEditionTag(one))
+        val theirs = wordList(withoutEditionTag(other))
+        return ours.size == theirs.size && ours.count { it !in smallWords } >= 2 &&
+            ours.zip(theirs).all { (our, their) -> our == their || (our in smallWords && their in smallWords) }
     }
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */
