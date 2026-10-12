@@ -1,0 +1,3 @@
+Playing now skips videos that aren't music.
+Playing now stays offered while another song is open.
+A song found by its name closes with the X.
