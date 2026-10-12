@@ -39,8 +39,14 @@ internal object SongNames {
     /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
     private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
 
-    /** Words this short, "de" and "del", "el" and "la", are the ones a title may say either way. */
-    private const val SMALL_WORD = 3
+    /**
+     * The small words a title may say either way, "de" or "del", "el" or "la": articles and
+     * prepositions, not short words with a meaning of their own, so "Blue Sky" is never "Blue Sun".
+     */
+    private val smallWords = setOf(
+        "a", "al", "an", "and", "au", "d", "da", "das", "de", "del", "der", "des", "di", "do", "dos", "du", "e", "el", "en", "et",
+        "il", "in", "l", "la", "las", "le", "les", "lo", "los", "of", "the", "un", "una", "une", "uno", "y"
+    )
 
     /** A shorter name has to be at least this long to count when it's inside another's. */
     private const val MIN_PARTIAL_ARTIST = 5
@@ -206,16 +212,14 @@ internal object SongNames {
 
     /**
      * The same title but for its small words, as sites write them down either way: "Vahos de ayer"
-     * for "Vahos del Ayer". Word for word, in order, with at least two longer words alike; numbers
-     * are never small words, so "Song 2" is still not "Song 3".
+     * for "Vahos del Ayer". Word for word, in order, with at least two other words alike.
      */
     fun sameButSmallWords(one: String, other: String): Boolean {
         if (wordsMatch(one, other)) return true
         val ours = wordList(withoutEditionTag(one))
         val theirs = wordList(withoutEditionTag(other))
-        fun small(word: String) = word.length <= SMALL_WORD && word.none(Char::isDigit)
-        return ours.size == theirs.size && ours.count { !small(it) } >= 2 &&
-            ours.zip(theirs).all { (our, their) -> our == their || (small(our) && small(their)) }
+        return ours.size == theirs.size && ours.count { it !in smallWords } >= 2 &&
+            ours.zip(theirs).all { (our, their) -> our == their || (our in smallWords && their in smallWords) }
     }
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */

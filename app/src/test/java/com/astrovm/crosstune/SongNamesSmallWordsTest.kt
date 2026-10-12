@@ -12,6 +12,7 @@ class SongNamesSmallWordsTest {
     fun aTitleWrittenWithOtherSmallWordsIsTheSame() {
         assertTrue(SongNames.sameButSmallWords("Vahos de ayer", "Vahos del Ayer"))
         assertTrue(SongNames.sameButSmallWords("Canción para el Sol", "Cancion para la sol"))
+        assertTrue(SongNames.sameButSmallWords("Song of the Road", "Song in a Road"))
         assertTrue(SongNames.sameButSmallWords("Vahos de ayer - Remastered 2010", "Vahos del Ayer"))
         // What already matched still does.
         assertTrue(SongNames.sameButSmallWords("River Road (Live)", "River Road"))
@@ -26,6 +27,10 @@ class SongNamesSmallWordsTest {
         assertFalse(SongNames.sameButSmallWords("Ayer de vahos", "Vahos del Ayer"))
         // One long word says too little.
         assertFalse(SongNames.sameButSmallWords("El Bamba", "La Bamba"))
+        // Short words with a meaning of their own aren't small words.
+        assertFalse(SongNames.sameButSmallWords("Blue Sky Mine", "Blue Sun Mine"))
+        assertFalse(SongNames.sameButSmallWords("Love Me Tonight", "Love You Tonight"))
+        assertFalse(SongNames.sameButSmallWords("I'm Yours Tonight", "I Am Yours Tonight"))
         // Numbers aren't small words.
         assertFalse(SongNames.sameButSmallWords("Vuelo 23 de Noche", "Vuelo 24 de Noche"))
         assertFalse(SongNames.sameButSmallWords("Song 2", "Song 3"))
@@ -43,8 +48,9 @@ class SongNamesSmallWordsTest {
             assertEquals("$one / $other", SongNames.sameButSmallWords(one, other), SongNames.sameButSmallWords(other, one))
             if (SongNames.wordsMatch(one, other)) assertTrue("$one / $other", SongNames.sameButSmallWords(one, other))
             // Swapping a small word for another keeps it the same.
-            val swapped = one.split(" ").joinToString(" ") { if (it == "de") "del" else it }
-            if (one.split(" ").count { it.length > 3 } >= 2) assertTrue("$one / $swapped", SongNames.sameButSmallWords(one, swapped))
+            val swap = mapOf("de" to "del", "del" to "de", "la" to "el", "el" to "la", "y" to "de")
+            val swapped = one.split(" ").joinToString(" ") { swap[it] ?: it }
+            if (one.split(" ").count { it !in swap }.let { it >= 2 }) assertTrue("$one / $swapped", SongNames.sameButSmallWords(one, swapped))
         }
     }
 }

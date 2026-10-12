@@ -296,6 +296,10 @@ var NMAX=${files.size - 1};
         val found = chords(vahos, words) as ChordFinder.Chords.Found
         assertEquals("https://acordes.lacuerda.net/flema/vahos_de_ayer.shtml", found.sheet.url)
         assertEquals(listOf("https://acordes.lacuerda.net/flema/vahos_de_ayer.shtml"), fake.requestedUrls.filter { ".shtml" in it || "/tab/" in it })
+        // A song with no artist is nobody's, so it needs every word.
+        fake.requestedUrls.clear()
+        assertEquals(ChordFinder.Chords.Unavailable, chords(MusicMetadata("Vahos del Ayer", ""), words))
+        assertTrue(fake.requestedUrls.none { ".shtml" in it || "/tab/" in it })
     }
 
     @Test
