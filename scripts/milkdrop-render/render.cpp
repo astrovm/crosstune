@@ -4,21 +4,28 @@
 // Built and run by render.py, which also patches projectM's clock to advance 1/FPS a frame.
 //   render <audio.f32> <cues.txt> <width> <height> <frames> <preroll frames>
 #include <EGL/egl.h>
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
+#include <GLES3/gl3.h>
 #include <projectM-4/projectM.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <random>
 #include <string>
 #include <vector>
 
 #ifndef FPS
 #define FPS 60
 #endif
+
+// projectM picks a preset's hue offsets and random textures with std::random_device. Drawn from
+// $SEED instead, so the same song, presets and seed draw the same frames every time.
+unsigned int std::random_device::_M_getval()
+{
+    static std::mt19937 numbers(getenv("SEED") ? strtoul(getenv("SEED"), nullptr, 10) : 1);
+    return numbers();
+}
 
 int main(int argc, char** argv)
 {
@@ -44,11 +51,11 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    // An offscreen OpenGL 3.3 context, no window needed.
+    // An offscreen OpenGL ES 3 context, no window needed.
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     eglInitialize(display, nullptr, nullptr);
     const EGLint configAttributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
-                                       EGL_ALPHA_SIZE, 8, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE};
+                                       EGL_ALPHA_SIZE, 8, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_NONE};
     EGLConfig config;
     EGLint configs = 0;
     if (!eglChooseConfig(display, configAttributes, &config, 1, &configs) || configs < 1) {
@@ -57,12 +64,12 @@ int main(int argc, char** argv)
     }
     const EGLint surfaceAttributes[] = {EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE};
     EGLSurface surface = eglCreatePbufferSurface(display, config, surfaceAttributes);
-    eglBindAPI(EGL_OPENGL_API);
-    const EGLint contextAttributes[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
-                                        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
+    // OpenGL ES, as on the phone: some presets' shaders only build there, and fall back to plainer ones otherwise.
+    eglBindAPI(EGL_OPENGL_ES_API);
+    const EGLint contextAttributes[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_NONE};
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttributes);
     if (!eglMakeCurrent(display, surface, surface, context)) {
-        fprintf(stderr, "no OpenGL 3.3 context\n");
+        fprintf(stderr, "no OpenGL ES 3 context\n");
         return 1;
     }
 
@@ -78,6 +85,8 @@ int main(int argc, char** argv)
     projectm_set_preset_locked(projectm, true);
     projectm_set_hard_cut_enabled(projectm, false);
     projectm_set_soft_cut_duration(projectm, 3.0);
+    // projectM seeds rand() from the time; the presets' rand() goes the same way each run.
+    srand(1);
 
     // The preroll fills projectM's feedback buffers with the first preset before frame 0.
     const int samplesPerFrame = 44100 / FPS;
@@ -94,6 +103,8 @@ int main(int argc, char** argv)
         glViewport(0, 0, width, height);
         projectm_opengl_render_frame(projectm);
         if (frame < 0) continue;
+        // projectM leaves its own framebuffer bound for reading, which holds the frame before its final shader.
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         fwrite(pixels.data(), 1, pixels.size(), stdout);
     }

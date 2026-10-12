@@ -333,7 +333,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            MilkdropVisuals(state.visualsSkips, Modifier.fillMaxSize())
+            LocalVisuals.current(state.visualsSkips, Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(

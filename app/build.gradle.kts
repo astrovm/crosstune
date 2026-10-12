@@ -199,7 +199,24 @@ tasks.named("check") {
     dependsOn("koverVerifyDebug")
 }
 
+// The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
+// class per language, side by side. scripts/shots/shots.py runs it, with the visuals drawn ahead.
+val shots = tasks.register<Test>("shots") {
+    group = "documentation"
+    description = "Draws the store screenshots and the site's clips in every language. Run scripts/shots/shots.py instead."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching("com.astrovm.crosstune.shots.*")
+    systemProperty("shots.out", layout.buildDirectory.dir("shots").get().asFile.path)
+    systemProperty("shots.visuals", providers.gradleProperty("shotsVisuals").getOrElse(rootProject.file("build/shots-visuals").path))
+    // Robolectric's native graphics load a library, which the JDK warns about otherwise.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    outputs.upToDateWhen { false }
+}
+
 tasks.withType<Test>().configureEach {
+    if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
     // Two test processes, each with that heap, where there's room for them, like CI's runner:
