@@ -468,6 +468,13 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun laCuerdaSearchesATitleWithoutAnArtistOnlyOnce() {
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        assertEquals(ChordFinder.Chords.None, chords(river.copy(artist = ""), english))
+        assertEquals(listOf("River Road"), fake.requestedUrls.filter { "/busca.php" in it }.map { it.toHttpUrl().queryParameter("exp") })
+    }
+
+    @Test
     fun chordsFoundAreKeptSoASongPlayedAgainNeedsNoLookup() {
         val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
         fake.handler = { request ->
