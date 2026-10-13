@@ -1,0 +1,1 @@
+Website language selection now ignores invalid saved values and stays on supported pages.

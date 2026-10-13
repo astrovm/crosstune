@@ -26,7 +26,9 @@ function page(document, { saved = null, browser = ['en'], blockedStorage = false
     navigator: { languages: browser, language: 'en' },
     location: { set href(value) { assigned.push(value); }, replace(value) { replaced.push(value); } }
   };
-  vm.runInNewContext(document.script, context, { timeout: 1000 });
+  vm.runInNewContext(document.script, context, {
+    timeout: 1000, filename: `site-language-${document.code}-${document.section ? 'privacy' : 'home'}.js`
+  });
   return { assigned, replaced, writes, pick: context.pickLanguage };
 }
 
@@ -58,7 +60,7 @@ const invalid = [
   'javascript:alert(1)', 'data:text/html,test', '%2f%2fattacker.invalid', '../privacy',
   'es/../../', 'es?next=//attacker.invalid', 'es#fragment', 'unknown', '__proto__',
   'constructor', 'toString', 'ES', ' es', 'es ', '', null, undefined, {}, ['es'],
-  '\nes', 'es\u0000', 'es\r\n'
+  '\nes', 'es\u0000', 'es\r\n', '/'.repeat(10000)
 ];
 
 test('invalid stored values and picker inputs cannot navigate or overwrite the preference', () => {
@@ -92,7 +94,7 @@ test('first visit follows supported browser tags, regional variants and Chinese 
     for (const [browser, code] of cases) {
       assert.deepEqual(page(document, { browser }).replaced, code === 'en' ? [] : [route(code, document.section)]);
     }
-    assert.deepEqual(page(document, { browser: undefined }).replaced, []);
+    assert.deepEqual(page(document, { browser: null }).replaced, []);
   }
 });
 
