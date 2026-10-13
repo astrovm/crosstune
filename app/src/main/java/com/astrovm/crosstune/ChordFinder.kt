@@ -292,7 +292,7 @@ internal class ChordFinder(
      */
     private fun insideTitle(title: String, ours: String): Boolean {
         if (SongNames.words(ours).isNotEmpty()) return false
-        val wanted = SongNames.normalize(Readings.simplified(ours))
+        val wanted = SongNames.normalize(Readings.simplified(SongNames.bareTitle(ours)))
         return wanted.length >= 2 && SongNames.normalize(Readings.simplified(title)).contains(wanted)
     }
 

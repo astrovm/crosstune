@@ -174,7 +174,7 @@ internal object ChordSheets {
         return texts.indices.map { LineChords(before[it], over[it].sortedBy { chord -> chord.at }) }
     }
 
-    private fun latin(text: String): Boolean = text.filter(Char::isLetter).let { letters -> letters.isNotEmpty() && letters.count { it in 'A'..'Z' || it in 'a'..'z' } * 2 > letters.length }
+    private fun latin(text: String): Boolean = text.filter(Char::isLetter).let { letters -> letters.isNotEmpty() && letters.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN } * 2 > letters.length }
 
     /**
      * The sheet's lines, but for the ones in Latin letters that carry no chord when the song is in
