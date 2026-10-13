@@ -1,0 +1,1 @@
+Chords are found even when a site’s search fails for the song and artist together.
