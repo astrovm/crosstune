@@ -8,6 +8,7 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Test
@@ -234,6 +235,27 @@ var NMAX=${files.size - 1};
             )
         }
         assertEquals(ChordFinder.Chords.None, chords(river, english))
+    }
+
+    @Test
+    fun aChineseSongIsFoundUnderItsTitleInTraditionalCharactersInsideAFilmsName() {
+        val sheet = "[tab][ch]C[/ch]            [ch]G[/ch]\nWo ting jian yu di luo zai qing qing cao di[/tab]\n[tab][ch]Am[/ch]\nYou yi ju mei yi ju de ting bu dong[/tab]"
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(
+                        ugResult("https://tabs.ultimate-guitar.com/tab/other-1", "我的少女時代 Our Times - 幸運草", "Misc Soundtrack", 900),
+                        ugResult("https://tabs.ultimate-guitar.com/tab/film-1", "我的少女時代 Our Times - 小幸運 Xiao Xing Yun A Little Happiness", "Misc Soundtrack", 50)
+                    ),
+                    "https://tabs.ultimate-guitar.com/tab/film-1" to ugTab(sheet, capo = null)
+                )
+            )
+        }
+        val found = chords(MusicMetadata("小幸运", "田馥甄"), listOf("我听见雨滴落在青青草地", "有一句没一句地听不懂")) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/film-1", found.sheet.url)
+        // One character is too little to say a song by.
+        assertFalse(chords(MusicMetadata("运", "田馥甄"), listOf("我听见雨滴落在青青草地")) is ChordFinder.Chords.Found)
     }
 
     @Test
