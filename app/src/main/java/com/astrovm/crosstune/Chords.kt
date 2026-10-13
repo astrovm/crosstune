@@ -140,8 +140,9 @@ internal object ChordSheets {
     }
 
     private fun placeIn(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
+        val lines = inScriptOf(sheet.lines, texts)
         val ours = Letters(texts)
-        val theirs = Letters(sheet.lines.map { it.text })
+        val theirs = Letters(lines.map { it.text })
         if (theirs.size < MIN_LETTERS || ours.size == 0) return null
         val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return null
         if (matchedAt.count { it >= 0 } < theirs.size * GOOD_LETTERS) return null
@@ -150,7 +151,7 @@ internal object ChordSheets {
         val over = Array(texts.size) { mutableListOf<Chord>() }
         // Chords played on their own, waiting for the next line sung.
         val waiting = mutableListOf<String>()
-        sheet.lines.forEachIndexed { number, line ->
+        lines.forEachIndexed { number, line ->
             val letters = theirs.of(number)
             if (letters.isEmpty()) {
                 waiting += line.chords.map { it.name }
@@ -171,6 +172,19 @@ internal object ChordSheets {
             }
         }
         return texts.indices.map { LineChords(before[it], over[it].sortedBy { chord -> chord.at }) }
+    }
+
+    private fun latin(text: String): Boolean = text.filter(Char::isLetter).let { letters -> letters.isNotEmpty() && letters.count { it in 'A'..'Z' || it in 'a'..'z' } * 2 > letters.length }
+
+    /**
+     * The sheet's lines, but for the ones in Latin letters that carry no chord when the song is in
+     * another script and the sheet writes it in that too: they are the same words said again, as
+     * "habibi ya nur" under "حبيبي يا نور", and would be words the song never sings.
+     */
+    private fun inScriptOf(lines: List<SheetLine>, texts: List<String>): List<SheetLine> {
+        if (latin(texts.joinToString(""))) return lines
+        val written = lines.any { it.text.any(Char::isLetter) && !latin(it.text) }
+        return if (written) lines.filterNot { it.chords.isEmpty() && latin(it.text) } else lines
     }
 
     /** The line shown and the letter in it [chord] lands on, from the nearest letter of its own line that lined up. */
