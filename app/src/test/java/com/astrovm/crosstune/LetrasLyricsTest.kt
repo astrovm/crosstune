@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.IOException
+import kotlin.random.Random
 
 /** Letras is the last source when the usual services have no words. */
 @RunWith(RobolectricTestRunner::class)
@@ -65,6 +66,18 @@ class LetrasLyricsTest {
             respond(results)
             assertEquals(Lyrics.None, lookup())
             assertTrue(fake.requestedUrls.none { it.startsWith("https://www.letras.com/") })
+        }
+    }
+
+    @Test
+    fun encodedWordsRoundTripAcrossLineAndVerseBreaks() {
+        val random = Random(207)
+        val alphabet = "abc ñé日本&<>\"'"
+        repeat(30) {
+            val lines = List(3) { List(20) { alphabet[random.nextInt(alphabet.length)] }.joinToString("").trim() }
+            val encoded = lines.map { line -> line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;") }
+            respond(page = "<div class=\"lyric-content\"><p>${encoded[0]}<br/>${encoded[1]}</p><p>${encoded[2]}</p></div>")
+            assertEquals(Lyrics.Found("${lines[0]}\n${lines[1]}\n\n${lines[2]}"), lookup())
         }
     }
 
