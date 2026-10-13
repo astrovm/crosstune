@@ -1158,7 +1158,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
     if (chords.over.isEmpty()) {
-        Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
+        if (ruby != null) RubyLine(ruby, style, readingScale) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
@@ -1184,6 +1184,8 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
                 addStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = UNSUNG_ALPHA)), litTo, written.length)
             }
         }
+        // Words that don't spell the line's own letters would put the chords and readings over the wrong ones.
+        ruby != null -> written
         else -> sungText(line.words, position)
     }
     val measurer = rememberTextMeasurer()
