@@ -237,6 +237,25 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aSheetUltimateGuitarWontServeIsSkippedForTheNextOne() {
+        fake.handler = { request ->
+            if (request.url.encodedPath.endsWith("/tab/down-1")) FakeSpotify.html(request, "", code = 500)
+            else answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(
+                        ugResult("https://tabs.ultimate-guitar.com/tab/down-1", "River Road", "The Walkers", 900),
+                        ugResult("https://tabs.ultimate-guitar.com/tab/few-1", "River Road", "The Walkers", 3)
+                    ),
+                    "https://tabs.ultimate-guitar.com/tab/few-1" to ugTab(ugWalking, capo = null)
+                )
+            )
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/few-1", found.sheet.url)
+    }
+
+    @Test
     fun aSearchThatFindsNothingIsNoChordsNotASiteThatWontAnswer() {
         // Ultimate Guitar answers it with a 404 and its usual page, LaCuerda with a 500 and no page at all.
         fake.handler = { request ->
