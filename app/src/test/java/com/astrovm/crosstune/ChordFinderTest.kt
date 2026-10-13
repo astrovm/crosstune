@@ -644,7 +644,8 @@ var NMAX=${files.size - 1};
         }
         assertEquals("https://tabs.ultimate-guitar.com/tab/plastic-1", (chords(song, english) as ChordFinder.Chords.Found).sheet.url)
         assertEquals(
-            listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "Plastic Love Mariya Takeuchi"),
+            // By the artist, then by the title alone when that finds none, then its second name.
+            listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "プラスティック・ラブ - Plastic Love", "Plastic Love Mariya Takeuchi"),
             fake.requestedUrls.filter { "search.php" in it }.map { it.toHttpUrl().queryParameter("value") }
         )
     }
@@ -762,7 +763,7 @@ var NMAX=${files.size - 1};
         fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道 / A", "歩く人"), japanese))
         assertEquals(listOf("川の道 / A 歩く人", "川の道"), uFretSearches)
-        assertEquals(listOf("川の道 / A 歩く人"), fake.requestedUrls.filter { "ultimate-guitar" in it }.map { it.toHttpUrl().queryParameter("value") })
+        assertEquals(listOf("川の道 / A 歩く人", "川の道 / A"), fake.requestedUrls.filter { "ultimate-guitar" in it }.map { it.toHttpUrl().queryParameter("value") })
         // Sung by a Japanese name, U-FRET's names for them are its own: NetEase isn't asked.
         fake.requestedUrls.clear()
         fake.handler = uFret(

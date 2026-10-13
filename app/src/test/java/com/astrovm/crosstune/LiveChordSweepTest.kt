@@ -152,55 +152,52 @@ class LiveChordSweepTest {
         Rasguña las Piedras|Charly García|rock|Argentina
         Inconsciente Colectivo|Charly García|rock|Argentina
         Cerca de la Revolución|Charly García|rock|Argentina
-        Demasiado Solo|Charly García|rock|Argentina
+        Demoliendo Hoteles|Charly García|rock|Argentina
         Muchacha (Ojos de Papel)|Luis Alberto Spinetta|rock|Argentina
-        Seminare|Luis Alberto Spinetta|rock|Argentina
+        Seminare|Serú Girán|rock|Argentina
         Ana No Duerme|Luis Alberto Spinetta|rock|Argentina
         Plegaria para un Niño Dormido|Almendra|rock|Argentina
         Mariposa Tecnicolor|Fito Páez|rock|Argentina
         El Amor Después del Amor|Fito Páez|rock|Argentina
         Circo Beat|Fito Páez|rock|Argentina
         Ciudad de Pobres Corazones|Fito Páez|rock|Argentina
-        Ji Ji Ji - Remasterizado|Los Redondos|rock|Argentina
-        Un Pedazo de Pan|Patricio Rey y sus Redonditos de Ricota|rock|Argentina
-        Amor Amarillo|Divididos|rock|Argentina
-        Brillante Sol|Divididos|rock|Argentina
-        Llegará el Día|Sumo|rock|Argentina
-        Sin Dolor|Sumo|rock|Argentina
+        Ji Ji Ji - Remasterizado|Patricio Rey y sus Redonditos de Ricota|rock|Argentina
+        El Árbol del Gran Bonete|Patricio Rey y sus Redonditos de Ricota|rock|Argentina
+        Amor Amarillo|Gustavo Cerati|rock|Argentina
+        Spaghetti del Rock|Divididos|rock|Argentina
+        Divididos por la Felicidad|Sumo|rock|Argentina
+        Los Viejos Vinagres|Sumo|rock|Argentina
         Matador|Los Fabulosos Cadillacs|ska rock|Argentina
         Mal Bicho|Los Fabulosos Cadillacs|ska rock|Argentina
         Vasos Vacíos|Los Fabulosos Cadillacs|ska rock|Argentina
-        Media Naranja|Andrés Calamaro|rock|Argentina
+        Estadio Azteca|Andrés Calamaro|rock|Argentina
         Loco|Andrés Calamaro|rock|Argentina
         Lamento Boliviano|Los Enanitos Verdes|rock|Argentina
-        Mi Enfermedad|Los Enanitos Verdes|rock|Argentina
+        Mi Enfermedad|Los Rodriguez|rock|Argentina
         Tus Viejas Cartas|Los Enanitos Verdes|rock|Argentina
-        Ilusiones|Attaque 77|rock|Argentina
-        Mi Vida Sin Ti|Attaque 77|rock|Argentina
-        Ropa Sucia|La Renga|rock|Argentina
-        Un Paso Adelante|La Renga|rock|Argentina
-        Ayer|Las Pelotas|rock|Argentina
-        Te Lo Advierto|Las Pelotas|rock|Argentina
+        Falsas Esperanzas|Attaque 77|rock|Argentina
+        Ángel|Attaque 77|rock|Argentina
+        Ropa Sucia|Patricio Rey y sus Redonditos de Ricota|rock|Argentina
+        Alejado de la Red|La Renga|rock|Argentina
+        Día Feliz|Las Pelotas|rock|Argentina
+        Río Gris|Las Pelotas|rock|Argentina
         Lago en el Cielo|Gustavo Cerati|rock|Argentina
-        Te Llevo Puesto|Gustavo Cerati|rock|Argentina
+        Puente|Gustavo Cerati|rock|Argentina
         Adiós|Gustavo Cerati|rock|Argentina
         Crimen|Gustavo Cerati|rock|Argentina
-        Sin Mirar Atrás|Los Abuelos de la Nada|rock|Argentina
-        Ir al Límite|Vicentico|rock|Argentina
-        Sin Miedo|Vicentico|rock|Argentina
-        Mujer Bang Bang|Babasónicos|rock|Argentina
-        Yo Quiero Ser Tu Bebé|Babasónicos|rock|Argentina
-        Del Otro Lado|Los Piojos|rock|Argentina
-        Cuando Dios Quiere|Los Piojos|rock|Argentina
-        Yo Tomo Pepsi|Bersuit Vergarabat|rock|Argentina
-        Mi Lugar|Hilda Lizarazu|rock|Argentina
+        Mil Horas|Los Abuelos de la Nada|rock|Argentina
+        Bajando la Calle|Vicentico|rock|Argentina
+        Fuera del Mundo|Vicentico|rock|Argentina
+        Sol Naranja|Babasónicos|rock|Argentina
+        Deléctrico|Babasónicos|rock|Argentina
+        Quemado|Los Piojos|rock|Argentina
+        Fijate|Los Piojos|rock|Argentina
+        Yo Tomo|Bersuit Vergarabat|rock|Argentina
         Pappo's Blues|Pappo|blues rock|Argentina
-        Desencuentro|Pappo|blues rock|Argentina
-        Ciudad Cruel|Memphis La Blusera|blues rock|Argentina
-        Canción para mi Muerte|Serú Girán|rock|Argentina
-        Noticias de Ayer|Serú Girán|rock|Argentina
+        La Sirenita y el Lobo de Mar|Memphis La Blusera|blues rock|Argentina
+        Canción para mi Muerte|Sui Generis|rock|Argentina
+        A Los Jóvenes de Ayer|Serú Girán|rock|Argentina
         Viernes 3 AM|Serú Girán|rock|Argentina
-        Río de la Plata|Serú Girán|rock|Argentina
         Borrachos en la Esquina|Flema|punk|Argentina
         Semen de Buey|Flema|punk|Argentina
         El Blanco Cristal|Flema|punk|Argentina
@@ -223,7 +220,7 @@ class LiveChordSweepTest {
         Entregá el Marrón|Los Auténticos Decadentes|punk|Argentina
         Muy, Muy Temprano|Los Fabulosos Cadillacs|punk|Argentina
         Mi Novia se Cayó en un Pozo Ciego|Los Fabulosos Cadillacs|punk|Argentina
-        Lucha Armada|Mal Momento|punk|Argentina
+        Corriendo el Riesgo|Mal Momento|punk|Argentina
         El Juego del Poder|Mal Momento|punk|Argentina
         Qué Saben las Flores|Mal Momento|punk|Argentina
     """)
@@ -251,7 +248,7 @@ class LiveChordSweepTest {
     }
 
     /** A chord name as a sheet writes it, e.g. C, F#m7b5, Dsus4, E7(#9), Am7/G. Loose on purpose. */
-    private val validChord = Regex("""^[A-G](#|b)?(m|M|maj|min|dim|aug|sus|add|°|ø|\+|-|\d|\(|\)|#|b)*(/[A-G](#|b)?)?$""")
+    private val validChord = Regex("""^[A-G](#|b|♯|♭)?(m|M|maj|min|dim|aug|sus|add|°|º|ø|\+|-|\d|\(|\)|#|b|♯|♭|\*)*(/[A-G](#|b|♯|♭)?)?$|^N\.?C\.?$""")
 
     /** Writes the song's dump, then the quality numbers and flags, from the same placement the app shows. */
     private fun qualityAndDump(n: Int, song: Song, sheet: ChordSheet, texts: List<String>, timed: List<LyricLine>): Quality {
