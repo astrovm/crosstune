@@ -4,7 +4,14 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const test = require('node:test');
 const html = fs.readFileSync(require('node:path').join(__dirname, '../site/index.html'), 'utf8');
-const source = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];
+function lastInlineScript(html) {
+  return [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)].at(-1)[1];
+}
+const source = lastInlineScript(html);
+
+test('script extraction accepts mixed-case HTML tags and selects the last script', () => {
+  assert.equal(lastInlineScript('<script>first</script><ScRiPt>last</SCRIPT>'), 'last');
+});
 
 function page({ dark = false, override, reduced = false, blockedStorage = false, language = 'en' } = {}, script = source) {
   const preference = matches => ({ matches, listeners: [], addEventListener(_, fn) { this.listeners.push(fn); }, change(value) { this.matches = value; this.listeners.forEach(fn => fn()); } });

@@ -214,27 +214,32 @@
 
   <footer>
     <span>Dibuat dengan <svg class="heart" viewBox="0 0 960 960" width="14" height="14" role="img" aria-label="love"><path fill="#e34b5f" d="M480,840Q466,840 451.5,835Q437,830 426,819L357,756Q251,659 165.5,563.5Q80,468 80,354Q80,260 143,197Q206,134 300,134Q353,134 400,156.5Q447,179 480,218Q513,179 560,156.5Q607,134 660,134Q754,134 817,197Q880,260 880,354Q880,468 794.5,564Q709,660 602,757L534,819Q523,830 508.5,835Q494,840 480,840Z"/></svg> oleh astro</span>
-    <span class="links"><a href="/id/privacy/">Kebijakan privasi</a> <a href="mailto:~@4st.li">~@4st.li</a> <select class="language" aria-label="Bahasa" onchange="pickLanguage(this.value)"><option value="/">English</option><option value="/es/">Español</option><option value="/pt-br/">Português (Brasil)</option><option value="/de/">Deutsch</option><option value="/fr/">Français</option><option value="/it/">Italiano</option><option value="/nl/">Nederlands</option><option value="/pl/">Polski</option><option value="/ru/">Русский</option><option value="/tr/">Türkçe</option><option value="/id/" selected>Bahasa Indonesia</option><option value="/hi/">हिन्दी</option><option value="/ja/">日本語</option><option value="/ko/">한국어</option><option value="/zh-cn/">简体中文</option><option value="/zh-tw/">繁體中文</option></select></span>
+    <span class="links"><a href="/id/privacy/">Kebijakan privasi</a> <a href="mailto:~@4st.li">~@4st.li</a> <select class="language" aria-label="Bahasa" onchange="pickLanguage(this.value)"><option value="en">English</option><option value="es">Español</option><option value="pt-br">Português (Brasil)</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="it">Italiano</option><option value="nl">Nederlands</option><option value="pl">Polski</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="id" selected>Bahasa Indonesia</option><option value="hi">हिन्दी</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="zh-cn">简体中文</option><option value="zh-tw">繁體中文</option></select></span>
   </footer>
 </div>
 <script>
-  function pickLanguage(url) {
-    try { localStorage.setItem("language", url.split("/")[1] && url.split("/")[1] !== "privacy" ? url.split("/")[1] : "en"); } catch (e) {}
-    location.href = url;
+  const languages = [{"code": "en", "tag": "en", "url": "/"}, {"code": "es", "tag": "es-ar", "url": "/es/"}, {"code": "pt-br", "tag": "pt-br", "url": "/pt-br/"}, {"code": "de", "tag": "de", "url": "/de/"}, {"code": "fr", "tag": "fr", "url": "/fr/"}, {"code": "it", "tag": "it", "url": "/it/"}, {"code": "nl", "tag": "nl", "url": "/nl/"}, {"code": "pl", "tag": "pl", "url": "/pl/"}, {"code": "ru", "tag": "ru", "url": "/ru/"}, {"code": "tr", "tag": "tr", "url": "/tr/"}, {"code": "id", "tag": "id", "url": "/id/"}, {"code": "hi", "tag": "hi", "url": "/hi/"}, {"code": "ja", "tag": "ja", "url": "/ja/"}, {"code": "ko", "tag": "ko", "url": "/ko/"}, {"code": "zh-cn", "tag": "zh-cn", "url": "/zh-cn/"}, {"code": "zh-tw", "tag": "zh-tw", "url": "/zh-tw/"}];
+  function pickLanguage(code) {
+    const language = languages.find(language => language.code === code);
+    if (!language) return;
+    try { localStorage.setItem("language", language.code); } catch (e) {}
+    location.href = language.url;
   }
   (function () {
     if ("id" !== "en") return;
     let saved = null;
     try { saved = localStorage.getItem("language"); } catch (e) {}
     if (saved === "en") return;
-    if (saved) { location.replace("/" + saved + "/" + ""); return; }
-    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/", "zh-tw": "/zh-tw/"};
+    const savedLanguage = languages.find(language => language.code === saved);
+    if (savedLanguage) { location.replace(savedLanguage.url); return; }
     for (const wanted of navigator.languages || [navigator.language]) {
       // Hong Kong and Macau write Traditional Chinese, like Taiwan.
       const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\b.*/, "zh-tw").replace(/^zh-hans\b.*/, "zh-cn");
-      const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
-      if (match === "/") return;
-      if (match) { location.replace(match + ""); return; }
+      const match = languages.find(language => language.tag === tag)
+        || languages.find(language => language.tag === tag.split("-")[0])
+        || languages.find(language => language.tag.split("-")[0] === tag.split("-")[0]);
+      if (match?.code === "en") return;
+      if (match) { location.replace(match.url); return; }
     }
   })();
 </script>

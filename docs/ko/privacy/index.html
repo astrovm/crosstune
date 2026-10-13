@@ -80,25 +80,30 @@
 <p>개인정보 관련 문의는 <a href="mailto:~@4st.li">~@4st.li</a>로 연락해 주세요. 개발자에게 이메일을 보내면 개발자가 답장할 수 있도록 이메일 서비스가 사용자의 주소와 메시지를 처리해요. 공유할 필요가 없는 민감한 정보는 포함하지 마세요.</p>
 <p>앱의 작동 방식이 바뀌면 이 방침이 업데이트될 수 있어요. 업데이트 내용은 새 날짜와 함께 이 페이지에 게시돼요.</p>
 </main>
-<footer> <select class="language" aria-label="언어" onchange="pickLanguage(this.value)"><option value="/privacy/">English</option><option value="/es/privacy/">Español</option><option value="/pt-br/privacy/">Português (Brasil)</option><option value="/de/privacy/">Deutsch</option><option value="/fr/privacy/">Français</option><option value="/it/privacy/">Italiano</option><option value="/nl/privacy/">Nederlands</option><option value="/pl/privacy/">Polski</option><option value="/ru/privacy/">Русский</option><option value="/tr/privacy/">Türkçe</option><option value="/id/privacy/">Bahasa Indonesia</option><option value="/hi/privacy/">हिन्दी</option><option value="/ja/privacy/">日本語</option><option value="/ko/privacy/" selected>한국어</option><option value="/zh-cn/privacy/">简体中文</option><option value="/zh-tw/privacy/">繁體中文</option></select></footer>
+<footer> <select class="language" aria-label="언어" onchange="pickLanguage(this.value)"><option value="en">English</option><option value="es">Español</option><option value="pt-br">Português (Brasil)</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="it">Italiano</option><option value="nl">Nederlands</option><option value="pl">Polski</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="id">Bahasa Indonesia</option><option value="hi">हिन्दी</option><option value="ja">日本語</option><option value="ko" selected>한국어</option><option value="zh-cn">简体中文</option><option value="zh-tw">繁體中文</option></select></footer>
 <script>
-  function pickLanguage(url) {
-    try { localStorage.setItem("language", url.split("/")[1] && url.split("/")[1] !== "privacy" ? url.split("/")[1] : "en"); } catch (e) {}
-    location.href = url;
+  const languages = [{"code": "en", "tag": "en", "url": "/privacy/"}, {"code": "es", "tag": "es-ar", "url": "/es/privacy/"}, {"code": "pt-br", "tag": "pt-br", "url": "/pt-br/privacy/"}, {"code": "de", "tag": "de", "url": "/de/privacy/"}, {"code": "fr", "tag": "fr", "url": "/fr/privacy/"}, {"code": "it", "tag": "it", "url": "/it/privacy/"}, {"code": "nl", "tag": "nl", "url": "/nl/privacy/"}, {"code": "pl", "tag": "pl", "url": "/pl/privacy/"}, {"code": "ru", "tag": "ru", "url": "/ru/privacy/"}, {"code": "tr", "tag": "tr", "url": "/tr/privacy/"}, {"code": "id", "tag": "id", "url": "/id/privacy/"}, {"code": "hi", "tag": "hi", "url": "/hi/privacy/"}, {"code": "ja", "tag": "ja", "url": "/ja/privacy/"}, {"code": "ko", "tag": "ko", "url": "/ko/privacy/"}, {"code": "zh-cn", "tag": "zh-cn", "url": "/zh-cn/privacy/"}, {"code": "zh-tw", "tag": "zh-tw", "url": "/zh-tw/privacy/"}];
+  function pickLanguage(code) {
+    const language = languages.find(language => language.code === code);
+    if (!language) return;
+    try { localStorage.setItem("language", language.code); } catch (e) {}
+    location.href = language.url;
   }
   (function () {
     if ("ko" !== "en") return;
     let saved = null;
     try { saved = localStorage.getItem("language"); } catch (e) {}
     if (saved === "en") return;
-    if (saved) { location.replace("/" + saved + "/" + "privacy/"); return; }
-    const homes = {"en": "/", "es-ar": "/es/", "pt-br": "/pt-br/", "de": "/de/", "fr": "/fr/", "it": "/it/", "nl": "/nl/", "pl": "/pl/", "ru": "/ru/", "tr": "/tr/", "id": "/id/", "hi": "/hi/", "ja": "/ja/", "ko": "/ko/", "zh-cn": "/zh-cn/", "zh-tw": "/zh-tw/"};
+    const savedLanguage = languages.find(language => language.code === saved);
+    if (savedLanguage) { location.replace(savedLanguage.url); return; }
     for (const wanted of navigator.languages || [navigator.language]) {
       // Hong Kong and Macau write Traditional Chinese, like Taiwan.
       const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\b.*/, "zh-tw").replace(/^zh-hans\b.*/, "zh-cn");
-      const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
-      if (match === "/") return;
-      if (match) { location.replace(match + "privacy/"); return; }
+      const match = languages.find(language => language.tag === tag)
+        || languages.find(language => language.tag === tag.split("-")[0])
+        || languages.find(language => language.tag.split("-")[0] === tag.split("-")[0]);
+      if (match?.code === "en") return;
+      if (match) { location.replace(match.url); return; }
     }
   })();
 </script>
