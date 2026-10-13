@@ -107,6 +107,8 @@ class ChordsScreenTest {
         assertEquals(listOf("Am", "F"), chordsOver(text))
         val readings = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
         assertEquals(listOf("よぞら", "ほし"), readings)
+        // Drawn: the readings are painted over the words, not only told to screen readers.
+        assertTrue(composeRule.onRoot().captureToImage().asAndroidBitmap().width > 0)
     }
 
     @Test
