@@ -40,6 +40,8 @@ internal object ChordSheets {
     private val ugChord = Regex("""\[ch]([^\[]*)\[/ch]""")
     private val ugTab = Regex("""\[/?tab]""")
     private val section = Regex("""^\s*\[[^\]]*]\s*$""")
+    private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
+    private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)([^/]*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
     fun fromUFret(lines: JSONArray): List<SheetLine> = (0 until lines.length()).map { index ->
@@ -54,6 +56,17 @@ internal object ChordSheets {
         }
         text.append(line.substring(from))
         SheetLine(text.toString(), chords)
+    }
+
+    /**
+     * [name] with its root written as a letter when it's in solfège, as Spanish sheets have it:
+     * "LAm" is "Am", "SOL7/SI" is "G7/B", "REm7*" is "Dm7*". Roots are capitalised as such, so "Fadd9" stays.
+     */
+    fun letterName(name: String): String {
+        val (root, accidental, rest, bass, bassAccidental) = solfegeChord.matchEntire(name)?.destructured ?: return name
+        val letters = StringBuilder(solfege.getValue(root)).append(accidental).append(rest)
+        if (bass.isNotEmpty()) letters.append('/').append(solfege.getValue(bass)).append(bassAccidental)
+        return letters.toString()
     }
 
     /**
@@ -78,7 +91,7 @@ internal object ChordSheets {
             var from = 0
             ugChord.findAll(line).forEach { match ->
                 plain.append(line, from, match.range.first)
-                chords += Chord(plain.length, match.groupValues[1].trim())
+                chords += Chord(plain.length, letterName(match.groupValues[1].trim()))
                 plain.append(match.groupValues[1])
                 from = match.range.last + 1
             }
@@ -97,7 +110,36 @@ internal object ChordSheets {
      * The [sheet]'s chords over each of [texts], the lines shown; null when its words aren't these,
      * as for another song of the same name.
      */
-    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
+    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? = placeIn(sheet, texts) ?: placeRomanized(sheet, texts)
+
+    /** The lines [texts] as they read in Latin letters, kept for the next sheet tried: the same words are put against several. */
+    private var lastTexts: List<String>? = null
+    private var lastSaid: List<String>? = null
+
+    private fun said(texts: List<String>): List<String>? = synchronized(this) {
+        if (texts != lastTexts) {
+            lastSaid = Readings.scriptOf(texts)?.let { script -> Readings.of(texts, script).zip(texts) { reading, text -> reading.romanized.ifBlank { text } } }
+            lastTexts = texts
+        }
+        lastSaid
+    }
+
+    /**
+     * Words in Japanese, Chinese or Korean against a sheet that writes them in Latin letters, as
+     * most of them are for such songs on Ultimate Guitar: the words as they read, and each chord on
+     * the same part of its line as it was, since the letters no longer line up with the written ones.
+     */
+    private fun placeRomanized(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
+        val said = said(texts) ?: return null
+        val placed = placeIn(sheet, said) ?: return null
+        return placed.mapIndexed { number, line ->
+            val length = texts[number].length
+            val readLength = said[number].length.coerceAtLeast(1)
+            LineChords(line.before, line.over.map { chord -> Chord((chord.at.toLong() * length / readLength).toInt().coerceIn(0, length), chord.name) })
+        }
+    }
+
+    private fun placeIn(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
         val ours = Letters(texts)
         val theirs = Letters(sheet.lines.map { it.text })
         if (theirs.size < MIN_LETTERS || ours.size == 0) return null

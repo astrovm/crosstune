@@ -170,24 +170,50 @@ internal class ChordFinder(
         return null
     }
 
-    /** Ultimate Guitar's first chord sheet for [title] that [fits]: by the artist first, those most voted for first. */
+    /**
+     * Ultimate Guitar's first chord sheet for [title] that [fits]: by the artist first, those most
+     * voted for first. It may name the artist otherwise, "Misc Soundtrack" for a film's songs, so
+     * when that finds none, by the title alone.
+     */
     private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        var failure: IOException? = null
+        val tried = mutableSetOf<String>()
+        for (key in listOf("$title ${song.artist}".trim(), title).distinct()) {
+            val urls = try {
+                ultimateGuitarSheets(song, title, key)
+            } catch (e: IOException) {
+                failure = e
+                continue
+            }
+            for (url in urls) {
+                if (!tried.add(url)) continue
+                val view = try {
+                    ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view")
+                } catch (e: IOException) {
+                    failure = e
+                    continue
+                } ?: continue
+                val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
+                ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
+                    .takeIf(fits)?.let { return it }
+            }
+        }
+        // An unanswered request is still unavailable, unless another found a matching sheet.
+        failure?.let { throw it }
+        return null
+    }
+
+    /** The pages of Ultimate Guitar's chord sheets for [title] by [song]'s artist, searched for by [key]: by the artist first, those most voted for first. */
+    private suspend fun ultimateGuitarSheets(song: MusicMetadata, title: String, key: String): List<String> {
         val search = UG_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("search_type", "title")
-            .addQueryParameter("value", "$title ${song.artist}")
+            .addQueryParameter("value", key)
             .build()
-        val results = ugStore(fetch(search.toString()))?.optJSONObject("data")?.optJSONArray("results") ?: return null
-        val urls = (0 until results.length()).mapNotNull { results.optJSONObject(it) }
+        val results = ugStore(fetch(search.toString(), search = true))?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
+        return (0 until results.length()).mapNotNull { results.optJSONObject(it) }
             .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
             .map { it.optString("tab_url") }.take(MAX_SHEETS)
-        for (url in urls) {
-            val view = ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: continue
-            val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
-            ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
-                .takeIf(fits)?.let { return it }
-        }
-        return null
     }
 
     /**
@@ -227,7 +253,7 @@ internal class ChordFinder(
     /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
     private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
         val search = LA_CUERDA_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("exp", key).addQueryParameter("canc", "1").build()
-        val page = fetch(search.toString())
+        val page = fetch(search.toString(), search = true)
         // Each song's page, by its row counted from the last.
         val files = laCuerdaFiles.find(page)?.groupValues?.get(1)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
         val last = laCuerdaLast.find(page)?.groupValues?.get(1)?.toInt() ?: return emptyList()
@@ -255,7 +281,10 @@ internal class ChordFinder(
      * words, "Vahos de ayer" for "Vahos del Ayer", as its words still have to be the song's.
      */
     private fun named(title: String, ours: String, byArtist: Boolean) =
-        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours)
+        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours) || endsWithSong(title, ours)
+
+    /** [title] names the film or album first: "Brahmāstra Part One - Shiva - Kesariya" is "Kesariya". */
+    private fun endsWithSong(title: String, ours: String) = title.substringAfterLast(" - ", "").let { it.isNotBlank() && SongNames.same(it, ours) }
 
     /** [artist] is the song's, [song]: one with no artist is nobody's. */
     private fun byArtist(artist: String, song: MusicMetadata) = song.artist.isNotBlank() && SongNames.sameArtist(artist, song.artist)
@@ -294,12 +323,16 @@ internal class ChordFinder(
     private fun ugStore(page: String): JSONObject? =
         ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
 
-    private suspend fun fetch(url: String, referer: String? = null): String {
+    private suspend fun fetch(url: String, referer: String? = null, search: Boolean = false): String {
         // Ultimate Guitar shows its search results only to a computer's browser.
         val request = Request.Builder().url(url).header("User-Agent", BROWSER).apply { referer?.let { header("Referer", it) } }.get().build()
         return client.newCall(request).executeAsync().use { response ->
-            if (!response.isSuccessful) throw IOException("Chord site returned ${response.code}")
-            response.body.stringAtMost()
+            val body = response.body.stringAtMost()
+            // A search that finds nothing is answered with a 404 and a page saying so by Ultimate Guitar,
+            // and with a 500 and no page at all by LaCuerda: neither is a site that wouldn't answer.
+            val none = search && (response.code == 404 || (response.code == 500 && body.isBlank()))
+            if (!response.isSuccessful && !none) throw IOException("Chord site returned ${response.code}")
+            body
         }
     }
 
@@ -354,7 +387,10 @@ internal class ChordFinder(
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
         val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
-        val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ")
+        val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ") + mapOf(
+            "ordm" to "º", "ordf" to "ª", "deg" to "°", "iexcl" to "¡", "iquest" to "¿", "laquo" to "«", "raquo" to "»",
+            "ndash" to "–", "mdash" to "—", "hellip" to "…", "lsquo" to "‘", "rsquo" to "’", "ldquo" to "“", "rdquo" to "”"
+        )
 
         /** An HTML attribute's text as written, spaces and all, which [android.text.Html] would run together. */
         fun unescape(text: String): String = entity.replace(text) { match ->

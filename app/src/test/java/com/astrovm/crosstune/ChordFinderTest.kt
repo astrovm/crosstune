@@ -237,6 +237,37 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aSearchThatFindsNothingIsNoChordsNotASiteThatWontAnswer() {
+        // Ultimate Guitar answers it with a 404 and its usual page, LaCuerda with a 500 and no page at all.
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> answer(request, mapOf("https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+    }
+
+    @Test
+    fun ultimateGuitarIsSearchedForByTheTitleAloneWhenItNamesTheArtistOtherwise() {
+        val searches = mutableListOf<String?>()
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && request.url.encodedPath == "/search.php") {
+                searches += request.url.queryParameter("value")
+                // With the artist it finds none: a film's songs are by "Misc Soundtrack".
+                if (request.url.queryParameter("value") == "River Road The Walkers") FakeSpotify.html(request, ugSearch(), code = 404)
+                else FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/film-1", "The Film, Part One - River Road", "Misc Soundtrack", 50)))
+            } else {
+                answer(request, mapOf("https://tabs.ultimate-guitar.com/tab/film-1" to ugTab(ugWalking, capo = null)))
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/film-1", found.sheet.url)
+        assertEquals(listOf("River Road The Walkers", "River Road"), searches)
+    }
+
+    @Test
     fun aSiteThatWontAnswerIsntTakenForOneWithoutTheSong() {
         fake.handler = { throw IOException("offline") }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
@@ -394,6 +425,43 @@ var NMAX=${files.size - 1};
         }
         assertEquals(ChordFinder.Chords.None, chords(river, english))
         assertTrue(fake.requestedUrls.none { ".shtml" in it })
+    }
+
+    @Test
+    fun laCuerdasSolfegeChordsAreNamedWithLetters() {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(
+                            "<div></div><A>SOL</A>       <A>REm7*</A>\nWalking down the river road\n<div></div><A>LAm</A>\nSinging to the morning light"
+                        )
+                    )
+                )
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(listOf("G", "Dm7*"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+        assertEquals(listOf("Am"), ChordSheets.place(found.sheet, english)!![1].over.map { it.name })
+    }
+
+    @Test
+    fun anEntityInAChordUltimateGuitarWritesIsTheCharacterItNames() {
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/walkers-1", "River Road", "The Walkers", 10)),
+                    "https://tabs.ultimate-guitar.com/tab/walkers-1" to ugTab("[tab][ch]G[/ch]       [ch]D&ordm;[/ch]\nWalking down the river road[/tab]\n[tab][ch]C[/ch]\nSinging to the morning light[/tab]")
+                )
+            )
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(listOf("G", "Dº"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
     }
 
     @Test
