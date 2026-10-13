@@ -256,6 +256,20 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun anEntityThatIsNoCharacterDoesNotBreakASheet() {
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/few-1", "River Road", "The Walkers", 3)),
+                    "https://tabs.ultimate-guitar.com/tab/few-1" to ugTab(ugWalking.replace("morning", "mor&#99999999999;ning").replace("river", "ri&#x110000;ver"))
+                )
+            )
+        }
+        assertTrue(chords(river, english) is ChordFinder.Chords.Found)
+    }
+
+    @Test
     fun aSearchThatFindsNothingIsNoChordsNotASiteThatWontAnswer() {
         // Ultimate Guitar answers it with a 404 and its usual page, LaCuerda with a 500 and no page at all.
         fake.handler = { request ->

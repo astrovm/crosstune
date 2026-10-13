@@ -41,7 +41,7 @@ internal object ChordSheets {
     private val ugTab = Regex("""\[/?tab]""")
     private val section = Regex("""^\s*\[[^\]]*]\s*$""")
     private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
-    private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)([^/]*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
+    private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|m|M|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
     fun fromUFret(lines: JSONArray): List<SheetLine> = (0 until lines.length()).map { index ->

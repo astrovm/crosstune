@@ -58,6 +58,8 @@ class ChordSheetsTest {
         assertEquals("F#m", ChordSheets.letterName("FA#m"))
         assertEquals("Bb", ChordSheets.letterName("SIb"))
         assertEquals("G7/B", ChordSheets.letterName("SOL7/SI"))
+        // A word that only starts like a chord isn't one.
+        for (word in listOf("SOLO", "FADE", "LAST", "MIDI")) assertEquals(word, ChordSheets.letterName(word))
         assertEquals("C/E", ChordSheets.letterName("DO/MI"))
         // Chords in letters stay, even those that begin like a note's name.
         for (name in listOf("C", "Dm", "Fadd9", "Dsus4", "Em7", "A7(sus4)", "Bb", "Gdim")) assertEquals(name, ChordSheets.letterName(name))

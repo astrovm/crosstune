@@ -396,11 +396,15 @@ internal class ChordFinder(
         fun unescape(text: String): String = entity.replace(text) { match ->
             val name = match.groupValues[1]
             when {
-                name.startsWith("#x") -> name.substring(2).toInt(16).let { String(Character.toChars(it)) }
-                name.startsWith("#") -> name.substring(1).toInt().let { String(Character.toChars(it)) }
+                name.startsWith("#x") -> codePoint(name.substring(2).toIntOrNull(16), match.value)
+                name.startsWith("#") -> codePoint(name.substring(1).toIntOrNull(), match.value)
                 else -> named[name] ?: htmlLetters[name] ?: match.value
             }
         }
+
+        /** The character of a numbered entity, or the entity as it is when the number is no character. */
+        private fun codePoint(code: Int?, entity: String): String =
+            if (code != null && Character.isValidCodePoint(code)) String(Character.toChars(code)) else entity
 
         /** The accented letters Ultimate Guitar writes by name, as in "Beyonc&eacute;". */
         val htmlLetters: Map<String, String> = buildMap {
