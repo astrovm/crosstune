@@ -469,7 +469,17 @@ var NMAX=${files.size - 1};
 
     @Test
     fun laCuerdaSearchesATitleWithoutAnArtistOnlyOnce() {
-        fake.handler = { request -> FakeSpotify.html(request, "") }
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://acordes.lacuerda.net/" to "",
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                    "https://www.ufret.jp/search.php" to "",
+                    "https://music.163.com/api/search/get" to "{}"
+                )
+            )
+        }
         assertEquals(ChordFinder.Chords.None, chords(river.copy(artist = ""), english))
         assertEquals(listOf("River Road"), fake.requestedUrls.filter { "/busca.php" in it }.map { it.toHttpUrl().queryParameter("exp") })
     }
