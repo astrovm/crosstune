@@ -85,7 +85,7 @@ class LiveChordSweepTest {
         Pretender|Official髭男dism|J-pop|Japan
         Gurenge|LiSA|anime|Japan
         Unravel|TK from 凛として時雨|anime|Japan
-        Cha-La Head-Cha-La|Hiroshi Kitadani|anime|Japan
+        Cha-La Head-Cha-La|Hironobu Kageyama|anime|Japan
         A Cruel Angel's Thesis|Yoko Takahashi|anime|Japan
         晴天|周杰伦|C-pop|Taiwan
         小幸运|田馥甄|C-pop|Taiwan
@@ -99,7 +99,7 @@ class LiveChordSweepTest {
         No Woman, No Cry|Bob Marley & The Wailers|reggae|Jamaica
         Redemption Song|Bob Marley|reggae|Jamaica
         Pressure Drop|Toots and the Maytals|reggae|Jamaica
-        Habibi Ya Nour El Ain|Amr Diab|Arabic pop|Egypt
+        Nour El Ein|Amr Diab|Arabic pop|Egypt
         حبيبي يا نور العين|عمرو دياب|Arabic pop|Egypt
         Enta Omri|Umm Kulthum|Arabic classic|Egypt
         La Vie en rose|Édith Piaf|chanson|France

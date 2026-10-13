@@ -488,6 +488,15 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aTitleInChineseWithAFilmNoteInBracketsIsTheSameSong() {
+        respond("""[${answer("小幸运 (电影《我的少女时代》主题曲)", "田馥甄", "我听见雨滴落在青青草地")}]""")
+        assertEquals("我听见雨滴落在青青草地", words(MusicMetadata("小幸运", "田馥甄")))
+        // Another song of the artist's isn't it, nor a title that only starts alike.
+        respond("""[${answer("小幸运吗 (电影主题曲)", "田馥甄", "别的歌")}]""")
+        assertEquals(Lyrics.None, found(MusicMetadata("小幸运", "田馥甄")))
+    }
+
+    @Test
     fun anArtistOnlyWrittenInJapaneseOnNetEaseCountsForARecordingAsLong() {
         val sunshine = MusicMetadata("Sunshine Kiz", "Piper")
         piperSong(lengthMs = 187_000 + SAME_RECORDING_LENGTH_MS)
