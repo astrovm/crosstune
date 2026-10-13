@@ -373,7 +373,7 @@ internal class ChordFinder(
         null
     }
 
-    private companion object {
+    internal companion object {
         /** Per site; looking a song up by its other names takes a few more requests. */
         const val TIMEOUT_MS = 20_000L
 
