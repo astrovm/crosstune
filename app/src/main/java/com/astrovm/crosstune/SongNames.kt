@@ -204,6 +204,11 @@ internal object SongNames {
         // Entirely non-Latin titles have no words below. Two empty sets say nothing about
         // whether they name the same song; compare their actual letters first.
         if (same(one, other) && normalize(one).isNotEmpty()) return true
+        // Nor do they have words for a note in brackets: "小幸运 (电影《我的少女时代》主题曲)" is "小幸运".
+        if (words(one).isEmpty() && words(other).isEmpty()) {
+            val bare = normalize(bareTitle(one))
+            if (bare.isNotEmpty() && bare == normalize(bareTitle(other))) return true
+        }
         val ours = words(withoutEditionTag(one))
         val theirs = words(withoutEditionTag(other))
         val (shorter, longer) = if (ours.size <= theirs.size) ours to theirs else theirs to ours
