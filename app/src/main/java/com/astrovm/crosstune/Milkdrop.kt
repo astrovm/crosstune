@@ -13,6 +13,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.TextureView
+import kotlin.math.sin
 import kotlin.random.Random
 
 /** Draws MilkDrop presets, moving to the sound it hears. Every call is on the GL thread, with its context current. */
@@ -171,9 +172,17 @@ internal class MilkdropRenderer(
             showNext(smooth = true)
         }
         val heard = sound?.read(samples) ?: 0
-        if (heard > 0) milkdrop.hear(samples, heard)
+        if (heard > 0 && !silent(samples, heard)) {
+            milkdrop.hear(samples, heard)
+        } else {
+            // Many presets fade to black in silence, so with nothing playing a soft wave keeps them alive.
+            idle(samples, ++idleFrame)
+            milkdrop.hear(samples, samples.size)
+        }
         milkdrop.draw()
     }
+
+    private var idleFrame = 0
 
     /** The next preset that loads, trying each at most once. */
     private fun showNext(smooth: Boolean) {
@@ -203,6 +212,20 @@ internal class MilkdropRenderer(
     }
 
     companion object {
+        /** Whether the first [count] of [samples] are all within a hair of the centre, 128. */
+        fun silent(samples: ByteArray, count: Int): Boolean =
+            (0 until count).all { (samples[it].toInt() and 0xFF) in 126..130 }
+
+        /** Fills [into] with a slow, gentle wave for frame [frame]: quiet, but enough for presets to move to. */
+        fun idle(into: ByteArray, frame: Int) {
+            val phase = frame * 0.07
+            val level = 0.35 + 0.25 * sin(frame * 0.045) + 0.15 * sin(frame * 0.13)
+            for (i in into.indices) {
+                val wave = 0.6 * sin(i * 0.02 + phase) + 0.3 * sin(i * 0.11 + phase * 2.3) + 0.1 * sin(i * 0.5 + frame)
+                into[i] = (128 + 110 * level * wave).toInt().toByte()
+            }
+        }
+
         const val PRESET_MS = 30_000L
         /** 30 frames a second. */
         const val FRAME_MS = 33L

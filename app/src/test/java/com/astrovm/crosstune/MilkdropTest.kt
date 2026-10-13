@@ -111,10 +111,19 @@ class MilkdropTest {
         renderer.frame()
         assertEquals(1, sleeps.size)
 
-        // Nothing heard, nothing given.
+        // Nothing heard, a soft wave instead, so presets that fade in silence still show.
         tap.sound = byteArrayOf()
         renderer.frame()
-        assertEquals(3, milkdrop.heard.size)
+        assertEquals(4, milkdrop.heard.size)
+        assertEquals(OutputMixTap.SAMPLES, milkdrop.heard.last().size)
+        assertTrue(milkdrop.heard.last().any { it != 128.toByte() })
+
+        // Flat silence, as Android gives when nothing plays, is the same.
+        tap.sound = ByteArray(8) { 128.toByte() }
+        clock += 100
+        renderer.frame()
+        assertEquals(OutputMixTap.SAMPLES, milkdrop.heard.last().size)
+        assertTrue(milkdrop.heard.last().any { it != 128.toByte() })
     }
 
     @Test
@@ -180,7 +189,7 @@ class MilkdropTest {
         renderer.frame()
         renderer.stop()
         assertEquals(listOf("open", "draw", "close"), milkdrop.calls)
-        assertTrue(milkdrop.heard.isEmpty())
+        assertTrue(milkdrop.heard.all { it.size == OutputMixTap.SAMPLES })
     }
 
     @Test
