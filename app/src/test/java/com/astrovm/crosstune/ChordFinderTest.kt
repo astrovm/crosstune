@@ -397,6 +397,77 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun laCuerdaRetriesTheTitleWhenSearchingWithTheArtistFails() {
+        for (code in listOf(500, 403)) {
+            fake.requestedUrls.clear()
+            fake.handler = { request ->
+                when {
+                    request.url.queryParameter("exp") == "River Road The Walkers" -> FakeSpotify.html(request, "Search failed", code = code)
+                    request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+                    else -> answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(laCuerdaWalking)))
+                }
+            }
+            val found = chords(river, english) as ChordFinder.Chords.Found
+            assertEquals("https://acordes.lacuerda.net/walkers/river_road.shtml", found.sheet.url)
+            assertEquals(listOf("River Road The Walkers", "River Road"), fake.requestedUrls.filter { "/busca.php" in it }.map { it.toHttpUrl().queryParameter("exp") })
+            assertEquals(listOf("G", "C"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+        }
+    }
+
+    @Test
+    fun laCuerdaTriesTheNextSheetWhenOneDownloadFails() {
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "RR-12", "river_road")))))
+                request.url.encodedPath == "/walkers/river_road.shtml" -> throw IOException("stream reset")
+                else -> answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://acordes.lacuerda.net/walkers/river_road-2.shtml" to laCuerdaSheet(laCuerdaWalking)))
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://acordes.lacuerda.net/walkers/river_road-2.shtml", found.sheet.url)
+        assertEquals(1, fake.requestedUrls.count { "/busca.php" in it })
+    }
+
+    @Test
+    fun laCuerdaRetriesTheTitleAfterUnusableSheetsWithoutDownloadingTheSameSheetTwice() {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                val songs = mutableListOf(LaCuerdaSong("River Road", "R-1", "river_road"))
+                if (request.url.queryParameter("exp") == "River Road") songs += LaCuerdaSong("River Road", "R-1", "river_road_live")
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", songs)))
+            } else {
+                answer(request, mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                    "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet("<A>G</A>\nNothing like the song at all, really"),
+                    "https://acordes.lacuerda.net/walkers/river_road_live.shtml" to laCuerdaSheet(laCuerdaWalking)
+                ))
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://acordes.lacuerda.net/walkers/river_road_live.shtml", found.sheet.url)
+        assertEquals(listOf("https://acordes.lacuerda.net/walkers/river_road.shtml", found.sheet.url), fake.requestedUrls.filter { ".shtml" in it })
+    }
+
+    @Test
+    fun aFailedLaCuerdaRequestStaysUnavailableWhenTheFallbackFindsNothing() {
+        for (failedPath in listOf("/busca.php", "/walkers/river_road.shtml")) {
+            fake.requestedUrls.clear()
+            fake.handler = { request ->
+                when {
+                    request.url.encodedPath == failedPath && request.url.queryParameter("exp") != "River Road" -> FakeSpotify.html(request, "Unavailable", code = 500)
+                    request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request,
+                        if (request.url.queryParameter("exp") == "River Road") "No results"
+                        else laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road"))))
+                    )
+                    else -> answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+                }
+            }
+            assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
+            assertEquals(2, fake.requestedUrls.count { "/busca.php" in it })
+        }
+    }
+
+    @Test
     fun chordsFoundAreKeptSoASongPlayedAgainNeedsNoLookup() {
         val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
         fake.handler = { request ->

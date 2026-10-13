@@ -195,13 +195,32 @@ internal class ChordFinder(
      * may name the artist otherwise, "Dos Minutos" for 2 Minutos, so then by the title alone.
      */
     private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
-        val urls = laCuerdaSheets(song, "${song.title} ${song.artist}").ifEmpty { laCuerdaSheets(song, song.title) }
-        for (url in urls) {
-            val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: continue
-            // Its chords as Ultimate Guitar marks them, over the words they're played on.
-            val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
-            ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url).takeIf(fits)?.let { return it }
+        var failure: IOException? = null
+        val tried = mutableSetOf<String>()
+        // A search with the artist can fail even when the title alone finds the song.
+        for (key in listOf("${song.title} ${song.artist}".trim(), song.title).distinct()) {
+            val urls = try {
+                laCuerdaSheets(song, key)
+            } catch (e: IOException) {
+                failure = e
+                continue
+            }
+            for (url in urls) {
+                if (!tried.add(url)) continue
+                val page = try {
+                    fetch(url)
+                } catch (e: IOException) {
+                    failure = e
+                    continue
+                }
+                val sheet = laCuerdaSheet.find(page)?.groupValues?.get(1) ?: continue
+                // Its chords as Ultimate Guitar marks them, over the words they're played on.
+                val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
+                ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url).takeIf(fits)?.let { return it }
+            }
         }
+        // An unanswered request is still unavailable, unless another found a matching sheet.
+        failure?.let { throw it }
         return null
     }
 
