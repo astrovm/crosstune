@@ -1093,8 +1093,9 @@ private fun LyricLineText(
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (chords != null && !chords.isEmpty) {
-            // Chords sit over the letters they're played on, where readings would.
-            ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, following.takeIf { lit }, style)
+            // Chords sit over the letters they're played on, above the readings when those show too.
+            val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
+            ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, following.takeIf { lit }, style, ruby, help?.readingScale ?: READING_SCALE)
         } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
             RubyLine(reading.parts, style, help.readingScale)
         } else if (lit && following != null && words.isNotEmpty()) {
@@ -1152,12 +1153,12 @@ internal val ChordsShown = SemanticsPropertyKey<List<String>>("ChordsShown")
  * words as they're sung, and the chord being played.
  */
 @Composable
-private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle) {
+private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle, ruby: List<Ruby>? = null, readingScale: Float = READING_SCALE) {
     val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
     if (chords.over.isEmpty()) {
-        Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
+        if (ruby != null) RubyLine(ruby, style, readingScale) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
@@ -1165,26 +1166,59 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
     playing.intValue = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
-    val shown = position?.let { sungText(line.words, it) } ?: AnnotatedString(text)
+    val over = style.copy(
+        fontSize = style.fontSize * readingScale,
+        lineHeight = style.fontSize * (readingScale + READING_GAP),
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
+    val shown = when {
+        position == null -> written
+        // Words lit as sung, with the readings' spacing kept when the words are the same letters.
+        ruby != null && line.words.joinToString("") { it.text } == text -> {
+            val sung = SyncedLyrics.wordsSungBy(line.words, position)
+            val litTo = line.words.take(sung).sumOf { it.text.length }
+            buildAnnotatedString {
+                append(written)
+                addStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = UNSUNG_ALPHA)), litTo, written.length)
+            }
+        }
+        // Words that don't spell the line's own letters would put the chords and readings over the wrong ones.
+        ruby != null -> written
+        else -> sungText(line.words, position)
+    }
     val measurer = rememberTextMeasurer()
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
         shown,
-        // Room over each row of the words for the chords played on it.
-        style = style.copy(lineHeight = (style.lineHeight.value + chordStyle.lineHeight.value).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        // Room over each row of the words for the chords played on it, and the readings.
+        style = style.copy(lineHeight = (style.lineHeight.value + chordStyle.lineHeight.value + if (ruby != null) over.lineHeight.value else 0f).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { layout = it },
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { this[ChordsShown] = chords.over.map { it.name } }
+            .semantics {
+                this[ChordsShown] = chords.over.map { it.name }
+                if (ruby != null) this[ReadingsShown] = ruby.mapNotNull { it.reading }
+            }
             // Laid out once for the words as laid out, not again each frame the line's sung.
             .drawWithCache {
                 val labels = chords.over.map { measurer.measure(it.name, chordStyle) }
                 val places = layout?.let { chordPlaces(chords.over, labels.map { label -> label.size.width.toFloat() }, it, size.width, chordStyle.fontSize.toPx() / 3) }.orEmpty()
+                val readings = if (ruby != null) layout?.let { readingPlaces(ruby, it) }.orEmpty() else emptyList()
+                val readingLabels = readings.map { measurer.measure(it.reading, over) }
+                // The readings sit just over the words, under the chords.
+                val below = chordStyle.lineHeight.toPx()
                 onDrawBehind {
                     val now = playing.intValue
                     places.forEachIndexed { index, place -> drawText(labels[index], color = if (now >= 0 && index != now) dim else chordStyle.color, topLeft = place) }
+                    readings.forEachIndexed { index, place ->
+                        val width = readingLabels[index].size.width.toFloat()
+                        val x = (place.center - width / 2).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
+                        drawText(readingLabels[index], topLeft = Offset(x, place.top + below))
+                    }
                 }
             }
     )

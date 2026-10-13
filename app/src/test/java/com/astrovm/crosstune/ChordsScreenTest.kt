@@ -96,6 +96,68 @@ class ChordsScreenTest {
     }
 
     @Test
+    fun readingsAndChordsShowTogetherOverTheWords() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))
+        val line = LyricLine(1_000, text)
+        val chords = ChordsState(on = true, sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1"))
+        val learning = Learning(readings = true, script = Script.JAPANESE, lines = listOf(LineReading(parts, "よぞらのほしをみあげてきみをおもうよる", "yozora no hoshi")))
+        val state = UiState(lyricsFor = song, lyrics = text, lyricLines = listOf(line), chords = chords, learning = learning)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
+        assertEquals(listOf("Am", "F"), chordsOver(text))
+        val readings = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
+        assertEquals(listOf("よぞら", "ほし"), readings)
+        // Drawn: the readings are painted over the words, not only told to screen readers.
+        assertTrue(composeRule.onRoot().captureToImage().asAndroidBitmap().width > 0)
+    }
+
+    @Test
+    fun readingsAndChordsKeepLightingTheWordsAsTheyAreSung() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))
+        val line = LyricLine(1_000, text, listOf(TimedWord(1_000, "夜空の"), TimedWord(2_000, "星を見上げて君を想う夜")))
+        val chords = ChordsState(on = true, sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1"))
+        val learning = Learning(readings = true, script = Script.JAPANESE, lines = listOf(LineReading(parts, "よぞらのほしをみあげてきみをおもうよる", "yozora no hoshi")))
+        val following = Following(PlaybackClock(1_500, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        val state = UiState(lyricsFor = song, lyrics = text, lyricLines = listOf(line), following = following, canFollowApps = true, chords = chords, learning = learning)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
+        assertEquals(listOf("Am", "F"), chordsOver(text))
+        val readings = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
+        assertEquals(listOf("よぞら", "ほし"), readings)
+    }
+
+    private fun japanese(line: LyricLine, chords: ChordSheet, following: Following? = null): UiState {
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))
+        val learning = Learning(readings = true, script = Script.JAPANESE, lines = listOf(LineReading(parts, "よぞらのほしをみあげてきみをおもうよる", "yozora no hoshi")))
+        return UiState(lyricsFor = song, lyrics = line.text, lyricLines = listOf(line), following = following, canFollowApps = true, chords = ChordsState(on = true, sheet = chords), learning = learning)
+    }
+
+    private fun readingsOver(line: String) = composeRule.onAllNodesWithText(line, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
+
+    @Test
+    fun aLineWithChordsOnlyBeforeItKeepsItsReadings() {
+        val text = "夜空の星を見上げて君を想う夜"
+        // The chords for the line are played before it, so none sit over its words.
+        val sheet = ChordSheet(listOf(SheetLine("", listOf(Chord(0, "Am"))), SheetLine(text, emptyList())), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(japanese(LyricLine(1_000, text), sheet), ScreenActions()) } }
+        composeRule.onNodeWithText("Am", useUnmergedTree = true).assertExists()
+        composeRule.waitUntil(5_000) { readingsOver(text) != null }
+        assertEquals(listOf("よぞら", "ほし"), readingsOver(text))
+    }
+
+    @Test
+    fun timedWordsThatSpellOtherLettersDontReplaceTheLineWithReadings() {
+        val text = "夜空の星を見上げて君を想う夜"
+        // Timed as another spelling of the line: the line is drawn as written, so chords and readings stay over their letters.
+        val line = LyricLine(1_000, text, listOf(TimedWord(1_000, "夜空の "), TimedWord(2_000, "星を見上げて君を想う夜")))
+        val sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
+        val following = Following(PlaybackClock(1_500, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(japanese(line, sheet, following), ScreenActions()) } }
+        assertEquals(listOf("Am", "F"), chordsOver(text))
+        assertEquals(listOf("よぞら", "ほし"), readingsOver(text))
+    }
+
+    @Test
     fun switchingChordsOnShowsTheSheetFoundAfterASearchFailure() {
         val fake = FakeSpotify()
         fake.handler = { request ->
