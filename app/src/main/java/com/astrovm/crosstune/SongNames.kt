@@ -31,7 +31,7 @@ internal object SongNames {
      * recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed)?|mono|stereo)\b$IN_TAG*)\s*[)\]]?$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
