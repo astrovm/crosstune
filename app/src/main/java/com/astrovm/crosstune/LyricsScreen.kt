@@ -87,6 +87,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.animateContentSize
@@ -183,6 +184,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
         return
     }
+    // Saved lines and practice take the place of the words, so only the words hold the screen, and only while a song plays.
+    KeepScreenOn(state.following?.clock?.playing == true)
     BackHandler(onBack = actions.onDismissLyrics)
     // Where the timed words are scrolled to, kept out here so they're right where they were when they
     // come back, e.g. once the visuals come or go, with nothing to glide back to.
@@ -345,6 +348,20 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
                 content(Color.Black.copy(alpha = state.visualsShade))
             }
         }
+    }
+}
+
+/**
+ * Holds the screen awake while the words follow a song that's playing. The phone's own timer
+ * takes over once the song pauses, nothing says where it is, or these words leave the screen.
+ */
+@Composable
+private fun KeepScreenOn(playing: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, playing) {
+        val window = (view.context as? Activity)?.window ?: return@DisposableEffect onDispose {}
+        if (playing) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 }
 

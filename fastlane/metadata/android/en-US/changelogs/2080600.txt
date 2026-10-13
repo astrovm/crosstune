@@ -1,1 +1,2 @@
 Website language selection now ignores invalid saved values and stays on supported pages.
+The screen stays on while lyrics follow a song that's playing.
