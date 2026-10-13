@@ -96,6 +96,20 @@ class ChordsScreenTest {
     }
 
     @Test
+    fun readingsAndChordsShowTogetherOverTheWords() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))
+        val line = LyricLine(1_000, text)
+        val chords = ChordsState(on = true, sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1"))
+        val learning = Learning(readings = true, script = Script.JAPANESE, lines = listOf(LineReading(parts, "よぞらのほしをみあげてきみをおもうよる", "yozora no hoshi")))
+        val state = UiState(lyricsFor = song, lyrics = text, lyricLines = listOf(line), chords = chords, learning = learning)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
+        assertEquals(listOf("Am", "F"), chordsOver(text))
+        val readings = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
+        assertEquals(listOf("よぞら", "ほし"), readings)
+    }
+
+    @Test
     fun switchingChordsOnShowsTheSheetFoundAfterASearchFailure() {
         val fake = FakeSpotify()
         fake.handler = { request ->
