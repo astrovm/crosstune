@@ -10,10 +10,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -90,6 +93,35 @@ class ChordsScreenTest {
         val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
         System.getenv("CHORDS_SCREENSHOT")?.let { path -> File(path).outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
         assertTrue(image.width > 0)
+    }
+
+    @Test
+    fun switchingChordsOnShowsTheSheetFoundAfterASearchFailure() {
+        val fake = FakeSpotify()
+        fake.handler = { request ->
+            val body = when {
+                request.url.queryParameter("exp") == "River Road The Walkers" -> null
+                request.url.encodedPath == "/busca.php" -> """<a href="/walkers/">The Walkers</a><li id='r000' lcd='R-1'><a href="javascript:">River Road</a></li><script>var fns=['river_road'];var NMAX=0;</script>"""
+                request.url.encodedPath == "/walkers/river_road.shtml" -> "<div id=t_body><pre><A>G</A>       <A>C</A>\n${lines[0].text}\n<A>F</A>\n${lines[2].text}</pre>"
+                else -> ""
+            }
+            FakeSpotify.html(request, body.orEmpty(), code = if (body == null) 500 else 200)
+        }
+        val finder = ChordFinder(fake.client())
+        var chords by mutableStateOf(ChordsState())
+        val actions = ScreenActions(onChordsChange = { on ->
+            val answer = if (on) runBlocking { finder.chordsOf(song, lines.map { it.text }) } else null
+            chords = ChordsState(on = on, tried = on, sheet = (answer as? ChordFinder.Chords.Found)?.sheet)
+        })
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), actions) } }
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_learn)).performClick()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords)).performClick()
+        assertEquals(listOf("G", "C"), chordsOver(lines[0].text))
+        assertEquals(listOf("F"), chordsOver(lines[2].text))
+        assertEquals(2, fake.requestedUrls.count { "/busca.php" in it })
+        composeRule.onNodeWithText(string(R.string.lyrics_chords)).performClick()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
