@@ -55,6 +55,7 @@ jobs:
           python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           node scripts/test-site-media.cjs
+          node scripts/test-site-language.cjs
 
       - name: Test, lint and build
         run: ./gradlew :app:ci --build-cache

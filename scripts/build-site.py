@@ -67,9 +67,9 @@ def home(code):
     return "/" if code == "en" else f"/{code}/"
 
 
-def picker(strings, code, page):
+def picker(strings, code):
     options = "".join(
-        f'<option value="{home(c)}{page}"{" selected" if c == code else ""}>{strings[c]["name"]}</option>'
+        f'<option value="{c}"{" selected" if c == code else ""}>{strings[c]["name"]}</option>'
         for c in LANGS
     )
     label = html.escape(strings[code]["language_label"])
@@ -79,25 +79,30 @@ def picker(strings, code, page):
 def script(strings, code, page):
     # Remembers a language picked by hand. An English page sends a visitor to the language they
     # picked before or, the first time, to their browser's language when the site has it.
-    homes = {strings[c]["lang"].lower(): home(c) for c in LANGS}
+    languages = [{"code": c, "tag": strings[c]["lang"].lower(), "url": home(c) + page} for c in LANGS]
     return f"""<script>
-  function pickLanguage(url) {{
-    try {{ localStorage.setItem("language", url.split("/")[1] && url.split("/")[1] !== "privacy" ? url.split("/")[1] : "en"); }} catch (e) {{}}
-    location.href = url;
+  const languages = {json.dumps(languages)};
+  function pickLanguage(code) {{
+    const language = languages.find(language => language.code === code);
+    if (!language) return;
+    try {{ localStorage.setItem("language", language.code); }} catch (e) {{}}
+    location.href = language.url;
   }}
   (function () {{
     if ({json.dumps(code)} !== "en") return;
     let saved = null;
     try {{ saved = localStorage.getItem("language"); }} catch (e) {{}}
     if (saved === "en") return;
-    if (saved) {{ location.replace("/" + saved + "/" + {json.dumps(page)}); return; }}
-    const homes = {json.dumps(homes)};
+    const savedLanguage = languages.find(language => language.code === saved);
+    if (savedLanguage) {{ location.replace(savedLanguage.url); return; }}
     for (const wanted of navigator.languages || [navigator.language]) {{
       // Hong Kong and Macau write Traditional Chinese, like Taiwan.
       const tag = wanted.toLowerCase().replace(/^zh-(hant|hk|mo)\\b.*/, "zh-tw").replace(/^zh-hans\\b.*/, "zh-cn");
-      const match = homes[tag] || homes[tag.split("-")[0]] || Object.entries(homes).find(([k]) => k.split("-")[0] === tag.split("-")[0])?.[1];
-      if (match === "/") return;
-      if (match) {{ location.replace(match + {json.dumps(page)}); return; }}
+      const match = languages.find(language => language.tag === tag)
+        || languages.find(language => language.tag === tag.split("-")[0])
+        || languages.find(language => language.tag.split("-")[0] === tag.split("-")[0]);
+      if (match?.code === "en") return;
+      if (match) {{ location.replace(match.url); return; }}
     }}
   }})();
 </script>"""
@@ -145,7 +150,7 @@ def main():
         (out / "index.html").write_text(fill(index, {
             **text, **common, "cards": cards, "how_steps": how_steps, "play_steps": play_steps, "services": services(),
             "alternates": alternates(strings, ""),
-            "language_picker": picker(strings, code, ""),
+            "language_picker": picker(strings, code),
             "language_script": script(strings, code, ""),
         }))
         body = "\n".join(
@@ -158,7 +163,7 @@ def main():
             "short_items": "\n".join(f"<li>{item}</li>" for item in s["short_items"]),
             "privacy_body": body,
             "alternates": alternates(strings, "privacy/"),
-            "language_picker": picker(strings, code, "privacy/"),
+            "language_picker": picker(strings, code),
             "language_script": script(strings, code, "privacy/"),
         }))
 
