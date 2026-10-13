@@ -29,6 +29,49 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun koreanWordsAreLinedUpWithASheetThatWritesThemInLatinLetters() {
+        val texts = listOf("오빤 강남스타일", "강남스타일", "낮에는 따사로운 인간적인 여자", "커피 한 잔의 여유를 아는 품격 있는 여자")
+        val read = Readings.of(texts, Script.KOREAN).map { it.romanized }
+        val sheet = ChordSheet(
+            listOf(
+                SheetLine(read[0], listOf(Chord(0, "Am"))),
+                SheetLine(read[1], listOf(Chord(0, "E"))),
+                SheetLine(read[2], listOf(Chord(0, "F"), Chord(read[2].length / 2, "G"))),
+                SheetLine(read[3], listOf(Chord(0, "A")))
+            ),
+            site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/psy/gangnam-style-chords-1176046"
+        )
+        val placed = ChordSheets.place(sheet, texts)!!
+        assertEquals(listOf("Am"), placed[0].over.map { it.name })
+        assertEquals(listOf("F", "G"), placed[2].over.map { it.name })
+        // The second chord is about half way along the line, wherever its letters are now.
+        assertEquals((texts[2].length / 2).toDouble(), placed[2].over[1].at.toDouble(), 3.0)
+        // Words in Latin letters are never read as anything else.
+        assertNull(ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light")))
+    }
+
+    @Test
+    fun solfegeChordsAreNamedWithLetters() {
+        assertEquals("C", ChordSheets.letterName("DO"))
+        assertEquals("Am", ChordSheets.letterName("LAm"))
+        assertEquals("Dm7*", ChordSheets.letterName("REm7*"))
+        assertEquals("F#m", ChordSheets.letterName("FA#m"))
+        assertEquals("Bb", ChordSheets.letterName("SIb"))
+        assertEquals("G7/B", ChordSheets.letterName("SOL7/SI"))
+        // A word that only starts like a chord isn't one.
+        for (word in listOf("SOLO", "FADE", "LAST", "MIDI")) assertEquals(word, ChordSheets.letterName(word))
+        assertEquals("C/E", ChordSheets.letterName("DO/MI"))
+        // Chords in letters stay, even those that begin like a note's name.
+        for (name in listOf("C", "Dm", "Fadd9", "Dsus4", "Em7", "A7(sus4)", "Bb", "Gdim")) assertEquals(name, ChordSheets.letterName(name))
+    }
+
+    @Test
+    fun solfegeChordsInASheetAreChordsInLettersOverTheSameLetters() {
+        val sheet = ChordSheets.fromUltimateGuitar("[ch]LAm[/ch]    [ch]SOL[/ch]\nQue yeta tengo")
+        assertEquals(listOf(SheetLine("Que yeta tengo", listOf(Chord(0, "Am"), Chord(7, "G")))), sheet)
+    }
+
+    @Test
     fun ultimateGuitarsChordsAreOverTheLetterTheyStartOn() {
         val content = "[Intro]\r\n[ch]G[/ch]  [ch]D[/ch]\r\n\r\n[Verse 1]\r\n[tab][ch]G[/ch]       [ch]C/B[/ch]\r\n  Walking down the road[/tab]\r\n" +
             "[tab]                          [ch]D[/ch]\r\nSinging[/tab]\r\nJust words here   \r\n[ch]Em[/ch]\r\n[Chorus]\r\n[ch]A[/ch]\r\n[ch]B[/ch]"

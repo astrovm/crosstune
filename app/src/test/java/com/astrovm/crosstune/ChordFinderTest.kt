@@ -237,6 +237,70 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aSheetUltimateGuitarWontServeIsSkippedForTheNextOne() {
+        fake.handler = { request ->
+            if (request.url.encodedPath.endsWith("/tab/down-1")) FakeSpotify.html(request, "", code = 500)
+            else answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(
+                        ugResult("https://tabs.ultimate-guitar.com/tab/down-1", "River Road", "The Walkers", 900),
+                        ugResult("https://tabs.ultimate-guitar.com/tab/few-1", "River Road", "The Walkers", 3)
+                    ),
+                    "https://tabs.ultimate-guitar.com/tab/few-1" to ugTab(ugWalking, capo = null)
+                )
+            )
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/few-1", found.sheet.url)
+    }
+
+    @Test
+    fun anEntityThatIsNoCharacterDoesNotBreakASheet() {
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/few-1", "River Road", "The Walkers", 3)),
+                    "https://tabs.ultimate-guitar.com/tab/few-1" to ugTab(ugWalking.replace("morning", "mor&#99999999999;ning").replace("river", "ri&#x110000;ver"))
+                )
+            )
+        }
+        assertTrue(chords(river, english) is ChordFinder.Chords.Found)
+    }
+
+    @Test
+    fun aSearchThatFindsNothingIsNoChordsNotASiteThatWontAnswer() {
+        // Ultimate Guitar answers it with a 404 and its usual page, LaCuerda with a 500 and no page at all.
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> answer(request, mapOf("https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+    }
+
+    @Test
+    fun ultimateGuitarIsSearchedForByTheTitleAloneWhenItNamesTheArtistOtherwise() {
+        val searches = mutableListOf<String?>()
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && request.url.encodedPath == "/search.php") {
+                searches += request.url.queryParameter("value")
+                // With the artist it finds none: a film's songs are by "Misc Soundtrack".
+                if (request.url.queryParameter("value") == "River Road The Walkers") FakeSpotify.html(request, ugSearch(), code = 404)
+                else FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/film-1", "The Film, Part One - River Road", "Misc Soundtrack", 50)))
+            } else {
+                answer(request, mapOf("https://tabs.ultimate-guitar.com/tab/film-1" to ugTab(ugWalking, capo = null)))
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/film-1", found.sheet.url)
+        assertEquals(listOf("River Road The Walkers", "River Road"), searches)
+    }
+
+    @Test
     fun aSiteThatWontAnswerIsntTakenForOneWithoutTheSong() {
         fake.handler = { throw IOException("offline") }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
@@ -394,6 +458,43 @@ var NMAX=${files.size - 1};
         }
         assertEquals(ChordFinder.Chords.None, chords(river, english))
         assertTrue(fake.requestedUrls.none { ".shtml" in it })
+    }
+
+    @Test
+    fun laCuerdasSolfegeChordsAreNamedWithLetters() {
+        fake.handler = { request ->
+            if (request.url.encodedPath == "/busca.php") {
+                FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(
+                            "<div></div><A>SOL</A>       <A>REm7*</A>\nWalking down the river road\n<div></div><A>LAm</A>\nSinging to the morning light"
+                        )
+                    )
+                )
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(listOf("G", "Dm7*"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
+        assertEquals(listOf("Am"), ChordSheets.place(found.sheet, english)!![1].over.map { it.name })
+    }
+
+    @Test
+    fun anEntityInAChordUltimateGuitarWritesIsTheCharacterItNames() {
+        fake.handler = { request ->
+            answer(
+                request,
+                mapOf(
+                    "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/walkers-1", "River Road", "The Walkers", 10)),
+                    "https://tabs.ultimate-guitar.com/tab/walkers-1" to ugTab("[tab][ch]G[/ch]       [ch]D&ordm;[/ch]\nWalking down the river road[/tab]\n[tab][ch]C[/ch]\nSinging to the morning light[/tab]")
+                )
+            )
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(listOf("G", "Dº"), ChordSheets.place(found.sheet, english)!![0].over.map { it.name })
     }
 
     @Test
@@ -576,7 +677,8 @@ var NMAX=${files.size - 1};
         }
         assertEquals("https://tabs.ultimate-guitar.com/tab/plastic-1", (chords(song, english) as ChordFinder.Chords.Found).sheet.url)
         assertEquals(
-            listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "Plastic Love Mariya Takeuchi"),
+            // By the artist, then by the title alone when that finds none, then its second name.
+            listOf("プラスティック・ラブ - Plastic Love Mariya Takeuchi", "プラスティック・ラブ - Plastic Love", "Plastic Love Mariya Takeuchi"),
             fake.requestedUrls.filter { "search.php" in it }.map { it.toHttpUrl().queryParameter("value") }
         )
     }
@@ -694,7 +796,7 @@ var NMAX=${files.size - 1};
         fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("川の道 / A", "歩く人"), japanese))
         assertEquals(listOf("川の道 / A 歩く人", "川の道"), uFretSearches)
-        assertEquals(listOf("川の道 / A 歩く人"), fake.requestedUrls.filter { "ultimate-guitar" in it }.map { it.toHttpUrl().queryParameter("value") })
+        assertEquals(listOf("川の道 / A 歩く人", "川の道 / A"), fake.requestedUrls.filter { "ultimate-guitar" in it }.map { it.toHttpUrl().queryParameter("value") })
         // Sung by a Japanese name, U-FRET's names for them are its own: NetEase isn't asked.
         fake.requestedUrls.clear()
         fake.handler = uFret(

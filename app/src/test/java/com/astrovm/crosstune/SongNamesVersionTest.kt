@@ -41,6 +41,13 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun aRemasterIsLeftOffInSpanishToo() {
+        assertEquals("Ji Ji Ji", SongNames.withoutEditionTag("Ji Ji Ji - Remasterizado"))
+        assertEquals("Ji Ji Ji", SongNames.withoutEditionTag("Ji Ji Ji (Remasterizada 2012)"))
+        assertEquals("Ji Ji Ji (Live)", SongNames.withoutEditionTag("Ji Ji Ji (Live) - Remasterizado"))
+    }
+
+    @Test
     fun theBareNameLeavesOffWhatItAdds() {
         assertEquals("Song", SongNames.bareTitle("Song (2018 Remix) (2024 Remaster)"))
         assertEquals("Song", SongNames.bareTitle("Song [Live] - Remastered"))
