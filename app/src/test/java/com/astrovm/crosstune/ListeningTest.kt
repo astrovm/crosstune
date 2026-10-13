@@ -222,7 +222,9 @@ class ListeningTest {
         launch()
         waitForText(string(R.string.playing_now))
         click("Iris")
-        composeRule.onNodeWithTag(RESULT_TAG).assertExists()
+        // Background lookups and the offer's exit animation can temporarily merge the card.
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithTag(RESULT_TAG, useUnmergedTree = true).assertExists()
         assertFalse(shown(string(R.string.playing_now)))
         assertEquals(0, microphone.opened)
     }

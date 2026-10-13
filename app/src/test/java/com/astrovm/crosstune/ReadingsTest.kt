@@ -21,6 +21,20 @@ class ReadingsTest {
     }
 
     @Test
+    fun aChineseTitleIsWrittenInSimplifiedCharacters() {
+        assertEquals("小幸运", Readings.simplified("小幸運"))
+        assertEquals("我的少女时代 Our Times - 小幸运", Readings.simplified("我的少女時代 Our Times - 小幸運"))
+        // Nothing else changes.
+        assertEquals("Plastic Love", Readings.simplified("Plastic Love"))
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun beforeAndroid10ATitleIsLeftAsWritten() {
+        assertEquals("小幸運", Readings.simplified("小幸運"))
+    }
+
+    @Test
     @Config(sdk = [28])
     fun beforeAndroid10ChineseHasNoReadings() {
         assertNull(Readings.scriptOf(listOf("我爱你")))

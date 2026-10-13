@@ -281,10 +281,20 @@ internal class ChordFinder(
      * words, "Vahos de ayer" for "Vahos del Ayer", as its words still have to be the song's.
      */
     private fun named(title: String, ours: String, byArtist: Boolean) =
-        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours) || endsWithSong(title, ours)
+        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours) || endsWithSong(title, ours) || insideTitle(title, ours)
 
     /** [title] names the film or album first: "Brahmāstra Part One - Shiva - Kesariya" is "Kesariya". */
     private fun endsWithSong(title: String, ours: String) = title.substringAfterLast(" - ", "").let { it.isNotBlank() && SongNames.same(it, ours) }
+
+    /**
+     * A title with no Latin letters is somewhere in [title], whichever Chinese characters write it:
+     * "我的少女時代 Our Times - 小幸運 Xiao Xing Yun" holds "小幸运". Two characters at least say little otherwise.
+     */
+    private fun insideTitle(title: String, ours: String): Boolean {
+        if (SongNames.words(ours).isNotEmpty()) return false
+        val wanted = SongNames.normalize(Readings.simplified(SongNames.bareTitle(ours)))
+        return wanted.length >= 2 && SongNames.normalize(Readings.simplified(title)).contains(wanted)
+    }
 
     /** [artist] is the song's, [song]: one with no artist is nobody's. */
     private fun byArtist(artist: String, song: MusicMetadata) = song.artist.isNotBlank() && SongNames.sameArtist(artist, song.artist)
@@ -363,7 +373,7 @@ internal class ChordFinder(
         null
     }
 
-    private companion object {
+    internal companion object {
         /** Per site; looking a song up by its other names takes a few more requests. */
         const val TIMEOUT_MS = 20_000L
 

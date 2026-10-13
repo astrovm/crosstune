@@ -268,6 +268,7 @@ internal class LyricsFinder(
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
         if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
         if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
+        if (tried(fromLetras(metadata, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
         // badly over untimed ones, as they still mostly follow the song and can be put in time by hand.
         return answers.reduce(::better)
@@ -449,6 +450,55 @@ internal class LyricsFinder(
     } ?: Lyrics.Unavailable
 
     /**
+     * Letras.com's words for the song, which has many in Spanish and Portuguese that no one else
+     * does, from the page its own search points to. They come untimed. It only answers a request
+     * that looks like a browser's, and sends one for another song when the address is guessed, so
+     * the address is the search's own.
+     */
+    private suspend fun fromLetras(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+        try {
+            val search = LETRAS_SEARCH_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("q", "${metadata.title} ${metadata.artist}")
+                .addQueryParameter("wt", "json")
+                // Answered as a call to this function, which is taken off.
+                .addQueryParameter("callback", "letras")
+                .build()
+            val docs = JSONObject(letrasPage(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs")
+                ?: return@withTimeoutOrNull Lyrics.Unavailable
+            val song = (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }.firstOrNull { doc ->
+                doc.optString("t") == LETRAS_SONG && SongNames.sameVersion(metadata.title, doc.optString("txt")) &&
+                    doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) }
+            } ?: return@withTimeoutOrNull Lyrics.None
+            val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
+            val words = letrasWords.find(letrasPage(page.toString()))?.groupValues?.get(1)
+                ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.replace(letrasTag, "")
+                ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
+            words?.let { Lyrics.Found(it) } ?: Lyrics.None
+        } catch (_: IOException) {
+            Lyrics.Unavailable
+        } catch (_: JSONException) {
+            Lyrics.Unavailable
+        }
+    } ?: Lyrics.Unavailable
+
+    private suspend fun letrasPage(url: String): String {
+        val request = Request.Builder().url(url)
+            .header("User-Agent", LETRAS_BROWSER)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .header("Accept-Language", "es-AR,es;q=0.9,en;q=0.8")
+            .header("Upgrade-Insecure-Requests", "1")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Site", "none")
+            .get()
+            .build()
+        return client.newCall(request).executeAsync().use { response ->
+            if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
+            withContext(ioDispatcher) { response.body.stringAtMost() }
+        }
+    }
+
+    /**
      * The words on YouTube Music's lyrics page, each line with when it starts if they're timed; a
      * note, "♪", where nothing is sung. Null when the page has none, e.g. "Lyrics not available".
      */
@@ -587,6 +637,14 @@ internal class LyricsFinder(
         const val SEARCH_URL = "https://lrclib.net/api/search"
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
+        const val LETRAS_URL = "https://www.letras.com/"
+        const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
+        const val LETRAS_SONG = "2"
+        const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+        val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val letrasStanza = Regex("""</p>\s*<p>""")
+        val letrasBreak = Regex("""<br\s*/?>""")
+        val letrasTag = Regex("""<[^>]+>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"

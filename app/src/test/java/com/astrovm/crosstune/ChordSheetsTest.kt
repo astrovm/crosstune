@@ -29,6 +29,22 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun arabicWordsAreLinedUpWithASheetThatWritesThemAgainInLatinLettersUnderEachLine() {
+        val texts = listOf("حبيبي يا نور العين يا ساكن خيالي", "عاشق بقالي سنين ولا غيرك في بالي")
+        val sheet = sheet(
+            SheetLine("حبيبي يا نور العين يا ساكن خيالي", listOf(Chord(0, "Cm"), Chord(15, "Fm"))),
+            SheetLine("habibi ya nur aleayn ya sakin khayali", emptyList()),
+            SheetLine("عاشق بقالي سنين ولا غيرك في بالي", listOf(Chord(0, "G"))),
+            SheetLine("eashiq biqali sinin wala ghyrk fi baly", emptyList())
+        )
+        val placed = ChordSheets.place(sheet, texts)!!
+        assertEquals(listOf("Cm", "Fm"), placed[0].over.map { it.name })
+        assertEquals(listOf("G"), placed[1].over.map { it.name })
+        // A sheet with only the Latin lines is not this song's words.
+        assertNull(ChordSheets.place(sheet(SheetLine("habibi ya nur aleayn ya sakin khayali", listOf(Chord(0, "Cm")))), texts))
+    }
+
+    @Test
     fun koreanWordsAreLinedUpWithASheetThatWritesThemInLatinLetters() {
         val texts = listOf("오빤 강남스타일", "강남스타일", "낮에는 따사로운 인간적인 여자", "커피 한 잔의 여유를 아는 품격 있는 여자")
         val read = Readings.of(texts, Script.KOREAN).map { it.romanized }

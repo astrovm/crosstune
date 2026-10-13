@@ -242,6 +242,15 @@ internal object Readings {
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun pinyin(): Transliterator = transliterator ?: Transliterator.getInstance("Han-Latin").also { transliterator = it }
 
+    private var simplifier: Transliterator? = null
+
+    /** [text] in simplified characters, "小幸運" as "小幸运", as sites write the same Chinese title either way. Unchanged before Android 10. */
+    @SuppressLint("NewApi")
+    fun simplified(text: String): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || text.none(::isHan)) return text
+        return synchronized(this) { (simplifier ?: Transliterator.getInstance("Hant-Hans").also { simplifier = it }).transliterate(text) }
+    }
+
     /** One line at a time, as Android's transliterator can't be used from two threads at once. */
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun chinese(line: String): LineReading = synchronized(this) {
