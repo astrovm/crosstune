@@ -2,6 +2,9 @@
 import contextlib
 import io
 from pathlib import Path
+import random
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -59,9 +62,35 @@ class ChangelogTest(unittest.TestCase):
             check_changelog.check_changelog(self.root)
 
     def test_indentation_crlf_and_inline_comment_are_supported(self):
-        self.build.write_bytes(b"    versionCode = 2080900 // Current release\r\n")
+        self.build.write_bytes(b"    versionCode = 2080900 // Notes: https://example.com\r\n")
         self.notes.write_text("Cleaner song titles.", encoding="utf-8")
         self.assertEqual(check_changelog.check_changelog(self.root), self.notes)
+
+    def test_generated_versions_require_their_own_notes(self):
+        rng = random.Random(9)
+        for code in [1, 2_100_000_000] + [rng.randint(1, 2_100_000_000) for _ in range(100)]:
+            with self.subTest(code=code):
+                self.build.write_text(f"\tversionCode = {code} // Release\n", encoding="utf-8")
+                notes = self.folder / f"{code}.txt"
+                with self.assertRaisesRegex(ValueError, "Missing Play Store changelog"):
+                    check_changelog.check_changelog(self.root)
+                notes.write_text("Cleaner song titles. 日本語\n", encoding="utf-8")
+                self.assertEqual(check_changelog.check_changelog(self.root), notes)
+                notes.unlink()
+
+    def test_standalone_command_uses_repo_root_from_another_directory(self):
+        script = self.root / "scripts/release/check_changelog.py"
+        script.parent.mkdir(parents=True)
+        script.write_text(Path(check_changelog.__file__).read_text(encoding="utf-8"), encoding="utf-8")
+        result = subprocess.run([sys.executable, str(script)], cwd=self.folder,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("::error::Missing Play Store changelog", result.stderr)
+        self.notes.write_text("Cleaner song titles.", encoding="utf-8")
+        result = subprocess.run([sys.executable, str(script)], cwd=self.folder,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(str(self.notes), result.stdout)
 
     def test_missing_duplicate_or_invalid_version_code_fails(self):
         for source in (
