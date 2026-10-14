@@ -117,6 +117,15 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aDashInsideBracketsDoesNotSplitTheTitle() {
+        assertEquals(
+            MusicMetadata("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod"),
+            MetadataParsers.youtubeVideo("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod")
+        )
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song", "Chan"))
+    }
+
+    @Test
     fun japaneseVideoTitlesNameTheSongInBrackets() {
         assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("アーティスト「曲名」 Official Music Video", "アーティスト"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band『Song』MV", "BandOfficial"))
