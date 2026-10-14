@@ -47,9 +47,20 @@ internal object MetadataParsers {
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(
-        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video)\s*$""",
+        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video)\s*$""",
         RegexOption.IGNORE_CASE
     )
+
+    /** What a title may end on after its song: "- Lyrics |HD|", a bare "HD" or "4K". */
+    private val trailingQualityRegex = Regex(
+        """(?:\s*[|\-–]\s*lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:hd|4k))\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** A track number before "Artist - Song" on an album upload, "07 - Song - Artist" but not "2814 - Song". */
+    private val trackNumberRegex = Regex("""^\d{1,2}\s*-\s+(?=.*\s-\s)""")
+
+    private val danglingDashRegex = Regex("""\s+[-–]\s*$""")
 
     /**
      * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as
@@ -178,7 +189,8 @@ internal object MetadataParsers {
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
-        val rawTitle = title.replace(videoNoiseRegex, "").replace(trailingVideoNoiseRegex, "").trim().ifEmpty { return null }
+        val rawTitle = title.replace(videoNoiseRegex, "").replace(trailingVideoNoiseRegex, "").replace(trailingQualityRegex, "")
+            .replace(danglingDashRegex, "").replace(trackNumberRegex, "").trim().ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".
