@@ -189,11 +189,23 @@ internal object MetadataParsers {
         // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011";
         // anywhere, a dash before only such a tag is.
         val tagOnly = SongNames.withoutEditionTag(rawTitle) != rawTitle && " - " !in SongNames.withoutEditionTag(rawTitle)
-        val separator = if (channel.endsWith(" - Topic") || tagOnly) -1 else rawTitle.indexOf(" - ")
+        val separator = if (channel.endsWith(" - Topic") || tagOnly) -1 else artistSeparator(rawTitle)
         return if (separator > 0) {
             MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim())
         } else {
             MusicMetadata(rawTitle, author)
+        }
+    }
+
+    /** Where "Artist - Song" splits, but not at a dash inside brackets: "NOFX [Reggae & Ska - 2014 Mixtape]" is one name. */
+    private fun artistSeparator(title: String): Int {
+        var depth = 0
+        var from = 0
+        while (true) {
+            val at = title.indexOf(" - ", from).takeIf { it >= 0 } ?: return -1
+            depth = (depth + title.substring(from, at).sumOf { c -> (if (c in "[(") 1 else if (c in "])") -1 else 0).toInt() }).coerceAtLeast(0)
+            if (depth == 0) return at
+            from = at + 3
         }
     }
 
