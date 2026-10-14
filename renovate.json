@@ -1,4 +1,28 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "group:all"]
+  "extends": [
+    "config:recommended",
+    "group:all"
+  ],
+  "hostRules": [
+    {
+      "matchHost": "repo.maven.apache.org",
+      "concurrentRequestLimit": 1
+    },
+    {
+      "matchHost": "repo1.maven.org",
+      "concurrentRequestLimit": 1
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchPackageNames": [
+        "arm64-v8a:armeabi-v7a"
+      ],
+      "enabled": false
+    }
+  ]
 }
