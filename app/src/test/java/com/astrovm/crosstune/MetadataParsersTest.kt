@@ -126,6 +126,32 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun weirdRealVideoTitlesAreCleaned() {
+        fun song(title: String, channel: String) = MetadataParsers.youtubeVideo(title, channel)?.let { it.title to it.artist }
+        assertEquals("Outerspace" to "Nightcore", song("Nightcore - Outerspace - (Lyrics)", "Syrex"))
+        assertEquals("Reyes de la noche" to "Guasones", song("Guasones - Reyes de la noche (video oficial) HD", "Guasones Oficial"))
+        assertEquals("MONEY ON THE DASH" to "Elley Duhe", song("Elley Duhe - MONEY ON THE DASH | Animated Video", "MrMoMMusic"))
+        assertEquals("The Strokes :: Dine N'Dash // Sub Español" to "Luis", song("The Strokes :: Dine N'Dash // Sub Español - Lyrics |HD|", "Luis"))
+        assertEquals("Friends Will Be Friends Will Be Friends... - Queen Remastered 2011" to "Gold", song("07 - Friends Will Be Friends Will Be Friends... - Queen Remastered 2011", "Gold"))
+        assertEquals("余波 (Vinyl Exclusive Bonus Track)" to "2814", song("2814 - 余波 (Vinyl Exclusive Bonus Track)", "Vapor Memory"))
+        assertEquals("What's Up" to "4 Non Blondes", song("4 Non Blondes - What's Up (Official Music Video)", "4 Non Blondes"))
+    }
+
+    @Test
+    fun argentineRockTitlesAreCleaned() {
+        fun song(title: String, channel: String) = MetadataParsers.youtubeVideo(title, channel)?.let { it.title to it.artist }
+        assertEquals("Días de verano" to "Amaral", song("Amaral - Días de verano (Videoclip Oficial)", "Warner"))
+        assertEquals("Y Qué" to "Babasónicos", song("Babasónicos - Y Qué (Letra)", "ces3tx"))
+        assertEquals("Una Nueva Noche Fría" to "Callejeros", song("Callejeros - Una Nueva Noche Fría (Video Oficial)", "Pelo"))
+        assertEquals("Luz" to "Ciro y Los Persas", song("Luz - Ciro y los Persas - Video Oficial", "Ciro y Los Persas"))
+        assertEquals("Actua" to "Owin y Jack", song("Owin y Jack - Actua - Video Clip Oficial", "Cumbia"))
+        assertEquals("Una señal (Otro día en el planeta Tierra)" to "Intoxicados", song("Intoxicados - 06 Una señal (Otro día en el planeta Tierra)", "PopArt"))
+        assertEquals("Corsario Negro" to "Los Natas", song("Los Natas - \"Corsario Negro\"", "Small Stone"))
+        assertEquals("99 Luftballons" to "Nena", song("Nena - 99 Luftballons", "Nena"))
+        assertEquals("Ala Delta" to "Divididos", song("Divididos - Ala Delta", "DIVIDIDOS"))
+    }
+
+    @Test
     fun japaneseVideoTitlesNameTheSongInBrackets() {
         assertEquals(MusicMetadata("曲名", "アーティスト"), MetadataParsers.youtubeVideo("アーティスト「曲名」 Official Music Video", "アーティスト"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band『Song』MV", "BandOfficial"))
