@@ -131,7 +131,7 @@ class MetadataParsersTest {
         assertEquals("Outerspace" to "Nightcore", song("Nightcore - Outerspace - (Lyrics)", "Syrex"))
         assertEquals("Reyes de la noche" to "Guasones", song("Guasones - Reyes de la noche (video oficial) HD", "Guasones Oficial"))
         assertEquals("MONEY ON THE DASH" to "Elley Duhe", song("Elley Duhe - MONEY ON THE DASH | Animated Video", "MrMoMMusic"))
-        assertEquals("The Strokes :: Dine N'Dash // Sub Español" to "Luis", song("The Strokes :: Dine N'Dash // Sub Español - Lyrics |HD|", "Luis"))
+        assertEquals("The Strokes :: Dine N'Dash" to "Luis", song("The Strokes :: Dine N'Dash // Sub Español - Lyrics |HD|", "Luis"))
         assertEquals("Friends Will Be Friends Will Be Friends... - Queen Remastered 2011" to "Gold", song("07 - Friends Will Be Friends Will Be Friends... - Queen Remastered 2011", "Gold"))
         assertEquals("余波 (Vinyl Exclusive Bonus Track)" to "2814", song("2814 - 余波 (Vinyl Exclusive Bonus Track)", "Vapor Memory"))
         assertEquals("What's Up" to "4 Non Blondes", song("4 Non Blondes - What's Up (Official Music Video)", "4 Non Blondes"))
@@ -488,5 +488,22 @@ class MetadataParsersTest {
             listOf(MusicMetadata("Song", "Band", artworkUrl = "https://i.ytimg.com/vi/abcdefghijk/mqdefault.jpg", url = "https://www.youtube.com/watch?v=abcdefghijk")),
             MetadataParsers.youtubePlaylist("""<meta property="og:title" content="X"><script>var ytInitialData = {"a":[$lockup]};</script>""")!!.tracks
         )
+    }
+
+    @Test
+    fun titlesInOtherLanguagesAreCleaned() {
+        fun song(title: String, channel: String) = MetadataParsers.youtubeVideo(title, channel)?.let { it.title to it.artist }
+        assertEquals("Dancing Queen" to "Abba", song("Abba - Dancing Queen // Sub Español + Lyrics // Video Oficial", "BrunoTraductor"))
+        assertEquals("Save Your Tears (Remix)" to "The Weeknd & Ariana Grande", song("The Weeknd & Ariana Grande - Save Your Tears (Remix) (Official Video) || Sub. Español + Lyrics", "tivs14"))
+        assertEquals("Du Hast (Tú tienes)" to "Rammstein", song("Rammstein - Du Hast (Sub Esp) (Tú tienes)", "RammsteinHaifisch3"))
+        assertEquals("La vie en rose" to "Edith Piaf", song("Edith Piaf - La vie en rose (Audio officiel)", "Edith Piaf Officiel"))
+        assertEquals("Tempo perdido" to "Legião Urbana", song("Legião Urbana - Tempo perdido (Videoclipe)", "Brasilidades"))
+        assertEquals("Water No Get Enemy" to "Fela Kuti", song("Fela Kuti - Water No Get Enemy (HQ)", "atomikn00b"))
+        assertEquals("Simarik" to "Tarkan", song("Tarkan - Simarik (Official Music Video) HQ", "ExclusiveMusic2share"))
+        assertEquals("Давай за..." to "ЛЮБЭ", song("ЛЮБЭ - Давай за... (клип)", "Matvey Music"))
+        assertEquals("泡沫" to "G.E.M. 鄧紫棋", song("G.E.M. 鄧紫棋 - 泡沫 (官方MV)", "GEM"))
+        assertEquals("봄날" to "BTS", song("BTS - 봄날 (가사)", "x"))
+        // A real song name that merely looks like a tag stays.
+        assertEquals("Sub" to "Band", song("Band - Sub", "x"))
     }
 }
