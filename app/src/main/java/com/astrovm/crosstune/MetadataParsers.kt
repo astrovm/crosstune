@@ -41,13 +41,13 @@ internal object MetadataParsers {
     private val bracketedSongRegex = Regex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
 
     private val videoNoiseRegex = Regex(
-        """\s*[(\[][^)\]]*\b(official|video|audio|lyrics?|visuali[sz]er|hd|4k|mv|m/v)\b[^)\]]*[)\]]""",
+        """\s*[(\[][^)\]]*\b(official|oficial|video|videoclip|audio|lyrics?|letra|subtitulado|visuali[sz]er|hd|4k|mv|m/v)\b[^)\]]*[)\]]""",
         RegexOption.IGNORE_CASE
     )
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(
-        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video)\s*$""",
+        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video|video\s*oficial|video\s*clip(?:\s+oficial)?|audio\s+oficial)\s*$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -59,6 +59,9 @@ internal object MetadataParsers {
 
     /** A track number before "Artist - Song" on an album upload, "07 - Song - Artist" but not "2814 - Song". */
     private val trackNumberRegex = Regex("""^\d{1,2}\s*-\s+(?=.*\s-\s)""")
+
+    /** A zero-padded track number glued to the song, "06 Una señal". */
+    private val paddedTrackRegex = Regex("""^0\d\s+""")
 
     private val danglingDashRegex = Regex("""\s+[-–]\s*$""")
 
@@ -202,11 +205,14 @@ internal object MetadataParsers {
         // anywhere, a dash before only such a tag is.
         val tagOnly = SongNames.withoutEditionTag(rawTitle) != rawTitle && " - " !in SongNames.withoutEditionTag(rawTitle)
         val separator = if (channel.endsWith(" - Topic") || tagOnly) -1 else artistSeparator(rawTitle)
-        return if (separator > 0) {
-            MusicMetadata(rawTitle.substring(separator + 3).trim(), rawTitle.substring(0, separator).trim())
-        } else {
-            MusicMetadata(rawTitle, author)
+        if (separator <= 0) return MusicMetadata(rawTitle, author)
+        val left = rawTitle.substring(0, separator).trim()
+        val right = rawTitle.substring(separator + 3).trim()
+        // "Song - Artist" when the artist is the channel and the left isn't: "Luz - Ciro y los Persas".
+        if (author.isNotEmpty() && SongNames.same(right.substringBefore(" - ").trim(), author) && !SongNames.same(left, author)) {
+            return MusicMetadata(left, author)
         }
+        return MusicMetadata(right.replace(paddedTrackRegex, "").removeSurrounding("\"").trim(), left)
     }
 
     /** Where "Artist - Song" splits, but not at a dash inside brackets: "NOFX [Reggae & Ska - 2014 Mixtape]" is one name. */
