@@ -189,12 +189,13 @@ internal class MediaSessionPlayback(
         if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
+        // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
-        val named = if (controller.isVideo()) {
-            MetadataParsers.musicVideo(title, artist) ?: return null
-        } else {
-            MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
+        val named = when {
+            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
+            controller.packageName == MusicService.YOUTUBE_MUSIC.packageName -> MetadataParsers.youtubeVideo(title, artist) ?: return null
+            else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
@@ -217,10 +218,10 @@ internal class MediaSessionPlayback(
         return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo())
     }
 
-    /** Music apps also play singles and local files with no album tag. */
+    /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
     private fun MediaController.isVideo(): Boolean =
         metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
-            MusicService.entries.none { it != MusicService.YOUTUBE && it.packageName == packageName }
+            MusicService.entries.none { it != MusicService.YOUTUBE && it != MusicService.YOUTUBE_MUSIC && it.packageName == packageName }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,
