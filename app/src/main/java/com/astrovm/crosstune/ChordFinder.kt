@@ -292,8 +292,9 @@ internal class ChordFinder(
      */
     private fun insideTitle(title: String, ours: String): Boolean {
         if (SongNames.words(ours).isNotEmpty()) return false
-        val wanted = SongNames.normalize(Readings.simplified(SongNames.bareTitle(ours)))
-        return wanted.length >= 2 && titleWords.findAll(Readings.simplified(title)).any { SongNames.normalize(it.value) == wanted }
+        val wanted = titleWords.findAll(Readings.simplified(SongNames.bareTitle(ours))).map { SongNames.normalize(it.value) }.toList()
+        val words = titleWords.findAll(Readings.simplified(title)).map { SongNames.normalize(it.value) }.toList()
+        return wanted.sumOf { it.length } >= 2 && words.windowed(wanted.size).any { it == wanted }
     }
 
     /** [artist] is the song's, [song]: one with no artist is nobody's. */

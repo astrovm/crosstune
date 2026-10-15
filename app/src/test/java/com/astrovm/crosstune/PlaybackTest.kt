@@ -355,6 +355,21 @@ class PlaybackTest {
     }
 
     @Test
+    fun musicAppsWithoutAnAlbumKeepTheirSongNamesAndPlaybackPosition() {
+        allow()
+        sounding()
+        for (service in MusicService.entries.filter { it != MusicService.YOUTUBE }) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player(service.packageName, service.name, "River - Road", "The Walkers", duration = 180_000))
+            val song = MusicMetadata("River - Road", "The Walkers", lengthMs = 180_000)
+            val heard = playback.nowPlaying()
+            assertEquals(service.name, song, heard?.metadata)
+            assertEquals(service.name, 42_000L, heard?.offsetMs)
+            assertEquals(service.name, false, followed(song).last()?.video)
+        }
+    }
+
+    @Test
     fun aFilePlayingInABrowserIsNoSong() {
         allow()
         sounding()

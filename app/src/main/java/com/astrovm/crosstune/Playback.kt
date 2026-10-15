@@ -149,11 +149,11 @@ internal class MediaSessionPlayback(
         // Without both there's no song to look up by name. A browser playing a bare file names it
         // by its address, under its site, e.g. "example.com/song.mp3" by "example.com": no song either.
         if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
-        // With no album it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
+        // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
-        val named = if (metadata.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()) {
+        val named = if (controller.isVideo()) {
             MetadataParsers.musicVideo(title, artist) ?: return null
         } else {
             MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
@@ -176,9 +176,13 @@ internal class MediaSessionPlayback(
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val clock = PlaybackClock(state.position, at, state.playbackSpeed.takeIf { it > 0f } ?: 1f, state.state == PlaybackState.STATE_PLAYING)
-        val video = controller.metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank()
-        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, video)
+        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo())
     }
+
+    /** Music apps also play singles and local files with no album tag. */
+    private fun MediaController.isVideo(): Boolean =
+        metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
+            MusicService.entries.none { it != MusicService.YOUTUBE && it.packageName == packageName }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,
