@@ -31,6 +31,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowMediaSessionManager
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
@@ -168,6 +170,43 @@ class PlaybackTest {
         sounding()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", song.title, song.artist))
         assertEquals(listOf<Heard.Song?>(null), offered())
+    }
+
+    @Test
+    fun revokingAccessOrReceivingAnOldCallbackCannotKeepAnOldOffer() {
+        allow()
+        sounding()
+        val spotify = player("com.spotify.music", "Spotify", song.title, song.artist)
+        shadowOf(sessions).addController(spotify)
+        val seen = offered()
+        assertEquals(song, seen.last()?.metadata)
+        val oldCallbacks = shadowOf(spotify).callbacks.toList()
+        Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
+        oldCallbacks.forEach { it.onPlaybackStateChanged(null) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        allow()
+        shadowOf(sessions).clearControllers()
+        shadowOf(Looper.getMainLooper()).idle()
+        oldCallbacks.forEach { it.onMetadataChanged(null) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
+    @Config(shadows = [DeniedSessions::class])
+    fun androidRefusingTheSubscriptionOffersNothingAndStillCloses() {
+        allow()
+        sounding()
+        assertEquals(listOf<Heard.Song?>(null), offered())
+    }
+
+    @Implements(MediaSessionManager::class)
+    class DeniedSessions : ShadowMediaSessionManager() {
+        @Implementation
+        override fun addOnActiveSessionsChangedListener(listener: MediaSessionManager.OnActiveSessionsChangedListener, component: ComponentName?, handler: android.os.Handler?) {
+            throw SecurityException("Notification access was revoked")
+        }
     }
 
     @Test
