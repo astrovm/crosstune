@@ -32,6 +32,36 @@ internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
 private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
 
+/** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon". */
+private val netEaseClosingCredit = Regex("""^([^:：]{1,60})\s[:：]\s+\S""")
+
+/** Where it was made, or who published it, which can come among those credits: "Recorded at Rockfield Studio, …". */
+private val netEaseStudio = Regex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
+
+/** Who sings a line, in a duet's words, rather than who played on it: "Male : …", "Chorus : …". */
+private val sungPart = Regex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
+
+/**
+ * The lines up to the credits NetEase closes some songs with: at least two, with nothing sung after
+ * them up to the end, where the studios and publishers can be among them.
+ */
+private fun <T> List<T>.withoutClosingCredits(text: (T) -> String): List<T> {
+    var start = size
+    var credits = 0
+    for (index in indices.reversed()) {
+        val line = text(this[index]).trim()
+        val part = netEaseClosingCredit.find(line)?.groupValues?.get(1)?.trim()
+        when {
+            line.isEmpty() -> continue
+            part != null && !sungPart.matches(part) -> credits++
+            netEaseStudio.containsMatchIn(line) -> Unit
+            else -> break
+        }
+        start = index
+    }
+    return if (credits >= 2) take(start) else this
+}
+
 /**
  * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
  * crowdsourced, so what it gives back is checked against the song asked about before it's
@@ -517,19 +547,19 @@ internal class LyricsFinder(
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String): Lyrics.Found? {
-        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines)
     }
 
-    /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
+    /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none, or an instrumental. */
     private fun netEaseWords(lrc: String): Lyrics.Found? {
         val stamped = SyncedLyrics.parse(lrc)
-        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }
         val lines = SyncedLyrics.withPauses(timed)
         // Words with timings are only those; plain words, only when there are no timings at all.
         val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
-        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.joinToString("\n").trim()
+        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.withoutClosingCredits { it }.joinToString("\n").trim()
         if (words.isEmpty() || words.contains(NETEASE_INSTRUMENTAL)) return null
         return Lyrics.Found(words, lines)
     }
@@ -656,8 +686,8 @@ internal class LyricsFinder(
         const val APP_CLIENT = "ANDROID_MUSIC"
         const val APP_CLIENT_VERSION = "7.21.50"
 
-        /** Bumped when words kept from before should be looked up again: 5 for words timed word by word. */
-        const val CACHE_VERSION = 5
+        /** Bumped when words kept from before should be looked up again: 6 for words without NetEase's closing credits. */
+        const val CACHE_VERSION = 6
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

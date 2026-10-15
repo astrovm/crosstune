@@ -481,7 +481,7 @@ class PlaybackTest {
     fun musicAppsWithoutAnAlbumKeepTheirSongNamesAndPlaybackPosition() {
         allow()
         sounding()
-        for (service in MusicService.entries.filter { it != MusicService.YOUTUBE }) {
+        for (service in MusicService.entries.filter { it != MusicService.YOUTUBE && it != MusicService.YOUTUBE_MUSIC }) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(service.packageName, service.name, "River - Road", "The Walkers", duration = 180_000))
             val song = MusicMetadata("River - Road", "The Walkers", lengthMs = 180_000)
@@ -489,6 +489,28 @@ class PlaybackTest {
             assertEquals(service.name, song, heard?.metadata)
             assertEquals(service.name, 42_000L, heard?.offsetMs)
             assertEquals(service.name, false, followed(song).last()?.video)
+        }
+    }
+
+    @Test
+    fun youTubeMusicVideosAreReadAsTheSongTheyNameAndItsSongsStayWhole() {
+        allow()
+        sounding()
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        // As YouTube Music names them: a video, its official one included, has no album; a song has its own.
+        for ((playing, heard) in listOf(
+            Triple("Queen - Bohemian Rhapsody (Lyrics)", "7clouds", null) to MusicMetadata("Bohemian Rhapsody", "Queen"),
+            Triple("Never Gonna Give You Up", "Rick Astley", null) to MusicMetadata("Never Gonna Give You Up", "Rick Astley"),
+            Triple("Bohemian Rhapsody - Remastered 2011", "Queen", "A Night at the Opera") to MusicMetadata("Bohemian Rhapsody - Remastered 2011", "Queen", lengthMs = 354_000)
+        )) {
+            val (title, artist, album) = playing
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player(music, "YouTube Music", title, artist, album = album, duration = 354_000))
+            val now = playback.nowPlaying()
+            assertEquals(title, heard, now?.metadata)
+            // Where a video is isn't where its song is.
+            assertEquals(title, if (album == null) null else 42_000L, now?.offsetMs)
+            assertEquals(title, album == null, followed(heard).last()?.video)
         }
     }
 
