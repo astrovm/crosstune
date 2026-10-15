@@ -328,6 +328,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun anArtistsOwnVideoAndLocalizedMusicTagsAreOfferedAsPlaying() {
+        allow()
+        sounding()
+        for ((title, artist) in listOf("The Weeknd - Blinding Lights" to "The Weeknd", "Blinding Lights (Video Oficial)" to "The Weeknd")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", title, artist))
+            assertEquals(song, playback.nowPlaying()?.metadata)
+        }
+    }
+
+    @Test
     fun aVideoThatDoesntSayItsMusicIsNoSong() {
         allow()
         sounding()
@@ -341,6 +352,21 @@ class PlaybackTest {
         sounding()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Here Comes The Sun - Remastered 2019", "The Beatles", album = "Abbey Road"))
         assertEquals(MusicMetadata("Here Comes The Sun - Remastered 2019", "The Beatles"), playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun musicAppsWithoutAnAlbumKeepTheirSongNamesAndPlaybackPosition() {
+        allow()
+        sounding()
+        for (service in MusicService.entries.filter { it != MusicService.YOUTUBE }) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player(service.packageName, service.name, "River - Road", "The Walkers", duration = 180_000))
+            val song = MusicMetadata("River - Road", "The Walkers", lengthMs = 180_000)
+            val heard = playback.nowPlaying()
+            assertEquals(service.name, song, heard?.metadata)
+            assertEquals(service.name, 42_000L, heard?.offsetMs)
+            assertEquals(service.name, false, followed(song).last()?.video)
+        }
     }
 
     @Test

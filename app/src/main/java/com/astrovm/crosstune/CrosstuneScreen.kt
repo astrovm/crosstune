@@ -523,7 +523,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         val playing = state.playingNow?.takeIf { now ->
             state.error == null && !state.isLoading && !state.listening &&
                 state.result?.let { SongNames.same(it.title, now.title) && SongNames.sameArtist(it.artist, now.artist) } != true &&
-                (state.result != null || state.linkText.isBlank())
+                (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
         }
         AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
             // Kept while it fades out, as the song goes when it's tapped.

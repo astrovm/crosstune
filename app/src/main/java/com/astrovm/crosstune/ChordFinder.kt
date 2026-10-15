@@ -281,19 +281,20 @@ internal class ChordFinder(
      * words, "Vahos de ayer" for "Vahos del Ayer", as its words still have to be the song's.
      */
     private fun named(title: String, ours: String, byArtist: Boolean) =
-        if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours) || endsWithSong(title, ours) || insideTitle(title, ours)
+        (if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours)) || endsWithSong(title, ours) || insideTitle(title, ours)
 
     /** [title] names the film or album first: "Brahmāstra Part One - Shiva - Kesariya" is "Kesariya". */
     private fun endsWithSong(title: String, ours: String) = title.substringAfterLast(" - ", "").let { it.isNotBlank() && SongNames.same(it, ours) }
 
     /**
      * A title with no Latin letters is somewhere in [title], whichever Chinese characters write it:
-     * "我的少女時代 Our Times - 小幸運 Xiao Xing Yun" holds "小幸运". Two characters at least say little otherwise.
+     * "我的少女時代 Our Times - 小幸運 Xiao Xing Yun" holds "小幸运". It must be a whole name, not part of another.
      */
     private fun insideTitle(title: String, ours: String): Boolean {
         if (SongNames.words(ours).isNotEmpty()) return false
-        val wanted = SongNames.normalize(Readings.simplified(SongNames.bareTitle(ours)))
-        return wanted.length >= 2 && SongNames.normalize(Readings.simplified(title)).contains(wanted)
+        val wanted = titleWords.findAll(Readings.simplified(SongNames.bareTitle(ours))).map { SongNames.normalize(it.value) }.toList()
+        val words = titleWords.findAll(Readings.simplified(title)).map { SongNames.normalize(it.value) }.toList()
+        return wanted.sumOf { it.length } >= 2 && words.windowed(wanted.size).any { it == wanted }
     }
 
     /** [artist] is the song's, [song]: one with no artist is nobody's. */
@@ -395,6 +396,8 @@ internal class ChordFinder(
         const val LA_CUERDA_URL = "https://acordes.lacuerda.net/"
         const val LA_CUERDA_SEARCH_URL = "${LA_CUERDA_URL}busca.php"
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+        private val titleWords = Regex("""[\p{L}\p{N}]+""")
 
         val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
         val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ") + mapOf(
