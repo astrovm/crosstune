@@ -207,6 +207,8 @@
     <string name="lyrics_following_app">%1$s에 맞추는 중</string>
     <string name="lyrics_play">재생</string>
     <string name="lyrics_pause">일시정지</string>
+    <string name="lyrics_next_song">다음 노래</string>
+    <string name="lyrics_previous_song">이전 노래</string>
     <string name="lyrics_jump">여기로 이동</string>
     <string name="lyrics_sync">타이밍 맞추기</string>
     <string name="lyrics_sync_hint">지금 들리는 줄을 탭하세요</string>

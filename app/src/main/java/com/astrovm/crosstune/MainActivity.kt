@@ -141,6 +141,7 @@ class MainActivity : ComponentActivity() {
         override fun closed() {
             floatingOverApps = false
             viewModel.pauseListeningAlong()
+            viewModel.pauseFollowingNext()
         }
     }
 
@@ -367,6 +368,7 @@ class MainActivity : ComponentActivity() {
                         onSeekLyrics = viewModel::seekLyrics,
                         onSyncLine = viewModel::syncLine,
                         onPlayPause = viewModel::playPause,
+                        onSkipSong = viewModel::skipSong,
                         onResetSync = viewModel::resetSync,
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
@@ -548,13 +550,14 @@ class MainActivity : ComponentActivity() {
         moveTaskToBack(true)
     }
 
-    /** Back in sight, the words stop floating, and listening along with them picks up again. */
+    /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */
     override fun onStart() {
         super.onStart()
         // Even from a screen made again since, in a new look or language.
         if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
         floatingOverApps = false
         viewModel.resumeListeningAlong()
+        viewModel.resumeFollowingNext()
         if (listenAlongWhenBack) {
             listenAlongWhenBack = false
             withMicrophone(MicrophoneFor.LISTEN_ALONG)
@@ -562,14 +565,17 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Listening stops once Crosstune is out of sight, which it may no longer do; a rotation keeps it,
-     * and so do words floating in their own window, which listen along.
+     * Listening stops once Crosstune is out of sight, which it may no longer do, and the words stay on
+     * the song they show; a rotation keeps both, and so do words floating in their own window.
      */
     override fun onStop() {
         super.onStop()
         if (isChangingConfigurations) return
         if (viewModel.uiState.listening) viewModel.stopListening()
-        if (!floatingOverApps) viewModel.pauseListeningAlong()
+        if (!floatingOverApps) {
+            viewModel.pauseListeningAlong()
+            viewModel.pauseFollowingNext()
+        }
     }
 
     /** Closed for good, nothing's left for the words to float out of. */

@@ -56,6 +56,10 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
@@ -591,10 +595,182 @@ class ListeningTest {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.quietPauseMs = 0
         MainActivity.hearingFactory = { hearing }
+        timedWordsOfAnySong()
+    }
+
+    /** Every song's words are timed: "<title> one" from the start, "two" at 10 seconds and "three" at 40. */
+    private fun timedWordsOfAnySong() {
         fake.handler = { request ->
             val title = request.url.queryParameter("track_name")
             FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] $title one\n[00:10.00] $title two\n[00:40.00] $title three"}]""")
         }
+    }
+
+    /** [title] by Band in Recent, found by its name. */
+    private fun inRecent(title: String) {
+        val url = "https://www.google.com/search?q=${title.replace(" ", "%20")}%20by%20Band"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata(title, "Band")))
+    }
+
+    /** A music app on the phone playing [song], 2 seconds in, that can go on to the next song and back. */
+    private fun appPlaying(song: String? = "Demo", skips: Boolean = true) = FakePlayback().apply {
+        access = true
+        if (song != null) {
+            onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, 2_000, SystemClock.elapsedRealtime())
+            playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true, canSkipNext = skips, canSkipPrevious = skips)
+        }
+    }.also { phone -> MainActivity.playbackFactory = { phone } }
+
+    /** The app moves on to [song], which it plays from the start. */
+    private fun FakePlayback.goesOnTo(song: String) = composeRule.runOnIdle {
+        playing.value = null
+        onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, 0, SystemClock.elapsedRealtime())
+    }
+
+    /** Opens the words of [title] from Recent, as from its card. */
+    private fun openWordsFromRecent(title: String) {
+        click(title)
+        click(string(R.string.lyrics_button))
+        waitForText("$title one")
+    }
+
+    @Test
+    fun wordsOfASongPlayingGoOnToTheNextSongTheAppPlays() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo")
+        launch()
+        openWordsFromRecent("Demo")
+        phone.goesOnTo("Other")
+        waitForText("Other one")
+        assertFalse(shown("Demo one"))
+        // Named by the app, nothing was listened to, and it joins Recent.
+        assertEquals(0, microphone.opened)
+        assertEquals("Other", HistoryStore(prefs()).load().first().metadata.title)
+    }
+
+    @Test
+    fun wordsOfASongPickedWhileAnotherPlaysStayUntilItPlays() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying(song = null)
+        phone.onThePhone = Heard.Song(MusicMetadata("Other", "Band"), null, 2_000, SystemClock.elapsedRealtime())
+        launch()
+        openWordsFromRecent("Demo")
+        // Another song comes on: the words picked stay.
+        composeRule.runOnIdle { phone.onThePhone = Heard.Song(MusicMetadata("Third", "Band"), null, 0, SystemClock.elapsedRealtime()) }
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        assertFalse(shown("Other one") || shown("Third one"))
+        // Once the song picked plays, the next one takes over.
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true) }
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        phone.goesOnTo("Fourth")
+        waitForText("Fourth one")
+    }
+
+    @Test
+    fun theSongAnAppPlaysByAnotherNameKeepsItsWords() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo")
+        launch()
+        openWordsFromRecent("Demo")
+        // The app says it still plays the song shown, while what plays goes by another name.
+        composeRule.runOnIdle { phone.onThePhone = Heard.Song(MusicMetadata("Demo (Remix)", "Band"), null, 3_000, SystemClock.elapsedRealtime()) }
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        assertFalse(shown("Demo (Remix) one"))
+    }
+
+    @Test
+    fun wordsAskedForFromTheSearchBarGoOnToTheNextSongTheAppPlays() {
+        timedWordsOfAnySong()
+        val phone = appPlaying("Demo")
+        allowMicrophone()
+        launch()
+        click(string(R.string.tile_lyrics_label))
+        waitForText("Demo one")
+        phone.goesOnTo("Other")
+        waitForText("Other one")
+        assertEquals(0, microphone.opened)
+    }
+
+    @Test
+    fun outOfSightTheWordsStayAndCatchUpOnceBack() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo")
+        launch()
+        openWordsFromRecent("Demo")
+        controller!!.pause().stop()
+        phone.goesOnTo("Other")
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Demo", controllerModel().uiState.lyricsFor?.title)
+        assertFalse(fake.requestedUrls.any { "Other" in it })
+        controller!!.restart().resume()
+        waitForText("Other one")
+    }
+
+    @Test
+    fun swipingTheSongHasTheAppGoOnToTheNextSongOrBack() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo")
+        launch()
+        openWordsFromRecent("Demo")
+        val song = composeRule.onNodeWithTag(LYRICS_SONG_TAG)
+        song.performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        assertEquals(listOf(true), phone.skips)
+        // Let go a little way across, it stays.
+        song.performTouchInput { swipe(center, center + Offset(width * 0.1f, 0f)) }
+        composeRule.waitForIdle()
+        assertEquals(listOf(true), phone.skips)
+        song.performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        assertEquals(listOf(true, false), phone.skips)
+        // A screen reader offers both.
+        fun action(label: Int) = composeRule.runOnIdle {
+            song.fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }.action()
+        }
+        action(R.string.lyrics_next_song)
+        action(R.string.lyrics_previous_song)
+        assertEquals(listOf(true, false, true, false), phone.skips)
+        // The app goes on to the song skipped to, and its words show.
+        phone.goesOnTo("Other")
+        waitForText("Other one")
+    }
+
+    @Test
+    fun swipingTheSongOfAnAppThatCantSkipDoesNothing() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo", skips = false)
+        launch()
+        openWordsFromRecent("Demo")
+        val song = composeRule.onNodeWithTag(LYRICS_SONG_TAG)
+        song.performTouchInput { swipeLeft() }
+        song.performTouchInput { swipeRight() }
+        composeRule.waitForIdle()
+        assertTrue(phone.skips.isEmpty())
+        assertFalse(SemanticsActions.CustomActions in song.fetchSemanticsNode().config)
+        assertTrue(shown("Demo one"))
+    }
+
+    @Test
+    fun wordsHeardWithTheMicrophoneCantBeSwipedToAnotherSong() {
+        val hearing = FakeHearing()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        demoWords(hearing)
+        composeRule.onNodeWithTag(LYRICS_SONG_TAG).performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
+        assertTrue(phone.skips.isEmpty())
+        assertTrue(lit("Demo one"))
     }
 
     private fun described(label: String) = composeRule.onAllNodes(hasContentDescription(label)).fetchSemanticsNodes().isNotEmpty()

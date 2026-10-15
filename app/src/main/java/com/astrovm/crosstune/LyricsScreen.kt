@@ -13,6 +13,18 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInVertically
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.TextLayoutResult
@@ -157,6 +169,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
 internal const val LYRIC_LINE_TAG = "lyric-line"
+internal const val LYRICS_SONG_TAG = "lyrics-song"
 internal const val STUDY_LINE_TAG = "study-line"
 
 /**
@@ -252,7 +265,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .widthIn(max = ContentMaxWidth)
         ) {
             // Signed in with ChatGPT, the song opens to what it's about.
-            LyricsHeader(song.copy(artworkUrl = cover), actions, onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null })
+            LyricsHeader(
+                song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious,
+                onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null }
+            )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
@@ -390,8 +406,31 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
 }
 
 /** The song the words are of, the way back, and where their timing comes from. */
+/**
+ * The song shown, and a way back. Swiped sideways, as in a music app's own player, the app playing it
+ * goes on to its next song, or back to the one before, while it can.
+ */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, onAbout: (() -> Unit)? = null) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: (() -> Unit)? = null) {
+    // How far the song is swiped; the next one comes in from the side it went out to.
+    val swiped = remember { Animatable(0f) }
+    var skippedNext by remember { mutableStateOf<Boolean?>(null) }
+    // Once the song has changed it's back in place, for the new one, which came in the way it was skipped.
+    LaunchedEffect(song.title, song.artist) {
+        swiped.snapTo(0f)
+        skippedNext = null
+    }
+    val scope = rememberCoroutineScope()
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val canNext by rememberUpdatedState(canSkipNext)
+    val canPrevious by rememberUpdatedState(canSkipPrevious)
+    val onSkip by rememberUpdatedState(actions.onSkipSong)
+    val nextSong = stringResource(R.string.lyrics_next_song)
+    val previousSong = stringResource(R.string.lyrics_previous_song)
+    val skip = { next: Boolean ->
+        skippedNext = next
+        onSkip(next)
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -405,9 +444,48 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, onAbout: (
         val about = stringResource(R.string.lyrics_about_song)
         AnimatedContent(
             targetState = song,
-            transitionSpec = { swap() },
+            transitionSpec = { skippedNext?.let { slide(forward = it) } ?: swap() },
             label = "lyrics song",
-            modifier = Modifier.weight(1f).clip(MaterialTheme.shapes.medium)
+            modifier = Modifier.weight(1f)
+                .testTag(LYRICS_SONG_TAG)
+                .semantics {
+                    val skips = listOfNotNull(
+                        CustomAccessibilityAction(previousSong) { skip(false); true }.takeIf { canSkipPrevious },
+                        CustomAccessibilityAction(nextSong) { skip(true); true }.takeIf { canSkipNext }
+                    )
+                    if (skips.isNotEmpty()) customActions = skips
+                }
+                .pointerInput(rtl) {
+                    // Toward the start of the line, as reading goes, is on to the next song.
+                    fun next(offset: Float) = (offset < 0f) != rtl
+                    fun can(offset: Float) = if (next(offset)) canNext else canPrevious
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val offset = swiped.value
+                            scope.launch {
+                                if (abs(offset) > size.width * SKIP_SWIPE_FRACTION && can(offset)) {
+                                    skip(next(offset))
+                                    swiped.animateTo(sign(offset) * size.width, tween(SKIP_OUT_MS))
+                                    // Still this song a while on, e.g. back to its own start, it comes back.
+                                    delay(SKIP_WAIT_MS)
+                                }
+                                swiped.animateTo(0f, spring())
+                            }
+                        },
+                        onDragCancel = { scope.launch { swiped.animateTo(0f, spring()) } }
+                    ) { change, amount ->
+                        if (!canNext && !canPrevious) return@detectHorizontalDragGestures
+                        change.consume()
+                        // With nowhere to go that way, it gives a little and springs back.
+                        val to = swiped.value + amount
+                        scope.launch { swiped.snapTo(if (can(to)) to else swiped.value + amount / SKIP_RESISTANCE) }
+                    }
+                }
+                .clip(MaterialTheme.shapes.medium)
+                .graphicsLayer {
+                    translationX = swiped.value
+                    alpha = 1f - (abs(swiped.value) / size.width).coerceIn(0f, 1f)
+                }
                 .then(onAbout?.let { Modifier.clickable(onClickLabel = about, onClick = it) } ?: Modifier)
         ) { shown ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
@@ -510,6 +588,17 @@ private const val MAX_VISUALS_SHADE = 0.9f
 
 /** How long after the words stop being scrolled the bar comes back. */
 private const val BAR_BACK_MS = 1_200L
+
+/** How far across the song is swiped, of its width, to go on to the next song or back. */
+private const val SKIP_SWIPE_FRACTION = 0.25f
+
+/** How much less the song moves when swiped where there's no song to go to. */
+private const val SKIP_RESISTANCE = 4f
+
+private const val SKIP_OUT_MS = 180
+
+/** How long a song swiped away waits for the next one before it comes back. */
+private const val SKIP_WAIT_MS = 1_500L
 
 /** Room under the words, so the last of them can be scrolled clear of the bar. */
 private val BAR_ROOM = 112.dp

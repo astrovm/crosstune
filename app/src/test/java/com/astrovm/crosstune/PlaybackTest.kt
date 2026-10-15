@@ -62,14 +62,14 @@ class PlaybackTest {
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", ComponentName(app, NowPlayingListener::class.java).flattenToString())
     }
 
-    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null, position: Long = 42_000, duration: Long? = null): MediaController {
+    private fun player(packageName: String, label: String, title: String, artist: String?, state: Int = PlaybackState.STATE_PLAYING, actions: Long = PlaybackState.ACTION_SEEK_TO, art: Map<String, String> = emptyMap(), at: Long = PLAYED_AT, album: String? = null, position: Long = 42_000, duration: Long? = null, session: MediaSession = MediaSession(app, packageName)): MediaController {
         shadowOf(app.packageManager).installPackage(
             PackageInfo().apply {
                 this.packageName = packageName
                 applicationInfo = ApplicationInfo().apply { this.packageName = packageName; nonLocalizedLabel = label }
             }
         )
-        val controller = MediaController(app, MediaSession(app, packageName).sessionToken)
+        val controller = MediaController(app, session.sessionToken)
         shadowOf(controller).setPackageName(packageName)
         shadowOf(controller).setMetadata(
             MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
@@ -559,6 +559,54 @@ class PlaybackTest {
         playback.playPause(song, play = true)
         // Nothing playing it, nothing to ask.
         playback.playPause(MusicMetadata("Other", "Band"), play = true)
+    }
+
+    @Test
+    fun theAppPlayingItSaysWhetherItCanGoOnToTheNextSongOrBack() {
+        allow()
+        val skips = PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = skips)
+        shadowOf(sessions).addController(spotify)
+        val seen = followed()
+        assertTrue(seen.last()!!.canSkipNext)
+        assertTrue(seen.last()!!.canSkipPrevious)
+        assertFalse(seen.last()!!.canSeek)
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).setActions(PlaybackState.ACTION_SKIP_TO_NEXT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(seen.last()!!.canSkipNext)
+        assertFalse(seen.last()!!.canSkipPrevious)
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(seen.last()!!.canSkipNext)
+    }
+
+    @Test
+    fun theAppPlayingItIsAskedToGoOnToTheNextSongOrBack() {
+        allow()
+        val asked = mutableListOf<String>()
+        val session = MediaSession(app, "com.spotify.music").apply {
+            setCallback(object : MediaSession.Callback() {
+                override fun onSkipToNext() { asked += "next" }
+                override fun onSkipToPrevious() { asked += "previous" }
+                override fun onPlay() { asked += "play" }
+            })
+            isActive = true
+        }
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", session = session)
+        shadowOf(sessions).addController(spotify)
+        playback.skip(song, next = true)
+        playback.skip(song, next = false)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("next", "previous"), asked)
+        // Paused, the song skipped to plays, or it would wait unheard.
+        shadowOf(spotify).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 1_000, 0f, PLAYED_AT).build())
+        playback.skip(song, next = true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("next", "previous", "next", "play"), asked)
+        // Nothing playing it, nothing to ask.
+        playback.skip(MusicMetadata("Other", "Band"), next = true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(4, asked.size)
     }
 
     private companion object {

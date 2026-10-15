@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -96,6 +97,9 @@ internal data class UiState(
     val lyricsSynced: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
     val following: Following? = null,
+    /** Whether the music app playing the song shown can go on to its next song, or back to the one before. */
+    val canSkipNext: Boolean = false,
+    val canSkipPrevious: Boolean = false,
     /** Whether Android lets Crosstune see what music apps play, which timed words follow. */
     val canFollowApps: Boolean = false,
     /** Whether Android holds that access back first, for an app installed from a file, so it takes more steps. */
@@ -1394,6 +1398,14 @@ internal class MainViewModel(
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var videoLeadMs: Long? = null
 
+    private var nextJob: Job? = null
+
+    /** Set once the song shown was playing while its words were open, so the next song an app plays takes over. */
+    private var shownPlayed = false
+
+    /** Set while Crosstune is out of sight with no words floating, when the words don't go on to the next song. */
+    private var nextPaused = false
+
     /**
      * Fetches the shown song's words and shows them. A song with no words of its own says so
      * rather than showing nothing, so it isn't read as a lookup that hasn't answered. Timed words
@@ -1404,13 +1416,15 @@ internal class MainViewModel(
         showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
     }
 
-    private fun showLyricsFor(song: MusicMetadata) {
+    private fun showLyricsFor(song: MusicMetadata, playing: Boolean = false) {
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return
         // Already showing these words, or on the way, so a second tap doesn't fetch them again. A lookup
         // that failed is worth asking again, so Retry is the one case that does fetch.
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
+        // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
+        shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
         lyricsJob?.cancel()
         stopLearning()
         stopFollowing()
@@ -1449,6 +1463,7 @@ internal class MainViewModel(
             follow(song)
             first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
         }
+        watchNext(song)
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
@@ -1661,6 +1676,50 @@ internal class MainViewModel(
         }
     }
 
+    /**
+     * Once the song shown was playing, the next song a music app plays takes over its words: when the
+     * app goes on to it, or it's skipped to, or another app plays it instead. Until then, e.g. for a
+     * song picked to read while another plays, the words stay. Not while Crosstune is out of sight,
+     * with no words floating; back in sight, it catches up.
+     */
+    private fun watchNext(song: MusicMetadata) {
+        nextJob?.cancel()
+        nextJob = null
+        val source = playback?.takeIf { it.hasAccess() && !nextPaused } ?: return
+        nextJob = viewModelScope.launch {
+            combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (app, playing) ->
+                if (app?.clock?.playing == true) shownPlayed = true
+                val skips = (app?.canSkipNext == true) to (app?.canSkipPrevious == true)
+                if (skips != (uiState.canSkipNext to uiState.canSkipPrevious)) uiState = uiState.copy(canSkipNext = skips.first, canSkipPrevious = skips.second)
+                // An app still playing the song shown, by another name, e.g. "Song - Remastered", plays no other.
+                val next = playing?.takeIf { shownPlayed && app?.clock?.playing != true && !sameSong(it.metadata, song) } ?: return@collect
+                remember(next)
+                showLyricsFor(next.metadata, playing = true)
+            }
+        }
+    }
+
+    /** Crosstune went out of sight with no words floating: the words stay on the song they show until it's back. */
+    fun pauseFollowingNext() {
+        nextPaused = true
+        nextJob?.cancel()
+        nextJob = null
+    }
+
+    fun resumeFollowingNext() {
+        if (!nextPaused) return
+        nextPaused = false
+        uiState.lyricsFor?.let(::watchNext)
+    }
+
+    /** Has the music app the words follow go on to its [next] song, or back to the one before, whose words then show. */
+    fun skipSong(next: Boolean) {
+        val song = uiState.lyricsFor ?: return
+        if (!(if (next) uiState.canSkipNext else uiState.canSkipPrevious)) return
+        shownPlayed = true
+        playback?.skip(song, next)
+    }
+
     private fun stopFollowing() {
         followJob?.cancel()
         followJob = null
@@ -1835,6 +1894,10 @@ internal class MainViewModel(
         heardSong = null
         lyricsJob?.cancel()
         lyricsJob = null
+        nextJob?.cancel()
+        nextJob = null
+        shownPlayed = false
+        uiState = uiState.copy(canSkipNext = false, canSkipPrevious = false)
         stopLearning()
         stopFollowing()
         stopListeningAlong()
