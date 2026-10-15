@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -627,10 +628,11 @@ class ListeningTest {
         onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, 0, SystemClock.elapsedRealtime())
     }
 
-    /** Opens the words of [title] from Recent, as from its card. */
+    /** Opens the words of [title] from Recent, as from its card, below the song playing when one is. */
     private fun openWordsFromRecent(title: String) {
-        click(title)
-        click(string(R.string.lyrics_button))
+        composeRule.onAllNodes(hasText(title) and hasClickAction()).onLast().performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_button)) or hasText(string(R.string.lyrics_button))).onLast().performClick()
         waitForText("$title one")
     }
 
