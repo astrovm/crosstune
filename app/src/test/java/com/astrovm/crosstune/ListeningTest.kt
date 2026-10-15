@@ -228,6 +228,42 @@ class ListeningTest {
     }
 
     @Test
+    fun theOfferUpdatesWhileTheScreenStaysOpenAndResubscribesOnResume() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        assertFalse(shown(string(R.string.playing_now)))
+        val first = Heard.Song(MusicMetadata("First Test Song", "First Test Artist"), null, 1000, SystemClock.elapsedRealtime())
+        composeRule.runOnIdle { phone.onThePhone = first }
+        waitForText("First Test Song")
+        assertTrue(shown(string(R.string.playing_now)))
+        composeRule.runOnIdle { phone.onThePhone = null }
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        val next = first.copy(metadata = MusicMetadata("Next Test Song", "Next Test Artist"))
+        composeRule.runOnIdle { phone.onThePhone = next }
+        waitForText("Next Test Song")
+        assertFalse(shown("First Test Song"))
+        // Position updates don't keep asking for the same song's lyrics.
+        composeRule.runOnIdle { phone.onThePhone = next.copy(offsetMs = 2000) }
+        composeRule.waitForIdle()
+        assertTrue(shown("Next Test Song"))
+        controller!!.pause()
+        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        phone.onThePhone = null
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(next.metadata, model.uiState.playingNow)
+        controller!!.resume()
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.playing_now)))
+        composeRule.runOnIdle { phone.onThePhone = first }
+        waitForText("First Test Song")
+        click("First Test Song")
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(first.metadata, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
     fun theSongPlayingIsOfferedOnlyWhileNothingElseIsOnScreen() {
         val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime()) }
         MainActivity.playbackFactory = { phone }

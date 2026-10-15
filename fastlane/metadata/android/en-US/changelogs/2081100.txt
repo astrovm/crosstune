@@ -1,4 +1,5 @@
 Playing now finds more music videos and songs without album tags.
 Cleaner video titles and improved chord matching for Chinese songs.
 Playing now hides while you type a new link.
+Playing now updates when music starts, pauses, stops, or changes songs.
 Chords like LAm7b5 from Spanish sheets show in letters too.

@@ -290,6 +290,9 @@ class MainActivity : ComponentActivity() {
 
         val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.watchPlayingNow() }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Android limits how often a background app may change shortcuts, so only while shown.
                 // Converted links saved on an entry don't change its shortcut, so they don't restart it.
@@ -498,8 +501,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // A song started meanwhile is offered at the top.
-        viewModel.checkPlayingNow()
         // The user may have just allowed links, or installed a music app, outside Crosstune.
         viewModel.refreshSystemState()
         // Or let Crosstune follow what music apps play.

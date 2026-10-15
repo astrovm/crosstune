@@ -6,6 +6,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.media.AudioManager
+import android.media.AudioAttributes
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -84,6 +85,89 @@ class PlaybackTest {
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
+    }
+
+    private fun offered(): MutableList<Heard.Song?> {
+        val seen = mutableListOf<Heard.Song?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        return seen
+    }
+
+    @Test
+    fun theOfferedSongTracksPlaybackAndMetadataWithoutReopeningTheApp() {
+        allow()
+        sounding()
+        val seen = offered()
+        assertEquals(listOf<Heard.Song?>(null), seen)
+        val spotify = player("com.spotify.music", "Spotify", song.title, song.artist)
+        shadowOf(sessions).addController(spotify)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(song, seen.last()?.metadata)
+
+        // Repeated position updates and pause/resume sequences keep agreeing with Android.
+        val random = kotlin.random.Random(42)
+        repeat(30) {
+            val state = listOf(PlaybackState.STATE_PLAYING, PlaybackState.STATE_PAUSED, PlaybackState.STATE_STOPPED)[random.nextInt(3)]
+            shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, it * 1000L, 1f, NOW).build())
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(if (state == PlaybackState.STATE_PLAYING) song else null, seen.last()?.metadata)
+        }
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, NOW).build())
+        shadowOf(spotify).executeOnMetadataChanged(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Next Song")
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, "Next Artist").build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(MusicMetadata("Next Song", "Next Artist"), seen.last()?.metadata)
+        shadowOf(spotify).executeOnMetadataChanged(null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+    }
+
+    @Test
+    fun theOfferTracksAudioAndStopsWatchingWhenClosed() {
+        allow()
+        val spotify = player("com.spotify.music", "Spotify", song.title, song.artist)
+        shadowOf(sessions).addController(spotify)
+        val seen = offered()
+        assertNull(seen.last())
+        fun audio(on: Boolean) {
+            sounding(on)
+            shadowOf(app.getSystemService(AudioManager::class.java)).setActivePlaybackConfigurationsFor(
+                if (on) listOf(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()) else emptyList(), true)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        audio(true)
+        assertEquals(song, seen.last()?.metadata)
+        audio(false)
+        assertNull(seen.last())
+        audio(true)
+        shadowOf(sessions).clearControllers()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        assertTrue(shadowOf(spotify).callbacks.isEmpty())
+        shadowOf(sessions).addController(spotify)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, shadowOf(spotify).callbacks.size)
+        // A dead session's last metadata must not be offered, even before its list is updated.
+        sounding(false)
+        shadowOf(spotify).executeOnSessionDestroyed()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(shadowOf(spotify).callbacks.isEmpty())
+        val count = seen.size
+        audio(true)
+        shadowOf(sessions).addController(player("com.other", "Other", "New", "Artist", album = "Album"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(count, seen.size)
+    }
+
+    @Test
+    fun anOfferCannotReadSessionsWithoutAccess() {
+        sounding()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", song.title, song.artist))
+        assertEquals(listOf<Heard.Song?>(null), offered())
     }
 
     @Test

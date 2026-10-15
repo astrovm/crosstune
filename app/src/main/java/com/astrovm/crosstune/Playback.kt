@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageInstaller
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -50,6 +51,9 @@ internal interface PlaybackSource {
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
+
+    /** The song playing now, updated when music apps start, pause, stop, or change songs. */
+    fun nowPlayingUpdates(): Flow<Heard.Song?>
 
     /**
      * Whether Android holds this access back until "Allow restricted settings" is turned on for
@@ -141,6 +145,38 @@ internal class MediaSessionPlayback(
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             .firstNotNullOfOrNull(::playing)
     }
+
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = callbackFlow {
+        var watched: List<MediaController> = emptyList()
+        fun update() { trySend(nowPlaying()) }
+        val callback = object : MediaController.Callback() {
+            override fun onMetadataChanged(metadata: MediaMetadata?) = update()
+            override fun onPlaybackStateChanged(state: PlaybackState?) = update()
+            override fun onSessionDestroyed() = update()
+        }
+        fun watch(controllers: List<MediaController>) {
+            watched.forEach { it.unregisterCallback(callback) }
+            watched = controllers
+            watched.forEach { it.registerCallback(callback, handler) }
+            update()
+        }
+        val changed = MediaSessionManager.OnActiveSessionsChangedListener { watch(it.orEmpty()) }
+        // Audio can fall silent before a player updates its session, or start after it says PLAYING.
+        val sounding = object : AudioManager.AudioPlaybackCallback() {
+            override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) = update()
+        }
+        val watching = runCatching {
+            sessions.addOnActiveSessionsChangedListener(changed, listener, handler)
+            audio.registerAudioPlaybackCallback(sounding, handler)
+            watch(sessions.getActiveSessions(listener))
+        }.isSuccess
+        if (!watching) trySend(null)
+        awaitClose {
+            sessions.removeOnActiveSessionsChangedListener(changed)
+            audio.unregisterAudioPlaybackCallback(sounding)
+            watched.forEach { it.unregisterCallback(callback) }
+        }
+    }.distinctUntilChanged()
 
     private fun playing(controller: MediaController): Heard.Song? {
         val metadata = controller.metadata ?: return null

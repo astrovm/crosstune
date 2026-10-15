@@ -14,7 +14,10 @@ internal class FakePlayback : PlaybackSource {
     val seeks = mutableListOf<Long>()
     /** Each ask to play (true) or pause (false). */
     val plays = mutableListOf<Boolean>()
-    var onThePhone: Heard.Song? = null
+    private val songs = MutableStateFlow<Heard.Song?>(null)
+    var onThePhone: Heard.Song?
+        get() = songs.value
+        set(value) { songs.value = value }
 
     override fun hasAccess() = access
 
@@ -23,6 +26,8 @@ internal class FakePlayback : PlaybackSource {
     override fun follow(song: MusicMetadata): Flow<Following?> = playing
 
     override fun nowPlaying() = onThePhone
+
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = songs
 
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
         seeks += positionMs
