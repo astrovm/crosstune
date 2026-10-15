@@ -69,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 11 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 15 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo di un brano, l'app invia il titolo e l'artista a LRCLIB, un servizio di testi che non richiede account o chiave. Quando attivi la traduzione nel testo, l'app invia le sue righe a MyMemory, un servizio di traduzione senza account, a meno che non le traduca ChatGPT, come descritto più sotto. Android riconosce sul telefono la lingua di un brano, e i testi in una lingua che hai scelto di non tradurre non vengono inviati. Le letture, come i kana sopra i kanji, vengono calcolate sul telefono e non vengono inviate da nessuna parte. Una parola che tocchi per il suo significato viene inviata allo stesso modo. Se l'app è in inglese, una parola inglese viene cercata nel dizionario di Wiktionary. Le righe che salvi restano sul telefono."
+      "Quando digiti il nome di un brano invece di un link, Crosstune invia quel nome alle ricerche pubbliche di canzoni di Deezer e di Apple e mostra i brani trovati, così puoi aprire il brano che cercavi senza il suo link. Quando chiedi il testo o gli accordi di un brano, l'app invia il titolo e l'artista a servizi che non richiedono account o chiave: LRCLIB, YouTube Music, NetEase Cloud Music e Letras per i testi, Ultimate Guitar, LaCuerda e U-FRET per gli accordi, e la ricerca brani di Apple per trovare il nome originale del brano. Quando attivi la traduzione nel testo, l'app invia le sue righe a MyMemory, un servizio di traduzione senza account, a meno che non le traduca ChatGPT, come descritto più sotto. Android riconosce sul telefono la lingua di un brano, e i testi in una lingua che hai scelto di non tradurre non vengono inviati. Le letture, come i kana sopra i kanji, vengono calcolate sul telefono e non vengono inviate da nessuna parte. Una parola che tocchi per il suo significato viene inviata allo stesso modo. Se l'app è in inglese, una parola inglese viene cercata nel dizionario di Wiktionary. Le righe che salvi restano sul telefono."
     ],
     [
       "p",

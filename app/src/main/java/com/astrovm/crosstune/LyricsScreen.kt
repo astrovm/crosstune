@@ -1153,7 +1153,7 @@ internal val ChordsShown = SemanticsPropertyKey<List<String>>("ChordsShown")
  * words as they're sung, and the chord being played.
  */
 @Composable
-private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle, ruby: List<Ruby>? = null, readingScale: Float = READING_SCALE) {
+private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
     val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
@@ -1166,12 +1166,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
     playing.intValue = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
-    val over = style.copy(
-        fontSize = style.fontSize * readingScale,
-        lineHeight = style.fontSize * (readingScale + READING_GAP),
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
     val shown = when {
         position == null -> written
@@ -1252,12 +1247,7 @@ internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
  */
 @Composable
 internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READING_SCALE) {
-    val over = style.copy(
-        fontSize = style.fontSize * scale,
-        lineHeight = style.fontSize * (scale + READING_GAP),
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    val over = readingStyle(style, scale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val text = remember(parts, scale) { rubyText(parts, scale) }
     val measurer = rememberTextMeasurer()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -1283,6 +1273,10 @@ internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READIN
             }
     )
 }
+
+/** The small type of readings over words in [style], [scale] times as big. */
+private fun readingStyle(style: TextStyle, scale: Float) =
+    style.copy(fontSize = style.fontSize * scale, lineHeight = style.fontSize * (scale + READING_GAP), fontWeight = FontWeight.Medium)
 
 /**
  * [parts] as one line, a piece whose reading is wider than it spaced out to make room for it. Kana
@@ -1505,7 +1499,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
         }
     }
     val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-    val over = style.copy(fontSize = style.fontSize * scale, lineHeight = style.fontSize * (scale + READING_GAP), fontWeight = FontWeight.Medium)
+    val over = readingStyle(style, scale)
     val highlight = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
     FlowRow(modifier = Modifier.testTag(STUDY_LINE_TAG)) {
         var at = 0

@@ -83,6 +83,7 @@ class PublishingTest(unittest.TestCase):
             shots.publish('zh-tw', 'light')
         self.assertEqual((listing / '1.png').read_bytes(), b'existing dark screenshot')
         self.assertFalse((shots.ROOT / 'screenshots/light/zh-TW').exists())
+        self.assertFalse((shots.ROOT / 'docs/img/zh-tw').exists())
 
 
 if __name__ == '__main__':

@@ -58,7 +58,7 @@ internal class ChordFinder(
 
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
     suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
-        val key = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
         cache?.get(key)?.let { kept -> fromCache(kept)?.let { return@withContext Chords.Found(it) } }
         // Japanese words are likelier on U-FRET; any song may be on either.
         val sites = if (texts.any(::japanese)) {
@@ -175,30 +175,44 @@ internal class ChordFinder(
      * voted for first. It may name the artist otherwise, "Misc Soundtrack" for a film's songs, so
      * when that finds none, by the title alone.
      */
-    private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+    private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> ultimateGuitarSheets(song, title, key) }, fits) { url ->
+            val view = ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: return@firstSheet null
+            val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
+            ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
+        }
+
+    /**
+     * The first sheet that [fits], of those [sheets] finds for each of [keys] in turn, each read by
+     * [read] at most once and [MAX_SHEETS] in all. A request that went unanswered still makes it unavailable, unless another
+     * found a matching sheet.
+     */
+    private suspend fun firstSheet(
+        keys: List<String>,
+        sheets: suspend (String) -> List<String>,
+        fits: (ChordSheet) -> Boolean,
+        read: suspend (String) -> ChordSheet?
+    ): ChordSheet? {
         var failure: IOException? = null
         val tried = mutableSetOf<String>()
-        for (key in listOf("$title ${song.artist}".trim(), title).distinct()) {
+        for (key in keys.distinct()) {
             val urls = try {
-                ultimateGuitarSheets(song, title, key)
+                sheets(key)
             } catch (e: IOException) {
                 failure = e
                 continue
             }
-            for (url in urls) {
-                if (!tried.add(url)) continue
-                val view = try {
-                    ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view")
+            for (url in urls.filterNot { it in tried }.take(MAX_SHEETS - tried.size)) {
+                tried += url
+                val sheet = try {
+                    read(url)
                 } catch (e: IOException) {
                     failure = e
                     continue
-                } ?: continue
-                val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
-                ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
-                    .takeIf(fits)?.let { return it }
+                }
+                if (sheet != null && fits(sheet)) return sheet
             }
         }
-        // An unanswered request is still unavailable, unless another found a matching sheet.
         failure?.let { throw it }
         return null
     }
@@ -209,51 +223,32 @@ internal class ChordFinder(
             .addQueryParameter("search_type", "title")
             .addQueryParameter("value", key)
             .build()
-        val results = ugStore(fetch(search.toString(), search = true))?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
+        // A search that finds nothing is answered with a 404 and its usual page.
+        val results = ugStore(fetch(search.toString()) { code, body -> code == 404 && ugData.containsMatchIn(body) })?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
         return (0 until results.length()).mapNotNull { results.optJSONObject(it) }
             .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
-            .map { it.optString("tab_url") }.take(MAX_SHEETS)
+            .map { it.optString("tab_url") }
     }
 
     /**
      * LaCuerda's first sheet of words and chords for the song that [fits], by the artist first. It
-     * may name the artist otherwise, "Dos Minutos" for 2 Minutos, so then by the title alone.
+     * may name the artist otherwise, "Dos Minutos" for 2 Minutos, and a search with the artist can
+     * fail even when the title alone finds the song, so then by the title alone.
      */
-    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
-        var failure: IOException? = null
-        val tried = mutableSetOf<String>()
-        // A search with the artist can fail even when the title alone finds the song.
-        for (key in listOf("${song.title} ${song.artist}".trim(), song.title).distinct()) {
-            val urls = try {
-                laCuerdaSheets(song, key)
-            } catch (e: IOException) {
-                failure = e
-                continue
-            }
-            for (url in urls) {
-                if (!tried.add(url)) continue
-                val page = try {
-                    fetch(url)
-                } catch (e: IOException) {
-                    failure = e
-                    continue
-                }
-                val sheet = laCuerdaSheet.find(page)?.groupValues?.get(1) ?: continue
-                // Its chords as Ultimate Guitar marks them, over the words they're played on.
-                val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
-                ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url).takeIf(fits)?.let { return it }
-            }
+    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("${song.title} ${song.artist}".trim(), song.title), { key -> laCuerdaSheets(song, key) }, fits) { url ->
+            val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: return@firstSheet null
+            // Its chords as Ultimate Guitar marks them, over the words they're played on.
+            val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
         }
-        // An unanswered request is still unavailable, unless another found a matching sheet.
-        failure?.let { throw it }
-        return null
-    }
 
     /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
     private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
         val search = LA_CUERDA_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("exp", key).addQueryParameter("canc", "1").build()
-        val page = fetch(search.toString(), search = true)
+        // A search that finds nothing is answered with a 500 and no page at all.
+        val page = fetch(search.toString()) { code, body -> code == 500 && body.isBlank() }
         // Each song's page, by its row counted from the last.
         val files = laCuerdaFiles.find(page)?.groupValues?.get(1)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
         val last = laCuerdaLast.find(page)?.groupValues?.get(1)?.toInt() ?: return emptyList()
@@ -273,7 +268,7 @@ internal class ChordFinder(
                 found += !SongNames.sameArtist(byName, song.artist) to "$LA_CUERDA_URL$by/$file${if (take == 1) "" else "-$take"}.shtml"
             }
         }
-        return found.sortedBy { it.first }.map { it.second }.take(MAX_SHEETS)
+        return found.sortedBy { it.first }.map { it.second }
     }
 
     /**
@@ -334,15 +329,13 @@ internal class ChordFinder(
     private fun ugStore(page: String): JSONObject? =
         ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
 
-    private suspend fun fetch(url: String, referer: String? = null, search: Boolean = false): String {
+    /** [found] tells a failed answer that's still the site's own, e.g. a search that found nothing, from a site that wouldn't answer. */
+    private suspend fun fetch(url: String, referer: String? = null, found: (Int, String) -> Boolean = { _, _ -> false }): String {
         // Ultimate Guitar shows its search results only to a computer's browser.
         val request = Request.Builder().url(url).header("User-Agent", BROWSER).apply { referer?.let { header("Referer", it) } }.get().build()
         return client.newCall(request).executeAsync().use { response ->
             val body = response.body.stringAtMost()
-            // A search that finds nothing is answered with a 404 and a page saying so by Ultimate Guitar,
-            // and with a 500 and no page at all by LaCuerda: neither is a site that wouldn't answer.
-            val none = search && (response.code == 404 || (response.code == 500 && body.isBlank()))
-            if (!response.isSuccessful && !none) throw IOException("Chord site returned ${response.code}")
+            if (!response.isSuccessful && !found(response.code, body)) throw IOException("Chord site returned ${response.code}")
             body
         }
     }
@@ -375,6 +368,9 @@ internal class ChordFinder(
     }
 
     internal companion object {
+        /** Raised when sheets are read differently, so ones kept before are looked up again. */
+        const val CACHE_VERSION = 2
+
         /** Per site; looking a song up by its other names takes a few more requests. */
         const val TIMEOUT_MS = 20_000L
 

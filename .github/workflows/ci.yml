@@ -31,6 +31,20 @@ jobs:
           python3 -m unittest discover -s scripts/release -p "test_*.py"
           python3 scripts/release/check_changelog.py
 
+      - name: Install media test tools
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+
+      # The committed site has to be what build-site.py makes, new pages included.
+      - name: Test site and media scripts
+        run: |
+          python3 scripts/build-site.py
+          git add --intent-to-add docs/
+          git diff --exit-code -- docs/
+          python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
+          python3 -m unittest discover -s scripts/shots -p "test_*.py"
+          node scripts/test-site-media.cjs
+          node scripts/test-site-language.cjs
+
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -52,18 +66,6 @@ jobs:
       # Same task as locally: unit tests with the 100% line coverage gate, lint, debug and release APKs.
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
-      - name: Install media test tools
-        run: sudo apt-get install -y ffmpeg
-
-      - name: Test media scripts
-        run: |
-          python3 scripts/build-site.py
-          git diff --exit-code -- docs/
-          python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
-          python3 -m unittest discover -s scripts/shots -p "test_*.py"
-          node scripts/test-site-media.cjs
-          node scripts/test-site-language.cjs
-
       - name: Test, lint and build
         run: ./gradlew :app:ci --build-cache
         env:

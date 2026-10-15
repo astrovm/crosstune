@@ -74,6 +74,12 @@ class ChordSheetsTest {
         assertEquals("F#m", ChordSheets.letterName("FA#m"))
         assertEquals("Bb", ChordSheets.letterName("SIb"))
         assertEquals("G7/B", ChordSheets.letterName("SOL7/SI"))
+        // Flat extensions and altered chords too.
+        assertEquals("Am7b5", ChordSheets.letterName("LAm7b5"))
+        assertEquals("G7b9", ChordSheets.letterName("SOL7b9"))
+        assertEquals("Dm7(b5)", ChordSheets.letterName("REm7(b5)"))
+        assertEquals("A7alt", ChordSheets.letterName("LA7alt"))
+        assertEquals("Ebmaj7", ChordSheets.letterName("MIbmaj7"))
         // A word that only starts like a chord isn't one.
         for (word in listOf("SOLO", "FADE", "LAST", "MIDI")) assertEquals(word, ChordSheets.letterName(word))
         assertEquals("C/E", ChordSheets.letterName("DO/MI"))

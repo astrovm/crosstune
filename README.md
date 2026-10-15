@@ -98,7 +98,7 @@ Check that **Open the exact match** is on. If it is, Crosstune found no confiden
 - History stays on your device.
 - Crosstune only asks the service a link comes from for its title, artist and cover.
 - With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack and Qobuz website search).
-- Lyrics come from [LRCLIB](https://lrclib.net) by title and artist. Translations go to [MyMemory](https://mymemory.translated.net), and English words to [Wiktionary](https://en.wiktionary.org). Readings, and which language a song is in, are worked out on your phone.
+- Lyrics are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music and [Letras](https://www.letras.com), and chords on [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net) and [U-FRET](https://www.ufret.jp). Translations go to [MyMemory](https://mymemory.translated.net), and English words to [Wiktionary](https://en.wiktionary.org). Readings, and which language a song is in, are worked out on your phone.
 - Signed in with ChatGPT, the AI features send OpenAI the song's title, artist and lyrics, and what you ask or type. Your sign-in stays on your phone and only goes to OpenAI.
 - Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
 - MilkDrop visuals read what your phone plays through Android, which asks for the microphone permission for it. Nothing is recorded or sent anywhere.

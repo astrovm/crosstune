@@ -69,7 +69,7 @@
   "privacy_link": "Política de privacidade",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidade do Crosstune",
-  "updated": "Última atualização: 11 de outubro de 2026",
+  "updated": "Última atualização: 15 de outubro de 2026",
   "short_h2": "Em resumo",
   "short_items": [
     "Sem conta, anúncios ou análises.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Quando você digita o nome de uma música em vez de um link, o Crosstune envia esse nome às buscas públicas de músicas do Deezer e da Apple e mostra as músicas encontradas, para você abrir a música que queria sem o link. Quando você pede a letra de uma música, o app envia o título e o artista à LRCLIB, um serviço de letras que não precisa de conta nem chave. Quando você ativa a Tradução na letra, o app envia as linhas dela para o MyMemory, um serviço de tradução que não pede conta, a menos que o ChatGPT as traduza, como explicado abaixo. O Android identifica no seu celular o idioma da música, e letras em um idioma que você escolheu não traduzir não são enviadas. As leituras, como kana sobre kanji, são feitas no seu celular e não são enviadas a lugar nenhum. Uma palavra que você toca para ver o significado é enviada do mesmo jeito. Se o app estiver em inglês, uma palavra em inglês é buscada no dicionário do Wiktionary. As linhas que você salva ficam no seu celular."
+      "Quando você digita o nome de uma música em vez de um link, o Crosstune envia esse nome às buscas públicas de músicas do Deezer e da Apple e mostra as músicas encontradas, para você abrir a música que queria sem o link. Quando você pede a letra ou os acordes de uma música, o app envia o título e o artista a serviços que não precisam de conta nem chave: LRCLIB, YouTube Music, NetEase Cloud Music e Letras para as letras, Ultimate Guitar, LaCuerda e U-FRET para os acordes, e a busca de músicas da Apple para achar o nome original da música. Quando você ativa a Tradução na letra, o app envia as linhas dela para o MyMemory, um serviço de tradução que não pede conta, a menos que o ChatGPT as traduza, como explicado abaixo. O Android identifica no seu celular o idioma da música, e letras em um idioma que você escolheu não traduzir não são enviadas. As leituras, como kana sobre kanji, são feitas no seu celular e não são enviadas a lugar nenhum. Uma palavra que você toca para ver o significado é enviada do mesmo jeito. Se o app estiver em inglês, uma palavra em inglês é buscada no dicionário do Wiktionary. As linhas que você salva ficam no seu celular."
     ],
     [
       "p",

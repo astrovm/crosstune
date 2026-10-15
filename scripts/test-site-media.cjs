@@ -90,4 +90,3 @@ test('generated event sequences always keep posters, sources and motion consiste
     }
   }
 });
-module.exports = { page, expectMedia, source };

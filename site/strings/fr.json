@@ -69,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 11 octobre 2026",
+  "updated": "Dernière mise à jour : 15 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles d'un morceau, l'application envoie le titre et l'artiste à LRCLIB, un service de paroles qui ne demande ni compte ni clé. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, sauf si ChatGPT les traduit, comme décrit plus bas. Android reconnaît la langue d'une chanson sur votre téléphone, et les paroles dans une langue que vous avez choisi de ne pas traduire ne sont pas envoyées. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone."
+      "Quand vous saisissez le nom d'un morceau au lieu d'un lien, Crosstune envoie ce nom aux recherches publiques de chansons de Deezer et d'Apple et affiche les morceaux trouvés, pour que vous puissiez ouvrir le morceau voulu sans son lien. Quand vous demandez les paroles ou les accords d'un morceau, l'application envoie le titre et l'artiste à des services qui ne demandent ni compte ni clé : LRCLIB, YouTube Music, NetEase Cloud Music et Letras pour les paroles, Ultimate Guitar, LaCuerda et U-FRET pour les accords, et la recherche de morceaux d'Apple pour trouver le nom d'origine du morceau. Quand vous activez la traduction dans les paroles, l'app envoie leurs lignes à MyMemory, un service de traduction sans compte, sauf si ChatGPT les traduit, comme décrit plus bas. Android reconnaît la langue d'une chanson sur votre téléphone, et les paroles dans une langue que vous avez choisi de ne pas traduire ne sont pas envoyées. Les lectures, comme les kana au-dessus des kanji, sont calculées sur votre téléphone et envoyées nulle part. Un mot que vous touchez pour son sens est envoyé de la même façon. Si l'appli est en anglais, un mot anglais est cherché dans le dictionnaire de Wiktionary. Les lignes que vous enregistrez restent sur votre téléphone."
     ],
     [
       "p",
