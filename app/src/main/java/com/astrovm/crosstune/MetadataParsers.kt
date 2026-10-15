@@ -40,9 +40,9 @@ internal object MetadataParsers {
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
     private val bracketedSongRegex = Regex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
 
-    private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|video|videoclip|videoclipe|clipe|audio|lyrics?|letra|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
+    private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|videoclip|videoclipe|clipe|audio|lyrics?|letra|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
     private val musicTagRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
-    private val videoNoiseRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS|\b(?:hd|hq|4k)\b)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
+    private val videoNoiseRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(

@@ -124,7 +124,7 @@ class MetadataParsersTest {
             assertEquals(tag, MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song ($tag)", "Band"))
         }
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song Video Oficial", "Band"))
-        for (tag in listOf("HD", "Full HD", "4K", "HQ")) {
+        for (tag in listOf("HD", "Full HD", "4K", "HQ", "Video", "Subtitulado", "Sub Español")) {
             assertNull(MetadataParsers.musicVideo("Morning Routine ($tag)", "Someone"))
         }
     }
