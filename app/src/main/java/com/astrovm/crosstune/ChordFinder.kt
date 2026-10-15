@@ -281,7 +281,7 @@ internal class ChordFinder(
      * words, "Vahos de ayer" for "Vahos del Ayer", as its words still have to be the song's.
      */
     private fun named(title: String, ours: String, byArtist: Boolean) =
-        (if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours) || endsWithSong(title, ours)) || insideTitle(title, ours)
+        (if (byArtist) SongNames.sameButSmallWords(title, ours) else SongNames.wordsMatch(title, ours)) || endsWithSong(title, ours) || insideTitle(title, ours)
 
     /** [title] names the film or album first: "Brahmāstra Part One - Shiva - Kesariya" is "Kesariya". */
     private fun endsWithSong(title: String, ours: String) = title.substringAfterLast(" - ", "").let { it.isNotBlank() && SongNames.same(it, ours) }
@@ -397,7 +397,7 @@ internal class ChordFinder(
         const val LA_CUERDA_SEARCH_URL = "${LA_CUERDA_URL}busca.php"
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
-        val titleWords = Regex("""[\p{L}\p{N}]+""")
+        private val titleWords = Regex("""[\p{L}\p{N}]+""")
 
         val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
         val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ") + mapOf(

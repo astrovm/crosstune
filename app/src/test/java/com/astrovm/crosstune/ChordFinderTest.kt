@@ -347,6 +347,25 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun filmPrefixedSingleWordTitlesMatchWithTheRightArtistToo() {
+        val url = "https://tabs.ultimate-guitar.com/tab/film-1"
+        for (artist in listOf(river.artist, "Misc Soundtrack")) {
+            for (title in listOf("The Film - Moon", "The Film - Moonlight")) {
+                fake.handler = { request ->
+                    answer(request, mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult(url, title, artist, 50)),
+                        url to ugTab(ugWalking),
+                        "https://acordes.lacuerda.net/busca.php" to "",
+                        "https://www.ufret.jp/search.php" to "",
+                        "https://music.163.com/api/search/get" to "{}"
+                    ))
+                }
+                assertEquals("$artist: $title", title == "The Film - Moon", chords(river.copy(title = "Moon"), english) is ChordFinder.Chords.Found)
+            }
+        }
+    }
+
+    @Test
     fun aSiteThatWontAnswerIsntTakenForOneWithoutTheSong() {
         fake.handler = { throw IOException("offline") }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
