@@ -117,6 +117,30 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun musicOnTheArtistsOwnChannelAndLocalizedTagsAreRecognized() {
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Band - Song", "Band"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song - Band", "Band"))
+        for (tag in listOf("Video Oficial", "Letra", "Offizielles Video", "公式", "官方", "歌詞", "가사", "كليب رسمي")) {
+            assertEquals(tag, MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song ($tag)", "Band"))
+        }
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song Video Oficial", "Band"))
+        for (tag in listOf("HD", "Full HD", "4K", "HQ")) {
+            assertNull(MetadataParsers.musicVideo("Morning Routine ($tag)", "Someone"))
+        }
+    }
+
+    @Test
+    fun stackedVideoSuffixesLeaveOnlyTheSong() {
+        val random = kotlin.random.Random(216)
+        val suffixes = listOf("Official Video", "Official Audio", "Video Oficial", "HD", "4K", "(Lyrics)", "[HQ]", "- Lyrics")
+        repeat(100) {
+            val title = "Band - River Road " + List(random.nextInt(1, 6)) { suffixes.random(random) }.joinToString(" ")
+            assertEquals(title, MusicMetadata("River Road", "Band"), MetadataParsers.youtubeVideo(title, "Band"))
+        }
+        assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star HD", "Band"))
+    }
+
+    @Test
     fun aDashInsideBracketsDoesNotSplitTheTitle() {
         assertEquals(
             MusicMetadata("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod"),

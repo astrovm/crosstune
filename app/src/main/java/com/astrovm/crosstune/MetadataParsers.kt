@@ -40,10 +40,9 @@ internal object MetadataParsers {
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
     private val bracketedSongRegex = Regex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
 
-    private val videoNoiseRegex = Regex(
-        """\s*[(\[][^)\]]*(?:\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|video|videoclip|videoclipe|clipe|audio|lyrics?|letra|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|visuali[sz]er|hd|hq|4k|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오)[^)\]]*[)\]]""",
-        RegexOption.IGNORE_CASE
-    )
+    private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|video|videoclip|videoclipe|clipe|audio|lyrics?|letra|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
+    private val musicTagRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
+    private val videoNoiseRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS|\b(?:hd|hq|4k)\b)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(
@@ -57,10 +56,10 @@ internal object MetadataParsers {
         RegexOption.IGNORE_CASE
     )
 
-    /** A track number before "Artist - Song" on an album upload, "07 - Song - Artist" but not "2814 - Song". */
     /** A subtitles tag and what follows it, "Song // Sub Español + Lyrics // Video Oficial". */
     private val subtitlesTagRegex = Regex("""\s*(?://|\|\|?)\s*sub\.?\s*(?:esp|español).*$""", RegexOption.IGNORE_CASE)
 
+    /** A track number before "Artist - Song" on an album upload, "07 - Song - Artist" but not "2814 - Song". */
     private val trackNumberRegex = Regex("""^\d{1,2}\s*-\s+(?=.*\s-\s)""")
 
     /** A zero-padded track number glued to the song, "06 Una señal". */
@@ -187,7 +186,8 @@ internal object MetadataParsers {
     fun musicVideo(title: String, channel: String): MusicMetadata? {
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
-            bracketedSongRegex.matches(title) || song.artist != channel.trim()
+            bracketedSongRegex.matches(title) || artistSeparator(title) > 0 ||
+            musicTagRegex.containsMatchIn(title) || trailingVideoNoiseRegex.containsMatchIn(title)
         return song.takeIf { says }
     }
 
@@ -195,8 +195,13 @@ internal object MetadataParsers {
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
-        val rawTitle = title.replace(subtitlesTagRegex, "").replace(videoNoiseRegex, "").replace(trailingVideoNoiseRegex, "").replace(trailingQualityRegex, "")
-            .replace(danglingDashRegex, "").replace(trackNumberRegex, "").trim().ifEmpty { return null }
+        var rawTitle = title.replace(subtitlesTagRegex, "").replace(videoNoiseRegex, "").trim()
+        // Removing one suffix can expose another: "Song Official Video HD" or "Song HD (Lyrics)".
+        do {
+            val previous = rawTitle
+            rawTitle = rawTitle.replace(trailingQualityRegex, "").replace(trailingVideoNoiseRegex, "").replace(danglingDashRegex, "").trim()
+        } while (rawTitle != previous)
+        rawTitle = rawTitle.replace(trackNumberRegex, "").ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:
         // "YOASOBI「アイドル」 Official Music Video".
