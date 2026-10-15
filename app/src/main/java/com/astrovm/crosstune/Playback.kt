@@ -15,6 +15,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
+import androidx.annotation.MainThread
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -53,6 +54,7 @@ internal interface PlaybackSource {
     fun nowPlaying(): Heard.Song?
 
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
+    @MainThread
     fun nowPlayingUpdates(): Flow<Heard.Song?>
 
     /**

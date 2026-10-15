@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -1028,7 +1027,9 @@ internal class MainViewModel(
             uiState = uiState.copy(playingNow = null)
             return
         }
-        source.nowPlayingUpdates().flowOn(systemDispatcher)
+        // Registration, callbacks and cancellation share the main thread, so none can reattach
+        // a controller while the lifecycle is releasing its listeners.
+        source.nowPlayingUpdates()
             .onEach { heard ->
                 playingHeard = heard
                 uiState = uiState.copy(playingNow = heard?.metadata)
