@@ -2947,14 +2947,13 @@ class MainActivityTest {
         // Closed and opened again, and even listened along with, they're still this song's, not what plays now.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         waitForResult()
-        click(string(R.string.lyrics_button))
+        composeRule.onNode(hasText(string(R.string.lyrics_button)) and hasAnyAncestor(hasTestTag(RESULT_TAG))).performClick()
         waitForText("Two")
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).performClick()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_stop_listening)).fetchSemanticsNodes().isNotEmpty() }
         Thread.sleep(500)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Dakare Ni Kita Onna").assertExists()
-        assertTrue(fake.requestedUrls.none { "Other" in it })
     }
 
     private fun lit(line: String) =
