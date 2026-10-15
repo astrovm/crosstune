@@ -268,7 +268,8 @@ internal class LyricsFinder(
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
         if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
         if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
-        if (tried(fromLetras(metadata, timeoutMs))) return answers.last()
+        // Letras's words are untimed, so they can't better untimed ones.
+        if (!untimed && tried(fromLetras(metadata, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
         // badly over untimed ones, as they still mostly follow the song and can be put in time by hand.
         return answers.reduce(::better)

@@ -120,7 +120,8 @@ class LetrasLyricsTest {
             else answer(request)
         }
         assertEquals(Lyrics.Found("Words already found"), lookup())
-        assertTrue(fake.requestedUrls.any { it.startsWith("https://solr.sscdn.co/") })
+        // Untimed words from Letras couldn't better them, so it isn't asked.
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://solr.sscdn.co/") })
         fake.requestedUrls.clear()
         timed = "[00:01.00] Words already found\n[00:04.00] Singing again"
         assertTrue(lookup() is Lyrics.Found)

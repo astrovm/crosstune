@@ -175,30 +175,44 @@ internal class ChordFinder(
      * voted for first. It may name the artist otherwise, "Misc Soundtrack" for a film's songs, so
      * when that finds none, by the title alone.
      */
-    private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+    private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> ultimateGuitarSheets(song, title, key) }, fits) { url ->
+            val view = ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: return@firstSheet null
+            val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
+            ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
+        }
+
+    /**
+     * The first sheet that [fits], of those [sheets] finds for each of [keys] in turn, each read by
+     * [read] at most once. A request that went unanswered still makes it unavailable, unless another
+     * found a matching sheet.
+     */
+    private suspend fun firstSheet(
+        keys: List<String>,
+        sheets: suspend (String) -> List<String>,
+        fits: (ChordSheet) -> Boolean,
+        read: suspend (String) -> ChordSheet?
+    ): ChordSheet? {
         var failure: IOException? = null
         val tried = mutableSetOf<String>()
-        for (key in listOf("$title ${song.artist}".trim(), title).distinct()) {
+        for (key in keys.distinct()) {
             val urls = try {
-                ultimateGuitarSheets(song, title, key)
+                sheets(key)
             } catch (e: IOException) {
                 failure = e
                 continue
             }
-            for (url in urls) {
-                if (!tried.add(url)) continue
-                val view = try {
-                    ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view")
+            for (url in urls.filterNot { it in tried }.take(MAX_SHEETS)) {
+                tried += url
+                val sheet = try {
+                    read(url)
                 } catch (e: IOException) {
                     failure = e
                     continue
-                } ?: continue
-                val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
-                ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
-                    .takeIf(fits)?.let { return it }
+                }
+                if (sheet != null && fits(sheet)) return sheet
             }
         }
-        // An unanswered request is still unavailable, unless another found a matching sheet.
         failure?.let { throw it }
         return null
     }
@@ -214,42 +228,21 @@ internal class ChordFinder(
         return (0 until results.length()).mapNotNull { results.optJSONObject(it) }
             .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
-            .map { it.optString("tab_url") }.take(MAX_SHEETS)
+            .map { it.optString("tab_url") }
     }
 
     /**
      * LaCuerda's first sheet of words and chords for the song that [fits], by the artist first. It
-     * may name the artist otherwise, "Dos Minutos" for 2 Minutos, so then by the title alone.
+     * may name the artist otherwise, "Dos Minutos" for 2 Minutos, and a search with the artist can
+     * fail even when the title alone finds the song, so then by the title alone.
      */
-    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
-        var failure: IOException? = null
-        val tried = mutableSetOf<String>()
-        // A search with the artist can fail even when the title alone finds the song.
-        for (key in listOf("${song.title} ${song.artist}".trim(), song.title).distinct()) {
-            val urls = try {
-                laCuerdaSheets(song, key)
-            } catch (e: IOException) {
-                failure = e
-                continue
-            }
-            for (url in urls) {
-                if (!tried.add(url)) continue
-                val page = try {
-                    fetch(url)
-                } catch (e: IOException) {
-                    failure = e
-                    continue
-                }
-                val sheet = laCuerdaSheet.find(page)?.groupValues?.get(1) ?: continue
-                // Its chords as Ultimate Guitar marks them, over the words they're played on.
-                val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
-                ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url).takeIf(fits)?.let { return it }
-            }
+    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("${song.title} ${song.artist}".trim(), song.title), { key -> laCuerdaSheets(song, key) }, fits) { url ->
+            val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: return@firstSheet null
+            // Its chords as Ultimate Guitar marks them, over the words they're played on.
+            val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
         }
-        // An unanswered request is still unavailable, unless another found a matching sheet.
-        failure?.let { throw it }
-        return null
-    }
 
     /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
     private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
@@ -275,7 +268,7 @@ internal class ChordFinder(
                 found += !SongNames.sameArtist(byName, song.artist) to "$LA_CUERDA_URL$by/$file${if (take == 1) "" else "-$take"}.shtml"
             }
         }
-        return found.sortedBy { it.first }.map { it.second }.take(MAX_SHEETS)
+        return found.sortedBy { it.first }.map { it.second }
     }
 
     /**
