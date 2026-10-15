@@ -316,7 +316,7 @@ class LyricsFinderTest {
     @Test
     fun theCreditsNetEaseClosesASongWithAreLeftOut() {
         val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
-        val credits = listOf("Lead Vocals : Hiroko Mita", "Piano : Someone Else", "Recorded at Some Studio, and Another One", "Drums, Timpani & Gong : A Drummer")
+        val credits = listOf("Lead Vocals : Hiroko Mita", "Recorded at Some Studio, and Another One", "", "Vocal, Rhythm, Synthesizer & String Arrangements : A Singer", "Published by A Publisher Limited", "Mastered at A Third Studio")
         // A sung line can look like one, and stays.
         val sung = listOf("五月雨は緑色", "Me : still here", "悲しくさせたよ")
         val lrc = (sung + "" + credits).mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n")
@@ -329,7 +329,15 @@ class LyricsFinderTest {
         japaneseSong(netEase = netEase, lyric = (sung + credits).joinToString("\n"))
         assertEquals(Lyrics.Found(sung.joinToString("\n")), found(hatsukoi))
 
-        val byWord = (sung + credits).mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
+        // A duet's last lines, each with who sings it, are words.
+        val duet = sung + listOf("Male : Stay with me", "Female : Never leave", "Both 2 : Together")
+        japaneseSong(netEase = netEase, lyric = (duet + credits).joinToString("\n"))
+        assertEquals(Lyrics.Found(duet.joinToString("\n")), found(hatsukoi))
+        // One alone could be sung.
+        japaneseSong(netEase = netEase, lyric = (sung + "Mastering : Someone").joinToString("\n"))
+        assertEquals(Lyrics.Found((sung + "Mastering : Someone").joinToString("\n")), found(hatsukoi))
+
+        val byWord = (sung + credits).filter { it.isNotEmpty() }.mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
         fake.handler = { request ->
             when (request.url.encodedPath) {
                 "/api/search/get" -> FakeSpotify.html(request, netEase(""))
