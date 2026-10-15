@@ -141,6 +141,18 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun malformedVideoMetadataNeverCrashesTheLookup() {
+        val random = kotlin.random.Random(221)
+        val alphabet = "abcXYZ0123 -|/[]()「」『』\"'\n\t\u0000ñé日本가사رسمي"
+        val titles = List(500) { List(random.nextInt(256)) { alphabet.random(random) }.joinToString("") } +
+            listOf("[".repeat(500), ") ( - ".repeat(100), "Song " + "HD ".repeat(100))
+        for (title in titles) {
+            MetadataParsers.youtubeVideo(title, "Channel")
+            MetadataParsers.musicVideo(title, "Channel")
+        }
+    }
+
+    @Test
     fun aDashInsideBracketsDoesNotSplitTheTitle() {
         assertEquals(
             MusicMetadata("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod"),

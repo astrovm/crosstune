@@ -57,6 +57,8 @@ jobs:
 
       - name: Test media scripts
         run: |
+          python3 scripts/build-site.py
+          git diff --exit-code -- docs/
           python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           node scripts/test-site-media.cjs
