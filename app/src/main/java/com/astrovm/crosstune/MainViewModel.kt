@@ -21,6 +21,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -500,7 +503,6 @@ internal class MainViewModel(
     /** The last look at what Android says about apps and links, null until the first one finishes. */
     private var linkState: LinkState? = null
     private var systemJob: Job? = null
-    private var playingJob: Job? = null
     /** What [UiState.playingNow] was heard as, with where in the song it was. */
     private var playingHeard: Heard.Song? = null
 
@@ -1016,24 +1018,25 @@ internal class MainViewModel(
     }
 
     /**
-     * Asks what a music app plays, as Crosstune comes into sight, to offer it at the top; its words
-     * are fetched meanwhile, so they show at once. Only with the access following an app needs.
+     * Offers what music apps play while Crosstune is in sight, fetching each song's words ahead.
      */
-    fun checkPlayingNow() {
-        playingJob?.cancel()
+    suspend fun watchPlayingNow() {
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
             playingHeard = null
             uiState = uiState.copy(playingNow = null)
             return
         }
-        playingJob = viewModelScope.launch {
-            val heard = withContext(systemDispatcher) { source.nowPlaying() }
-            playingHeard = heard
-            uiState = uiState.copy(playingNow = heard?.metadata)
-            // Kept by the finder, so showing them later needs no lookup, nor fetching them ahead again.
-            heard?.let { lyricsFinder?.firstLook(it.metadata) }
-        }
+        // Registration, callbacks and cancellation share the main thread, so none can reattach
+        // a controller while the lifecycle is releasing its listeners.
+        source.nowPlayingUpdates()
+            .onEach { heard ->
+                playingHeard = heard
+                uiState = uiState.copy(playingNow = heard?.metadata)
+            }
+            // Clock updates keep the offer current without restarting its lyrics lookup.
+            .distinctUntilChangedBy { it?.metadata }
+            .collectLatest { heard -> heard?.let { lyricsFinder?.firstLook(it.metadata) } }
     }
 
     /** Shows the song playing now as if just heard, with its words when [lyrics], in time with the app. */
