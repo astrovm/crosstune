@@ -226,13 +226,14 @@ internal object MetadataParsers {
     /** Where "Artist - Song" splits, but not at a dash inside brackets: "NOFX [Reggae & Ska - 2014 Mixtape]" is one name. */
     private fun artistSeparator(title: String): Int {
         var depth = 0
-        var from = 0
-        while (true) {
-            val at = title.indexOf(" - ", from).takeIf { it >= 0 } ?: return -1
-            depth = (depth + title.substring(from, at).sumOf { c -> (if (c in "[(") 1 else if (c in "])") -1 else 0).toInt() }).coerceAtLeast(0)
-            if (depth == 0) return at
-            from = at + 3
+        for (at in title.indices) {
+            when (title[at]) {
+                '[', '(' -> depth++
+                ']', ')' -> depth = (depth - 1).coerceAtLeast(0)
+            }
+            if (depth == 0 && title.startsWith(" - ", at)) return at
         }
+        return -1
     }
 
     private val youtubeDataRegex = Regex("""var ytInitialData = (\{.*?\});</script>""", RegexOption.DOT_MATCHES_ALL)

@@ -147,6 +147,7 @@ class MetadataParsersTest {
             MetadataParsers.youtubeVideo("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod")
         )
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song", "Chan"))
+        assertEquals(MusicMetadata("Song", "Band ) [Mix - Series]"), MetadataParsers.youtubeVideo("Band ) [Mix - Series] - Song", "Chan"))
     }
 
     @Test

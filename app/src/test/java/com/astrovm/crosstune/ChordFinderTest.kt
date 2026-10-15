@@ -259,6 +259,30 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun traditionalTitlesMatchByTheArtistTooButLongerNamesDoNot() {
+        val url = "https://tabs.ultimate-guitar.com/tab/song-1"
+        val texts = listOf("我听见雨滴落在青青草地", "有一句没一句地听不懂")
+        val sheet = texts.joinToString("\n") { "[ch]C[/ch]\n$it" }
+        for (artist in listOf("田馥甄", "Misc Soundtrack")) {
+            for (title in listOf("小幸運", "Our Times - 小幸運 Xiao Xing Yun", "小幸運嗎", "好小幸運")) {
+                fake.requestedUrls.clear()
+                fake.handler = { request ->
+                    answer(request, mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult(url, title, artist, 50)),
+                        url to ugTab(sheet),
+                        "https://acordes.lacuerda.net/busca.php" to "",
+                        "https://www.ufret.jp/search.php" to "",
+                        "https://music.163.com/api/search/get" to "{}"
+                    ))
+                }
+                val expected = title == "小幸運" || title.startsWith("Our Times")
+                assertEquals("$artist: $title", expected, chords(MusicMetadata("小幸运", "田馥甄"), texts) is ChordFinder.Chords.Found)
+                assertEquals("$artist: $title page fetched", expected, url in fake.requestedUrls)
+            }
+        }
+    }
+
+    @Test
     fun aSheetUltimateGuitarWontServeIsSkippedForTheNextOne() {
         fake.handler = { request ->
             if (request.url.encodedPath.endsWith("/tab/down-1")) FakeSpotify.html(request, "", code = 500)

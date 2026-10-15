@@ -328,6 +328,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun anArtistsOwnVideoAndLocalizedMusicTagsAreOfferedAsPlaying() {
+        allow()
+        sounding()
+        for ((title, artist) in listOf("The Weeknd - Blinding Lights" to "The Weeknd", "Blinding Lights (Video Oficial)" to "The Weeknd")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.google.android.youtube", "YouTube", title, artist))
+            assertEquals(song, playback.nowPlaying()?.metadata)
+        }
+    }
+
+    @Test
     fun aVideoThatDoesntSayItsMusicIsNoSong() {
         allow()
         sounding()
