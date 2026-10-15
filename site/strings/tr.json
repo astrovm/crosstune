@@ -69,7 +69,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 11 Ekim 2026",
+  "updated": "Son güncelleme: 15 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini istediğinizde uygulama, şarkının başlığını ve sanatçısını LRCLIB'e gönderir; LRCLIB, hesap veya anahtar gerektirmeyen bir söz servisidir. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye gönderir; aşağıda anlatıldığı gibi ChatGPT çevirmiyorsa. Android bir şarkının dilini telefonunda anlar ve çevrilmemesini seçtiğin bir dildeki sözler gönderilmez. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Uygulama İngilizceyse, İngilizce bir kelime Wiktionary sözlüğünde aranır. Kaydettiğin satırlar telefonunda kalır."
+      "Bir bağlantı yerine şarkının adını yazdığınızda Crosstune, bu adı Deezer ve Apple'ın herkese açık şarkı aramalarına gönderir ve bulunan şarkıları gösterir; böylece istediğiniz şarkıyı bağlantısı olmadan açabilirsiniz. Bir şarkının sözlerini veya akorlarını istediğinizde uygulama, şarkının başlığını ve sanatçısını hesap veya anahtar gerektirmeyen servislere gönderir: sözler için LRCLIB, YouTube Music, NetEase Cloud Music ve Letras'a, akorlar için Ultimate Guitar, LaCuerda ve U-FRET'e, şarkının özgün adını bulmak için de Apple'ın şarkı aramasına. Sözlerde Çeviri'yi açtığında uygulama satırları hesap gerektirmeyen bir çeviri hizmeti olan MyMemory'ye gönderir; aşağıda anlatıldığı gibi ChatGPT çevirmiyorsa. Android bir şarkının dilini telefonunda anlar ve çevrilmemesini seçtiğin bir dildeki sözler gönderilmez. Kanjilerin üstündeki kana gibi okunuşlar telefonunda hesaplanır ve hiçbir yere gönderilmez. Anlamı için dokunduğun bir kelime de aynı şekilde gönderilir. Uygulama İngilizceyse, İngilizce bir kelime Wiktionary sözlüğünde aranır. Kaydettiğin satırlar telefonunda kalır."
     ],
     [
       "p",

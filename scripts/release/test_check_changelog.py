@@ -27,7 +27,7 @@ class ChangelogTest(unittest.TestCase):
         self.notes.write_text("Cleaner song titles.\n", encoding="utf-8")
         self.assertEqual(check_changelog.check_changelog(self.root), self.notes)
 
-    def test_missing_2_8_9_changelog_fails_even_with_previous_notes(self):
+    def test_missing_changelog_fails_even_with_previous_notes(self):
         (self.folder / "2080800.txt").write_text("Previous release.", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Missing Play Store changelog.*2080900.txt"):
             check_changelog.check_changelog(self.root)

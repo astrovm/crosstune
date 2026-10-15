@@ -313,8 +313,7 @@ class LiveChordSweepTest {
 
     @Test
     fun sweep() {
-        val enabled = System.getenv("LIVE_CHORDS") == "1" || File("/tmp/chord-sweep/enabled").exists()
-        assumeTrue("LIVE_CHORDS=1 (or /tmp/chord-sweep/enabled) turns the sweep on", enabled)
+        assumeTrue("LIVE_CHORDS=1 turns the sweep on", System.getenv("LIVE_CHORDS") == "1")
         // CHORD_SWEEP_SET=ar runs only the Argentine list, into its own report.
         // CHORD_SWEEP_SET=all runs both lists once, into quality.tsv and dumps/ (the reports stay as they are).
         val mode = System.getenv("CHORD_SWEEP_SET").orEmpty()
@@ -323,7 +322,7 @@ class LiveChordSweepTest {
             "ar" -> argentina
             "all" -> songs + argentina
             // CHORD_SWEEP_SET=retry: only the titles listed in /tmp/chord-sweep/retry.txt, one per line.
-            "retry" -> (songs + argentina).filter { it.title in File("/tmp/chord-sweep/retry.txt").readLines() }
+            "retry" -> File("/tmp/chord-sweep/retry.txt").readLines().toSet().let { titles -> (songs + argentina).filter { it.title in titles } }
             else -> songs
         }
         val reportPath = when (mode) {

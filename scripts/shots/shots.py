@@ -68,6 +68,10 @@ def arguments(argv=None):
 
 def publish(lang, theme):
     made = OUT / lang / theme
+    shots = sorted((made / "store").glob("*.png"))
+    # Checked before anything is copied, so a failed run leaves the site and store as they were.
+    if len(shots) != 8:
+        raise RuntimeError(f"Expected 8 {theme} screenshots for {lang}, got {len(shots)}")
     site = ROOT / "docs/img" / lang
     site.mkdir(parents=True, exist_ok=True)
     for name in ("home", "lyrics"):
@@ -77,9 +81,6 @@ def publish(lang, theme):
     locale = LANGS[lang][1]
     store = (ROOT / "fastlane/metadata/android" / locale / "images/phoneScreenshots"
              if theme == "dark" else ROOT / "screenshots/light" / locale)
-    shots = sorted((made / "store").glob("*.png"))
-    if len(shots) != 8:
-        raise RuntimeError(f"Expected 8 {theme} screenshots for {lang}, got {len(shots)}")
     store.mkdir(parents=True, exist_ok=True)
     for shot in shots:
         shutil.copy(shot, store / shot.name)

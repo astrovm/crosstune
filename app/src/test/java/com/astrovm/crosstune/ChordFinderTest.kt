@@ -329,6 +329,28 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun eachSitesWayOfSayingItFoundNothingIsOnlyTakenFromThatSite() {
+        // A bare 500 from Ultimate Guitar, or a 404 from LaCuerda, is a site that wouldn't answer.
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, "", code = 500)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                else -> answer(request, mapOf("https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
+        // Nor is a 404 without Ultimate Guitar's page, as from a proxy in the way.
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, "Not Found", code = 404)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> answer(request, mapOf("https://www.ufret.jp/search.php" to "", "https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(river, english))
+    }
+
+    @Test
     fun ultimateGuitarIsSearchedForByTheTitleAloneWhenItNamesTheArtistOtherwise() {
         val searches = mutableListOf<String?>()
         fake.handler = { request ->
@@ -669,10 +691,14 @@ var NMAX=${files.size - 1};
         // What was kept by a version that kept something else is looked up again.
         val broken = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
         val cache = LookupCache(broken, Dispatchers.Unconfined)
-        val key = "${SongNames.normalize(river.title)}\u0000${SongNames.normalize(river.artist)}"
+        val key = "${ChordFinder.CACHE_VERSION}\u0000${SongNames.normalize(river.title)}\u0000${SongNames.normalize(river.artist)}"
         runBlocking { cache.put(key, "{}") }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
         runBlocking { cache.put(key, """{"site":"NOWHERE","url":"","capo":0,"lines":[]}""") }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
+        // A sheet kept before sheets were read this way, e.g. with its chords still in solfège.
+        val old = """{"site":"LA_CUERDA","url":"https://acordes.lacuerda.net/walkers/river_road.shtml","capo":0,"lines":[["Walking down the river road",[[0,"LAm"]]]]}"""
+        runBlocking { cache.put("${SongNames.normalize(river.title)}\u0000${SongNames.normalize(river.artist)}", old) }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
     }
 

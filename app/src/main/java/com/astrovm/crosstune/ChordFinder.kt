@@ -58,7 +58,7 @@ internal class ChordFinder(
 
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
     suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
-        val key = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
         cache?.get(key)?.let { kept -> fromCache(kept)?.let { return@withContext Chords.Found(it) } }
         // Japanese words are likelier on U-FRET; any song may be on either.
         val sites = if (texts.any(::japanese)) {
@@ -209,7 +209,8 @@ internal class ChordFinder(
             .addQueryParameter("search_type", "title")
             .addQueryParameter("value", key)
             .build()
-        val results = ugStore(fetch(search.toString(), search = true))?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
+        // A search that finds nothing is answered with a 404 and its usual page.
+        val results = ugStore(fetch(search.toString()) { code, body -> code == 404 && ugData.containsMatchIn(body) })?.optJSONObject("data")?.optJSONArray("results") ?: return emptyList()
         return (0 until results.length()).mapNotNull { results.optJSONObject(it) }
             .filter { it.optString("type") == "Chords" && named(it.optString("song_name"), title, byArtist(it.optString("artist_name"), song)) }
             .sortedWith(compareBy({ !SongNames.sameArtist(it.optString("artist_name"), song.artist) }, { -it.optInt("votes") }))
@@ -253,7 +254,8 @@ internal class ChordFinder(
     /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
     private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
         val search = LA_CUERDA_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("exp", key).addQueryParameter("canc", "1").build()
-        val page = fetch(search.toString(), search = true)
+        // A search that finds nothing is answered with a 500 and no page at all.
+        val page = fetch(search.toString()) { code, body -> code == 500 && body.isBlank() }
         // Each song's page, by its row counted from the last.
         val files = laCuerdaFiles.find(page)?.groupValues?.get(1)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
         val last = laCuerdaLast.find(page)?.groupValues?.get(1)?.toInt() ?: return emptyList()
@@ -334,15 +336,13 @@ internal class ChordFinder(
     private fun ugStore(page: String): JSONObject? =
         ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
 
-    private suspend fun fetch(url: String, referer: String? = null, search: Boolean = false): String {
+    /** [found] tells a failed answer that's still the site's own, e.g. a search that found nothing, from a site that wouldn't answer. */
+    private suspend fun fetch(url: String, referer: String? = null, found: (Int, String) -> Boolean = { _, _ -> false }): String {
         // Ultimate Guitar shows its search results only to a computer's browser.
         val request = Request.Builder().url(url).header("User-Agent", BROWSER).apply { referer?.let { header("Referer", it) } }.get().build()
         return client.newCall(request).executeAsync().use { response ->
             val body = response.body.stringAtMost()
-            // A search that finds nothing is answered with a 404 and a page saying so by Ultimate Guitar,
-            // and with a 500 and no page at all by LaCuerda: neither is a site that wouldn't answer.
-            val none = search && (response.code == 404 || (response.code == 500 && body.isBlank()))
-            if (!response.isSuccessful && !none) throw IOException("Chord site returned ${response.code}")
+            if (!response.isSuccessful && !found(response.code, body)) throw IOException("Chord site returned ${response.code}")
             body
         }
     }
@@ -375,6 +375,9 @@ internal class ChordFinder(
     }
 
     internal companion object {
+        /** Raised when sheets are read differently, so ones kept before are looked up again. */
+        const val CACHE_VERSION = 2
+
         /** Per site; looking a song up by its other names takes a few more requests. */
         const val TIMEOUT_MS = 20_000L
 
