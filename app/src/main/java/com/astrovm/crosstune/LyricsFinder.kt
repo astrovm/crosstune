@@ -32,6 +32,23 @@ internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 /** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
 private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
 
+/** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon". */
+private val netEaseClosingCredit = Regex("""^[^:：]{1,40}\s[:：]\s+\S""")
+
+/**
+ * The lines up to the credits NetEase closes some songs with: two in a row, and most of what's left.
+ * A line naming the studios can be among them; a sung "A : B" stays.
+ */
+private fun <T> List<T>.withoutClosingCredits(text: (T) -> String): List<T> {
+    val sung = indices.filter { text(this[it]).isNotBlank() }
+    val credit = { index: Int -> netEaseClosingCredit.containsMatchIn(text(this[index]).trim()) }
+    val start = sung.indices.firstOrNull { from ->
+        val rest = sung.drop(from)
+        rest.take(2).count(credit) == 2 && rest.count(credit) * 2 > rest.size
+    } ?: return this
+    return take(sung[start])
+}
+
 /**
  * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
  * crowdsourced, so what it gives back is checked against the song asked about before it's
@@ -517,19 +534,19 @@ internal class LyricsFinder(
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String): Lyrics.Found? {
-        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines)
     }
 
-    /** NetEase's words, without the credits, such as "作词 : …", it puts first; null for none, or an instrumental. */
+    /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none, or an instrumental. */
     private fun netEaseWords(lrc: String): Lyrics.Found? {
         val stamped = SyncedLyrics.parse(lrc)
-        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }
+        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }
         val lines = SyncedLyrics.withPauses(timed)
         // Words with timings are only those; plain words, only when there are no timings at all.
         val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
-        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.joinToString("\n").trim()
+        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.withoutClosingCredits { it }.joinToString("\n").trim()
         if (words.isEmpty() || words.contains(NETEASE_INSTRUMENTAL)) return null
         return Lyrics.Found(words, lines)
     }
