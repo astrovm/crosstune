@@ -725,13 +725,17 @@ class ListeningTest {
         launch()
         openWordsFromRecent("Demo")
         val song = composeRule.onNodeWithTag(LYRICS_SONG_TAG)
+        // Held still, the song swiped away stays out while it waits for the next one.
+        composeRule.mainClock.autoAdvance = false
         song.performTouchInput { swipeLeft() }
-        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(500)
         assertEquals(listOf(true), phone.skips)
-        // Let go a little way across, it stays.
+        // Swiped a little way meanwhile, it's that little way that counts, not where it was: it stays.
         song.performTouchInput { swipe(center, center + Offset(width * 0.1f, 0f)) }
-        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(500)
         assertEquals(listOf(true), phone.skips)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
         song.performTouchInput { swipeRight() }
         composeRule.waitForIdle()
         assertEquals(listOf(true, false), phone.skips)

@@ -405,10 +405,9 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
     else -> LyricsShown.PLAIN
 }
 
-/** The song the words are of, the way back, and where their timing comes from. */
 /**
- * The song shown, and a way back. Swiped sideways, as in a music app's own player, the app playing it
- * goes on to its next song, or back to the one before, while it can.
+ * The song the words are of, and the way back. Swiped sideways, as in a music app's own player, the
+ * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
 private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: (() -> Unit)? = null) {
@@ -459,13 +458,16 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     // Toward the start of the line, as reading goes, is on to the next song.
                     fun next(offset: Float) = (offset < 0f) != rtl
                     fun can(offset: Float) = if (next(offset)) canNext else canPrevious
+                    // How far this swipe went, from wherever the song was, e.g. still on its way out from the last one.
+                    var dragged = 0f
                     detectHorizontalDragGestures(
+                        onDragStart = { dragged = 0f },
                         onDragEnd = {
-                            val offset = swiped.value
+                            val far = dragged
                             scope.launch {
-                                if (abs(offset) > size.width * SKIP_SWIPE_FRACTION && can(offset)) {
-                                    skip(next(offset))
-                                    swiped.animateTo(sign(offset) * size.width, tween(SKIP_OUT_MS))
+                                if (abs(far) > size.width * SKIP_SWIPE_FRACTION && can(far)) {
+                                    skip(next(far))
+                                    swiped.animateTo(sign(far) * size.width, tween(SKIP_OUT_MS))
                                     // Still this song a while on, e.g. back to its own start, it comes back.
                                     delay(SKIP_WAIT_MS)
                                 }
@@ -476,9 +478,10 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     ) { change, amount ->
                         if (!canNext && !canPrevious) return@detectHorizontalDragGestures
                         change.consume()
+                        dragged += amount
                         // With nowhere to go that way, it gives a little and springs back.
-                        val to = swiped.value + amount
-                        scope.launch { swiped.snapTo(if (can(to)) to else swiped.value + amount / SKIP_RESISTANCE) }
+                        val moved = if (can(dragged)) amount else amount / SKIP_RESISTANCE
+                        scope.launch { swiped.snapTo(swiped.value + moved) }
                     }
                 }
                 .clip(MaterialTheme.shapes.medium)
