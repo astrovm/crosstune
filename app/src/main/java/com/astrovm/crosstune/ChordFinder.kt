@@ -184,7 +184,7 @@ internal class ChordFinder(
 
     /**
      * The first sheet that [fits], of those [sheets] finds for each of [keys] in turn, each read by
-     * [read] at most once. A request that went unanswered still makes it unavailable, unless another
+     * [read] at most once and [MAX_SHEETS] in all. A request that went unanswered still makes it unavailable, unless another
      * found a matching sheet.
      */
     private suspend fun firstSheet(
@@ -202,7 +202,7 @@ internal class ChordFinder(
                 failure = e
                 continue
             }
-            for (url in urls.filterNot { it in tried }.take(MAX_SHEETS)) {
+            for (url in urls.filterNot { it in tried }.take(MAX_SHEETS - tried.size)) {
                 tried += url
                 val sheet = try {
                     read(url)
