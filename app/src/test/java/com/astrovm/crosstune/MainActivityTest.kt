@@ -5490,6 +5490,110 @@ class MainActivityTest {
         assertNull(shell.changed)
     }
 
+    /** Setup done, with Spotify's app still in the way and the links not allowed, as found later. */
+    private fun foundWrongAfterSetup(shell: (playback: FakePlayback, unblock: () -> Unit, allow: () -> Unit) -> FakeShell): FakeShell =
+        oneTapSetup(shell).also { prefs().edit().putBoolean("setup_complete", true).commit() }
+
+    @Test
+    fun afterSetupShizukuFixesWhatsFoundWrongInOneTapToo() {
+        val shell = foundWrongAfterSetup(::doingShell)
+        launch()
+        val user = (android.os.Process.myUid() / 100_000).toString()
+        // The app in the way, from its notice: stopped, and nothing else.
+        assertTextShown(string(R.string.notice_app_still_opens, "Spotify"))
+        click(string(R.string.fix_button))
+        assertEquals(listOf(listOf("pm", "set-app-links-allowed", "--user", user, "--package", MusicService.SPOTIFY.packageName, "false")), shell.ran)
+        assertTextAbsent(string(R.string.notice_app_still_opens, "Spotify"))
+        // The links, from theirs: allowed, with no guide to go through.
+        click(string(R.string.allow_button))
+        assertEquals(
+            listOf(
+                listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
+                listOf("pm", "set-app-links-user-selection", "--user", user, "--package", app.packageName, "true", "all")
+            ),
+            shell.ran.drop(1)
+        )
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        assertTextAbsent(string(R.string.setup_allow_title))
+    }
+
+    @Test
+    fun whatShizukuCantFixAfterSetupOpensTheGuideSayingSo() {
+        val shell = foundWrongAfterSetup { _, _, _ -> FakeShell { false } }
+        launch()
+        click(string(R.string.allow_button))
+        assertEquals(2, shell.ran.size)
+        assertTextShown(string(R.string.setup_allow_title))
+        assertTextShown(string(R.string.setup_one_tap_failed))
+        // Left, its notice is back.
+        click(string(R.string.back_button))
+        assertTextAbsent(string(R.string.setup_allow_title))
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        // The apps can't be stopped either, which their guide says too.
+        click(string(R.string.fix_button))
+        assertTextShown(string(R.string.setup_apps_title))
+        assertTextShown(string(R.string.setup_one_tap_failed))
+        click(string(R.string.back_button))
+
+        // Opened by hand, once Shizuku's stopped, the guide says nothing of it.
+        shell.ready = false
+        shell.changed!!()
+        composeRule.waitForIdle()
+        click(string(R.string.allow_button))
+        assertTextShown(string(R.string.setup_allow_title))
+        assertTextAbsent(string(R.string.setup_one_tap_failed))
+        assertEquals(3, shell.ran.size)
+    }
+
+    @Test
+    fun withoutShizukuWhatsFoundWrongAfterSetupOpensTheGuide() {
+        val shell = foundWrongAfterSetup { _, _, _ -> FakeShell(ready = false) }
+        launch()
+        click(string(R.string.allow_button))
+        assertTrue(shell.ran.isEmpty())
+        assertTextShown(string(R.string.setup_allow_title))
+        assertTextAbsent(string(R.string.setup_one_tap_failed))
+    }
+
+    @Test
+    fun afterSetupShizukuFixesOnceWhileTheUserAnswersIt() {
+        val shell = foundWrongAfterSetup { playback, unblock, allow -> doingShell(playback, unblock, allow).apply { answer = CompletableDeferred() } }
+        val activity = launch()
+        click(string(R.string.allow_button))
+        // Busy, its button waits, and asking again does nothing more.
+        composeRule.onNodeWithText(string(R.string.allow_button)).assertIsNotEnabled()
+        assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].fixInOneTap(OneTapFix.APPS))
+        shell.answer.complete(Unit)
+        composeRule.waitForIdle()
+        assertEquals(2, shell.ran.size)
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
+        assertTextShown(string(R.string.notice_app_still_opens, "Spotify"))
+    }
+
+    @Test
+    fun afterSetupShizukuLetsLyricsFollowMusicAppsInOneTapOrLeavesItToAndroidsPage() {
+        val shell = foundWrongAfterSetup(::doingShell)
+        launch()
+        click(string(R.string.settings_button))
+        val follow = composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo()
+        follow.performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.single().take(3))
+        assertEquals(null, nextStartedActivity())
+        follow.assertIsOn()
+    }
+
+    @Test
+    fun lyricsShizukuCouldntLetFollowAreLeftToAndroidsPage() {
+        val shell = foundWrongAfterSetup { _, _, _ -> FakeShell { false } }
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, shell.ran.size)
+        assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
+    }
+
     @Test
     fun linkOpenedBeforeSetupAsksWhereToGoThenSetupFollows() {
         freshInstall()

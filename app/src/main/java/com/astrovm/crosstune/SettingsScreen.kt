@@ -89,7 +89,7 @@ internal fun SettingsScreen(
     ) { key ->
         val item = sources.firstOrNull { it.key == key }
         if (item != null) {
-            SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, onBack = { onOpenSource(null) })
+            SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(null) })
         } else {
             SettingsList(state, actions, sources, onBack, onOpenSource)
         }
@@ -963,6 +963,7 @@ private fun SourcePage(
     claimingApps: Map<String, Map<LinkApp, Boolean>>,
     onlyMusicVideos: Boolean,
     actions: ScreenActions,
+    fixingLinks: Boolean,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -982,7 +983,7 @@ private fun SourcePage(
                 onCheckedChange = item.onToggle,
                 enabled = !item.locked
             )
-            if (item.notAllowed) NotAllowedRow(actions)
+            if (item.notAllowed) NotAllowedRow(fixingLinks, actions)
             if (item.video) {
                 GroupDivider()
                 // Shared by YouTube, Invidious and Piped.
@@ -1019,7 +1020,7 @@ private fun SourcePage(
 }
 
 @Composable
-private fun NotAllowedRow(actions: ScreenActions) {
+private fun NotAllowedRow(fixing: Boolean, actions: ScreenActions) {
     Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = stringResource(R.string.setup_not_allowed),
@@ -1027,7 +1028,7 @@ private fun NotAllowedRow(actions: ScreenActions) {
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.weight(1f)
         )
-        TextButton(onClick = actions.onShowAllowGuide) { Text(stringResource(R.string.allow_button)) }
+        OneTapButton(stringResource(R.string.allow_button), actions.onShowAllowGuide, fixing = fixing)
     }
 }
 

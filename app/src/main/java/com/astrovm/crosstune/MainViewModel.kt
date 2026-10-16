@@ -191,6 +191,10 @@ internal data class UiState(
     val settingUpInOneTap: Boolean = false,
     /** Set when setup in one tap didn't do it all, left to the user to finish. */
     val oneTapFailed: Boolean = false,
+    /** What's being fixed in one tap after setup, through Shizuku, as during it. */
+    val fixingInOneTap: OneTapFix? = null,
+    /** What one tap couldn't fix after setup, left to the steps by hand, which open once. */
+    val fixByHand: OneTapFix? = null,
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
     /**
@@ -429,6 +433,9 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
+/** What's fixed in one tap after setup, from where it's found wrong: the links, the apps that take them, or following. */
+internal enum class OneTapFix { LINKS, APPS, FOLLOW }
+
 internal sealed interface Effect {
     /**
      * [packageName] is null for custom destinations, which open in whatever app handles the URL.
@@ -575,15 +582,43 @@ internal class MainViewModel(
         val state = uiState
         uiState = uiState.copy(settingUpInOneTap = true, oneTapFailed = false)
         viewModelScope.launch {
-            val follow = !state.canFollowApps
-            val worked = setup.setUp(apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything, follow = follow)
-            // Android lets Crosstune follow music apps a moment after it's told to.
-            var waits = 0
-            while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)
+            val worked = inOneTap(setup, apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything, follow = !state.canFollowApps)
             uiState = uiState.copy(settingUpInOneTap = false, oneTapFailed = !worked)
             refreshSystemState()
             refreshFollowing()
         }
+    }
+
+    /**
+     * Fixes [fix] in one tap, through Shizuku, after setup as during it, rather than by hand; what it
+     * couldn't is left to the steps, in [UiState.fixByHand]. Whether Shizuku is there to try.
+     */
+    fun fixInOneTap(fix: OneTapFix): Boolean {
+        val setup = oneTap ?: return false
+        if (!uiState.canSetUpInOneTap) return false
+        if (uiState.fixingInOneTap != null) return true
+        val apps = if (fix == OneTapFix.APPS) uiState.blockingApps.orEmpty().map { it.packageName } else emptyList()
+        uiState = uiState.copy(fixingInOneTap = fix, fixByHand = null)
+        viewModelScope.launch {
+            val worked = inOneTap(setup, apps = apps, links = fix == OneTapFix.LINKS, follow = fix == OneTapFix.FOLLOW)
+            uiState = uiState.copy(fixingInOneTap = null, fixByHand = fix.takeUnless { worked })
+            refreshSystemState()
+            refreshFollowing()
+        }
+        return true
+    }
+
+    /** The steps for what one tap couldn't fix are open. */
+    fun fixByHandShown() {
+        uiState = uiState.copy(fixByHand = null)
+    }
+
+    private suspend fun inOneTap(setup: OneTapSetup, apps: List<String>, links: Boolean, follow: Boolean): Boolean {
+        val worked = setup.setUp(apps = apps, links = links, follow = follow)
+        // Android lets Crosstune follow music apps a moment after it's told to.
+        var waits = 0
+        while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)
+        return worked
     }
 
     /**

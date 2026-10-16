@@ -1,9 +1,9 @@
-Playing now finds more music videos and songs without album tags.
-Cleaner video titles and better chord matching for Chinese songs.
-Playing now hides while you type a new link.
-Playing now updates as music plays, pauses or changes.
+Playing now finds more videos and untagged songs.
+Playing now hides while you type and updates as music changes.
+Cleaner video titles, better Chinese chord matching.
 Chords like LAm7b5 show in letters too.
 Lyrics no longer end with a list of who played what.
 Swipe the song atop Lyrics to skip it or go back.
 Lyrics of a song playing move on to the next one.
 Simpler floating lyrics: tap for buttons, drag to ✕ to close.
+With Shizuku, Fix and Allow fix links and lyrics in one tap.

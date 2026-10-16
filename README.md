@@ -35,6 +35,7 @@ The app walks you through it:
    - **Allow links in Crosstune**: tap **Add link**, tick all the links, tap **Add**.
    - **Let lyrics follow your music**: turn on Crosstune's access.
 3. Using [Shizuku](https://shizuku.rikka.app) on Android 12 or newer? Tap **Set everything up** instead, and it's done in one tap.
+4. Something breaks later, like an app taking the links back? With Shizuku, its **Fix** or **Allow** button on the main screen fixes it in one tap too.
 
 Crosstune opens links from every service it reads. Turn any off in **Settings**.
 
@@ -102,7 +103,7 @@ Check that **Open the exact match** is on. If it is, Crosstune found no confiden
 - Signed in with ChatGPT, the AI features send OpenAI the song's title, artist and lyrics, and what you ask or type. Your sign-in stays on your phone and only goes to OpenAI.
 - Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
 - MilkDrop visuals read what your phone plays through Android, which asks for the microphone permission for it. Nothing is recorded or sent anywhere.
-- **Set everything up** uses Shizuku only to change Android's link and lyrics settings for Crosstune.
+- **Set everything up**, and the one-tap **Fix** and **Allow** buttons after it, use Shizuku only to change Android's link and lyrics settings for Crosstune.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

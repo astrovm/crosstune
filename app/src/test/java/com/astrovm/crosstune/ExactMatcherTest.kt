@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
 
 /** Runs under Robolectric for the real org.json implementation. */
@@ -983,30 +984,31 @@ class ExactMatcherTest {
 
     @Test
     fun aQueueAsksAgainOnceWhenASongsSearchFailsButNotWhenItFindsNothing() {
-        var asked = 0
+        // Searches go out at once, on OkHttp's threads, so they're counted atomically.
+        val asked = AtomicInteger()
         fake.handler = { request ->
             if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
-            else if (++asked == 1) throw IOException("slow moment")
+            else if (asked.incrementAndGet() == 1) throw IOException("slow moment")
             else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("Song", "Band • Album • 3:00", videoId = "video000000")))
         }
         assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} })
-        assertEquals(2, asked)
+        assertEquals(2, asked.get())
 
         // Nothing found is an answer, so it is not asked twice: once among the songs, once among the
         // videos, and Apple, in two stores, and Deezer for its other names. Failing twice gives up.
-        asked = 0
-        fake.handler = { request -> asked++; FakeSpotify.html(request, """{"contents":{}}""") }
+        asked.set(0)
+        fake.handler = { request -> asked.incrementAndGet(); FakeSpotify.html(request, """{"contents":{}}""") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
-        assertEquals(5, asked)
-        asked = 0
-        fake.handler = { asked++; throw IOException("offline") }
+        assertEquals(5, asked.get())
+        asked.set(0)
+        fake.handler = { asked.incrementAndGet(); throw IOException("offline") }
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
-        assertEquals(2, asked)
+        assertEquals(2, asked.get())
 
         // A single song is asked once, so opening it doesn't wait longer on a slow network.
-        asked = 0
+        asked.set(0)
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Missing", "Nobody")) })
-        assertEquals(1, asked)
+        assertEquals(1, asked.get())
     }
 
     @Test
