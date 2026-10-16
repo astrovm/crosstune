@@ -38,6 +38,7 @@ import org.robolectric.android.controller.ServiceController
 import android.view.WindowManager
 import android.view.View
 import android.widget.ImageView
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.app.NotificationManager
 import android.app.Application
@@ -1643,15 +1644,17 @@ class ListeningTest {
         assertEquals((app.resources.displayMetrics.widthPixels - spot.width) / 2, spot.x)
         assertTrue(spot.y > app.resources.displayMetrics.heightPixels / 2)
         assertTrue(spot.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
-        assertEquals(1f, target.scaleX)
-        // Over it, it grows; off it again, it's back as it was.
+        fun fill() = (target.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor
+        val idle = fill()
+        // Over it, it turns red, with a tick felt once; off it again, it's back as it was.
         val (centerX, centerY) = spot.x + spot.width / 2f to spot.y + spot.height / 2f
         touch(MotionEvent.ACTION_MOVE, centerX, centerY)
-        assertEquals(1.3f, target.scaleX)
+        assertEquals(0xFFD32F2F.toInt(), fill())
+        assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, shadowOf(target).lastHapticFeedbackPerformed())
         touch(MotionEvent.ACTION_MOVE, centerX, centerY + 1f)
-        assertEquals(1.3f, target.scaleY)
+        assertEquals(0xFFD32F2F.toInt(), fill())
         touch(MotionEvent.ACTION_MOVE, centerX + spot.width * 1.5f, centerY)
-        assertEquals(1f, target.scaleX)
+        assertEquals(idle, fill())
         // Let go elsewhere, it goes, and they stay floating.
         touch(MotionEvent.ACTION_UP, centerX + spot.width * 1.5f, centerY)
         assertEquals(null, closeTarget(service))

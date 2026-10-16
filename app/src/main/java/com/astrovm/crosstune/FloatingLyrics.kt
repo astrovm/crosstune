@@ -206,7 +206,7 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls
             when (panel) {
                 FloatingPanel.NONE -> Box(Modifier.fillMaxWidth())
                 FloatingPanel.BUTTONS -> FloatingButtons(state, actions, onSettings = { settings = true })
-                FloatingPanel.SETTINGS -> FloatingSettings(
+                else -> FloatingSettings(
                     state.floating, actions,
                     onLock = {
                         onControls(false)

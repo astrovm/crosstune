@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
@@ -415,16 +416,18 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         windows.addView(target, closeParams)
     }
 
-    /** A finger at [x], [y] on screen is over the close target when it's near it, which grows to say so. */
+    /**
+     * A finger at [x], [y] on screen is over the close target when it's near it, which turns red, with
+     * a tick felt, to say so.
+     */
     private fun hover(x: Float, y: Float) {
         val target = closeTarget ?: return
         val reach = closeParams.width.toFloat()
         val over = hypot(x - (closeParams.x + closeParams.width / 2f), y - (closeParams.y + closeParams.height / 2f)) <= reach
         if (over == overClose) return
         overClose = over
-        val grown = if (over) CLOSE_TARGET_GROWN else 1f
-        target.scaleX = grown
-        target.scaleY = grown
+        (target.background as GradientDrawable).setColor(if (over) CLOSE_TARGET_OVER else UNLOCK_BACKGROUND)
+        if (over) target.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
     private fun hideCloseTarget() {
@@ -459,8 +462,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         private const val CLOSE_TARGET_DP = 56
         /** How far up from the screen's bottom the close target is, clear of the gesture bar. */
         private const val CLOSE_TARGET_BOTTOM_DP = 72
-        /** How much bigger the close target grows with words over it. */
-        private const val CLOSE_TARGET_GROWN = 1.3f
+        /** The close target with words over it: red, as letting go there closes them. */
+        private const val CLOSE_TARGET_OVER = 0xFFD32F2F.toInt()
         /** Room either side of the words, clear of the edges, where a swipe is Android's back gesture. */
         private const val MARGIN_DP = 32
 
