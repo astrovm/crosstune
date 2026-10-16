@@ -1,19 +1,27 @@
 package com.astrovm.crosstune
 
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.FlowRow
-import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -37,11 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -49,10 +54,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 
 internal const val FLOATING_LYRICS_TAG = "floating-lyrics"
 internal const val FLOATING_CUSTOMIZE_TAG = "floating-customize"
@@ -60,7 +63,7 @@ internal const val FLOATING_CUSTOMIZE_TAG = "floating-customize"
 /**
  * How the words floating over other apps look, as set on them: how much of a dark band they sit on,
  * from none, only the words, outlined, to almost solid; how big; which lines show around the one
- * sung; and where they are, how wide and how tall at least, in pixels, unset until first moved or resized.
+ * sung; and where they are, in pixels, unset until first moved.
  */
 internal data class FloatingOptions(
     val background: Float = 0f,
@@ -70,8 +73,6 @@ internal data class FloatingOptions(
     val locked: Boolean = false,
     val left: Int = -1,
     val top: Int = -1,
-    val width: Int = -1,
-    val height: Int = -1,
     /** MilkDrop visuals behind the words, with [background] as how dark they're shaded. */
     val visuals: Boolean = false
 ) {
@@ -97,13 +98,15 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val outline = if (options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
     val lines = state.lyricLines
     val sung = rememberSungLine(lines, state.following)
-    // Made taller, the words stay in the middle; never shorter than they need.
-    val tallest = with(LocalDensity.current) { options.height.takeIf { it > 0 }?.toDp() } ?: 0.dp
+    // As tall as the tallest lines so far, so a shorter line doesn't pull up what's under them; until
+    // the song, the size or which lines show changes.
+    var tallest by remember(song, options.scale, options.previousLine, options.nextLine) { mutableIntStateOf(0) }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .testTag(FLOATING_LYRICS_TAG)
-            .heightIn(min = tallest)
+            .heightIn(min = with(LocalDensity.current) { tallest.toDp() })
+            .onSizeChanged { if (it.height > tallest) tallest = it.height }
             .clip(MaterialTheme.shapes.large)
             .then(if (options.visuals) Modifier else Modifier.background(shade))
     ) {
@@ -166,6 +169,7 @@ private fun Line(text: String, lit: Boolean, scale: Float, ink: Color, outline: 
 internal class FloatingActions(
     val onOpen: () -> Unit,
     val onToggleListening: () -> Unit,
+    val onPlayPause: () -> Unit,
     val onLock: () -> Unit,
     val onClose: () -> Unit,
     /** Changed on them; kept when [save]d. */
@@ -173,115 +177,123 @@ internal class FloatingActions(
     /** A slider let go: keeps how they are now. */
     val onSave: () -> Unit,
     /** Where, in the window, a drag is a slider's own rather than one moving the words; null when nowhere. */
-    val onSlidersAt: (android.graphics.Rect?) -> Unit = {},
-    /** Where, in the window, the words are while their sides show to be dragged; null while they don't. */
-    val onWordsAt: (android.graphics.Rect?) -> Unit = {}
+    val onSlidersAt: (android.graphics.Rect?) -> Unit = {}
 )
 
 /**
- * The words over other apps, tapped for what they can do, which hides again after a moment unless
- * they're being changed. Moving, resizing and pinching them are up to their window, which shows the
- * sides and bottom to drag while the buttons are out. Locked, touches go through to the app below, so none reach here.
+ * The words over other apps. Tapped, they're outlined, with a few buttons under them, until they're
+ * tapped again, or somewhere else is; the settings take the buttons' place, until Done. Moving and
+ * pinching them are up to their window. Locked, touches go through to the app below, so none reach here.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FloatingOverApps(state: UiState, actions: FloatingActions) {
-    var controls by remember { mutableStateOf(false) }
-    var customizing by remember { mutableStateOf(false) }
-    LaunchedEffect(controls, customizing) {
-        if (controls && !customizing) {
-            delay(CONTROLS_SHOWN_MS)
-            controls = false
-        }
-    }
-    LaunchedEffect(customizing) { if (!customizing) actions.onSlidersAt(null) }
-    LaunchedEffect(controls) { if (!controls) actions.onWordsAt(null) }
+internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls: Boolean, onControls: (Boolean) -> Unit) {
+    var settings by remember { mutableStateOf(false) }
+    LaunchedEffect(controls) { if (!controls) settings = false }
+    LaunchedEffect(settings) { if (!settings) actions.onSlidersAt(null) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = if (controls) {
-                Modifier.onGloballyPositioned { area ->
-                    val bounds = area.boundsInWindow()
-                    actions.onWordsAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
-                }
-            } else {
-                Modifier
-            }
-        ) {
-            FloatingLyrics(
-                state,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures {
-                            controls = !controls
-                            if (!controls) customizing = false
-                        }
-                    }
-            )
-            // The sides to drag to make them wider or narrower, and the bottom, taller or shorter.
-            if (controls) {
-                Handle(Modifier.align(Alignment.CenterStart))
-                Handle(Modifier.align(Alignment.CenterEnd))
-                Handle(Modifier.align(Alignment.BottomCenter), across = true)
-            }
+        FloatingLyrics(
+            state,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (controls) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large) else Modifier)
+                // A click, not just a tap, so TalkBack can bring the buttons out too; without the ripple,
+                // since the outline says it.
+                .clickable(interactionSource = null, indication = null) { onControls(!controls) }
+        )
+        val shown = when {
+            !controls -> FloatingPanel.NONE
+            settings -> FloatingPanel.SETTINGS
+            else -> FloatingPanel.BUTTONS
         }
-        AnimatedVisibility(controls) {
-            Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.padding(top = 6.dp)) {
-                // Narrowed, the buttons go on two rows rather than squeezing each other.
-                FlowRow(horizontalArrangement = Arrangement.Center, modifier = Modifier.padding(horizontal = 4.dp)) {
-                    Control(R.drawable.ic_open_in_new, stringResource(R.string.floating_open), actions.onOpen)
-                    Control(
-                        R.drawable.ic_recognize,
-                        stringResource(if (state.listeningAlong) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
-                        actions.onToggleListening
-                    )
-                    Control(R.drawable.ic_tune, stringResource(R.string.floating_customize)) { customizing = !customizing }
-                    // Locked, they couldn't be tapped anyway.
-                    Control(R.drawable.ic_lock, stringResource(R.string.floating_lock)) {
-                        controls = false
-                        customizing = false
+        AnimatedContent(targetState = shown, transitionSpec = { fade() }, label = "floating panel") { panel ->
+            when (panel) {
+                FloatingPanel.NONE -> Box(Modifier.fillMaxWidth())
+                FloatingPanel.BUTTONS -> FloatingButtons(state, actions, onSettings = { settings = true })
+                else -> FloatingSettings(
+                    state.floating, actions,
+                    onLock = {
+                        onControls(false)
                         actions.onLock()
-                    }
-                    Control(R.drawable.ic_close, stringResource(R.string.floating_close), actions.onClose)
-                }
+                    },
+                    onDone = { onControls(false) }
+                )
             }
-        }
-        AnimatedVisibility(controls && customizing) {
-            Customize(state.floating, actions)
         }
     }
 }
 
-/** How they look, changed on them: the band behind, the size, and the lines either side. */
+private enum class FloatingPanel { NONE, BUTTONS, SETTINGS }
+
+/**
+ * The few things done most: play or pause the song in the app it follows, or, with no app, listen
+ * along with the microphone; the settings; and close.
+ */
+@Composable
+private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings: () -> Unit) {
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 6.dp, modifier = Modifier.padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+            val app = state.following?.takeIf { it.app != null }
+            if (app != null) {
+                val playing = app.clock.playing
+                FilledIconButton(onClick = actions.onPlayPause) {
+                    AppIcon(
+                        if (playing) R.drawable.ic_pause else R.drawable.ic_play,
+                        contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
+                    )
+                }
+            } else {
+                val listening = state.listeningAlong
+                IconToggleButton(checked = listening, onCheckedChange = { actions.onToggleListening() }) {
+                    AppIcon(
+                        R.drawable.ic_recognize,
+                        contentDescription = stringResource(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
+                        tint = if (listening) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    )
+                }
+            }
+            IconButton(onClick = onSettings) { AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.floating_customize)) }
+            IconButton(onClick = actions.onClose) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.floating_close)) }
+        }
+    }
+}
+
+/**
+ * How they look, changed on them: the size, the band behind, the lines either side and the visuals;
+ * letting touches through to the app below; and Crosstune itself, a tap away. Done puts it all away.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Customize(options: FloatingOptions, actions: FloatingActions) {
+private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.padding(top = 6.dp).fillMaxWidth().testTag(FLOATING_CUSTOMIZE_TAG)
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(top = 8.dp).fillMaxWidth().testTag(FLOATING_CUSTOMIZE_TAG)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
             Column(
                 modifier = Modifier.onGloballyPositioned { area ->
                     val bounds = area.boundsInWindow()
                     actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
                 }
             ) {
-                Text(stringResource(R.string.floating_background), style = MaterialTheme.typography.labelLarge)
+                val textSize = stringResource(R.string.floating_text_size)
+                Text(textSize, style = MaterialTheme.typography.labelLarge)
                 Slider(
-                    value = options.background,
-                    onValueChange = { actions.onChange(options.copy(background = it), false) },
-                    onValueChangeFinished = actions.onSave,
-                    valueRange = 0f..FloatingOptions.MAX_BACKGROUND
-                )
-                Text(stringResource(R.string.floating_text_size), style = MaterialTheme.typography.labelLarge)
-                Slider(
+                    modifier = Modifier.semantics { contentDescription = textSize },
                     value = options.scale,
                     onValueChange = { actions.onChange(options.copy(scale = it), false) },
                     onValueChangeFinished = actions.onSave,
                     valueRange = FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE
+                )
+                val background = stringResource(R.string.floating_background)
+                Text(background, style = MaterialTheme.typography.labelLarge)
+                Slider(
+                    modifier = Modifier.semantics { contentDescription = background },
+                    value = options.background,
+                    onValueChange = { actions.onChange(options.copy(background = it), false) },
+                    onValueChangeFinished = actions.onSave,
+                    valueRange = 0f..FloatingOptions.MAX_BACKGROUND
                 )
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -301,19 +313,26 @@ private fun Customize(options: FloatingOptions, actions: FloatingActions) {
                     label = { Text(stringResource(R.string.floating_visuals)) }
                 )
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = false, role = Role.Switch, onValueChange = { onLock() })
+                    .padding(vertical = 8.dp)
+            ) {
+                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Switch(checked = false, onCheckedChange = null)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = actions.onOpen) {
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.floating_open), modifier = Modifier.padding(start = 8.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = onDone) { Text(stringResource(R.string.floating_done)) }
+            }
         }
     }
-}
-
-@Composable
-private fun Handle(modifier: Modifier, across: Boolean = false) {
-    val size = if (across) Modifier.padding(vertical = 3.dp).size(width = 32.dp, height = 5.dp) else Modifier.padding(horizontal = 3.dp).size(width = 5.dp, height = 32.dp)
-    Box(modifier.then(size).clip(CircleShape).background(Color.White.copy(alpha = 0.7f)))
-}
-
-@Composable
-private fun Control(@DrawableRes icon: Int, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick) { AppIcon(icon, contentDescription = label) }
 }
 
 /**
@@ -331,9 +350,6 @@ internal fun FloatPermissionDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } }
     )
 }
-
-/** How long the floating words' buttons stay after a tap. */
-private const val CONTROLS_SHOWN_MS = 6_000L
 
 /** Below this much band, the words are outlined to read on whatever's under them. */
 private const val OUTLINED_BELOW = 0.4f

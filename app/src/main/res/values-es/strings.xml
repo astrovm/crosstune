@@ -261,6 +261,7 @@
     <string name="floating_lock">Dejar pasar los toques</string>
     <string name="floating_unlock">Desbloquear</string>
     <string name="floating_close">Cerrar</string>
+    <string name="floating_done">Listo</string>
     <string name="floating_channel">Letra flotante</string>
     <string name="floating_notification">Letra flotando sobre tus apps</string>
     <string name="lyrics_learn">Lecturas y traducción</string>

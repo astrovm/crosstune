@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
@@ -24,6 +25,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
@@ -47,6 +49,8 @@ internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
     fun toggleListening()
+    /** Plays or pauses the song in the music app the words follow. */
+    fun playPause()
     /** How the words look and where they are, kept when [save]d, e.g. once a drag is done. */
     fun update(options: FloatingOptions, save: Boolean = true)
     /** The words were closed, with Crosstune still out of sight, so nothing listens along any more. */
@@ -73,6 +77,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            // Told of a touch anywhere else, which puts the buttons away.
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
             // Hardware drawn, which the visuals behind the words need.
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
         PixelFormat.TRANSLUCENT
@@ -91,10 +97,27 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START }
 
+    /**
+     * Shown while the words are dragged, near the bottom: dropped on it, they close. It only marks the
+     * spot; touches go through it.
+     */
+    private var closeTarget: ImageView? = null
+    private val closeParams = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.TOP or Gravity.START }
+
     /** Where in the window the sliders are, whose drags are theirs, not the window's. */
     private var sliders: Rect? = null
-    /** Where in the window the words are while their sides show, whose bottom is dragged to make them taller. */
-    private var words: Rect? = null
+
+    /** Whether the finger dragging the words is over [closeTarget]. */
+    private var overClose = false
+
+    /** Whether the words' buttons are out, from a tap on them, until another, or one anywhere else. */
+    private val controls = mutableStateOf(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -156,11 +179,14 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     private fun openIntent() = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
 
-    /** Where the words go, as [options] keep them, on the screen as it is now, whichever way it's turned. */
+    /**
+     * Where the words go, as [options] keep them, on the screen as it is now, whichever way it's turned:
+     * across it, short of its sides, up to a width that still reads at a glance on a big screen.
+     */
     private fun place(options: FloatingOptions) {
         val screen = resources.displayMetrics
         val margin = (MARGIN_DP * screen.density).toInt()
-        params.width = options.width.takeIf { it > 0 }?.coerceAtMost(screen.widthPixels) ?: (screen.widthPixels - 2 * margin)
+        params.width = minOf(screen.widthPixels - 2 * margin, (WIDEST_DP * screen.density).toInt())
         params.x = options.left.takeIf { it >= 0 }?.coerceAtMost(screen.widthPixels - params.width) ?: ((screen.widthPixels - params.width) / 2)
         params.y = options.top.takeIf { it >= 0 } ?: (screen.heightPixels / 4)
     }
@@ -186,13 +212,15 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                         FloatingActions(
                             onOpen = { startActivity(openIntent()) },
                             onToggleListening = host::toggleListening,
+                            onPlayPause = host::playPause,
                             onLock = { host.update(host.state.floating.copy(locked = true)) },
                             onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
-                            onSlidersAt = { sliders = it },
-                            onWordsAt = { words = it }
-                        )
+                            onSlidersAt = { sliders = it }
+                        ),
+                        controls = controls.value,
+                        onControls = { controls.value = it }
                     )
                 }
             }
@@ -248,26 +276,25 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     }
 
     /**
-     * Holds the words and moves their window with them: a finger dragged moves it, one dragged from
-     * either side makes it wider or narrower, one dragged from their bottom, while it shows, taller or
-     * shorter, and two pinched make the words bigger or smaller. It
-     * goes by where fingers are on screen, since the window, and everything in it, moves under them.
-     * Taps, and drags on the sliders, are left to the words.
+     * Holds the words and moves their window with them: a finger dragged moves it, onto the close
+     * target to close them, and two pinched make the words bigger or smaller. It goes by where fingers
+     * are on screen, since the window, and everything in it, moves under them. Taps, and drags on the
+     * sliders, are left to the words; a touch anywhere else puts their buttons away.
      */
     private inner class GestureFrame(context: Context, private val host: FloatingHost) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
-        private val edge = EDGE_DP * resources.displayMetrics.density
-        private val narrowest = (NARROWEST_DP * resources.displayMetrics.density).toInt()
-        private val shortest = (SHORTEST_DP * resources.displayMetrics.density).toInt()
-        /** How far under the words their bottom can still be caught, before the buttons there. */
-        private val below = BELOW_DP * resources.displayMetrics.density
         private var gesture = Gesture.NONE
         private var downX = 0f
         private var downY = 0f
         private var from = Rect()
-        private var tallFrom = 0
         private var pinchFrom = 0f
         private var scaleFrom = 1f
+
+        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked != MotionEvent.ACTION_OUTSIDE) return super.dispatchTouchEvent(event)
+            controls.value = false
+            return true
+        }
 
         override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
@@ -275,15 +302,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     downX = event.rawX
                     downY = event.rawY
                     from = Rect(params.x, params.y, params.x + params.width, params.y)
-                    val words = words
-                    tallFrom = words?.height() ?: 0
-                    gesture = when {
-                        sliders?.contains(event.x.toInt(), event.y.toInt()) == true -> Gesture.SLIDER
-                        event.x < edge -> Gesture.LEFT
-                        event.x > width - edge -> Gesture.RIGHT
-                        words != null && event.y in words.bottom - edge..words.bottom + below -> Gesture.BOTTOM
-                        else -> Gesture.NONE
-                    }
+                    gesture = if (sliders?.contains(event.x.toInt(), event.y.toInt()) == true) Gesture.SLIDER else Gesture.NONE
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> if (gesture != Gesture.SLIDER) {
                     pinchFrom = spread(event)
@@ -311,8 +330,14 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 }
                 MotionEvent.ACTION_MOVE -> drag(event)
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    host.update(host.state.floating.copy(left = params.x, top = params.y, width = params.width))
+                    val dropped = gesture == Gesture.MOVE && overClose && event.actionMasked == MotionEvent.ACTION_UP
+                    hideCloseTarget()
                     gesture = Gesture.NONE
+                    if (dropped) {
+                        close()
+                    } else {
+                        host.update(host.state.floating.copy(left = params.x, top = params.y))
+                    }
                 }
             }
             return true
@@ -354,30 +379,66 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     host.update(host.state.floating.copy(scale = scale), save = false)
                     return
                 }
-                Gesture.LEFT -> {
-                    params.x = (from.left + dx).coerceIn(0, from.right - narrowest)
-                    params.width = from.right - params.x
-                }
-                Gesture.RIGHT -> params.width = (from.width() + dx).coerceIn(narrowest, screen.widthPixels - from.left)
-                // The window fits what's in it, so it's the words that are made taller, and it follows.
-                Gesture.BOTTOM -> {
-                    val tall = (tallFrom + dy).coerceIn(shortest, maxOf(shortest, screen.heightPixels - params.y))
-                    host.update(host.state.floating.copy(height = tall), save = false)
-                    return
-                }
                 else -> {
                     params.x = (from.left + dx).coerceIn(0, maxOf(0, screen.widthPixels - params.width))
                     params.y = (from.top + dy).coerceIn(0, maxOf(0, screen.heightPixels - height))
+                    showCloseTarget()
+                    hover(event.rawX, event.rawY)
                 }
             }
             windows.updateViewLayout(this, params)
         }
     }
 
-    private enum class Gesture { NONE, MOVE, LEFT, RIGHT, BOTTOM, PINCH, SLIDER }
+    private enum class Gesture { NONE, MOVE, PINCH, SLIDER }
+
+    private fun showCloseTarget() {
+        if (closeTarget != null) return
+        val screen = resources.displayMetrics
+        val size = (CLOSE_TARGET_DP * screen.density).toInt()
+        val target = ImageView(this).apply {
+            setImageResource(R.drawable.ic_close)
+            setColorFilter(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(UNLOCK_BACKGROUND)
+                setStroke((2 * screen.density).toInt(), Color.WHITE)
+            }
+            val inset = size / 4
+            setPadding(inset, inset, inset, inset)
+            contentDescription = getString(R.string.floating_close)
+        }
+        closeParams.width = size
+        closeParams.height = size
+        closeParams.x = (screen.widthPixels - size) / 2
+        closeParams.y = screen.heightPixels - size - (CLOSE_TARGET_BOTTOM_DP * screen.density).toInt()
+        closeTarget = target
+        windows.addView(target, closeParams)
+    }
+
+    /**
+     * A finger at [x], [y] on screen is over the close target when it's near it, which turns red, with
+     * a tick felt, to say so.
+     */
+    private fun hover(x: Float, y: Float) {
+        val target = closeTarget ?: return
+        val reach = closeParams.width.toFloat()
+        val over = hypot(x - (closeParams.x + closeParams.width / 2f), y - (closeParams.y + closeParams.height / 2f)) <= reach
+        if (over == overClose) return
+        overClose = over
+        (target.background as GradientDrawable).setColor(if (over) CLOSE_TARGET_OVER else UNLOCK_BACKGROUND)
+        if (over) target.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    private fun hideCloseTarget() {
+        closeTarget?.let(windows::removeView)
+        closeTarget = null
+        overClose = false
+    }
 
     override fun onDestroy() {
         hideUnlock()
+        hideCloseTarget()
         view?.let(windows::removeView)
         view = null
         registry.currentState = Lifecycle.State.DESTROYED
@@ -396,15 +457,14 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         private const val UNLOCK_DP = 40
         private const val UNLOCK_BACKGROUND = 0xCC000000.toInt()
 
-        /** How far in from either side a drag makes the words wider or narrower rather than moving them. */
-        private const val EDGE_DP = 24
-        private const val NARROWEST_DP = 160
-        private const val SHORTEST_DP = 48
-        private const val BELOW_DP = 6
-        /**
-         * Room either side of the words, until they're first resized: enough to keep their sides,
-         * dragged to resize, clear of the edges, where a swipe is Android's back gesture.
-         */
+        /** The widest the words get, on a big screen, so a line still reads at a glance. */
+        private const val WIDEST_DP = 560
+        private const val CLOSE_TARGET_DP = 56
+        /** How far up from the screen's bottom the close target is, clear of the gesture bar. */
+        private const val CLOSE_TARGET_BOTTOM_DP = 72
+        /** The close target with words over it: red, as letting go there closes them. */
+        private const val CLOSE_TARGET_OVER = 0xFFD32F2F.toInt()
+        /** Room either side of the words, clear of the edges, where a swipe is Android's back gesture. */
         private const val MARGIN_DP = 32
 
         /** The most Android lets a window be seen while touches pass through it to another app's. */

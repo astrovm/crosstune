@@ -261,6 +261,7 @@
     <string name="floating_lock">Berührungen durchlassen</string>
     <string name="floating_unlock">Entsperren</string>
     <string name="floating_close">Schließen</string>
+    <string name="floating_done">Fertig</string>
     <string name="floating_channel">Schwebender Songtext</string>
     <string name="floating_notification">Songtext schwebt über deinen Apps</string>
     <string name="lyrics_learn">Lesungen und Übersetzung</string>

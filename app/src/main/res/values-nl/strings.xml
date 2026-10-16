@@ -261,6 +261,7 @@
     <string name="floating_lock">Aanrakingen doorlaten</string>
     <string name="floating_unlock">Ontgrendelen</string>
     <string name="floating_close">Sluiten</string>
+    <string name="floating_done">Klaar</string>
     <string name="floating_channel">Zwevende tekst</string>
     <string name="floating_notification">Tekst zweeft over je apps</string>
     <string name="lyrics_learn">Uitspraak en vertaling</string>

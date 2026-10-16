@@ -262,6 +262,7 @@
     <string name="floating_lock">タッチを通す</string>
     <string name="floating_unlock">ロック解除</string>
     <string name="floating_close">閉じる</string>
+    <string name="floating_done">完了</string>
     <string name="floating_channel">フローティング歌詞</string>
     <string name="floating_notification">歌詞をアプリの上に表示中</string>
     <string name="lyrics_learn">読みと翻訳</string>

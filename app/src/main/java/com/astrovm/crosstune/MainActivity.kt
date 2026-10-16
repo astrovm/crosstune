@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }
         }
+        override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {
             floatingOverApps = false

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -38,6 +39,7 @@ import org.robolectric.android.controller.ServiceController
 import android.view.WindowManager
 import android.view.View
 import android.widget.ImageView
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.app.NotificationManager
 import android.app.Application
@@ -1363,8 +1365,6 @@ class ListeningTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun floatingOnToASongWithoutTimedWordsShowsTheSongWhole() {
         val title = "A Song With A Name Long Enough To Need Several Lines Of The Floating Window To Be Read Whole"
-        // Made narrow, as far as it goes.
-        prefs().edit().putInt("floating_width", 420).commit()
         val hearing = FakeHearing()
         demoWords(hearing)
         floatNow()
@@ -1372,11 +1372,11 @@ class ListeningTest {
         fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
         hearing.song(title, 2.0)
         val floating = hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG))
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(shown("Band"))
         // Never cut short: every line it takes is shown.
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        composeRule.onNode(floating).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        composeRule.onNode(floating, useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.single().lineCount > 2)
         assertFalse(layouts.single().hasVisualOverflow)
     }
@@ -1411,7 +1411,25 @@ class ListeningTest {
     private fun overlay(service: FloatingLyricsService): View = overlays(service).single { it !is ImageView }
 
     /** The button beside locked words, which still takes a touch. */
-    private fun unlockButton(service: FloatingLyricsService): ImageView? = overlays(service).filterIsInstance<ImageView>().singleOrNull()
+    private fun unlockButton(service: FloatingLyricsService): ImageView? =
+        overlays(service).filterIsInstance<ImageView>().singleOrNull { it.contentDescription == string(R.string.floating_unlock) }
+
+    /** Where the words are dropped to close them, shown while they're dragged. */
+    private fun closeTarget(service: FloatingLyricsService): ImageView? =
+        overlays(service).filterIsInstance<ImageView>().singleOrNull { it.contentDescription == string(R.string.floating_close) }
+
+    /** Taps the floating words, which puts their buttons out, or away. */
+    private fun tapWords() {
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        composeRule.waitForIdle()
+    }
+
+    /** Opens the floating words' settings, from their buttons. */
+    private fun floatingSettings() {
+        tapWords()
+        click(string(R.string.floating_customize))
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertExists()
+    }
 
     @Test
     fun wordsLeftAtTheBottomMoveUpToFitAndBackWithoutForgettingWhereTheyWere() {
@@ -1426,17 +1444,24 @@ class ListeningTest {
     }
 
     @Test
-    fun turnedTheFloatingWordsFitTheScreensNewWidth() {
+    fun floatingWordsGoAcrossTheScreenShortOfItsSidesAsItTurns() {
+        // Left at the far right of a wider screen.
+        prefs().edit().putInt("floating_left", 100_000).commit()
         val floating = floatOverApps(FakeHearing())
         val view = overlay(floating.get())
-        val wide = (view.layoutParams as WindowManager.LayoutParams).width
-        // Made as wide as they go, then the screen narrows, as turning it does.
-        prefs().edit().putInt("floating_width", wide).putInt("floating_left", 0).commit()
+        val window = view.layoutParams as WindowManager.LayoutParams
+        fun margin() = (32 * app.resources.displayMetrics.density).toInt()
+        assertEquals(app.resources.displayMetrics.widthPixels - 2 * margin(), window.width)
+        assertEquals(app.resources.displayMetrics.widthPixels - window.width, window.x)
+        // Turned narrower, they fit it.
         org.robolectric.RuntimeEnvironment.setQualifiers("w300dp-h700dp")
         floating.get().onConfigurationChanged(app.resources.configuration)
-        val window = view.layoutParams as WindowManager.LayoutParams
-        assertTrue(window.width <= app.resources.displayMetrics.widthPixels)
-        assertTrue(window.x + window.width <= app.resources.displayMetrics.widthPixels)
+        assertEquals(app.resources.displayMetrics.widthPixels - 2 * margin(), window.width)
+        assertEquals(app.resources.displayMetrics.widthPixels - window.width, window.x)
+        // On a big screen, they're no wider than reads at a glance.
+        org.robolectric.RuntimeEnvironment.setQualifiers("w1200dp-h800dp")
+        floating.get().onConfigurationChanged(app.resources.configuration)
+        assertEquals((560 * app.resources.displayMetrics.density).toInt(), window.width)
     }
 
     @Test
@@ -1460,11 +1485,11 @@ class ListeningTest {
         assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE == 0)
         assertFalse(prefs().getBoolean("floating_locked", true))
         assertEquals(null, unlockButton(service))
-        // Locked again, it's back; closed, it goes with the words.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        // Locked again, from their settings, it's back, with the settings put away; closed, it goes with the words.
+        floatingSettings()
         click(string(R.string.floating_lock))
         assertTrue(unlockButton(service) != null)
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertDoesNotExist()
         floating.destroy()
         assertTrue(overlays(service).isEmpty())
     }
@@ -1488,22 +1513,33 @@ class ListeningTest {
         val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals(string(R.string.floating_notification), shadowOf(notification).contentTitle)
 
-        // Tapped, they show what they can do, for a moment.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
+        // Tapped, they show what they can do, until tapped again, however long that takes. A click, so
+        // TalkBack can too.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertHasClickAction()
+        tapWords()
+        assertTrue(described(string(R.string.floating_close)))
+        assertTrue(described(string(R.string.floating_customize)))
+        composeRule.mainClock.advanceTimeBy(60_000)
         composeRule.waitForIdle()
         assertTrue(described(string(R.string.floating_close)))
-        composeRule.mainClock.advanceTimeBy(7_000)
+        tapWords()
+        assertFalse(described(string(R.string.floating_close)))
+        // A touch anywhere else puts them away too, and is let through to what's there.
+        tapWords()
+        val outside = MotionEvent.obtain(0, 0, MotionEvent.ACTION_OUTSIDE, 0f, 0f, 0)
+        assertTrue(overlay(service).dispatchTouchEvent(outside))
+        outside.recycle()
         composeRule.waitForIdle()
         assertFalse(described(string(R.string.floating_close)))
-        // Stop listening along, and start it again.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        // With no app to play and pause, it's the microphone: stop listening along, and start it again.
+        tapWords()
         click(string(R.string.lyrics_stop_listening))
         assertTrue(described(string(R.string.lyrics_listen_along)))
         click(string(R.string.lyrics_listen_along))
         assertTrue(described(string(R.string.lyrics_stop_listening)))
 
         // Locked, touches go through to the app below, and the notification can unlock them.
+        click(string(R.string.floating_customize))
         click(string(R.string.floating_lock))
         val window = overlay(service).layoutParams as WindowManager.LayoutParams
         assertTrue(window.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
@@ -1515,9 +1551,8 @@ class ListeningTest {
         assertTrue((overlay(service).layoutParams as WindowManager.LayoutParams).flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE == 0)
         assertFalse(prefs().getBoolean("floating_locked", true))
 
-        // Open Crosstune brings it back, and back in sight they stop floating.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        // Open Crosstune, in their settings, brings it back, and back in sight they stop floating.
+        floatingSettings()
         click(string(R.string.floating_open))
         assertEquals(MainActivity::class.java.name, shadowOf(service).nextStartedActivity.component!!.className)
         controller!!.start()
@@ -1552,27 +1587,21 @@ class ListeningTest {
     }
 
     @Test
-    fun floatingWordsAreMadeWiderNarrowerOrBiggerWhereTheyAre() {
+    fun floatingWordsAreMovedSidewaysOrPinchedBiggerWhereTheyAre() {
         val floating = floatOverApps(FakeHearing())
         val view = overlay(floating.get())
         val window = view.layoutParams as WindowManager.LayoutParams
         val screen = app.resources.displayMetrics.widthPixels
         val (left, width) = window.x to window.width
         fun touch(action: Int, x: Float, y: Float = 20f) = MotionEvent.obtain(0, 0, action, x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
-        // Dragged from the right side, they're narrower, as far as they can be.
+        // Dragged sideways, even from a side, they move, as wide as they were.
         touch(MotionEvent.ACTION_DOWN, view.width - 2f)
-        touch(MotionEvent.ACTION_MOVE, view.width - 100f)
-        touch(MotionEvent.ACTION_UP, view.width - 100f)
-        assertEquals(width - 98, window.width)
-        assertEquals(width - 98, prefs().getInt("floating_width", -1))
-        // From the left, the left side moves.
-        touch(MotionEvent.ACTION_DOWN, 2f)
-        touch(MotionEvent.ACTION_MOVE, 52f)
-        touch(MotionEvent.ACTION_UP, 52f)
-        assertEquals(left + 50, window.x)
-        assertEquals(width - 148, window.width)
-        assertEquals(left + 50, prefs().getInt("floating_left", -1))
-        // From the middle, sideways, they move, kept on screen.
+        touch(MotionEvent.ACTION_MOVE, view.width - 22f)
+        touch(MotionEvent.ACTION_UP, view.width - 22f)
+        assertEquals(left - 20, window.x)
+        assertEquals(width, window.width)
+        assertEquals(left - 20, prefs().getInt("floating_left", -1))
+        // Kept on screen.
         touch(MotionEvent.ACTION_DOWN, 100f)
         touch(MotionEvent.ACTION_MOVE, 100_000f)
         touch(MotionEvent.ACTION_UP, 100_000f)
@@ -1603,35 +1632,101 @@ class ListeningTest {
     private val sliders = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
 
     @Test
-    fun floatingWordsAreMadeTallerOrShorterFromTheirBottomWhileItShows() {
-        val floating = floatOverApps(FakeHearing())
-        val view = overlay(floating.get())
-        fun words() = composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).fetchSemanticsNode().boundsInWindow
-        fun touch(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, view.width / 2f, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
-        fun drag(from: Float, to: Float) {
-            touch(MotionEvent.ACTION_DOWN, from)
-            touch(MotionEvent.ACTION_MOVE, to)
-            touch(MotionEvent.ACTION_UP, to)
-            composeRule.waitForIdle()
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun floatingWordsKeepTheirHeightThroughShorterLinesTillTheNextSong() {
+        val hearing = FakeHearing()
+        floatOverApps(hearing)
+        // "Long" starts with a line that takes a few rows, then short ones; any other song's are short.
+        fake.handler = { request ->
+            val title = request.url.queryParameter("track_name")
+            val first = if (title == "Long") "A first line long enough to need a few rows of the floating window to show it whole" else "$title one"
+            FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] $first\n[00:10.00] $title two\n[00:20.00] $title three"}]""")
         }
-        val fits = words().height
-        // Without the buttons out, their bottom is no different: dragged, they move.
-        val top = (view.layoutParams as WindowManager.LayoutParams).y
-        drag(words().bottom - 4f, words().bottom + 100f)
-        assertEquals(top + 104, (view.layoutParams as WindowManager.LayoutParams).y)
-        assertEquals(fits, words().height, 1f)
+        fun height() = composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).fetchSemanticsNode().boundsInWindow.height
+        hearing.song("Long", 2.0)
+        waitUntil(TIMEOUT_MS) { shown("A first line long enough to need a few rows of the floating window to show it whole") }
+        val tall = height()
+        // Shorter lines don't pull up what's under them.
+        hearing.song("Long", 12.0)
+        hearing.song("Long", 12.1)
+        waitUntil(TIMEOUT_MS) { shown("Long three") && !shown("A first line long enough to need a few rows of the floating window to show it whole") }
+        assertEquals(tall, height(), 1f)
+        // The next song starts from its own.
+        hearing.song("Short", 2.0)
+        waitUntil(TIMEOUT_MS) { shown("Short one") && !shown("Long two") }
+        assertTrue(height() < tall - 10f)
+    }
 
-        // With them out, it's dragged down to make them taller, kept for next time.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
-        drag(words().bottom - 4f, words().bottom + 200f)
-        assertEquals(fits + 204, words().height, 2f)
-        assertEquals(fits + 204, prefs().getInt("floating_height", -1).toFloat(), 2f)
-        assertEquals(top + 104, (view.layoutParams as WindowManager.LayoutParams).y)
-        // Up, they're shorter, but never shorter than the words need.
-        drag(words().bottom - 4f, words().bottom - 10_000f)
-        assertEquals(fits, words().height, 1f)
+    @Test
+    fun floatingWordsDroppedOnTheCloseTargetClose() {
+        val floating = floatOverApps(FakeHearing())
+        val service = floating.get()
+        val view = overlay(service)
+        fun touch(action: Int, x: Float, y: Float) = MotionEvent.obtain(0, 0, action, x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        // Not there until they're dragged.
+        assertEquals(null, closeTarget(service))
+        touch(MotionEvent.ACTION_DOWN, 100f, 20f)
+        touch(MotionEvent.ACTION_MOVE, 100f, 60f)
+        val target = closeTarget(service)!!
+        val spot = target.layoutParams as WindowManager.LayoutParams
+        // Near the bottom, in the middle, and touches go through it.
+        assertEquals((app.resources.displayMetrics.widthPixels - spot.width) / 2, spot.x)
+        assertTrue(spot.y > app.resources.displayMetrics.heightPixels / 2)
+        assertTrue(spot.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
+        fun fill() = (target.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor
+        val idle = fill()
+        // Over it, it turns red, with a tick felt once; off it again, it's back as it was.
+        val (centerX, centerY) = spot.x + spot.width / 2f to spot.y + spot.height / 2f
+        touch(MotionEvent.ACTION_MOVE, centerX, centerY)
+        assertEquals(0xFFD32F2F.toInt(), fill())
+        assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, shadowOf(target).lastHapticFeedbackPerformed())
+        // Near it is enough, for a finger that covers it.
+        touch(MotionEvent.ACTION_MOVE, centerX + spot.width * 0.8f, centerY)
+        assertEquals(0xFFD32F2F.toInt(), fill())
+        touch(MotionEvent.ACTION_MOVE, centerX + spot.width * 1.5f, centerY)
+        assertEquals(idle, fill())
+        // Let go elsewhere, it goes, and they stay floating.
+        touch(MotionEvent.ACTION_UP, centerX + spot.width * 1.5f, centerY)
+        assertEquals(null, closeTarget(service))
+        assertFalse(shadowOf(service).isStoppedBySelf)
+        // A drag cut short over it doesn't close them either.
+        touch(MotionEvent.ACTION_DOWN, 100f, 20f)
+        touch(MotionEvent.ACTION_MOVE, centerX, centerY)
+        touch(MotionEvent.ACTION_CANCEL, centerX, centerY)
+        assertEquals(null, closeTarget(service))
+        assertFalse(shadowOf(service).isStoppedBySelf)
+        // Dropped on it, they close; dragged straight onto it again, it still turns red.
+        touch(MotionEvent.ACTION_DOWN, 100f, 20f)
+        touch(MotionEvent.ACTION_MOVE, centerX, centerY)
+        assertEquals(0xFFD32F2F.toInt(), (closeTarget(service)!!.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+        touch(MotionEvent.ACTION_UP, centerX, centerY)
+        assertEquals(null, closeTarget(service))
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        // Closed some other way mid-drag, the target goes with them.
+        touch(MotionEvent.ACTION_DOWN, 100f, 20f)
+        touch(MotionEvent.ACTION_MOVE, 100f, 60f)
+        assertTrue(closeTarget(service) != null)
         floating.destroy()
+        assertTrue(overlays(service).isEmpty())
+    }
+
+    @Test
+    fun floatingWordsOfAnAppPlayingPlayAndPauseIt() {
+        timedWordsOfAnySong()
+        inRecent("Demo")
+        val phone = appPlaying("Demo")
+        launch()
+        openWordsFromRecent("Demo")
+        floatNow()
+        tapWords()
+        // The app plays the song, so its words play and pause it, rather than listen along.
+        assertFalse(described(string(R.string.lyrics_listen_along)) || described(string(R.string.lyrics_stop_listening)))
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true) }
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_play))
+        assertEquals(listOf(false, true), phone.plays)
     }
 
     @Test
@@ -1639,18 +1734,13 @@ class ListeningTest {
         val hearing = FakeHearing()
         val floating = floatOverApps(hearing)
         val view = overlay(floating.get())
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
-        click(string(R.string.floating_customize))
-        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertExists()
-        // Being changed, the buttons stay out.
-        composeRule.mainClock.advanceTimeBy(7_000)
-        composeRule.waitForIdle()
-        assertTrue(described(string(R.string.floating_close)))
+        floatingSettings()
+        // In their place, the buttons, which come back with Done.
+        assertFalse(described(string(R.string.floating_close)))
 
-        // The band behind them, and their size, slid, are kept once let go.
-        composeRule.onAllNodes(sliders)[0].performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
-        composeRule.onAllNodes(sliders)[1].performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_background))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         composeRule.waitForIdle()
         assertEquals(0.5f, controllerModel().uiState.floating.background, 0.01f)
         assertEquals(0.5f, prefs().getFloat("floating_background", 0f), 0.01f)
@@ -1673,12 +1763,17 @@ class ListeningTest {
         hearing.song("Demo", 12.6)
         waitUntil(TIMEOUT_MS) { shown("Demo two") && shown("Demo one") && !shown("Demo three") }
 
-        // Tapped again, all of it goes, and next time only the buttons come out.
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        // Done puts it all away.
+        click(string(R.string.floating_done))
         composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertDoesNotExist()
+        assertFalse(described(string(R.string.floating_close)))
+        // Tapped again, all of it goes too, and next time only the buttons come out.
+        floatingSettings()
+        tapWords()
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertDoesNotExist()
+        tapWords()
+        composeRule.onNodeWithTag(FLOATING_CUSTOMIZE_TAG).assertDoesNotExist()
+        assertTrue(described(string(R.string.floating_close)))
     }
 
     @Test
@@ -1734,8 +1829,7 @@ class ListeningTest {
     fun floatingWordsCloseFromThemselvesTheNotificationOrCrosstuneClosing() {
         prefs().edit().putString("theme", "LIGHT").commit()
         val floating = floatOverApps(FakeHearing(), background = 0.6f)
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        tapWords()
         click(string(R.string.floating_close))
         assertTrue(shadowOf(floating.get()).isStoppedBySelf)
 
@@ -1790,8 +1884,7 @@ class ListeningTest {
     fun floatingWordsWithoutTheMicrophoneOpenCrosstuneToAskForIt() {
         val hearing = FakeHearing()
         val floating = floatOverApps(hearing)
-        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).performClick()
-        composeRule.waitForIdle()
+        tapWords()
         click(string(R.string.lyrics_stop_listening))
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         click(string(R.string.lyrics_listen_along))

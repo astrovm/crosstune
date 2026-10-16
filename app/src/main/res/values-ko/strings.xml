@@ -261,6 +261,7 @@
     <string name="floating_lock">터치 통과</string>
     <string name="floating_unlock">잠금 해제</string>
     <string name="floating_close">닫기</string>
+    <string name="floating_done">완료</string>
     <string name="floating_channel">떠 있는 가사</string>
     <string name="floating_notification">앱 위에 가사가 떠 있음</string>
     <string name="lyrics_learn">읽기와 번역</string>
