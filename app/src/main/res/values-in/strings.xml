@@ -261,6 +261,7 @@
     <string name="floating_lock">Teruskan sentuhan</string>
     <string name="floating_unlock">Buka kunci</string>
     <string name="floating_close">Tutup</string>
+    <string name="floating_done">Selesai</string>
     <string name="floating_channel">Lirik melayang</string>
     <string name="floating_notification">Lirik melayang di atas aplikasimu</string>
     <string name="lyrics_learn">Bacaan dan terjemahan</string>

@@ -261,6 +261,7 @@
     <string name="floating_lock">讓觸控穿透</string>
     <string name="floating_unlock">解鎖</string>
     <string name="floating_close">關閉</string>
+    <string name="floating_done">完成</string>
     <string name="floating_channel">懸浮歌詞</string>
     <string name="floating_notification">歌詞正懸浮在應用程式上方</string>
     <string name="lyrics_learn">讀音和翻譯</string>

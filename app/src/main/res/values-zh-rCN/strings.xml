@@ -261,6 +261,7 @@
     <string name="floating_lock">让触摸穿透</string>
     <string name="floating_unlock">解锁</string>
     <string name="floating_close">关闭</string>
+    <string name="floating_done">完成</string>
     <string name="floating_channel">悬浮歌词</string>
     <string name="floating_notification">歌词正悬浮在应用上方</string>
     <string name="lyrics_learn">读音和翻译</string>

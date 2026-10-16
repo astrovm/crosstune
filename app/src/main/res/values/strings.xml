@@ -280,6 +280,7 @@
     <string name="floating_lock">Let touches through</string>
     <string name="floating_unlock">Unlock</string>
     <string name="floating_close">Close</string>
+    <string name="floating_done">Done</string>
     <string name="floating_channel">Floating lyrics</string>
     <string name="floating_notification">Lyrics floating over your apps</string>
     <string name="lyrics_learn">Readings and translation</string>

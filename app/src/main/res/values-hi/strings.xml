@@ -261,6 +261,7 @@
     <string name="floating_lock">टच को आर-पार जाने दें</string>
     <string name="floating_unlock">अनलॉक करें</string>
     <string name="floating_close">बंद करें</string>
+    <string name="floating_done">हो गया</string>
     <string name="floating_channel">तैरते बोल</string>
     <string name="floating_notification">बोल आपके ऐप्स के ऊपर तैर रहे हैं</string>
     <string name="lyrics_learn">उच्चारण और अनुवाद</string>

@@ -261,6 +261,7 @@
     <string name="floating_lock">Пропускать касания</string>
     <string name="floating_unlock">Разблокировать</string>
     <string name="floating_close">Закрыть</string>
+    <string name="floating_done">Готово</string>
     <string name="floating_channel">Плавающий текст</string>
     <string name="floating_notification">Текст поверх ваших приложений</string>
     <string name="lyrics_learn">Чтение и перевод</string>

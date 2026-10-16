@@ -1,8 +1,9 @@
 Playing now finds more music videos and songs without album tags.
-Cleaner video titles and improved chord matching for Chinese songs.
+Cleaner video titles and better chord matching for Chinese songs.
 Playing now hides while you type a new link.
-Playing now updates when music starts, pauses, stops, or changes songs.
-Chords like LAm7b5 from Spanish sheets show in letters too.
+Playing now updates as music plays, pauses or changes.
+Chords like LAm7b5 show in letters too.
 Lyrics no longer end with a list of who played what.
-Swipe the song at the top of Lyrics to skip to the next one or go back.
-Lyrics of a song that is playing move on to the next song.
+Swipe the song atop Lyrics to skip it or go back.
+Lyrics of a song playing move on to the next one.
+Simpler floating lyrics: tap for buttons, drag to ✕ to close.

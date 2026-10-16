@@ -261,6 +261,7 @@
     <string name="floating_lock">Laisser passer les touchers</string>
     <string name="floating_unlock">Déverrouiller</string>
     <string name="floating_close">Fermer</string>
+    <string name="floating_done">OK</string>
     <string name="floating_channel">Paroles flottantes</string>
     <string name="floating_notification">Paroles flottant sur vos applis</string>
     <string name="lyrics_learn">Lectures et traduction</string>
