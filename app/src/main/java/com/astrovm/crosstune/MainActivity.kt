@@ -417,7 +417,9 @@ class MainActivity : ComponentActivity() {
                         onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
                         onListenAlong = { withMicrophone(MicrophoneFor.LISTEN_ALONG) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
-                        onAllowFollowing = { if (viewModel.allowFollowing()) openNotificationAccess() },
+                        // With Shizuku, in one tap, as in setup; otherwise, or once it couldn't, by hand.
+                        onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW) && viewModel.allowFollowing()) openNotificationAccess() },
+                        onAllowFollowingByHand = { if (viewModel.allowFollowing()) openNotificationAccess() },
                         onOpenFollowAccess = {
                             viewModel.openingFollowAccess()
                             openNotificationAccess()
@@ -455,6 +457,8 @@ class MainActivity : ComponentActivity() {
                         onCompleteSetup = viewModel::completeSetup,
                         onPreselectSources = viewModel::preselectSources,
                         onSetUpInOneTap = viewModel::setUpInOneTap,
+                        onFixInOneTap = viewModel::fixInOneTap,
+                        onFixByHandShown = viewModel::fixByHandShown,
                         onLinkModeChange = viewModel::setLinkMode,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,

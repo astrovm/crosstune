@@ -277,7 +277,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             AnimatedVisibility(
                 visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps && state.following == null && !state.listeningAlong
             ) {
-                FollowOffer(actions, onDismiss = { followOffered = false })
+                FollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW, onDismiss = { followOffered = false })
             }
             AnimatedVisibility(visible = syncing) {
                 SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
@@ -1104,7 +1104,7 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
 
 /** A strip over the words: they can follow the music app playing the song, once it's allowed. */
 @Composable
-private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
+private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1113,7 +1113,7 @@ private fun FollowOffer(actions: ScreenActions, onDismiss: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = actions.onAllowFollowing) { Text(stringResource(R.string.follow_turn_on)) }
+            OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
             IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
         }
     }

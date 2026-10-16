@@ -160,6 +160,10 @@ internal data class ScreenActions(
     val onPreselectSources: () -> Unit = {},
     /** Does all of setup's fixing at once, through Shizuku. */
     val onSetUpInOneTap: () -> Unit = {},
+    /** Fixes one thing found wrong after setup, through Shizuku; whether it's there to try. */
+    val onFixInOneTap: (OneTapFix) -> Boolean = { false },
+    /** The steps for what one tap couldn't fix are open. */
+    val onFixByHandShown: () -> Unit = {},
     val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
@@ -264,6 +268,8 @@ internal data class ScreenActions(
     val onAllowFollowing: () -> Unit = {},
     /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */
     val onOpenFollowAccess: () -> Unit = {},
+    /** Lets the words follow music apps by hand, through Android's settings, once one tap couldn't. */
+    val onAllowFollowingByHand: () -> Unit = {},
     /** Opens Crosstune's App info, where restricted settings are allowed. */
     val onOpenAppInfo: () -> Unit = {},
     val onDismissFollowHelp: () -> Unit = {},
@@ -305,8 +311,24 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         }
     }
     var guide by rememberSaveable { mutableStateOf<String?>(null) }
+    // Opened because one tap couldn't fix it all, which the guide says.
+    var guideAfterOneTap by rememberSaveable { mutableStateOf(false) }
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
-    val guided = actions.copy(onShowAllowGuide = { guide = GUIDE_ALLOW }, onShowAppsGuide = { guide = GUIDE_APPS })
+    // With Shizuku, what's found wrong is fixed in one tap, as in setup; the guides are for what it can't.
+    val guided = actions.copy(
+        onShowAllowGuide = { if (!actions.onFixInOneTap(OneTapFix.LINKS)) guide = GUIDE_ALLOW },
+        onShowAppsGuide = { if (!actions.onFixInOneTap(OneTapFix.APPS)) guide = GUIDE_APPS }
+    )
+    LaunchedEffect(state.fixByHand) {
+        val fix = state.fixByHand ?: return@LaunchedEffect
+        if (fix == OneTapFix.FOLLOW) {
+            actions.onAllowFollowingByHand()
+        } else {
+            guide = if (fix == OneTapFix.LINKS) GUIDE_ALLOW else GUIDE_APPS
+            guideAfterOneTap = true
+        }
+        actions.onFixByHandShown()
+    }
     val screen = when {
         // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
         // after; so are the words it was for.
@@ -334,7 +356,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         if (shown == Screen.SETUP) {
             SetupScreen(state, actions)
         } else if (shown == Screen.ALLOW_GUIDE || shown == Screen.APPS_GUIDE) {
-            GuidePage(shown == Screen.ALLOW_GUIDE, state, actions, onDone = { guide = null })
+            GuidePage(shown == Screen.ALLOW_GUIDE, state, actions, afterOneTap = guideAfterOneTap, onDone = {
+                guide = null
+                guideAfterOneTap = false
+            })
         } else if (shown == Screen.SETTINGS) {
             SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
         } else if (shown == Screen.HANDOFF) {
@@ -360,9 +385,12 @@ private enum class Screen(val depth: Int) {
 private const val GUIDE_ALLOW = "allow"
 private const val GUIDE_APPS = "apps"
 
-/** The setup guides on their own, opened from a notice or settings, with a way back once done. */
+/**
+ * The setup guides on their own, opened from a notice or settings, or [afterOneTap] couldn't do it
+ * all, with a way back once done.
+ */
 @Composable
-private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, onDone: () -> Unit) {
+private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, afterOneTap: Boolean, onDone: () -> Unit) {
     BackHandler(onBack = onDone)
     Page(
         title = stringResource(if (allow) R.string.setup_allow_title else R.string.setup_apps_title),
@@ -374,6 +402,14 @@ private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, on
     ) {
         // Both guides show what Android says, so a guide restored before that's known waits for it.
         if (!state.systemStateKnown) return@Page
+        if (afterOneTap) {
+            Text(
+                text = stringResource(R.string.setup_one_tap_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
         // Leaving with something left to do is skipping it, so the button says so.
         val done = if (allow) {
             AllowLinksGuide(state, actions)
@@ -689,16 +725,16 @@ private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean)
         if (!dismissed.containsAll(keys)) {
             // Set to open in the browser, no link reaches Crosstune at all.
             if (OWN_LINKS_OFF in keys) {
-                NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide, dismiss(keys))
+                NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
             } else if (!inSettings) {
                 // Settings marks each service that isn't allowed yet instead.
-                NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide, dismiss(keys))
+                NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
             }
         }
     } else if (state.showLinkSettingsHelper) {
         NoticeStrip(
             stringResource(R.string.link_settings_helper_title), allow, actions.onShowAllowGuide,
-            onDismiss = actions.onDismissLinkSettingsHelper
+            onDismiss = actions.onDismissLinkSettingsHelper, fixing = state.fixingInOneTap == OneTapFix.LINKS
         )
     }
     val apps = state.blockingApps.orEmpty().sortedBy { it.label }
@@ -709,12 +745,13 @@ private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean)
         } else {
             stringResource(R.string.notice_apps_still_open, apps.joinToString(", ") { it.label })
         }
-        NoticeStrip(text, stringResource(R.string.fix_button), actions.onShowAppsGuide, dismiss(appKeys))
+        NoticeStrip(text, stringResource(R.string.fix_button), actions.onShowAppsGuide, dismiss(appKeys), fixing = state.fixingInOneTap == OneTapFix.APPS)
     }
 }
 
+/** [fixing] while Shizuku fixes it, in one tap, its button turns to a spinner. */
 @Composable
-private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDismiss: (() -> Unit)? = null) {
+private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDismiss: (() -> Unit)? = null, fixing: Boolean = false) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -736,7 +773,7 @@ private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDi
                     .weight(1f)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             )
-            TextButton(onClick = onAction) { Text(action) }
+            OneTapButton(action, onAction, fixing)
             if (onDismiss != null) {
                 IconButton(onClick = onDismiss) {
                     AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button))

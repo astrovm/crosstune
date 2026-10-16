@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -23,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -234,5 +237,19 @@ internal fun rememberWebOpener(): (String) -> Unit {
                 Toast.makeText(context, noApp, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+}
+
+/** A button for something Shizuku may fix in one tap, with a spinner beside its [label] while it's [fixing]. */
+@Composable
+internal fun OneTapButton(label: String, onClick: () -> Unit, fixing: Boolean) {
+    TextButton(onClick = onClick, enabled = !fixing) {
+        if (fixing) {
+            CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                modifier = Modifier.padding(end = ButtonDefaults.IconSpacing).size(ButtonDefaults.IconSize)
+            )
+        }
+        Text(label)
     }
 }
