@@ -1,1 +1,2 @@
 A song service answering with a broken link now gets you a search instead.
+The widget buttons now come in the same order as in the app.

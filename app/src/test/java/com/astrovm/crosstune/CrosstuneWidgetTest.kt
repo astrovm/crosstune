@@ -96,6 +96,15 @@ class CrosstuneWidgetTest {
     }
 
     @Test
+    fun wideItsButtonsComeInTheOrderTheAppHasThem() = widget(CrosstuneWidget.LIST, listOf(song)) {
+        // Words, listen, paste, as beside the app's link field.
+        val buttons = listOf(R.string.widget_lyrics_label, R.string.recognize_button, R.string.shortcut_paste_long).map { app.getString(it) }
+        val shown = onAllNodes(buttons.map(::hasContentDescription).reduce { one, other -> one or other })
+        buttons.forEachIndexed { index, button -> shown[index].assert(hasContentDescription(button)) }
+        shown.assertCountEquals(buttons.size)
+    }
+
+    @Test
     fun twoColumnsWideTheSongsTakeTheWholeRow() = widget(CrosstuneWidget.NARROW_LIST, listOf(song)) {
         // Only the copied link's button fits beside the logo.
         onNode(hasContentDescription(app.getString(R.string.recognize_button))).assertDoesNotExist()
