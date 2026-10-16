@@ -98,6 +98,22 @@ class SongListenerTest {
     }
 
     @Test
+    fun whereInTheSongItWasHeardIsKeptOnlyWhenItMakesSense() {
+        fun heardAt(matches: String): Long? {
+            answer("""{"matches":$matches,"track":{"title":"Demo"}}""")
+            return (heard() as Heard.Song).offsetMs
+        }
+        assertEquals(12_500L, heardAt("""[{"id":"1","offset":12.5}]"""))
+        assertEquals(0L, heardAt("""[{"id":"1","offset":0}]"""))
+        // Before the start, not a number, or not there at all: where it is isn't known.
+        assertEquals(null, heardAt("""[{"id":"1","offset":-3.2}]"""))
+        assertEquals(null, heardAt("""[{"id":"1","offset":"soon"}]"""))
+        assertEquals(null, heardAt("""[{"id":"1"}]"""))
+        assertEquals(null, heardAt("""["1"]"""))
+        assertEquals(null, heardAt("""{}"""))
+    }
+
+    @Test
     fun noMatchOrNoTitleIsNothing() {
         answer(NO_MATCH)
         assertEquals(Heard.Nothing, heard())

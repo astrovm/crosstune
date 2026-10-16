@@ -239,7 +239,7 @@ internal class ExactMatcher(
             // Apple marks some albums in their name, e.g. "Name - Single", which the source doesn't.
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
             matches(metadata, name, result.optString("artistName"))
-        }?.optString(urlKey)?.ifBlank { null }
+        }?.optString(urlKey)?.linkTo(MusicService.APPLE_MUSIC)
     }
 
     private suspend fun findOnDeezer(metadata: MusicMetadata): String? =
@@ -247,7 +247,7 @@ internal class ExactMatcher(
             val name = result.optString("title").ifEmpty { result.optString("name") }
             val artist = result.optJSONObject("artist")?.optString("name") ?: name
             matches(metadata, name, artist)
-        }?.optString("link")?.ifBlank { null }
+        }?.optString("link")?.linkTo(MusicService.DEEZER)
 
     private suspend fun searchDeezer(metadata: MusicMetadata): List<JSONObject> {
         val path = when (metadata.type) {
@@ -394,7 +394,7 @@ internal class ExactMatcher(
                 result.optBoolean("verified") && matches(metadata, result.optString("username"), "")
             }
         }
-        return found?.optString("permalink_url")?.ifBlank { null }
+        return found?.optString("permalink_url")?.linkTo(MusicService.SOUNDCLOUD)
     }
 
     /** Like SoundCloud, anyone can upload to Audiomack, so only the artist's own or a verified account's upload counts. */
@@ -444,6 +444,9 @@ internal class ExactMatcher(
         }
     }
 
+    /** This, when it's a link to [service]: an answer that has something else where its link goes, e.g. cut short, has none. */
+    private fun String.linkTo(service: MusicService): String? = takeIf { MusicLinks.serviceFor(it) == service }
+
     private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
 
     private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(Regex("<[^>]+>"), " "), android.text.Html.FROM_HTML_MODE_LEGACY)
@@ -474,7 +477,7 @@ internal class ExactMatcher(
         return results.objects().firstOrNull { result ->
             matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") }) &&
                 isOnArtistsOwnPage(metadata, result.optString("item_url_root"))
-        }?.optString("item_url_path")?.ifBlank { null }
+        }?.optString("item_url_path")?.linkTo(MusicService.BANDCAMP)
     }
 
     /**

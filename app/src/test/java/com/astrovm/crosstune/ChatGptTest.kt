@@ -193,6 +193,8 @@ class ChatGptTest {
         val bad = listOf(
             { openAi.idToken(nonce = "another") },
             { openAi.idToken(audience = "oaiapp_9") },
+            // Signed with OpenAI's key, but for another sign-in service.
+            { openAi.idToken(issuer = "https://auth.example.com") },
             { openAi.idToken(expires = clock / 1000 - 1) },
             { openAi.idToken(alg = "none") },
             { openAi.idToken(kid = "unknown") },

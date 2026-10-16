@@ -2709,6 +2709,49 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.song_original)) && shown("First Demo") && shown("Old Band") }
     }
 
+    @Test
+    fun whatChatGptSaysAboutASongArrivingAfterTheNextSongTookOverIsntShownForIt() {
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        val late = java.util.concurrent.CountDownLatch(1)
+        val answeredLate = java.util.concurrent.atomic.AtomicInteger()
+        // What it says about Demo comes only once the next song plays; about any other, there's nothing to say.
+        openAi.reply = { body ->
+            val instructions = body.getString("instructions")
+            val about = "covers and samples" in instructions || "explain the song in four parts" in instructions
+            val demo = "Demo" in body.getJSONArray("input").getJSONObject(0).getString("content")
+            when {
+                about && demo -> { late.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); answers(body).also { answeredLate.incrementAndGet() } }
+                about -> 500 to ""
+                else -> answers(body)
+            }
+        }
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        val words = fake.handler
+        fake.handler = { request -> openAi.answer(request) ?: words(request) }
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { openAi.asked.count { "Demo" in it.getJSONArray("input").getJSONObject(0).getString("content") && ("covers and samples" in it.getString("instructions") || "explain the song in four parts" in it.getString("instructions")) } == 2 }
+        hearing.song("Other", 1.0)
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
+        late.countDown()
+        waitUntil(TIMEOUT_MS) { answeredLate.get() == 2 }
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        // Other's words don't say Demo covers First Demo, or what Demo is about.
+        val learning = controllerModel().uiState.learning
+        assertNull(learning.songFacts)
+        assertFalse(learning.songExplanation?.text.orEmpty().contains("under the stars"))
+        assertFalse(shown("Old Band") || shown("A night under the stars."))
+    }
+
 
 
     @Test

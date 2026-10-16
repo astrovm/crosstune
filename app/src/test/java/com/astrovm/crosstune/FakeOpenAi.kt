@@ -92,10 +92,11 @@ internal class FakeOpenAi(private val now: () -> Long) {
         expires: Long = now() / 1000 + 3600,
         alg: String = "RS256",
         kid: String = "key-1",
-        signer: KeyPair = keys
+        signer: KeyPair = keys,
+        issuer: String = "https://auth.openai.com"
     ): String {
         val header = base64Url(JSONObject().put("alg", alg).put("kid", kid).toString().toByteArray())
-        val claims = JSONObject().put("iss", "https://auth.openai.com").put("aud", audience).put("sub", subject)
+        val claims = JSONObject().put("iss", issuer).put("aud", audience).put("sub", subject)
             .put("email", EMAIL).put("nonce", nonce ?: authorize.queryParameter("nonce")).put("exp", expires)
         val payload = base64Url(claims.toString().toByteArray())
         val signature = Signature.getInstance("SHA256withRSA").run {
