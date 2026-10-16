@@ -118,6 +118,32 @@ class SongSearcherTest {
     }
 
     @Test
+    fun oddOrRefusedAnswersCostOnlyWhatsOddInThem() {
+        // Deezer refusing, Apple answering in bits: what's whole of Apple's is kept, nothing else.
+        fake.handler = { request: Request ->
+            if (request.url.host == "api.deezer.com") FakeSpotify.html(request, "Service unavailable", code = 503)
+            else FakeSpotify.html(
+                request,
+                """{"results":[1,"two",{"trackName":"","artistName":"Band"},{"trackName":"Song","artistName":""},
+                    {"trackName":"Whole","artistName":"Band"}]}"""
+            )
+        }
+        assertEquals(listOf(MusicMetadata("Whole", "Band")), found("Whole"))
+
+        // Deezer's bits too: an artist that isn't one, a song with no artist or album, and one whole.
+        respond(
+            """{"data":[null,"x",{"title":"No artist"},{"title":"Odd artist","artist":"Band"},
+                {"title":"Whole","artist":{"name":"Band"},"album":"none"}]}""",
+            itunes = """["not","an","object"]"""
+        )
+        assertEquals(listOf(MusicMetadata("Whole", "Band")), found("Whole"))
+
+        // Neither answering with what it should: nothing found, nothing thrown.
+        respond("""{"data":"none"}""", itunes = "<html>Error</html>")
+        assertEquals(emptyList<MusicMetadata>(), found("Whole"))
+    }
+
+    @Test
     fun noServiceAndNoTimeBothFindNothing() {
         fake.handler = { throw IOException("offline") }
         assertEquals(emptyList<MusicMetadata>(), found("Song"))

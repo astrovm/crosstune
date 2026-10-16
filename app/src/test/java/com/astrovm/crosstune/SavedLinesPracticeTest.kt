@@ -78,4 +78,17 @@ class SavedLinesPracticeTest {
         assertEquals(0, old.box)
         assertEquals(0L, old.due)
     }
+
+    @Test
+    fun savedLinesKeptBrokenAreSkippedAndSavingStillWorks() {
+        // Not a list at all: nothing kept, and saving starts over.
+        prefs.edit().putString("saved_lines", "{not json").commit()
+        val store = SavedLinesStore(prefs)
+        assertEquals(emptyList<SavedLine>(), store.load())
+        assertEquals(listOf(line.copy(due = 0)), store.toggle(line))
+
+        // A list with bits that aren't lines: only the whole ones come back, with what's missing left out.
+        prefs.edit().putString("saved_lines", """[null,"x",{"text":""},{"title":"No text"},{"text":"Kept","reading":"","box":"two"}]""").commit()
+        assertEquals(listOf(SavedLine("Kept", title = "", artist = "")), store.load())
+    }
 }

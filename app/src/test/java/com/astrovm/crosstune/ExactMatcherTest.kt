@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -458,6 +459,9 @@ class ExactMatcherTest {
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""", code = 429) }
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
         fake.handler = { request -> FakeSpotify.html(request, """{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}""") }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
+        // However the error's put.
+        fake.handler = { request -> FakeSpotify.html(request, """{"error":"Quota limit exceeded"}""") }
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
         fake.handler = { throw IOException("offline") }
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.APPLE_MUSIC, song) })
@@ -1250,5 +1254,72 @@ class ExactMatcherTest {
         assertEquals(true, canBeMissing(MusicService.BANDCAMP, MusicMetadata("Mix", "", ItemType.PLAYLIST)))
         fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
         assertNull(find(MusicService.QOBUZ, MusicMetadata("Other", "Band")))
+    }
+
+    /** [value] with some of what's in it swapped for something of another kind, or left out. */
+    private fun mangled(value: Any?, random: kotlin.random.Random): Any? {
+        if (random.nextInt(6) == 0) {
+            return listOf(org.json.JSONObject.NULL, 0, -1, Long.MAX_VALUE, 1.5, true, "", "x".repeat(300), "https://elsewhere.example/1", org.json.JSONArray(), org.json.JSONObject(), org.json.JSONArray("[1,\"a\",null]")).random(random)
+        }
+        return when (value) {
+            is org.json.JSONObject -> org.json.JSONObject().also { copy ->
+                value.keys().forEach { key -> if (random.nextInt(8) != 0) copy.put(key, mangled(value.get(key), random)) }
+            }
+            is org.json.JSONArray -> org.json.JSONArray().also { copy ->
+                (0 until value.length()).forEach { if (random.nextInt(8) != 0) copy.put(mangled(value.get(it), random)) }
+                if (random.nextInt(4) == 0 && value.length() > 0) copy.put(mangled(value.get(0), random))
+            }
+            is String -> if (random.nextInt(4) == 0) value.take(random.nextInt(value.length + 1)) else value
+            else -> value
+        }
+    }
+
+    /** [text], as JSON with parts of another kind or left out, or else, as a page, cut short or with letters lost. */
+    private fun mangledAnswer(text: String, random: kotlin.random.Random): String {
+        val json = runCatching { org.json.JSONTokener(text).nextValue() }.getOrNull()
+        if (json is org.json.JSONObject || json is org.json.JSONArray) return mangled(json, random).toString()
+        val chars = StringBuilder(text)
+        repeat(random.nextInt(1, 20)) { if (chars.isNotEmpty()) chars.deleteCharAt(random.nextInt(chars.length)) }
+        return if (random.nextBoolean()) chars.toString() else chars.take(random.nextInt(chars.length + 1)).toString()
+    }
+
+    @Test
+    fun anyServiceAnsweringWithBrokenResultsFindsNothingOrItsOwnLinkAndNeverCrashes() {
+        val song = MusicMetadata("Song", "Band")
+        val qobuz = """<li><div class="ListItem"><a href="/us-en/album/slug/rec1" class="ListItem__title" title="Song">Song</a>
+            <p class="ListItem__artists">Band • Record</p><button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;12"></button></div></li>"""
+        // Each service's answer when it has the song, and where what it finds is.
+        val answers: List<Triple<MusicService, String, (Request) -> String>> = listOf(
+            Triple(MusicService.APPLE_MUSIC, "music.apple.com", { _ -> """{"results":[{"trackName":"Song","artistName":"Band","trackViewUrl":"https://music.apple.com/us/song/1"}]}""" }),
+            Triple(MusicService.DEEZER, "www.deezer.com", { _ -> """{"data":[{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""" }),
+            Triple(MusicService.BANDCAMP, "band.bandcamp.com", { _ -> """{"auto":{"results":[{"type":"t","name":"Song","band_name":"Band","item_url_root":"https://band.bandcamp.com","item_url_path":"https://band.bandcamp.com/track/song"}]}}""" }),
+            Triple(MusicService.TIDAL, "tidal.com", { _ -> """{"items":[{"id":2,"title":"Song","artists":[{"name":"Band"}]}]}""" }),
+            Triple(MusicService.SOUNDCLOUD, "soundcloud.com", { request ->
+                when {
+                    request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>"""
+                    request.url.host == "a-v2.sndcdn.com" -> """client_id:"${"k".repeat(32)}""""
+                    else -> """{"collection":[{"title":"Song","user":{"username":"Band"},"permalink_url":"https://soundcloud.com/band/song"}]}"""
+                }
+            }),
+            Triple(MusicService.AUDIOMACK, "audiomack.com", { _ -> """{"results":[{"title":"Song","artist":"Band","url_slug":"song","uploader":{"name":"Band","url_slug":"band"}}]}""" }),
+            Triple(MusicService.QOBUZ, "play.qobuz.com", { _ -> "<ul class=\"ListContainer\">$qobuz</ul>" }),
+            Triple(MusicService.YOUTUBE_MUSIC, "music.youtube.com", { _ -> youTubeMusicPage(youTubeMusicRow("Song", "Band • Record • 3:00", videoId = "abcdefghijk")) })
+        )
+        val random = kotlin.random.Random(230)
+        val odd = mutableListOf<String>()
+        for ((service, host, answer) in answers) {
+            fake.handler = { request -> FakeSpotify.html(request, answer(request)) }
+            // Whole, it's found where it is.
+            val found = runBlocking { matcher().lookFor(service, song) }
+            assertTrue("$service: $found", (found as? ExactMatcher.Match.Found)?.url?.toHttpUrl()?.host == host)
+            repeat(150) {
+                fake.handler = { request -> FakeSpotify.html(request, mangledAnswer(answer(request), random)) }
+                when (val match = runBlocking { matcher().lookFor(service, song) }) {
+                    is ExactMatcher.Match.Found -> if (match.url.toHttpUrlOrNull()?.host?.endsWith(host.substringAfter("www.")) != true) odd += "$service: ${match.url}"
+                    else -> Unit
+                }
+            }
+        }
+        assertEquals(emptyList<String>(), odd)
     }
 }

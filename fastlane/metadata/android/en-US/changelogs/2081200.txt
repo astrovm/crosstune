@@ -1,0 +1,1 @@
+A song service answering with a broken link now gets you a search instead.
