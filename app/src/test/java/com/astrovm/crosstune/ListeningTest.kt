@@ -739,6 +739,15 @@ class ListeningTest {
         song.performTouchInput { swipeRight() }
         composeRule.waitForIdle()
         assertEquals(listOf(true, false), phone.skips)
+        // Taken away halfway, e.g. by the phone's own gesture, it springs back and skips nothing.
+        song.performTouchInput {
+            down(center)
+            moveBy(Offset(-width * 0.4f, 0f))
+            moveBy(Offset(-width * 0.2f, 0f))
+            cancel()
+        }
+        composeRule.waitForIdle()
+        assertEquals(listOf(true, false), phone.skips)
         // A screen reader offers both.
         fun action(label: Int) = composeRule.runOnIdle {
             song.fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }.action()
