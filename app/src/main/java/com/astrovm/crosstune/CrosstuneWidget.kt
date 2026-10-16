@@ -195,19 +195,20 @@ internal fun WidgetContent(songs: List<WidgetSong>) {
                         )
                     }
                     if (wide) {
-                        CircleIconButton(
-                            imageProvider = ImageProvider(R.drawable.ic_recognize),
-                            contentDescription = context.getString(R.string.recognize_button),
-                            onClick = actionStartActivity(Intent(context, RecognizeSongActivity::class.java)),
-                            backgroundColor = GlanceTheme.colors.secondaryContainer,
-                            contentColor = GlanceTheme.colors.onSecondaryContainer
-                        )
-                        Spacer(GlanceModifier.width(6.dp))
+                        // In the order the app has them: words, listen, paste.
                         // Names the song and shows its words, in time with it.
                         CircleIconButton(
                             imageProvider = ImageProvider(R.drawable.ic_lyrics),
                             contentDescription = context.getString(R.string.widget_lyrics_label),
                             onClick = actionStartActivity(MainActivity.lyricsIntent(context)),
+                            backgroundColor = GlanceTheme.colors.secondaryContainer,
+                            contentColor = GlanceTheme.colors.onSecondaryContainer
+                        )
+                        Spacer(GlanceModifier.width(6.dp))
+                        CircleIconButton(
+                            imageProvider = ImageProvider(R.drawable.ic_recognize),
+                            contentDescription = context.getString(R.string.recognize_button),
+                            onClick = actionStartActivity(Intent(context, RecognizeSongActivity::class.java)),
                             backgroundColor = GlanceTheme.colors.secondaryContainer,
                             contentColor = GlanceTheme.colors.onSecondaryContainer
                         )
