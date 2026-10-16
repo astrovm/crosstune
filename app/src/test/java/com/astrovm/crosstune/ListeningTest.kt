@@ -1629,6 +1629,32 @@ class ListeningTest {
     private val sliders = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun floatingWordsKeepTheirHeightThroughShorterLinesTillTheNextSong() {
+        val hearing = FakeHearing()
+        floatOverApps(hearing)
+        // "Long" starts with a line that takes a few rows, then short ones; any other song's are short.
+        fake.handler = { request ->
+            val title = request.url.queryParameter("track_name")
+            val first = if (title == "Long") "A first line long enough to need a few rows of the floating window to show it whole" else "$title one"
+            FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] $first\n[00:10.00] $title two\n[00:20.00] $title three"}]""")
+        }
+        fun height() = composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).fetchSemanticsNode().boundsInWindow.height
+        hearing.song("Long", 2.0)
+        waitUntil(TIMEOUT_MS) { shown("A first line long enough to need a few rows of the floating window to show it whole") }
+        val tall = height()
+        // Shorter lines don't pull up what's under them.
+        hearing.song("Long", 12.0)
+        hearing.song("Long", 12.1)
+        waitUntil(TIMEOUT_MS) { shown("Long three") && !shown("A first line long enough to need a few rows of the floating window to show it whole") }
+        assertEquals(tall, height(), 1f)
+        // The next song starts from its own.
+        hearing.song("Short", 2.0)
+        waitUntil(TIMEOUT_MS) { shown("Short one") && !shown("Long two") }
+        assertTrue(height() < tall - 10f)
+    }
+
+    @Test
     fun floatingWordsDroppedOnTheCloseTargetClose() {
         val floating = floatOverApps(FakeHearing())
         val service = floating.get()
@@ -1651,7 +1677,8 @@ class ListeningTest {
         touch(MotionEvent.ACTION_MOVE, centerX, centerY)
         assertEquals(0xFFD32F2F.toInt(), fill())
         assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, shadowOf(target).lastHapticFeedbackPerformed())
-        touch(MotionEvent.ACTION_MOVE, centerX, centerY + 1f)
+        // Near it is enough, for a finger that covers it.
+        touch(MotionEvent.ACTION_MOVE, centerX + spot.width * 0.8f, centerY)
         assertEquals(0xFFD32F2F.toInt(), fill())
         touch(MotionEvent.ACTION_MOVE, centerX + spot.width * 1.5f, centerY)
         assertEquals(idle, fill())
@@ -1665,12 +1692,17 @@ class ListeningTest {
         touch(MotionEvent.ACTION_CANCEL, centerX, centerY)
         assertEquals(null, closeTarget(service))
         assertFalse(shadowOf(service).isStoppedBySelf)
-        // Dropped on it, they close.
+        // Dropped on it, they close; dragged straight onto it again, it still turns red.
         touch(MotionEvent.ACTION_DOWN, 100f, 20f)
         touch(MotionEvent.ACTION_MOVE, centerX, centerY)
+        assertEquals(0xFFD32F2F.toInt(), (closeTarget(service)!!.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
         touch(MotionEvent.ACTION_UP, centerX, centerY)
         assertEquals(null, closeTarget(service))
         assertTrue(shadowOf(service).isStoppedBySelf)
+        // Closed some other way mid-drag, the target goes with them.
+        touch(MotionEvent.ACTION_DOWN, 100f, 20f)
+        touch(MotionEvent.ACTION_MOVE, 100f, 60f)
+        assertTrue(closeTarget(service) != null)
         floating.destroy()
         assertTrue(overlays(service).isEmpty())
     }
