@@ -5525,14 +5525,24 @@ class MainActivityTest {
         assertEquals(2, shell.ran.size)
         assertTextShown(string(R.string.setup_allow_title))
         assertTextShown(string(R.string.setup_one_tap_failed))
-        // Left, and opened again by hand, it says so no longer.
+        // Left, its notice is back.
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.setup_allow_title))
         assertTextShown(string(R.string.notice_links_not_allowed))
-
+        // The apps can't be stopped either, which their guide says too.
         click(string(R.string.fix_button))
         assertTextShown(string(R.string.setup_apps_title))
         assertTextShown(string(R.string.setup_one_tap_failed))
+        click(string(R.string.back_button))
+
+        // Opened by hand, once Shizuku's stopped, the guide says nothing of it.
+        shell.ready = false
+        shell.changed!!()
+        composeRule.waitForIdle()
+        click(string(R.string.allow_button))
+        assertTextShown(string(R.string.setup_allow_title))
+        assertTextAbsent(string(R.string.setup_one_tap_failed))
+        assertEquals(3, shell.ran.size)
     }
 
     @Test
