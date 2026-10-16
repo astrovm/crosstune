@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -1371,11 +1372,11 @@ class ListeningTest {
         fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Band","plainLyrics":"Just words"}]""") }
         hearing.song(title, 2.0)
         val floating = hasText(title) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG))
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(floating, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(shown("Band"))
         // Never cut short: every line it takes is shown.
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-        composeRule.onNode(floating).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        composeRule.onNode(floating, useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertTrue(layouts.single().lineCount > 2)
         assertFalse(layouts.single().hasVisualOverflow)
     }
@@ -1512,7 +1513,9 @@ class ListeningTest {
         val notification = shadowOf(service.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals(string(R.string.floating_notification), shadowOf(notification).contentTitle)
 
-        // Tapped, they show what they can do, until tapped again, however long that takes.
+        // Tapped, they show what they can do, until tapped again, however long that takes. A click, so
+        // TalkBack can too.
+        composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertHasClickAction()
         tapWords()
         assertTrue(described(string(R.string.floating_close)))
         assertTrue(described(string(R.string.floating_customize)))
@@ -1735,9 +1738,9 @@ class ListeningTest {
         // In their place, the buttons, which come back with Done.
         assertFalse(described(string(R.string.floating_close)))
 
-        // Their size, and the band behind them, slid, are kept once let go.
-        composeRule.onAllNodes(sliders)[0].performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
-        composeRule.onAllNodes(sliders)[1].performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_background))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         composeRule.waitForIdle()
         assertEquals(0.5f, controllerModel().uiState.floating.background, 0.01f)
         assertEquals(0.5f, prefs().getFloat("floating_background", 0f), 0.01f)

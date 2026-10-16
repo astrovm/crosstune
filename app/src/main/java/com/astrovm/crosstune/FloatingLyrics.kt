@@ -12,10 +12,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -195,7 +196,9 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (controls) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large) else Modifier)
-                .pointerInput(controls) { detectTapGestures { onControls(!controls) } }
+                // A click, not just a tap, so TalkBack can bring the buttons out too; without the ripple,
+                // since the outline says it.
+                .clickable(interactionSource = null, indication = null) { onControls(!controls) }
         )
         val shown = when {
             !controls -> FloatingPanel.NONE
@@ -274,15 +277,19 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
                     actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
                 }
             ) {
-                Text(stringResource(R.string.floating_text_size), style = MaterialTheme.typography.labelLarge)
+                val textSize = stringResource(R.string.floating_text_size)
+                Text(textSize, style = MaterialTheme.typography.labelLarge)
                 Slider(
+                    modifier = Modifier.semantics { contentDescription = textSize },
                     value = options.scale,
                     onValueChange = { actions.onChange(options.copy(scale = it), false) },
                     onValueChangeFinished = actions.onSave,
                     valueRange = FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE
                 )
-                Text(stringResource(R.string.floating_background), style = MaterialTheme.typography.labelLarge)
+                val background = stringResource(R.string.floating_background)
+                Text(background, style = MaterialTheme.typography.labelLarge)
                 Slider(
+                    modifier = Modifier.semantics { contentDescription = background },
                     value = options.background,
                     onValueChange = { actions.onChange(options.copy(background = it), false) },
                     onValueChangeFinished = actions.onSave,
