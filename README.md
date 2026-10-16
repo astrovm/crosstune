@@ -49,7 +49,7 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
 - **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there.
+- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back.
 - **MilkDrop visuals.** 76 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, darken them, or show only the visuals.
 - **Floating lyrics.** Float them over any app. Drag them, resize them, pinch the text, and pick how see-through they are.
 - **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.

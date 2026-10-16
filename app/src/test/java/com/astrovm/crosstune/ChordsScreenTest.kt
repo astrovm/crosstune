@@ -140,7 +140,8 @@ class ChordsScreenTest {
         // The chords for the line are played before it, so none sit over its words.
         val sheet = ChordSheet(listOf(SheetLine("", listOf(Chord(0, "Am"))), SheetLine(text, emptyList())), capo = 0, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
         composeRule.setContent { CrosstuneTheme { LyricsScreen(japanese(LyricLine(1_000, text), sheet), ScreenActions()) } }
-        composeRule.onNodeWithText("Am", useUnmergedTree = true).assertExists()
+        // The chord shows once the words are drawn, which a busy machine may take a moment more for.
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Am", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         composeRule.waitUntil(5_000) { readingsOver(text) != null }
         assertEquals(listOf("よぞら", "ほし"), readingsOver(text))
     }

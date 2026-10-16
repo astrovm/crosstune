@@ -561,6 +561,39 @@ class PlaybackTest {
         playback.playPause(MusicMetadata("Other", "Band"), play = true)
     }
 
+    @Test
+    fun theAppPlayingItSaysWhetherItCanGoOnToTheNextSongOrBack() {
+        allow()
+        val skips = PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = skips)
+        shadowOf(sessions).addController(spotify)
+        val seen = followed()
+        assertTrue(seen.last()!!.canSkipNext)
+        assertTrue(seen.last()!!.canSkipPrevious)
+        assertFalse(seen.last()!!.canSeek)
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).setActions(PlaybackState.ACTION_SKIP_TO_NEXT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(seen.last()!!.canSkipNext)
+        assertFalse(seen.last()!!.canSkipPrevious)
+        shadowOf(spotify).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(seen.last()!!.canSkipNext)
+    }
+
+    @Test
+    fun theAppPlayingItIsAskedToGoOnToTheNextSongOrBack() {
+        allow()
+        // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
+        shadowOf(sessions).addController(spotify)
+        playback.skip(song, next = true)
+        playback.skip(song, next = false)
+        shadowOf(spotify).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 1_000, 0f, PLAYED_AT).build())
+        playback.skip(song, next = true)
+        // Nothing playing it, nothing to ask.
+        playback.skip(MusicMetadata("Other", "Band"), next = true)
+    }
+
     private companion object {
         const val NOW = 500_000L
         const val PLAYED_AT = 400_000L

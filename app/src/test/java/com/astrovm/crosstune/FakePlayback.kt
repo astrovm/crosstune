@@ -14,6 +14,8 @@ internal class FakePlayback : PlaybackSource {
     val seeks = mutableListOf<Long>()
     /** Each ask to play (true) or pause (false). */
     val plays = mutableListOf<Boolean>()
+    /** Each ask to go on to the next song (true) or back to the one before (false). */
+    val skips = mutableListOf<Boolean>()
     private val songs = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
@@ -35,5 +37,9 @@ internal class FakePlayback : PlaybackSource {
 
     override fun playPause(song: MusicMetadata, play: Boolean) {
         plays += play
+    }
+
+    override fun skip(song: MusicMetadata, next: Boolean) {
+        skips += next
     }
 }

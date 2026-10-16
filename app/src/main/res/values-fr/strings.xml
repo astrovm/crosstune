@@ -207,6 +207,8 @@
     <string name="lyrics_following_app">Suit %1$s</string>
     <string name="lyrics_play">Lire</string>
     <string name="lyrics_pause">Pause</string>
+    <string name="lyrics_next_song">Chanson suivante</string>
+    <string name="lyrics_previous_song">Chanson précédente</string>
     <string name="lyrics_jump">Aller ici</string>
     <string name="lyrics_sync">Corriger le timing</string>
     <string name="lyrics_sync_hint">Touchez la ligne que vous entendez</string>

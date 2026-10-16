@@ -203,6 +203,8 @@ internal data class ScreenActions(
     val onSeekLyrics: (Long) -> Unit = {},
     /** Plays or pauses the song in the music app the words follow. */
     val onPlayPause: () -> Unit = {},
+    /** Has the music app go on to its next song (true), or back to the one before. */
+    val onSkipSong: (next: Boolean) -> Unit = {},
     /** The line of the timed words being sung right now, as the user taps it, to put the words in time. */
     val onSyncLine: (Int) -> Unit = {},
     /** The words back in time as they were found. */

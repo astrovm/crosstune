@@ -32,9 +32,17 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 /**
  * A song followed as it plays: where it is, the app playing it if one is, by name and package, and
  * whether a line can be jumped to. In a [video] the app says where the video is, which may have
- * more before the song starts.
+ * more before the song starts. The app may also go on to its next song, or back to the one before.
  */
-internal data class Following(val clock: PlaybackClock, val app: String?, val canSeek: Boolean, val appPackage: String? = null, val video: Boolean = false)
+internal data class Following(
+    val clock: PlaybackClock,
+    val app: String?,
+    val canSeek: Boolean,
+    val appPackage: String? = null,
+    val video: Boolean = false,
+    val canSkipNext: Boolean = false,
+    val canSkipPrevious: Boolean = false
+)
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
@@ -49,6 +57,9 @@ internal interface PlaybackSource {
 
     /** Has the app playing [song] [play] it, or pause it. */
     fun playPause(song: MusicMetadata, play: Boolean)
+
+    /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
+    fun skip(song: MusicMetadata, next: Boolean)
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
@@ -136,6 +147,19 @@ internal class MediaSessionPlayback(
         runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.run { if (play) play() else pause() } }
     }
 
+    override fun skip(song: MusicMetadata, next: Boolean) {
+        // Taken back meanwhile, the song just keeps on as it was.
+        runCatching {
+            val app = sessions.getActiveSessions(listener).firstOrNull { it.plays(song) } ?: return
+            val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
+            app.transportControls.run {
+                if (next) skipToNext() else skipToPrevious()
+                // Paused, the song skipped to would wait unheard, with the words still on the last one.
+                if (paused) play()
+            }
+        }
+    }
+
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
         // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so
@@ -215,7 +239,11 @@ internal class MediaSessionPlayback(
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val clock = PlaybackClock(state.position, at, state.playbackSpeed.takeIf { it > 0f } ?: 1f, state.state == PlaybackState.STATE_PLAYING)
-        return Following(clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo())
+        return Following(
+            clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
+            canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
+            canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L
+        )
     }
 
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */

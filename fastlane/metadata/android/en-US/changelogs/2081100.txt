@@ -4,3 +4,5 @@ Playing now hides while you type a new link.
 Playing now updates when music starts, pauses, stops, or changes songs.
 Chords like LAm7b5 from Spanish sheets show in letters too.
 Lyrics no longer end with a list of who played what.
+Swipe the song at the top of Lyrics to skip to the next one or go back.
+Lyrics of a song that is playing move on to the next song.
