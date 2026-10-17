@@ -6,6 +6,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -104,6 +105,8 @@ class SungReadingsTest {
         assertEquals("Band", search.queryParameter("artist_name"))
         assertEquals("夜の都会 ～Night Town～", search.queryParameter("title"))
         assertTrue(fake.requestHeaders.any { (name, value) -> name == "User-Agent" && value == SungReadings.BROWSER })
+        // As a computer: a phone is sent pages laid out otherwise.
+        assertFalse("Mobile" in SungReadings.BROWSER || "Android" in SungReadings.BROWSER)
         // Asked again, it's kept.
         val asked = fake.requestedUrls.size
         assertEquals(fixes, ask(LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)))
