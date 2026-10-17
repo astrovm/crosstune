@@ -5,11 +5,17 @@ project(crosstune_milkdrop LANGUAGES C CXX)
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" ABSOLUTE)
 add_compile_options("-ffile-prefix-map=${PROJECT_ROOT}=." "-fdebug-prefix-map=${PROJECT_ROOT}=.")
+# The NDK's headers too: their path ends up in the debug info, which the library's build ID hashes,
+# and the NDK sits in a different place on GitHub's runners and on F-Droid's build server.
+add_compile_options("-ffile-prefix-map=${ANDROID_NDK}=/ndk" "-fdebug-prefix-map=${ANDROID_NDK}=/ndk")
 
 # projectM's expression parser comes with its generated sources; flex or bison on the machine would
 # make them again, differently from one machine to the next.
 set(CMAKE_DISABLE_FIND_PACKAGE_FLEX TRUE)
 set(CMAKE_DISABLE_FIND_PACKAGE_BISON TRUE)
+# projectM stores the current Git commit, which the app never reads; without Git it stores "Unknown",
+# so the library doesn't depend on the commit or on the checkout having Git history.
+set(CMAKE_DISABLE_FIND_PACKAGE_Git TRUE)
 
 # projectM as one static library inside ours, with only what drawing presets needs.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
