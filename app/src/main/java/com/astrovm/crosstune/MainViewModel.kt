@@ -338,7 +338,7 @@ internal data class Practice(
     val finished: Boolean get() = total > 0 && queue.isEmpty()
 }
 
-/** How a card's line sounds: not at all, found in the music app, playing, or played. */
+/** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
 
 /** A [song] the music app [app] played, at [positionMs], before practice took it over. */
@@ -2060,21 +2060,24 @@ internal class MainViewModel(
     private var practiceSong: SavedLine? = null
     private var soundJob: Job? = null
 
-    /** Shows the next card, playing its line when it can be. */
+    /**
+     * Shows the next card, with its line ready in the music app, not played: heard, it would say how
+     * it reads, which is what's asked. It plays once the card's turned.
+     */
     private fun showCard() {
         soundJob?.cancel()
         val practice = uiState.practice ?: return
         val line = practice.line ?: return
         val playable = line.timed && playback?.hasAccess() == true
         uiState = uiState.copy(practice = practice.copy(turned = false, lastSong = line, sound = if (playable) LineSound.LOADING else LineSound.NONE))
-        if (playable) sound(line)
+        if (playable) sound(line, play = false)
     }
 
     /**
-     * Has the music app play [line], from where it's sung to the next line, then pause. A song it
-     * isn't playing it's asked to find first.
+     * Has the music app play [line], from where it's sung to the next line, then pause; or, when not
+     * [play] and the card isn't turned yet, only get there. A song it isn't playing it's asked to find first.
      */
-    private fun sound(line: SavedLine) {
+    private fun sound(line: SavedLine, play: Boolean = true) {
         val source = playback ?: return
         soundJob?.cancel()
         soundJob = viewModelScope.launch {
@@ -2085,7 +2088,10 @@ internal class MainViewModel(
                 val start = (line.startMs ?: 0L) + lead
                 val end = (line.endMs ?: 0L) + lead
                 source.seekTo(song, start)
-                source.playPause(song, true)
+                // Turned while the app got there, it plays now.
+                val now = play || uiState.practice?.turned == true
+                source.playPause(song, now)
+                if (!now) return@inApp setSound(line, LineSound.PLAYED)
                 setSound(line, LineSound.PLAYING)
                 // Once the app says it's there, it plays to the end of the line.
                 withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
@@ -2130,9 +2136,11 @@ internal class MainViewModel(
         sound(line)
     }
 
-    /** Turns the card, to say whether it was known. */
+    /** Turns the card, to say whether it was known, and plays its line, now that it's the answer. */
     fun turnPractice() {
-        uiState = uiState.copy(practice = uiState.practice?.copy(turned = true))
+        val practice = uiState.practice?.takeIf { !it.turned } ?: return
+        uiState = uiState.copy(practice = practice.copy(turned = true))
+        if (practice.sound == LineSound.PLAYED) replayLine()
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */

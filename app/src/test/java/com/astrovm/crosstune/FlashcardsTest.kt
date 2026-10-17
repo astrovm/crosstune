@@ -140,7 +140,7 @@ class FlashcardsTest {
     // endregion
 
     @Test
-    fun aLineSavedIsAskedAsWrittenAndPlaysInTheMusicApp() {
+    fun aLineSavedIsAskedAsWrittenAndPlaysInTheMusicAppOnceTurned() {
         wordsOfDemo()
         // Saved from its sheet: where it's sung, to the next line, and the app it plays in.
         composeRule.onAllNodes(hasText("Stars")).onLast().performTouchInput { longClick() }
@@ -152,26 +152,34 @@ class FlashcardsTest {
         composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).performSemanticsAction(SemanticsActions.Dismiss)
         composeRule.waitForIdle()
 
-        // The line as written, while the app goes to it and plays it.
+        // The line as written, the app paused where it's sung: heard, it would say how it reads.
         click(string(R.string.lyrics_study))
+        val played = phone.plays.size
         click(string(R.string.saved_practice))
-        waitUntil { model().uiState.practice?.sound == LineSound.PLAYING }
+        waitUntil { model().uiState.practice?.sound == LineSound.PLAYED }
         assertTrue(shown("Stars"))
         assertEquals(10_000L, phone.seeks.last())
+        assertEquals(listOf(false), phone.plays.drop(played))
+        assertFalse(described(string(R.string.practice_play)))
+
+        // Tapping the card turns it, and TalkBack says so; turned, it plays.
+        assertEquals(string(R.string.practice_show), card().fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        card().performClick()
+        waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(true, phone.plays.last())
-        // Once the app is there, at the next line it pauses, to be played again.
+        // Once the app is there, at the next line it pauses, to be played again; turned again, it isn't.
         appHas(atMs = 10_000)
         pass(10_500)
         waitUntil { practice().sound == LineSound.PLAYED }
         assertEquals(false, phone.plays.last())
+        val seeks = phone.seeks.size
+        model().turnPractice()
+        pass(1_000)
+        assertEquals(seeks, phone.seeks.size)
         click(string(R.string.practice_play))
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(listOf(10_000L, 10_000L), phone.seeks.takeLast(2))
-
-        // Tapping the card turns it, and TalkBack says so; known, it's done.
-        assertEquals(string(R.string.practice_show), card().fetchSemanticsNode().config[SemanticsActions.OnClick].label)
-        card().performClick()
-        composeRule.waitForIdle()
+        // Known, it's done.
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 1)) }
         assertEquals(1, savedLine("Stars").box)
@@ -195,19 +203,25 @@ class FlashcardsTest {
         launch()
         // Due, practice is a tap away from the main screen, saying how many.
         click(practiceDue(2))
-        // The app's asked for the song by name, saying so while it gets there.
+        // The app's asked for the song by name.
         waitUntil { phone.songsAsked.isNotEmpty() }
         assertEquals(MusicMetadata("Other", "Band") to app.packageName, phone.songsAsked.single())
-        assertTrue(shown(string(R.string.practice_loading, app.packageManager.getApplicationLabel(app.applicationInfo).toString())))
         assertEquals(LineSound.LOADING, practice().sound)
+        // Only the kanji: how it reads, heard or written, and what it means, are the answer.
+        val loading = string(R.string.practice_loading, app.packageManager.getApplicationLabel(app.applicationInfo).toString())
+        assertTrue(shown("夜の空"))
+        assertFalse(shown(loading) || readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
+        // Turned while the app gets there, it says so, and plays once there.
+        click(string(R.string.practice_show))
+        assertTrue(readingShown("よる") && readingShown("そら") && shown("yoru no sora") && shown("Cielo nocturno"))
+        assertTrue(shown(loading))
+        pass(1_000)
         appHas("Other", atMs = 0)
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(5_000L, phone.seeks.last())
-        // Only the kanji: how it reads, and what it means, are the answer.
-        assertTrue(shown("夜の空"))
-        assertFalse(readingShown("よる") || shown("yoru no sora") || shown("Cielo nocturno"))
-        click(string(R.string.practice_show))
-        assertTrue(readingShown("よる") && readingShown("そら") && shown("yoru no sora") && shown("Cielo nocturno"))
+        assertEquals(true, phone.plays.last())
+        // Asked for once: turned, it waited for the app instead of asking again.
+        assertEquals(1, phone.songsAsked.size)
         // Missed, it comes back after the rest of its song.
         click(string(R.string.practice_again))
         waitUntil { practice().line?.text == "星" }
@@ -236,16 +250,17 @@ class FlashcardsTest {
         appHas("Other", atMs = 0)
         launch()
         click(practiceDue(2))
+        waitUntil { practice().sound == LineSound.PLAYED }
+        click(string(R.string.practice_show))
         waitUntil { practice().sound == LineSound.PLAYING }
         // The app lets the song go before the next card, of the same song, so it loads again.
         phone.playing.value = null
         waitUntil { practice().sound == LineSound.PLAYED }
-        click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Two" && phone.songsAsked.isNotEmpty() }
         assertEquals(LineSound.LOADING, practice().sound)
         appHas("Other", atMs = 0)
-        waitUntil { practice().sound == LineSound.PLAYING }
+        waitUntil { practice().sound == LineSound.PLAYED }
         assertEquals(15_000L, phone.seeks.last())
     }
 
@@ -261,9 +276,9 @@ class FlashcardsTest {
         // No app to ask: it's read, with nothing to play.
         waitUntil { practice().line?.text == "One" && practice().sound == LineSound.NONE }
         assertTrue(shown("One"))
+        click(string(R.string.practice_show))
         assertFalse(described(string(R.string.practice_play)))
         // Asked, but never found: after a while it's read too.
-        click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         phone.canPlaySongs = true
         waitUntil { phone.songsAsked.isNotEmpty() }
@@ -283,7 +298,9 @@ class FlashcardsTest {
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         click(practiceDue(1))
-        waitUntil { model().uiState.practice?.sound == LineSound.PLAYING }
+        waitUntil { model().uiState.practice?.sound == LineSound.PLAYED }
+        click(string(R.string.practice_show))
+        waitUntil { practice().sound == LineSound.PLAYING }
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         assertEquals(false, phone.plays.last())
@@ -317,7 +334,7 @@ class FlashcardsTest {
         appHas(video = true)
         launch()
         click(practiceDue(1))
-        waitUntil { model().uiState.practice?.sound == LineSound.PLAYING }
+        waitUntil { model().uiState.practice?.sound == LineSound.PLAYED }
         assertEquals(3_000L, phone.seeks.last())
         // The word, with the line it's sung in under it; how it reads and what it means once turned.
         assertTrue(shown("空") && shown("夜の空"))

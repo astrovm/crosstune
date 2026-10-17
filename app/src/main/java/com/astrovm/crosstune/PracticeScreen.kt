@@ -73,8 +73,8 @@ internal const val PRACTICE_CARD_TAG = "practice-card"
 
 /**
  * Saved lines practised as cards, over the color of the song they're from. Every card asks the same:
- * the line as written, heard from the music app, and how it reads and what it means, shown once
- * turned. Done, it says how many, and the music played before is a tap away.
+ * the line as written; turned, it plays in the music app, and shows how it reads and what it means.
+ * Done, it says how many, and the music played before is a tap away.
  */
 @Composable
 internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
@@ -137,8 +137,8 @@ private fun CaughtUp() {
 }
 
 /**
- * A card: the song it's from, the line as written with its sound, and once turned how it reads and
- * what it means. Turned, it's said whether it was known, each button saying when it's back.
+ * A card: the song it's from and the line as written; once turned, its sound, how it reads and what
+ * it means. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
 private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
@@ -165,9 +165,10 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions)
                 CardFront(line)
-                LineSound(line, practice.sound, actions.onReplayLine)
+                // Heard, the line says how it reads, so it's part of the answer.
                 if (practice.turned) {
                     HorizontalDivider()
+                    LineSound(line, practice.sound, actions.onReplayLine)
                     CardBack(line)
                 }
             }
