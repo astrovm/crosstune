@@ -191,9 +191,9 @@ class FlashcardsTest {
         // Once the app is there, it pauses a moment past the next line, so the last word isn't cut short, to
         // be played again; turned again, it isn't.
         appHas(atMs = 10_000)
-        pass(10_000)
+        pass(10_700)
         assertEquals(LineSound.PLAYING, practice().sound)
-        pass(500)
+        pass(300)
         waitUntil { practice().sound == LineSound.PLAYED }
         assertEquals(false, phone.plays.last())
         val seeks = phone.seeks.size
