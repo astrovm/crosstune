@@ -111,7 +111,9 @@ class MainActivity : ComponentActivity() {
                     // Each song's chords are kept, so a song played again needs no lookup.
                     chordFinder = ChordFinder(client, cache = LookupCache(File(cacheDir, "chords.json"), lookupDispatcher, maxEntries = 300)),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
-                    oneTap = OneTapSetup(applicationContext, shellFactory())
+                    oneTap = OneTapSetup(applicationContext, shellFactory()),
+                    // Each song's sung readings are kept, so a song read again needs no lookup.
+                    sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300))
                 )
             }
         }
@@ -382,6 +384,7 @@ class MainActivity : ComponentActivity() {
                         onExplainLine = viewModel::explainLine,
                         onStartPractice = { viewModel.startPractice() },
                         onPractiseSong = viewModel::practiseSong,
+                        onReadCardAs = viewModel::readCardAs,
                         onTurnPractice = viewModel::turnPractice,
                         onGradePractice = viewModel::gradePractice,
                         onStopPractice = viewModel::stopPractice,

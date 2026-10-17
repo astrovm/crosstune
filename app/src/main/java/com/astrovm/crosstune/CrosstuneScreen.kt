@@ -227,6 +227,8 @@ internal data class ScreenActions(
     val onStartPractice: () -> Unit = {},
     /** Practises only the lines of the song whose words show. */
     val onPractiseSong: () -> Unit = {},
+    /** The card's line read as given, one reading for each of its kanji, put right by hand. */
+    val onReadCardAs: (List<String>) -> Unit = {},
     val onTurnPractice: () -> Unit = {},
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},

@@ -507,7 +507,9 @@ internal class MainViewModel(
     /** Which language a song's words are in; nullable so tests need none. */
     private val lyricsLanguage: LyricsLanguage? = null,
     /** Setup in one tap, for people who run Shizuku; nullable so tests need none. */
-    private val oneTap: OneTapSetup? = null
+    private val oneTap: OneTapSetup? = null,
+    /** How a Japanese song's kanji are sung, which a dictionary can't say; nullable so tests need none. */
+    private val sungReadings: SungReadings? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -2048,6 +2050,14 @@ internal class MainViewModel(
         return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
     }
 
+    /** Lines of [song] kept are read as its lines are now, put right, but for the ones put right by hand. */
+    private fun rereadSavedLines(song: MusicMetadata) {
+        val lines = wordLines()
+        val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand }
+            .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
+        if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
+    }
+
     /**
      * Lines of [song] kept before they could be timed are timed now, by the timed words found for it;
      * [again], all its lines are, as when the words were put in time by hand.
@@ -2170,6 +2180,17 @@ internal class MainViewModel(
         val practice = uiState.practice?.takeIf { !it.turned } ?: return
         uiState = uiState.copy(practice = practice.copy(turned = true))
         if (practice.sound == LineSound.PLAYED) replayLine()
+    }
+
+    /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
+    fun readCardAs(readings: List<String>) {
+        val practice = uiState.practice ?: return
+        val line = practice.line ?: return
+        val read = line.readAs(readings).takeIf { it != line } ?: return
+        uiState = uiState.copy(
+            savedLines = savedLinesStore.readAs(read),
+            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true) else it })
+        )
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
@@ -2486,13 +2507,24 @@ internal class MainViewModel(
         if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-                val read = withContext(systemDispatcher) { Readings.of(lines, script) }
+                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
-                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
                 val song = uiState.lyricsFor
-                if (script == Script.JAPANESE && usesChatGpt() && song != null) {
+                if (script != Script.JAPANESE || song == null) return@launch
+                // Sung readings, 都会 as まち, from a site that writes them over the words.
+                sungReadings?.of(song, lines, read)?.takeIf { it.isNotEmpty() }?.let { fixes ->
+                    if (wordLines() != lines || uiState.learning.lines != read) return@launch
+                    read = Readings.corrected(read, fixes)
+                    uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+                    rereadSavedLines(song)
+                }
+                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
+                if (usesChatGpt()) {
                     val checked = tutor?.checkReadings(song, lines, read) ?: return@launch
-                    if (wordLines() == lines && uiState.learning.lines == read) uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+                    if (wordLines() == lines && uiState.learning.lines == read) {
+                        uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+                        rereadSavedLines(song)
+                    }
                 }
             }
         }

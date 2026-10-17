@@ -325,6 +325,7 @@
     <string name="practice_due">%1$d件の復習</string>
     <string name="learn_song">この曲を覚える</string>
     <string name="practice_song">この曲を練習</string>
+    <string name="practice_fix_reading">読みを直す</string>
     <string name="learn_song_add">%1$d件を追加</string>
     <string name="learn_song_times">%1$d回歌われる</string>
     <string name="learn_song_new_words">覚えたい単語あり</string>

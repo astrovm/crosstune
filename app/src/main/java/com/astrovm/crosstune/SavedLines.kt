@@ -31,7 +31,9 @@ internal data class SavedLine(
     /** For a word, the line it's sung in. */
     val line: String? = null,
     /** The line in pieces, each with how it reads over it when that isn't plain from it, e.g. kanji with their kana. */
-    val ruby: List<Ruby>? = null
+    val ruby: List<Ruby>? = null,
+    /** Its reading put right by hand, which stays when the song's are read again. */
+    val readByHand: Boolean = false
 ) {
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
@@ -40,6 +42,27 @@ internal data class SavedLine(
     val practisable get() = translation != null || reading != null || timed
 
     fun isSame(other: SavedLine) = text == other.text && title == other.title && artist == other.artist
+
+    /** What of it can be read otherwise: its kanji, each with its reading, or a word as a whole. */
+    val readable: List<Ruby> get() = ruby?.filter { it.reading != null } ?: listOfNotNull(reading?.takeIf { line != null }?.let { Ruby(text, it) })
+
+    /**
+     * Read as [readings] say, one for each of [readable], in kana, put right by hand: on its
+     * words, in its kana and in its romaji. Kana written after a kanji, れる of 流れる, may be left
+     * in or out; a reading that isn't kana is left out.
+     */
+    fun readAs(readings: List<String>): SavedLine {
+        val parts = ruby
+        if (parts == null) {
+            val word = readings.firstOrNull()?.trim()?.let(Readings::hiragana)?.takeIf { it.isNotEmpty() && it.all(Readings::isKana) && line != null } ?: return this
+            return copy(reading = word, romanized = Readings.romaji(word), readByHand = true)
+        }
+        val shown = readable
+        val fixes = shown.indices.mapNotNull { index -> readings.getOrNull(index)?.trim()?.takeIf { it != shown[index].reading }?.let { ReadingFix(0, shown[index].text, it) } }
+        val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty())), fixes).first()
+        if (read.parts == parts) return this
+        return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true)
+    }
 }
 
 /** The lines kept, newest first, on the phone only. */
@@ -53,7 +76,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.optInt("box"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line"), json.ruby()
+                json.text("line"), json.ruby(), json.optBoolean("byHand")
             )
         }
     }
@@ -84,6 +107,17 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     /** Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised. */
     fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = save(load().map { if (it.isSame(line) && (again || !it.timed)) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it })
+
+    /** Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand. */
+    fun reread(lines: List<SavedLine>): List<SavedLine> = save(
+        load().map { kept ->
+            lines.firstOrNull { it.isSame(kept) }?.takeIf { !kept.readByHand }?.let { kept.copy(reading = it.reading, romanized = it.romanized, ruby = it.ruby) } ?: kept
+        }
+    )
+
+    /** Keeps [line] read as it is now, put right by hand. */
+    fun readAs(line: SavedLine): List<SavedLine> =
+        save(load().map { if (it.isSame(line)) it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true) else it })
 
     /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> {
@@ -117,6 +151,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
                     .put("artwork", line.artworkUrl).put("line", line.line)
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
+                    .apply { if (line.readByHand) put("byHand", true) }
             )
         }
         preferences.edit { putString(KEY, array.toString()) }

@@ -114,6 +114,7 @@ class ListeningTest {
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "sung_readings.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
         shazamAnswers(MATCH)
     }
@@ -1910,11 +1911,11 @@ class ListeningTest {
      * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers
      * [translations], and [openAi] for ChatGPT when signed in.
      */
-    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null) {
+    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null, sites: (okhttp3.Request) -> okhttp3.Response? = { null }) {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
-            openAi?.answer(request) ?: when (request.url.host) {
+            openAi?.answer(request) ?: sites(request) ?: when (request.url.host) {
                 "api.mymemory.translated.net" -> translation(request, translations)
                 else -> {
                     val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
@@ -2092,6 +2093,31 @@ class ListeningTest {
         composeRule.onNode(hasText(string(R.string.lyrics_ask_line))).performTextInput("Again?")
         click(string(R.string.lyrics_ask_send))
         waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_ask_failed)) }
+    }
+
+    @Test
+    fun kanjiAreReadAsTheyreSungWhereALyricsSiteSaysAndLinesKeptAreReadSoButOnesPutRightByHand() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]]},""" +
+                """{"text":"都会の朝","reading":"とかいのあした","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["朝","あした"]],"byHand":true}]"""
+        ).commit()
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        wordsOf(null, "都会の夜\\n都会の朝", sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                request.url.encodedPath == "/search" ->
+                    FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+                else -> FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br />${ruby("都会", "まち")}の${ruby("朝", "あさ")}<br /></div>""")
+            }
+        })
+        // The dictionary reads 都会 as とかい; it's sung まち.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        assertFalse(readingShown("とかい"))
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals("まちのよる", kept.first { it.text == "都会の夜" }.reading)
+        // Put right by hand, it stays so.
+        assertEquals("とかいのあした", kept.first { it.text == "都会の朝" }.reading)
     }
 
     @Test

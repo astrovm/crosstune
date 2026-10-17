@@ -324,6 +324,7 @@
     <string name="practice_due">%1$d à revoir</string>
     <string name="learn_song">Apprendre cette chanson</string>
     <string name="practice_song">S\'entraîner sur cette chanson</string>
+    <string name="practice_fix_reading">Corriger la lecture</string>
     <string name="learn_song_add">Ajouter %1$d</string>
     <string name="learn_song_times">Chantée %1$d fois</string>
     <string name="learn_song_new_words">Contient des mots à connaître</string>

@@ -172,4 +172,55 @@ class SavedLinesPracticeTest {
         assertEquals(3 * day, SavedLinesStore.waitFor(line, Grade.EASY))
         assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.EASY))
     }
+
+    private val night = SavedLine(
+        "都会の夜", reading = "とかいのよる", romanized = "tokai no yoru", title = "Demo", artist = "Band",
+        ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる"))
+    )
+
+    @Test
+    fun aLineReadOtherwiseByHandIsReadSoOnItsKanjiInItsKanaAndInRomaji() {
+        assertEquals(listOf(Ruby("都会", "とかい"), Ruby("夜", "よる")), night.readable)
+        val read = night.readAs(listOf("まち", "よる"))
+        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), read.ruby)
+        assertEquals("まちのよる", read.reading)
+        assertEquals("machi no yoru", read.romanized)
+        assertTrue(read.readByHand)
+        // In katakana, it's read the same.
+        assertEquals(read, night.readAs(listOf(" マチ ", "よる")))
+        // Not kana, or the same, nothing changes.
+        assertEquals(night, night.readAs(listOf("machi", "よる")))
+        assertEquals(night, night.readAs(listOf("とかい", "よる")))
+        assertEquals(night, night.readAs(listOf("", "")))
+    }
+
+    @Test
+    fun aWordReadOtherwiseByHandIsReadSoAsAWhole() {
+        val word = SavedLine("都会", reading = "とかい", romanized = "tokai", title = "Demo", artist = "Band", line = "都会の夜")
+        assertEquals(listOf(Ruby("都会", "とかい")), word.readable)
+        assertEquals(word.copy(reading = "まち", romanized = "machi", readByHand = true), word.readAs(listOf("まち")))
+        assertEquals(word, word.readAs(listOf("machi")))
+        assertEquals(word, word.readAs(emptyList()))
+        // A line with nothing to read otherwise has nothing to put right.
+        assertEquals(emptyList<Ruby>(), line.readable)
+        assertEquals(line, line.readAs(listOf("かぜ")))
+    }
+
+    @Test
+    fun linesReadAgainTakeTheNewReadingsButNotOnesPutRightByHand() {
+        val store = SavedLinesStore(prefs)
+        val morning = SavedLine("都会の朝", reading = "とかいのあさ", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("朝", "あさ")))
+        store.addAll(listOf(night, morning))
+        store.readAs(morning.readAs(listOf("とかい", "あした")))
+        val sung = night.readAs(listOf("まち", "よる")).copy(readByHand = false)
+        val again = store.reread(listOf(sung, morning.copy(reading = "まちのあさ", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("朝", "あさ")))))
+        assertEquals("まちのよる", again.first { it.text == night.text }.reading)
+        assertEquals(sung.ruby, again.first { it.text == night.text }.ruby)
+        assertFalse(again.first { it.text == night.text }.readByHand)
+        // Put right by hand, it stays so, after the phone's restarted too.
+        val kept = SavedLinesStore(prefs).load().first { it.text == morning.text }
+        assertEquals("とかいのあした", kept.reading)
+        assertTrue(kept.readByHand)
+        assertFalse(SavedLinesStore(prefs).load().first { it.text == night.text }.readByHand)
+    }
 }

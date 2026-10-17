@@ -7,7 +7,9 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -16,8 +18,11 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
+import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -32,8 +37,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
-import java.io.File
-import java.time.Duration
 
 /** Saved lines practised as cards that play in the music app, and whole songs learned. */
 @RunWith(RobolectricTestRunner::class)
@@ -195,6 +198,46 @@ class FlashcardsTest {
         click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         waitUntil { shown(string(R.string.practice_caught_up)) }
+    }
+
+    @Test
+    fun aReadingThatIsntHowItsSungIsPutRightByHandOnTheCardsBack() {
+        saved(
+            """{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","title":"Other","artist":"Band",""" +
+                """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""",
+            """{"text":"Moon","translation":"Luna","title":"Other","artist":"Band","box":1}"""
+        )
+        launch()
+        click(practiceDue(2))
+        // Only once turned, with its reading shown.
+        assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_show))
+        assertTrue(readingShown("よる"))
+        click(string(R.string.practice_fix_reading))
+        // Each kanji, with its reading to change.
+        assertTrue(shown("夜") && shown("空"))
+        composeRule.onNode(hasText("よる") and hasSetTextAction()).performTextReplacement("night")
+        // Not kana: it can't be saved.
+        composeRule.onNode(hasText(string(R.string.save_button))).assertIsNotEnabled()
+        composeRule.onNode(hasText("night") and hasSetTextAction()).performTextReplacement("よ")
+        click(string(R.string.save_button))
+        // On the card now, and kept, in kana and romaji too.
+        waitUntil { readingShown("よ") }
+        assertFalse(readingShown("よる"))
+        assertTrue(shown("yo no sora"))
+        val kept = savedLine("夜の空")
+        assertEquals("よのそら", kept.reading)
+        assertTrue(kept.readByHand)
+        // Cancelled, nothing changes.
+        click(string(R.string.practice_fix_reading))
+        composeRule.onNode(hasText("そら") and hasSetTextAction()).performTextReplacement("から")
+        click(string(R.string.cancel_button))
+        assertEquals("よのそら", savedLine("夜の空").reading)
+        // A line with no kanji has nothing to put right.
+        click(string(R.string.practice_good))
+        waitUntil { practice().line?.text == "Moon" }
+        click(string(R.string.practice_show))
+        assertFalse(described(string(R.string.practice_fix_reading)))
     }
 
     @Test

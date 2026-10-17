@@ -324,6 +324,7 @@
     <string name="practice_due">%1$d fällig</string>
     <string name="learn_song">Diesen Song lernen</string>
     <string name="practice_song">Diesen Song üben</string>
+    <string name="practice_fix_reading">Lesung korrigieren</string>
     <string name="learn_song_add">%1$d hinzufügen</string>
     <string name="learn_song_times">%1$d-mal gesungen</string>
     <string name="learn_song_new_words">Hat Wörter zum Lernen</string>

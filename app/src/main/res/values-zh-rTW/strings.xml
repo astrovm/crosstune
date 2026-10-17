@@ -324,6 +324,7 @@
     <string name="practice_due">%1$d 項待複習</string>
     <string name="learn_song">學這首歌</string>
     <string name="practice_song">練習這首歌</string>
+    <string name="practice_fix_reading">修改讀音</string>
     <string name="learn_song_add">新增 %1$d 項</string>
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要學的詞</string>
