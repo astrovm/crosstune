@@ -1,0 +1,1 @@
+Ready for F-Droid: its build of the app now matches the GitHub release exactly.
