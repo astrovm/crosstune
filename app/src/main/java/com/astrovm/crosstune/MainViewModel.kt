@@ -3111,10 +3111,11 @@ internal class MainViewModel(
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L
         /**
-         * How long a line plays on past where the words say it ends: timed by ear, words are often
-         * timed a little early, and a line cut short loses its last word.
+         * How long a line plays on past where the words say it ends. Words are timed to show a little
+         * before they're sung, half a second in songs heard, so the next line's time is about when
+         * this one's last sound starts fading, not when it's gone; cut there, its last word is lost.
          */
-        const val LINE_TAIL_MS = 500L
+        const val LINE_TAIL_MS = 1_000L
         private const val REPEAT_CHECK_MS = 100L
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long a song the music app has already takes to be found. */
