@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onLast
@@ -201,6 +202,8 @@ class FlashcardsTest {
         // Heard, its meaning can be peeked at; turned by a tap, it says what it was.
         click(string(R.string.practice_hint))
         assertTrue(shown("Uno"))
+        // Tapping the card turns it, and TalkBack says so.
+        assertEquals(string(R.string.practice_show), card().fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         card().performClick()
         composeRule.waitForIdle()
         assertTrue(shown("One"))
@@ -347,6 +350,9 @@ class FlashcardsTest {
         click(string(R.string.learn_song))
         // Each line once, how often it's sung said; sounds aren't picked to start with.
         assertTrue(described(string(R.string.learn_song_times, 2)))
+        // Each a whole finger tall.
+        val tall = 48 * app.resources.displayMetrics.density
+        assertTrue(composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes().all { it.size.height >= tall })
         click(string(R.string.learn_song_add, 3))
         click(string(R.string.lyrics_study))
         click(string(R.string.learn_song))
@@ -379,6 +385,8 @@ class FlashcardsTest {
         click(string(R.string.quiz_listen))
         assertTrue(model().uiState.quiz)
         assertFalse(shown("Stars") || shown("Moon"))
+        // Still there to TalkBack, as lines hidden.
+        assertEquals(2, composeRule.onAllNodes(hasContentDescription(string(R.string.quiz_hidden))).fetchSemanticsNodes().size)
         // Sung, it's said whether it was known, and shows.
         appHas(atMs = 10_000)
         waitUntil { described(string(R.string.quiz_knew)) }

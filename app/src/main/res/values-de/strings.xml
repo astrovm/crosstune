@@ -338,6 +338,7 @@
     <string name="quiz_listen">Beim Hören abfragen</string>
     <string name="quiz_knew">Gewusst</string>
     <string name="quiz_missed">Nicht gewusst</string>
+    <string name="quiz_hidden">Versteckte Zeile</string>
     <string name="song_tab_meaning">Bedeutung</string>
     <string name="song_tab_words">Wörter</string>
     <string name="song_tab_artist">Künstler</string>

@@ -338,6 +338,7 @@
     <string name="quiz_listen">들으면서 퀴즈</string>
     <string name="quiz_knew">알았어요</string>
     <string name="quiz_missed">몰랐어요</string>
+    <string name="quiz_hidden">숨겨진 가사</string>
     <string name="song_tab_meaning">의미</string>
     <string name="song_tab_words">단어</string>
     <string name="song_tab_artist">아티스트</string>

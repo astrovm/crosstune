@@ -59,6 +59,10 @@ class PracticeSessionTest {
         // At most as many as asked, the ones due longest.
         assertEquals(listOf("B1", "B2", "A2"), sessionOf(lines, now = 10, max = 3).map { it.text })
         assertTrue(sessionOf(emptyList(), now = 10).isEmpty())
+        // One with no meaning is practised when it can be heard, and only then.
+        assertEquals(listOf("Heard"), sessionOf(listOf(line("Heard", start = 1_000, translation = null), line("Half", translation = null).copy(startMs = 1_000)), now = 10).map { it.text })
+        // Due this very moment, it's in.
+        assertEquals(listOf("Later"), sessionOf(listOf(line("Later", due = 100, start = 1_000)), now = 100).map { it.text })
     }
 
     @Test
@@ -74,6 +78,7 @@ class PracticeSessionTest {
         assertTrue(sameSongOf(line("A1", "A"), line("A2", "A")))
         assertFalse(sameSongOf(line("A1", "A"), line("B1", "B")))
         assertFalse(sameSongOf(line("A1", "A"), null))
+        assertFalse(sameSongOf(line("A1", "A"), line("A1", "A").copy(artist = "Other band")))
     }
 
     @Test

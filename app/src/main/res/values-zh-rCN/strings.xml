@@ -338,6 +338,7 @@
     <string name="quiz_listen">边听边测验</string>
     <string name="quiz_knew">我知道</string>
     <string name="quiz_missed">我不知道</string>
+    <string name="quiz_hidden">隐藏的歌词</string>
     <string name="song_tab_meaning">含义</string>
     <string name="song_tab_words">词语</string>
     <string name="song_tab_artist">艺人</string>

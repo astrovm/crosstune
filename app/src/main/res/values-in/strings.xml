@@ -338,6 +338,7 @@
     <string name="quiz_listen">Uji saya saat mendengarkan</string>
     <string name="quiz_knew">Saya tahu</string>
     <string name="quiz_missed">Saya tidak tahu</string>
+    <string name="quiz_hidden">Baris tersembunyi</string>
     <string name="song_tab_meaning">Arti</string>
     <string name="song_tab_words">Kata</string>
     <string name="song_tab_artist">Artis</string>

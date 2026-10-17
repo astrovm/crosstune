@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Slider
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -754,6 +755,7 @@ private fun LearnSongSheet(state: UiState, actions: ScreenActions, onDismiss: ()
                         modifier = Modifier
                             .fillMaxWidth()
                             .toggleable(on, enabled = !saved, role = Role.Checkbox) { if (it) picked.add(line.index) else picked.remove(line.index) }
+                            .heightIn(min = 48.dp)
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         Checkbox(checked = on, onCheckedChange = null, enabled = !saved)
@@ -1316,7 +1318,7 @@ private fun LyricLineText(
     ) {
         val reading = help?.reading
         // Hidden to be said first, the words blur, or fade away where they can't, and aren't read out.
-        Box(modifier = if (hidden) Modifier.hiddenWords() else Modifier) {
+        Box(modifier = if (hidden) Modifier.hiddenWords(stringResource(R.string.quiz_hidden)) else Modifier) {
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (chords != null && !chords.isEmpty) {
@@ -1342,7 +1344,7 @@ private fun LyricLineText(
 }
 
 /** Words hidden to be said first: blurred where Android can, or else faded away, and not read out either way. */
-private fun Modifier.hiddenWords(): Modifier = clearAndSetSemantics {}.then(
+private fun Modifier.hiddenWords(label: String): Modifier = clearAndSetSemantics { contentDescription = label }.then(
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(12.dp, BlurredEdgeTreatment.Unbounded) else Modifier.alpha(0.06f)
 )
 

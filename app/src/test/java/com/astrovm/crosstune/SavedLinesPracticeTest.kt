@@ -121,6 +121,11 @@ class SavedLinesPracticeTest {
         assertEquals(SavedLinesStore.MAX, full.size)
         assertEquals("New", full.first().text)
         assertFalse(full.any { it.text == "Line 3" })
+        // Learned as well as each other, the one kept longest goes.
+        val oldest = full.last().text
+        val fuller = store.addAll(listOf(line.copy(text = "Newer")))
+        assertEquals(full.dropLast(1).map { it.text }, fuller.drop(1).map { it.text })
+        assertFalse(fuller.any { it.text == oldest })
     }
 
     @Test
@@ -149,6 +154,9 @@ class SavedLinesPracticeTest {
         store.practised(line, Grade.GOOD, now = monday + 60_000)
         assertEquals(1, store.streakOn(monday))
         store.practised(line, Grade.AGAIN, now = monday + day)
+        assertEquals(2, store.streakOn(monday + day))
+        // Again the same day, it stays.
+        store.practised(line, Grade.GOOD, now = monday + day + 60_000)
         assertEquals(2, store.streakOn(monday + day))
         // Still counted the day after, gone the day after that.
         assertEquals(2, store.streakOn(monday + 2 * day))

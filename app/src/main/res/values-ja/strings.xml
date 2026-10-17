@@ -339,6 +339,7 @@
     <string name="quiz_listen">聴きながらクイズ</string>
     <string name="quiz_knew">わかった</string>
     <string name="quiz_missed">わからなかった</string>
+    <string name="quiz_hidden">隠れた歌詞</string>
     <string name="song_tab_meaning">意味</string>
     <string name="song_tab_words">言葉</string>
     <string name="song_tab_artist">アーティスト</string>

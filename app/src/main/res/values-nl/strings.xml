@@ -338,6 +338,7 @@
     <string name="quiz_listen">Overhoor me tijdens het luisteren</string>
     <string name="quiz_knew">Ik wist het</string>
     <string name="quiz_missed">Ik wist het niet</string>
+    <string name="quiz_hidden">Verborgen regel</string>
     <string name="song_tab_meaning">Betekenis</string>
     <string name="song_tab_words">Woorden</string>
     <string name="song_tab_artist">Artiest</string>

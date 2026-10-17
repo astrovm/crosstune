@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.clickable
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
 import androidx.activity.compose.BackHandler
@@ -208,8 +209,6 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
-            onClick = actions.onTurnPractice,
-            enabled = !practice.turned,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -218,7 +217,8 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
                 .offset { IntOffset(dragged.value.x.roundToInt(), dragged.value.y.roundToInt()) }
                 .rotate(dragged.value.x / 40f)
                 .then(
-                    if (!practice.turned) Modifier
+                    // Tapped, it turns: a button with a name for TalkBack, as Show answer is.
+                    if (!practice.turned) Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                     else Modifier.pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragEnd = {

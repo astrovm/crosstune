@@ -338,6 +338,7 @@
     <string name="quiz_listen">Dinlerken beni sına</string>
     <string name="quiz_knew">Biliyordum</string>
     <string name="quiz_missed">Bilmiyordum</string>
+    <string name="quiz_hidden">Gizli satır</string>
     <string name="song_tab_meaning">Anlam</string>
     <string name="song_tab_words">Kelimeler</string>
     <string name="song_tab_artist">Sanatçı</string>

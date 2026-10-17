@@ -338,6 +338,7 @@
     <string name="quiz_listen">Проверять меня во время прослушивания</string>
     <string name="quiz_knew">Помню</string>
     <string name="quiz_missed">Не помню</string>
+    <string name="quiz_hidden">Скрытая строка</string>
     <string name="song_tab_meaning">Смысл</string>
     <string name="song_tab_words">Слова</string>
     <string name="song_tab_artist">Исполнитель</string>

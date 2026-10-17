@@ -338,6 +338,7 @@
     <string name="quiz_listen">Me perguntar enquanto ouço</string>
     <string name="quiz_knew">Eu sabia</string>
     <string name="quiz_missed">Eu não sabia</string>
+    <string name="quiz_hidden">Linha oculta</string>
     <string name="song_tab_meaning">Significado</string>
     <string name="song_tab_words">Palavras</string>
     <string name="song_tab_artist">Artista</string>

@@ -357,6 +357,7 @@
     <string name="quiz_listen">Quiz me while I listen</string>
     <string name="quiz_knew">I knew it</string>
     <string name="quiz_missed">I didn\'t know it</string>
+    <string name="quiz_hidden">Hidden line</string>
     <string name="song_tab_meaning">Meaning</string>
     <string name="song_tab_words">Words</string>
     <string name="song_tab_artist">Artist</string>
