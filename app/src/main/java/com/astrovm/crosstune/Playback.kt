@@ -10,6 +10,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.os.Handler
@@ -65,9 +66,9 @@ internal interface PlaybackSource {
 
     /**
      * Has [app], or else the music app that last played, find [song] by its name and play it, in the
-     * background; false with no app to ask.
+     * background, or YouTube Music play its [link] there when it's known; false with no app to ask.
      */
-    fun playSong(song: MusicMetadata, app: String?): Boolean
+    fun playSong(song: MusicMetadata, app: String?, link: String? = null): Boolean
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
@@ -168,7 +169,7 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun playSong(song: MusicMetadata, app: String?): Boolean = runCatching {
+    override fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean = runCatching {
         // Without the user's say-so Android shows none, and says so by throwing.
         val apps = sessions.getActiveSessions(listener).filter { it.packageName != context.packageName }
         val asked = apps.firstOrNull { it.packageName == app } ?: apps.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L } ?: return false
@@ -178,7 +179,9 @@ internal class MediaSessionPlayback(
             putString(MediaStore.EXTRA_MEDIA_TITLE, song.title)
             putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
         }
-        asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
+        // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
+        if (link != null && asked.packageName == MusicService.YOUTUBE_MUSIC.packageName) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
+        else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
         true
     }.getOrDefault(false)
 

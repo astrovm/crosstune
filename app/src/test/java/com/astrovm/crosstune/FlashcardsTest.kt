@@ -265,6 +265,48 @@ class FlashcardsTest {
     }
 
     @Test
+    fun youTubeMusicIsAskedForTheSongByItsLinkThereAndOtherAppsByName() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved(
+            // Kept before the app it was in was, so the last one that played is asked: here YouTube Music.
+            """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",
+            """{"text":"Two","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
+            """{"text":"Three","title":"Gone","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
+            """{"text":"Four","title":"Elsewhere","artist":"Band","box":1,"start":5000,"end":9000,"app":"com.spotify.music"}"""
+        )
+        // YouTube Music has every song but Gone.
+        fake.handler = { request ->
+            val title = listOf("Another", "Other", "Elsewhere").firstOrNull { it in FakeSpotify.bodyOf(request) }
+            if (request.url.host == "music.youtube.com" && title != null) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"${title.lowercase().padEnd(11, '0')}"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
+        launch()
+        click(practiceDue(4))
+        // YouTube Music ignores being asked by name, so it's given the song's link there.
+        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000", "Another" to "https://music.youtube.com/watch?v=another0000")) {
+            waitUntil { phone.songsAsked.lastOrNull()?.first?.title == title }
+            assertEquals(link, phone.linksAsked.last())
+            appHas(title, atMs = 0, app = youTubeMusic)
+            waitUntil { practice().sound == LineSound.PLAYED }
+            click(string(R.string.practice_show))
+            click(string(R.string.practice_good))
+            phone.playing.value = null
+        }
+        // A song it doesn't have is asked for by name; another app always is.
+        waitUntil { phone.songsAsked.size == 3 }
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        waitUntil { practice().sound == LineSound.NONE }
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        waitUntil { phone.songsAsked.size == 4 }
+        assertEquals(listOf("Gone", "Elsewhere"), phone.songsAsked.drop(2).map { it.first.title })
+        assertEquals(listOf(null, null), phone.linksAsked.drop(2))
+    }
+
+    @Test
     fun aSongTheAppCantFindIsReadInsteadAndPracticeStopsWhatItPlays() {
         saved(
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",

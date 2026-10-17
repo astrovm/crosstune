@@ -18,6 +18,8 @@ internal class FakePlayback : PlaybackSource {
     val skips = mutableListOf<Boolean>()
     /** Each song asked for by name, and the app asked. */
     val songsAsked = mutableListOf<Pair<MusicMetadata, String?>>()
+    /** Each song's link given with it, when there was one. */
+    val linksAsked = mutableListOf<String?>()
     /** Whether there's an app to ask for a song. */
     var canPlaySongs = true
     private val songs = MutableStateFlow<Heard.Song?>(null)
@@ -43,9 +45,10 @@ internal class FakePlayback : PlaybackSource {
         plays += play
     }
 
-    override fun playSong(song: MusicMetadata, app: String?): Boolean {
+    override fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
         if (!canPlaySongs) return false
         songsAsked += song to app
+        linksAsked += link
         return true
     }
 
