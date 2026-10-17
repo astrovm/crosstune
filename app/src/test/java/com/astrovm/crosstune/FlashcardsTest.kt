@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -509,6 +510,22 @@ class FlashcardsTest {
         val kept = SavedLinesStore(prefs()).load().filter { it.title == "Demo" }
         assertEquals(listOf("La la la", "Night sky", "Moon"), kept.map { it.text })
         assertEquals("Elsewhere", SavedLinesStore(prefs()).load().first { it.title == "Other" }.text)
+    }
+
+    @Test
+    fun aWordKeptIsListedApartFromItsLineToLetGo() {
+        // A word that's a whole line: kept as a word, not as the line.
+        saved("""{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","line":"Moon"}""")
+        wordsOfDemo()
+        click(string(R.string.lyrics_study))
+        click(string(R.string.choose_lines))
+        val moons = composeRule.onAllNodes(isToggleable() and hasText("Moon"))
+        moons.assertCountEquals(2)
+        // The line isn't kept; the word, after the lines, is.
+        moons[0].assertIsOff()
+        moons[1].assertIsOn().performClick()
+        click(string(R.string.save_button))
+        assertTrue(SavedLinesStore(prefs()).load().isEmpty())
     }
 
     @Test
