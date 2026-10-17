@@ -2,7 +2,6 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,32 +15,6 @@ class PracticeSessionTest {
 
     private fun line(text: String, title: String = "Demo", due: Long = 0, start: Long? = null, translation: String? = "Meaning", box: Int = 0) =
         SavedLine(text, translation = translation, title = title, artist = "Band", due = due, startMs = start, endMs = start?.plus(5_000), box = box)
-
-    @Test
-    fun aLineThatCanBePlayedIsReadThenHeardThenThoughtOfFromItsMeaningInTurn() {
-        val faces = (0..4).map { faceOf(line("Night", start = 1_000, box = it), playable = true) }
-        assertEquals(listOf(Face.LINE, Face.LISTEN, Face.MEANING, Face.LINE, Face.LISTEN), faces)
-    }
-
-    @Test
-    fun aLineThatCantBePlayedTakesTurnsBetweenItsWordsAndItsMeaning() {
-        assertEquals(listOf(Face.LINE, Face.MEANING, Face.LINE), (0..2).map { faceOf(line("Night", box = it), playable = false) })
-    }
-
-    @Test
-    fun aLineWithNoMeaningIsHeardAndAWordIsAGapInItsLine() {
-        assertEquals(Face.LISTEN, faceOf(line("Night", start = 0, translation = null), playable = true))
-        assertEquals(Face.GAP, faceOf(line("sky", translation = "cielo").copy(line = "Night sky"), playable = false))
-        // A word with nothing to say what it means has no gap to fill.
-        assertEquals(Face.LISTEN, faceOf(line("sky", translation = null).copy(line = "Night sky"), playable = true))
-    }
-
-    @Test
-    fun theWordLeftOutIsFoundWhateverItsCase() {
-        assertEquals("Night $GAP tonight", withGap("Night Sky tonight", "sky"))
-        assertNull(withGap("Night sky", "moon"))
-        assertNull(withGap("Night sky", " "))
-    }
 
     @Test
     fun aSessionTakesTheLinesDueLongestEachSongsTogetherInTheOrderTheyreSung() {

@@ -131,8 +131,6 @@ internal data class UiState(
     val savedLines: List<SavedLine> = emptyList(),
     /** Saved lines being practised, while they are. */
     val practice: Practice? = null,
-    /** Set while the saved lines of the song shown hide until they're sung, to say them first. */
-    val quiz: Boolean = false,
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */
@@ -315,30 +313,22 @@ internal data class ChatGptState(
 )
 
 /**
- * Saved lines being practised as cards, [queue] the ones left, the one shown first. Each shows its
- * [face], to think of the rest, which shows once [turned]; the line plays in the music app as
- * [sound] says. A song new to the session shows on its own, as an [intro], while the app gets to it.
- * With none left, the session's done; with none at all, none was due: all are caught up.
+ * Saved lines being practised as cards, [queue] the ones left, the one shown first. Each asks the
+ * line as written, which plays in the music app as [sound] says, and shows how it reads and what it
+ * means once [turned]. With none left, the session's done; with none at all, none was due: all are
+ * caught up.
  */
 internal data class Practice(
     val queue: List<SavedLine> = emptyList(),
     /** How many cards the session has, and how many are done, for how far along it is. */
     val total: Int = 0,
     val done: Int = 0,
-    val face: Face = Face.LINE,
-    val turned: Boolean = false,
-    /** Set once the meaning of a card that's heard is peeked at. */
-    val hint: Boolean = false,
-    val sound: LineSound = LineSound.NONE,
-    val intro: Boolean = false,
-    /** How many were missed, known, and known easily. */
+    /** How many times one was missed, so a card missed comes back as a new one. */
     val missed: Int = 0,
-    val known: Int = 0,
-    val easy: Int = 0,
-    /** Days in a row lines were practised, as of now. */
-    val streak: Int = 0,
-    /** The first line of each song practised, in turn, for their covers. */
-    val songs: List<SavedLine> = emptyList(),
+    val turned: Boolean = false,
+    val sound: LineSound = LineSound.NONE,
+    /** The last card's line shown, for the song practice left off in. */
+    val lastSong: SavedLine? = null,
     /** What the music app played before, to go back to once done. */
     val before: Before? = null
 ) {
@@ -2023,7 +2013,8 @@ internal class MainViewModel(
             learning.translations.getOrNull(index),
             song.title,
             song.artist,
-            learning.explanation?.takeIf { it.index == index && it.done }?.text
+            learning.explanation?.takeIf { it.index == index && it.done }?.text,
+            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
         ).timedAt(index)
     }
 
@@ -2049,19 +2040,6 @@ internal class MainViewModel(
         }
     }
 
-    /** While listening, says whether the saved line [index], sung now, was [known] before it showed. */
-    fun quizLine(index: Int, known: Boolean) {
-        val song = uiState.lyricsFor ?: return
-        val text = wordLines().getOrNull(index) ?: return
-        val saved = uiState.savedLines.firstOrNull { it.text == text && it.title == song.title && it.artist == song.artist } ?: return
-        uiState = uiState.copy(savedLines = savedLinesStore.practised(saved, if (known) Grade.GOOD else Grade.AGAIN, wallClock()))
-    }
-
-    /** Hides the saved lines of the song shown until they're sung, to say them first, or shows them again. */
-    fun setQuiz(on: Boolean) {
-        uiState = uiState.copy(quiz = on)
-    }
-
     /**
      * Practises the lines due, as cards, each song's together. What the music app plays now is kept,
      * to go back to once done.
@@ -2074,7 +2052,7 @@ internal class MainViewModel(
         val before = uiState.lyricsFor?.let { song -> playing?.let { Before(song, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: playback?.nowPlaying()?.let { heard -> heard.clock?.let { Before(heard.metadata, it.positionAt(now()), app = null) } }
         practiceSong = null
-        uiState = uiState.copy(practice = Practice(queue, total = queue.size, streak = savedLinesStore.streakOn(wallClock()), before = before))
+        uiState = uiState.copy(practice = Practice(queue, total = queue.size, before = before))
         showCard()
     }
 
@@ -2082,32 +2060,21 @@ internal class MainViewModel(
     private var practiceSong: SavedLine? = null
     private var soundJob: Job? = null
 
-    /** Shows the next card, playing its line, unless its meaning's the side to think of from. */
+    /** Shows the next card, playing its line when it can be. */
     private fun showCard() {
         soundJob?.cancel()
         val practice = uiState.practice ?: return
-        val line = practice.line
-        if (line == null) {
-            uiState = uiState.copy(practice = practice.copy(streak = savedLinesStore.streakOn(wallClock())))
-            return
-        }
+        val line = practice.line ?: return
         val playable = line.timed && playback?.hasAccess() == true
-        val face = faceOf(line, playable)
-        val songs = if (practice.songs.none { sameSongOf(it, line) }) practice.songs + line else practice.songs
-        uiState = uiState.copy(
-            practice = practice.copy(
-                face = face, turned = false, hint = false, songs = songs,
-                sound = if (playable) LineSound.LOADING else LineSound.NONE, intro = playable && !sameSongOf(line, practiceSong)
-            )
-        )
-        if (playable) sound(line, play = face != Face.MEANING)
+        uiState = uiState.copy(practice = practice.copy(turned = false, lastSong = line, sound = if (playable) LineSound.LOADING else LineSound.NONE))
+        if (playable) sound(line)
     }
 
     /**
-     * Has the music app play [line], or only get to it when not [play]: from where it's sung to the
-     * next line, then pause. A song it isn't playing it's asked to find first.
+     * Has the music app play [line], from where it's sung to the next line, then pause. A song it
+     * isn't playing it's asked to find first.
      */
-    private fun sound(line: SavedLine, play: Boolean) {
+    private fun sound(line: SavedLine) {
         val source = playback ?: return
         soundJob?.cancel()
         soundJob = viewModelScope.launch {
@@ -2118,8 +2085,7 @@ internal class MainViewModel(
                 val start = (line.startMs ?: 0L) + lead
                 val end = (line.endMs ?: 0L) + lead
                 source.seekTo(song, start)
-                source.playPause(song, play)
-                if (!play) return@inApp setSound(line, LineSound.PLAYED)
+                source.playPause(song, true)
                 setSound(line, LineSound.PLAYING)
                 // Once the app says it's there, it plays to the end of the line.
                 withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
@@ -2154,26 +2120,19 @@ internal class MainViewModel(
     /** How [line] sounds, unless another card's shown by now. */
     private fun setSound(line: SavedLine, sound: LineSound) {
         val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
-        uiState = uiState.copy(practice = practice.copy(sound = sound, intro = false))
+        uiState = uiState.copy(practice = practice.copy(sound = sound))
     }
 
     /** Plays the card's line again. */
     fun replayLine() {
         val practice = uiState.practice ?: return
         val line = practice.line?.takeIf { practice.sound != LineSound.NONE } ?: return
-        sound(line, play = true)
+        sound(line)
     }
 
-    /** Shows the meaning of a card that's heard, to help. */
-    fun hintPractice() {
-        uiState = uiState.copy(practice = uiState.practice?.copy(hint = true))
-    }
-
-    /** Turns the card, to say how well its other side was known; one that's thought of from its meaning plays now. */
+    /** Turns the card, to say whether it was known. */
     fun turnPractice() {
-        val practice = uiState.practice?.takeIf { !it.turned } ?: return
-        uiState = uiState.copy(practice = practice.copy(turned = true))
-        if (practice.face == Face.MEANING && practice.sound == LineSound.PLAYED) replayLine()
+        uiState = uiState.copy(practice = uiState.practice?.copy(turned = true))
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
@@ -2182,12 +2141,8 @@ internal class MainViewModel(
         val line = practice.line ?: return
         uiState = uiState.copy(savedLines = savedLinesStore.practised(line, grade, wallClock()))
         uiState = uiState.copy(
-            practice = when (grade) {
-                // Missed, it starts over, so it comes back read and heard.
-                Grade.AGAIN -> practice.copy(queue = missedAgain(listOf(line.copy(box = 0)) + practice.queue.drop(1)), missed = practice.missed + 1)
-                Grade.GOOD -> practice.copy(queue = practice.queue.drop(1), done = practice.done + 1, known = practice.known + 1)
-                Grade.EASY -> practice.copy(queue = practice.queue.drop(1), done = practice.done + 1, easy = practice.easy + 1)
-            }
+            practice = if (grade == Grade.AGAIN) practice.copy(queue = missedAgain(practice.queue), missed = practice.missed + 1)
+            else practice.copy(queue = practice.queue.drop(1), done = practice.done + 1)
         )
         showCard()
     }

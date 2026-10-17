@@ -2116,9 +2116,8 @@ class ListeningTest {
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)
-        // Nothing else is due: one practised, one known, the first day in a row.
-        waitForDescription(string(R.string.practice_done, 1))
-        assertTrue(described(string(R.string.practice_tally, 0, 1, 0)) && described(string(R.string.practice_streak, 1)))
+        // Nothing else is due: one practised.
+        waitForText(string(R.string.practice_done, 1))
         // Closed, it's back to the words.
         click(string(R.string.floating_close))
         waitForText("«Night sky»")
@@ -2135,10 +2134,9 @@ class ListeningTest {
         click(string(R.string.saved_practice))
         // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
         waitForDescription(string(R.string.practice_progress, 0, 2))
-        assertEquals(Face.LINE, controllerModel().uiState.practice!!.face)
         assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
-        controllerModel().gradePractice(Grade.EASY)
+        controllerModel().gradePractice(Grade.GOOD)
         assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
         // Tapped, the card turns.
         composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
@@ -2149,16 +2147,15 @@ class ListeningTest {
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
         assertEquals(1, good.box)
         assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
-        // Known once before, the next shows its meaning first; known easily, it's back much later.
+        // Known once before, it asks the same, and known again, it's back later.
         waitForDescription(string(R.string.practice_progress, 1, 2))
-        assertTrue(controllerModel().uiState.practice!!.face == Face.MEANING && shown("Estrellas"))
+        assertTrue(shown("Stars") && !shown("Estrellas"))
         click(string(R.string.practice_show))
-        click(string(R.string.practice_easy))
-        val easy = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
-        assertEquals(3, easy.box)
-        assertTrue(easy.due >= before + 7 * DAY_MS)
-        waitForDescription(string(R.string.practice_done, 2))
-        assertTrue(described(string(R.string.practice_tally, 0, 1, 1)))
+        click(string(R.string.practice_good))
+        val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
+        assertEquals(2, again.box)
+        assertTrue(again.due >= before + 3 * DAY_MS)
+        waitForText(string(R.string.practice_done, 2))
     }
 
     @Test

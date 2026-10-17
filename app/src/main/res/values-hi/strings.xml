@@ -284,7 +284,6 @@
     <string name="practice_show">जवाब देखें</string>
     <string name="practice_again">फिर से</string>
     <string name="practice_good">ठीक</string>
-    <string name="practice_easy">आसान</string>
     <string name="practice_caught_up">सब हो गया</string>
     <string name="lyrics_ask_line">इस पंक्ति के बारे में पूछें</string>
     <string name="lyrics_ask_send">भेजें</string>
@@ -328,17 +327,10 @@
     <string name="learn_song_times">%1$d बार गाया गया</string>
     <string name="learn_song_new_words">सीखने लायक शब्द हैं</string>
     <string name="practice_play">लाइन चलाएं</string>
-    <string name="practice_hint">मतलब देखें</string>
     <string name="practice_loading">%1$s में खुल रहा है</string>
-    <string name="practice_streak">लगातार %1$d दिन</string>
-    <string name="practice_tally">%1$d फिर से, %2$d अच्छा, %3$d आसान</string>
     <string name="practice_done">%1$d का अभ्यास हुआ</string>
     <string name="practice_back_to">%1$s पर वापस जाएं</string>
     <string name="practice_progress">%2$d में से %1$d</string>
-    <string name="quiz_listen">सुनते समय मुझसे पूछें</string>
-    <string name="quiz_knew">मुझे पता था</string>
-    <string name="quiz_missed">मुझे नहीं पता था</string>
-    <string name="quiz_hidden">छिपी हुई पंक्ति</string>
     <string name="song_tab_meaning">मतलब</string>
     <string name="song_tab_words">शब्द</string>
     <string name="song_tab_artist">कलाकार</string>

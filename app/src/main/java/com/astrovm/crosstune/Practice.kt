@@ -1,36 +1,6 @@
 package com.astrovm.crosstune
 
 /**
- * What a card shows first, to think of the rest: the line heard, the line read, what it means, or,
- * for a word, its line with a gap where it goes.
- */
-internal enum class Face { LISTEN, LINE, MEANING, GAP }
-
-/**
- * The face [line] shows, as it's learned: heard and read at first, then only heard, then only its
- * meaning, and round again. One that can't be [playable] takes turns between its words and its
- * meaning; one with no meaning is only heard.
- */
-internal fun faceOf(line: SavedLine, playable: Boolean): Face = when {
-    line.line != null && line.translation != null -> Face.GAP
-    line.translation == null -> Face.LISTEN
-    playable -> CYCLE[line.box % CYCLE.size]
-    line.box % 2 == 1 -> Face.MEANING
-    else -> Face.LINE
-}
-
-private val CYCLE = listOf(Face.LINE, Face.LISTEN, Face.MEANING)
-
-/** [line] with a gap where [word] is in it, or null when it isn't. */
-internal fun withGap(line: String, word: String): String? {
-    val at = line.indexOf(word, ignoreCase = true).takeIf { word.isNotBlank() && it >= 0 } ?: return null
-    return line.substring(0, at) + GAP + line.substring(at + word.length)
-}
-
-/** What stands for the word left out. */
-internal const val GAP = "＿＿＿"
-
-/**
  * The lines due at [now], at most [max], each song's together, in the order they're sung, so the
  * music app goes from one song to the next once, and only forward in each. The song due longest
  * comes first.

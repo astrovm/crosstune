@@ -1,13 +1,7 @@
 package com.astrovm.crosstune
 
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import android.os.Build
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
@@ -553,10 +547,6 @@ private fun LyricsActions(
                 // The song's lines are learned, and lines kept are studied.
                 if (state.lyrics.isNotEmpty()) {
                     IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
-                }
-                // Lines of this song kept can hide until they're sung, to say them first.
-                if (savedHere(state).isNotEmpty() && state.lyricLines.isNotEmpty()) {
-                    LitButton(state.quiz, R.drawable.ic_quiz, stringResource(R.string.quiz_listen), onClick = { actions.onQuizChange(!state.quiz) })
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
@@ -1108,12 +1098,6 @@ private fun TimedLyrics(
     LaunchedEffect(active) {
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
     }
-    // Quizzing, the lines kept hide until they're sung, or said to be known or not as they are.
-    val kept = if (state.quiz) savedHere(state) else emptySet()
-    val revealed = remember(state.lyricsFor) { mutableStateListOf<Int>() }
-    // The words may change while the old ones still fade out, so a line may be gone already.
-    val hidden = { index: Int -> lines.getOrNull(index)?.text in kept && index !in revealed && (active < 0 || index >= active) }
-    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 240.dp),
@@ -1139,36 +1123,9 @@ private fun TimedLyrics(
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index),
-                hidden = hidden(index)
+                help = state.learning.helpFor(index)
             )
         }
-    }
-    if (active >= 0 && hidden(active)) {
-        QuizButtons(
-            onAnswer = { known ->
-                revealed.add(active)
-                actions.onQuizLine(active, known)
-            },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)
-        )
-    }
-    }
-}
-
-/** Whether the line hidden, being sung, was known before it showed. */
-@Composable
-private fun QuizButtons(onAnswer: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    val haptics = LocalHapticFeedback.current
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier) {
-        OutlinedButton(onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.Reject)
-            onAnswer(false)
-        }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.quiz_missed)) }
-        Button(onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-            onAnswer(true)
-        }) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.quiz_knew)) }
     }
 }
 
@@ -1270,8 +1227,7 @@ private fun LyricLineText(
     onStudy: () -> Unit,
     help: LineHelp? = null,
     waiting: Boolean = false,
-    seekLabel: Int = R.string.lyrics_jump,
-    hidden: Boolean = false
+    seekLabel: Int = R.string.lyrics_jump
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1317,8 +1273,6 @@ private fun LyricLineText(
             .padding(vertical = 6.dp)
     ) {
         val reading = help?.reading
-        // Hidden to be said first, the words blur, or fade away where they can't, and aren't read out.
-        Box(modifier = if (hidden) Modifier.hiddenWords(stringResource(R.string.quiz_hidden)) else Modifier) {
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (chords != null && !chords.isEmpty) {
@@ -1333,20 +1287,14 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
-        }
         val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
         // Shown in them already, they'd say it twice.
-        if (help?.romanized == true && !hidden) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
+        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
     }
 }
-
-/** Words hidden to be said first: blurred where Android can, or else faded away, and not read out either way. */
-private fun Modifier.hiddenWords(label: String): Modifier = clearAndSetSemantics { contentDescription = label }.then(
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(12.dp, BlurredEdgeTreatment.Unbounded) else Modifier.alpha(0.06f)
-)
 
 /** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable

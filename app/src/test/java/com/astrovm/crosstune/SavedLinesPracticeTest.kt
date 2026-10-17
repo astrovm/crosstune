@@ -145,28 +145,24 @@ class SavedLinesPracticeTest {
     }
 
     @Test
-    fun daysPractisedInARowAreCountedOncePerDay() {
+    fun howALineReadsIsKeptPieceByPiece() {
         val store = SavedLinesStore(prefs)
+        val ruby = listOf(Ruby("風", "かぜ"), Ruby("が"), Ruby("噂", "うわさ"), Ruby("をはこんでく"))
+        store.toggle(line.copy(reading = "かぜがうわさをはこんでく", ruby = ruby))
+        assertEquals(ruby, SavedLinesStore(prefs).load().single().ruby)
+        // None kept, or none at all, it has none.
         store.toggle(line)
-        val monday = 1_700_000_000_000L
-        assertEquals(0, store.streakOn(monday))
-        store.practised(line, Grade.GOOD, now = monday)
-        store.practised(line, Grade.GOOD, now = monday + 60_000)
-        assertEquals(1, store.streakOn(monday))
-        store.practised(line, Grade.AGAIN, now = monday + day)
-        assertEquals(2, store.streakOn(monday + day))
-        // Again the same day, it stays.
-        store.practised(line, Grade.GOOD, now = monday + day + 60_000)
-        assertEquals(2, store.streakOn(monday + day))
-        // Still counted the day after, gone the day after that.
-        assertEquals(2, store.streakOn(monday + 2 * day))
-        assertEquals(0, store.streakOn(monday + 3 * day))
-        // A day missed starts it over.
-        store.practised(line, Grade.EASY, now = monday + 3 * day)
-        assertEquals(1, store.streakOn(monday + 3 * day))
-        // A line not kept counts for nothing.
-        store.practised(line.copy(text = "Other"), Grade.GOOD, now = monday + 4 * day)
-        assertEquals(1, store.streakOn(monday + 4 * day))
+        store.toggle(line.copy(ruby = emptyList()))
+        assertEquals(null, SavedLinesStore(prefs).load().single().ruby)
+    }
+
+    @Test
+    fun aLineIsPractisedWithSomethingToRecall() {
+        val bare = line.copy(translation = null)
+        assertFalse(bare.practisable)
+        assertTrue(bare.copy(reading = "かぜ").practisable)
+        assertTrue(bare.copy(startMs = 0, endMs = 1_000).practisable)
+        assertTrue(line.practisable)
     }
 
     @Test

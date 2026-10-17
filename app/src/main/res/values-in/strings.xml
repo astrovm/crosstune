@@ -284,7 +284,6 @@
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_again">Lagi</string>
     <string name="practice_good">Baik</string>
-    <string name="practice_easy">Mudah</string>
     <string name="practice_caught_up">Semua sudah</string>
     <string name="lyrics_ask_line">Tanya tentang baris ini</string>
     <string name="lyrics_ask_send">Kirim</string>
@@ -328,17 +327,10 @@
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
     <string name="practice_play">Putar baris</string>
-    <string name="practice_hint">Lihat artinya</string>
     <string name="practice_loading">Membuka di %1$s</string>
-    <string name="practice_streak">%1$d hari berturut-turut</string>
-    <string name="practice_tally">%1$d lagi, %2$d bagus, %3$d mudah</string>
     <string name="practice_done">%1$d dilatih</string>
     <string name="practice_back_to">Kembali ke %1$s</string>
     <string name="practice_progress">%1$d dari %2$d</string>
-    <string name="quiz_listen">Uji saya saat mendengarkan</string>
-    <string name="quiz_knew">Saya tahu</string>
-    <string name="quiz_missed">Saya tidak tahu</string>
-    <string name="quiz_hidden">Baris tersembunyi</string>
     <string name="song_tab_meaning">Arti</string>
     <string name="song_tab_words">Kata</string>
     <string name="song_tab_artist">Artis</string>

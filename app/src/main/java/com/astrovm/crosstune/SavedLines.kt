@@ -29,13 +29,15 @@ internal data class SavedLine(
     /** The song's cover, when it had one. */
     val artworkUrl: String? = null,
     /** For a word, the line it's sung in. */
-    val line: String? = null
+    val line: String? = null,
+    /** The line in pieces, each with how it reads over it when that isn't plain from it, e.g. kanji with their kana. */
+    val ruby: List<Ruby>? = null
 ) {
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
 
-    /** Whether it can be practised: it has a meaning to think of, or a sound to recall it by. */
-    val practisable get() = translation != null || timed
+    /** Whether it can be practised: it has a reading or a meaning to recall, or a sound to recall it by. */
+    val practisable get() = translation != null || reading != null || timed
 
     fun isSame(other: SavedLine) = text == other.text && title == other.title && artist == other.artist
 }
@@ -51,7 +53,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.optInt("box"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line")
+                json.text("line"), json.ruby()
             )
         }
     }
@@ -103,22 +105,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                 Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
             }
         }
-    ).also { if (it.any { kept -> kept.isSame(line) }) streak(now) }
-
-    /** How many days in a row, up to [now], lines were practised; 0 when the last was before yesterday. */
-    fun streakOn(now: Long): Int {
-        val last = preferences.getLong(KEY_STREAK_DAY, Long.MIN_VALUE)
-        return if (last >= dayOf(now) - 1) preferences.getInt(KEY_STREAK, 0) else 0
-    }
-
-    /** One more day in a row, practised at [now], unless it's been counted already. */
-    private fun streak(now: Long) {
-        val today = dayOf(now)
-        val last = preferences.getLong(KEY_STREAK_DAY, Long.MIN_VALUE)
-        if (last == today) return
-        val count = if (last == today - 1) preferences.getInt(KEY_STREAK, 0) + 1 else 1
-        preferences.edit { putLong(KEY_STREAK_DAY, today).putInt(KEY_STREAK, count) }
-    }
+    )
 
     private fun save(lines: List<SavedLine>): List<SavedLine> {
         val array = JSONArray()
@@ -129,6 +116,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("explanation", line.explanation).put("box", line.box).put("due", line.due)
                     .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
                     .put("artwork", line.artworkUrl).put("line", line.line)
+                    .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
             )
         }
         preferences.edit { putString(KEY, array.toString()) }
@@ -137,12 +125,15 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     private fun JSONObject.text(name: String): String? = optString(name).takeIf { has(name) && it.isNotEmpty() }
 
+    /** The pieces of a line with their readings, as [text, reading or null] each. */
+    private fun JSONObject.ruby(): List<Ruby>? = optJSONArray("ruby")?.let { array ->
+        (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { Ruby(it.optString(0), it.optString(1).takeIf { _ -> !it.isNull(1) }) } }
+    }?.takeIf { it.isNotEmpty() }
+
     private fun JSONObject.time(name: String): Long? = if (has(name)) optLong(name, -1).takeIf { it >= 0 } else null
 
     companion object {
         private const val KEY = "saved_lines"
-        private const val KEY_STREAK = "practice_streak"
-        private const val KEY_STREAK_DAY = "practice_streak_day"
 
         /** How many lines are kept at most. */
         const val MAX = 500
@@ -155,9 +146,6 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             Grade.GOOD -> PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.lastIndex)] * DAY_MS
             Grade.EASY -> PRACTICE_DAYS[minOf(line.box + 1, PRACTICE_DAYS.lastIndex)] * DAY_MS
         }
-
-        /** The day [now] falls on where the phone is, counted from 1970. */
-        private fun dayOf(now: Long): Long = (now + java.util.TimeZone.getDefault().getOffset(now)) / DAY_MS
     }
 }
 

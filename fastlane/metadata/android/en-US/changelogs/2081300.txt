@@ -1,2 +1,2 @@
 Ready for F-Droid: its build of the app now matches the GitHub release exactly.
-Practice now plays each saved line in your music app. Learn a whole song at once, and quiz yourself while you listen.
+Practice now plays each saved line in your music app, and shows its kana or pinyin only once you turn the card. Learn a whole song at once.

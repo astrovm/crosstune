@@ -1,7 +1,6 @@
 package com.astrovm.crosstune
 
 import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
@@ -230,11 +229,8 @@ internal data class ScreenActions(
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
     val onReplayLine: () -> Unit = {},
-    val onHintPractice: () -> Unit = {},
     val onBackToBefore: () -> Unit = {},
     val onLearnSong: (List<Int>) -> Unit = {},
-    val onQuizChange: (Boolean) -> Unit = {},
-    val onQuizLine: (Int, Boolean) -> Unit = { _, _ -> },
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
@@ -559,13 +555,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         actions = {
             // Saved lines due, a tap from practising, with how many.
             val due = state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }
-            if (due > 0) {
-                IconButton(onClick = actions.onStartPractice) {
-                    BadgedBox(badge = { Badge { Text(due.toString()) } }) {
-                        AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.practice_due, due))
-                    }
-                }
-            }
+            if (due > 0) PracticeButton(due, actions.onStartPractice)
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
@@ -1945,4 +1935,20 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
             TextButton(onClick = { actions.onTakeNotFoundOffer(false) }) { Text(stringResource(R.string.search_anyway, app)) }
         }
     )
+}
+
+/** Practice, in words, with how many saved lines are due. */
+@Composable
+private fun PracticeButton(due: Int, onClick: () -> Unit) {
+    val label = stringResource(R.string.saved_practice)
+    val description = "$label, ${stringResource(R.string.practice_due, due)}"
+    FilledTonalButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(start = 12.dp, end = 10.dp),
+        modifier = Modifier.padding(end = 4.dp).semantics { contentDescription = description }
+    ) {
+        AppIcon(R.drawable.ic_school, contentDescription = null, modifier = Modifier.size(18.dp))
+        Text(label, modifier = Modifier.padding(start = 6.dp, end = 6.dp))
+        Badge { Text(due.toString()) }
+    }
 }
