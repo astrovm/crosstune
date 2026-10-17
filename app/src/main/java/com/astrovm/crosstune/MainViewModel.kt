@@ -2116,12 +2116,16 @@ internal class MainViewModel(
             // it can't be moved, e.g. during an ad, asking again would only start it over.
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
             val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
-            else source.playSong(song, app) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
+            else source.playSong(song, app, youTubeMusicLink(song, app)) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
             if (there) block { latest } else null
         } finally {
             following.cancel()
         }
     }
+
+    /** [song]'s link on YouTube Music when that's the app to ask, or may be; null when it isn't, or isn't there. */
+    private suspend fun youTubeMusicLink(song: MusicMetadata, app: String?): String? =
+        if (app == null || app == MusicService.YOUTUBE_MUSIC.packageName) matcher.find(MusicService.YOUTUBE_MUSIC, song) else null
 
     /** How [line] sounds, unless another card's shown by now. */
     private fun setSound(line: SavedLine, sound: LineSound) {

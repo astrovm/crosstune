@@ -610,6 +610,9 @@ class PlaybackTest {
         assertTrue(playback.playSong(song, "com.spotify.music"))
         assertTrue(playback.playSong(song, "com.example.gone"))
         assertTrue(playback.playSong(song, null))
+        // YouTube Music is given the song's link there; another app, asked by name, has no use for one.
+        assertTrue(playback.playSong(song, "com.google.android.apps.youtube.music", "https://music.youtube.com/watch?v=other000000"))
+        assertTrue(playback.playSong(song, "com.spotify.music", "https://music.youtube.com/watch?v=other000000"))
     }
 
     private companion object {
