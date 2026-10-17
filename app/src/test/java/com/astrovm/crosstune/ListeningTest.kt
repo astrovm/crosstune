@@ -2571,10 +2571,10 @@ class ListeningTest {
         click(string(R.string.lyrics_translation_failed))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(described(string(R.string.lyrics_translation_failed)))
-        // English has no readings to offer, only a translation; signed out, with no lines kept, there's
-        // nothing to say about the song or study.
+        // English has no readings to offer, only a translation; signed out, there's nothing to say about
+        // the song, but it can still be learned.
         assertFalse(described(string(R.string.lyrics_about_song)))
-        assertFalse(described(string(R.string.lyrics_study)))
+        assertTrue(described(string(R.string.lyrics_study)))
         learnMenu()
         assertFalse(shown(string(R.string.lyrics_as_written)))
         assertFalse(shown(string(R.string.lyrics_readings)))

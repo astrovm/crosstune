@@ -1109,7 +1109,8 @@ private fun TimedLyrics(
     // Quizzing, the lines kept hide until they're sung, or said to be known or not as they are.
     val kept = if (state.quiz) savedHere(state) else emptySet()
     val revealed = remember(state.lyricsFor) { mutableStateListOf<Int>() }
-    val hidden = { index: Int -> lines[index].text in kept && index !in revealed && (active < 0 || index >= active) }
+    // The words may change while the old ones still fade out, so a line may be gone already.
+    val hidden = { index: Int -> lines.getOrNull(index)?.text in kept && index !in revealed && (active < 0 || index >= active) }
     Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = list,
