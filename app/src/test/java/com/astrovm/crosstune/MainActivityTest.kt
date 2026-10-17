@@ -3038,8 +3038,13 @@ class MainActivityTest {
         // Repeated, the app goes to its start, and back again each time it reaches the next line.
         click(string(R.string.lyrics_repeat_line))
         assertEquals(listOf(20_000L), playback.seeks)
-        playback.playing.value = Following(PlaybackClock(40_500, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        // Just past the next line's start, the last word still sounds: it plays on a moment.
+        playback.playing.value = Following(PlaybackClock(40_200, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_200))
+        composeRule.waitForIdle()
+        assertEquals(listOf(20_000L), playback.seeks)
+        playback.playing.value = Following(PlaybackClock(40_500, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
         composeRule.waitForIdle()
         assertEquals(listOf(20_000L, 20_000L), playback.seeks)
         // Not sent back again while the app hasn't said where it went.

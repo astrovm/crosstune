@@ -112,7 +112,7 @@ internal class SungReadings(
         const val BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
 
         /** How alike two lines have to be, from 0 to 1, for one's readings to be the other's. */
-        const val ALIKE = 0.5
+        const val ALIKE = 0.4
 
         private val searchRow = Regex(
             """<p class="searchResult__title">\s*<a href="(/lyric/[A-Za-z0-9]+/)">.*?<td class="searchResult__artist">\s*<p>\s*<a [^>]*>(.*?)</a>""",
