@@ -301,7 +301,6 @@
     <string name="lyrics_stop_repeating">Smetti di ripetere</string>
     <string name="lyrics_save_line">Salva riga</string>
     <string name="lyrics_line_saved">Salvata</string>
-    <string name="lyrics_saved_lines">Righe salvate</string>
     <string name="lyrics_word_failed">Impossibile trovare il significato ora.</string>
     <string name="lyrics_word_unknown">Nessuna voce di dizionario per questa parola.</string>
     <string name="lyrics_words_to_know_failed">Impossibile trovare le parole da sapere.</string>
@@ -323,10 +322,10 @@
     <string name="lyrics_about_song">Sulla canzone</string>
     <string name="lyrics_study">Studia</string>
     <string name="practice_due">%1$d da ripassare</string>
-    <string name="learn_song">Impara questa canzone</string>
+    <string name="choose_lines">Scegli le righe</string>
     <string name="practice_song">Esercitati su questa canzone</string>
+    <string name="practice_all_songs">Tutte le canzoni</string>
     <string name="practice_fix_reading">Correggi lettura</string>
-    <string name="learn_song_add">Aggiungi %1$d</string>
     <string name="learn_song_times">Cantata %1$d volte</string>
     <string name="learn_song_new_words">Ha parole da imparare</string>
     <string name="practice_play">Ascolta la riga</string>

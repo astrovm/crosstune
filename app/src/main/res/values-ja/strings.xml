@@ -301,7 +301,6 @@
     <string name="lyrics_stop_repeating">くり返しを止める</string>
     <string name="lyrics_save_line">行を保存</string>
     <string name="lyrics_line_saved">保存済み</string>
-    <string name="lyrics_saved_lines">保存した行</string>
     <string name="lyrics_word_failed">今は意味が見つかりませんでした。</string>
     <string name="lyrics_word_unknown">この単語の辞書項目はありません。</string>
     <string name="lyrics_words_to_know_failed">覚えたい言葉が見つかりませんでした。</string>
@@ -323,10 +322,10 @@
     <string name="lyrics_about_song">この曲について</string>
     <string name="lyrics_study">学習</string>
     <string name="practice_due">%1$d件の復習</string>
-    <string name="learn_song">この曲を覚える</string>
+    <string name="choose_lines">行を選ぶ</string>
     <string name="practice_song">この曲を練習</string>
+    <string name="practice_all_songs">すべての曲</string>
     <string name="practice_fix_reading">読みを直す</string>
-    <string name="learn_song_add">%1$d件を追加</string>
     <string name="learn_song_times">%1$d回歌われる</string>
     <string name="learn_song_new_words">覚えたい単語あり</string>
     <string name="practice_play">この行を再生</string>

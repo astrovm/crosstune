@@ -1994,13 +1994,15 @@ internal class MainViewModel(
         uiState = uiState.copy(savedLines = savedLinesStore.toggle(line))
     }
 
-    /** Keeps lines [indexes] of the words shown, to learn the song, each with what helps read it. */
-    fun learnSong(indexes: List<Int>) {
-        val lines = indexes.sorted().mapNotNull(::savedLineAt)
-        if (lines.isEmpty()) return
-        uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
-        // Learning a song starts with it, on its own.
-        practiseSong()
+    /**
+     * The lines of a song chosen to learn: lines [add] of the words shown kept, each with what helps
+     * read it, and [remove] let go; then, when asked to [practise], the song's practised on its own.
+     */
+    fun chooseLines(add: List<Int>, remove: List<SavedLine>, practise: Boolean) {
+        val lines = add.sorted().mapNotNull(::savedLineAt)
+        if (lines.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
+        if (remove.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.removeAll(remove))
+        if (practise) practiseSong()
     }
 
     /** Practises the lines of the song whose words show, and no other's. */
@@ -2225,10 +2227,6 @@ internal class MainViewModel(
                 source.playPause(before.song, true)
             }
         }
-    }
-
-    fun removeSavedLine(line: SavedLine) {
-        uiState = uiState.copy(savedLines = savedLinesStore.remove(line))
     }
 
     private var wordJob: Job? = null

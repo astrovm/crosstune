@@ -145,6 +145,20 @@ class SavedLinesPracticeTest {
     }
 
     @Test
+    fun linesLetGoTogetherAreEachTheSameLineOfTheSameSong() {
+        val store = SavedLinesStore(prefs)
+        val other = line.copy(text = "Other line")
+        val elsewhere = line.copy(title = "Other song")
+        store.addAll(listOf(line, other, elsewhere))
+        // The same line, read or timed otherwise since, is still it; the same words of another song aren't.
+        assertEquals(listOf(elsewhere), store.removeAll(listOf(line.copy(reading = "read", startMs = 1), other)))
+        assertEquals(listOf(elsewhere), store.load())
+        assertTrue(elsewhere.isOf(MusicMetadata("Other song", line.artist)))
+        assertFalse(elsewhere.isOf(MusicMetadata(line.title, line.artist)))
+        assertFalse(elsewhere.isOf(MusicMetadata("Other song", "Someone else")))
+    }
+
+    @Test
     fun howALineReadsIsKeptPieceByPiece() {
         val store = SavedLinesStore(prefs)
         val ruby = listOf(Ruby("風", "かぜ"), Ruby("が"), Ruby("噂", "うわさ"), Ruby("をはこんでく"))

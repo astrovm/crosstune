@@ -2162,8 +2162,7 @@ class ListeningTest {
         wordsOf(null, "Night sky\nStars")
         waitForText("[Stars]")
         studyMenu()
-        click(string(R.string.lyrics_saved_lines))
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
         waitForDescription(string(R.string.practice_progress, 0, 2))
         assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
@@ -2197,8 +2196,7 @@ class ListeningTest {
         wordsOf(null, "Night sky\\nStars")
         waitForText("[Stars]")
         studyMenu()
-        click(string(R.string.lyrics_saved_lines))
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         click(string(R.string.practice_show))
         waitForText("Cielo nocturno")
         // Missed, it's back in ten minutes, and once more before the session's done.
@@ -2206,10 +2204,11 @@ class ListeningTest {
         assertEquals(0, SavedLinesStore(prefs()).load().single().box)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.practice?.missed == 1 && shown(string(R.string.practice_show)) }
         assertEquals(1, controllerModel().uiState.practice!!.queue.size)
-        // Back goes back to the lines.
+        // Back goes back to the words.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
-        assertTrue(shown(string(R.string.saved_practice)))
+        assertNull(controllerModel().uiState.practice)
+        waitForText("[Stars]")
     }
 
     @Test
@@ -2695,11 +2694,11 @@ class ListeningTest {
         aboutSong(R.string.song_tab_words)
         waitForText("cielo")
         assertEquals(asked, openAi.asked.size)
-        // Learning the song, the lines with words worth knowing say so.
+        // Choosing the song's lines, those with words worth knowing say so.
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("cielo") }
         studyMenu()
-        click(string(R.string.learn_song))
+        click(string(R.string.choose_lines))
         assertTrue(described(string(R.string.learn_song_new_words)))
     }
 

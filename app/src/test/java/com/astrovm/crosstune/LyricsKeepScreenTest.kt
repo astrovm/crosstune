@@ -106,14 +106,4 @@ class LyricsKeepScreenTest {
         shown = false
         assertFalse("screen stayed on after the words closed", screenStaysOn())
     }
-
-    @Test
-    fun theScreenSleepsWhileSavedLinesAreOpen() {
-        val saved = listOf(SavedLine("Walking down the river road", title = song.title, artist = song.artist))
-        show(state(following(playing = true), saved = saved))
-        assertTrue(screenStaysOn())
-        composeRule.onNodeWithContentDescription(composeRule.activity.getString(R.string.lyrics_study)).performClick()
-        composeRule.onNodeWithText(composeRule.activity.getString(R.string.lyrics_saved_lines)).performClick()
-        assertFalse("screen stayed on over saved lines", screenStaysOn())
-    }
 }

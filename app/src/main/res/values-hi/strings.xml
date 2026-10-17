@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">दोहराना बंद करें</string>
     <string name="lyrics_save_line">लाइन सेव करें</string>
     <string name="lyrics_line_saved">सेव हो गई</string>
-    <string name="lyrics_saved_lines">सेव की गई लाइनें</string>
     <string name="lyrics_word_failed">अभी इसका मतलब नहीं मिला।</string>
     <string name="lyrics_word_unknown">इस शब्द के लिए कोई शब्दकोश प्रविष्टि नहीं है।</string>
     <string name="lyrics_words_to_know_failed">जानने लायक शब्द नहीं मिले।</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">गाने के बारे में</string>
     <string name="lyrics_study">पढ़ाई</string>
     <string name="practice_due">%1$d बाकी</string>
-    <string name="learn_song">यह गाना सीखें</string>
+    <string name="choose_lines">लाइनें चुनें</string>
     <string name="practice_song">इस गाने का अभ्यास करें</string>
+    <string name="practice_all_songs">सभी गाने</string>
     <string name="practice_fix_reading">उच्चारण ठीक करें</string>
-    <string name="learn_song_add">%1$d जोड़ें</string>
     <string name="learn_song_times">%1$d बार गाया गया</string>
     <string name="learn_song_new_words">सीखने लायक शब्द हैं</string>
     <string name="practice_play">लाइन चलाएं</string>

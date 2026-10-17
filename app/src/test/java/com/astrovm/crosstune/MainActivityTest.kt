@@ -3078,15 +3078,16 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.lyrics_save_line))
 
-        // Then found among the lines kept, and let go there.
+        // Then found checked among the song's lines, and let go there.
         click(string(R.string.lyrics_study))
-        click(string(R.string.lyrics_saved_lines))
+        click(string(R.string.choose_lines))
         assertTextShown("Dakare Ni Kita Onna")
         assertTextShown("Kingo Hamada")
-        click(string(R.string.remove_button))
-        // Nothing left, it's back to the words.
+        composeRule.onNode(isToggleable() and hasText("Two")).assertIsOn().performClick()
+        click(string(R.string.save_button))
+        assertFalse(prefs().getString("saved_lines", null)!!.contains("\"Two\""))
         waitForText("Three")
-        assertTextAbsent(string(R.string.lyrics_saved_lines))
+        assertTextAbsent(string(R.string.save_button))
     }
 
     @Test
