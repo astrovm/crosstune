@@ -1,2 +1,4 @@
 Ready for F-Droid: its build of the app now matches the GitHub release exactly.
-Practice now plays each saved line in your music app, and shows its kana or pinyin only once you turn the card. Learn a whole song at once.
+Practice now plays each saved line in your music app, and shows its kana or pinyin only once you turn the card.
+Pick which lines of a song to learn from one list, then practice that song alone or all songs at once.
+Japanese kanji now read as they're sung, and you can fix a reading by hand.

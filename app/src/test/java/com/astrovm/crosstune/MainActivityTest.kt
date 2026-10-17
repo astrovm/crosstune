@@ -1874,6 +1874,28 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSharedLinkLeavesThePracticeList() {
+        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band"}]""").commit()
+        launch()
+        click(string(R.string.saved_practice))
+        assertTextShown(string(R.string.practice_all_songs))
+
+        val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
+        onNewIntent.isAccessible = true
+        onNewIntent.invoke(
+            controller!!.get(),
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "not a music link")
+            }
+        )
+        composeRule.waitForIdle()
+
+        assertTextAbsent(string(R.string.practice_all_songs))
+        assertTextShown(string(R.string.error_invalid_url))
+    }
+
+    @Test
     fun sharedIntentWithoutPayloadIsIgnored() {
         launch(Intent(Intent.ACTION_SEND).apply { type = "text/plain" })
         assertTextAbsent(string(R.string.error_invalid_url))
