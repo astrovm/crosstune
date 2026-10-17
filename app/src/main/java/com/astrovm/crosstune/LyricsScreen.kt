@@ -134,6 +134,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -185,9 +186,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val song = state.lyricsFor ?: return
     // Named by the app playing it, a song often comes without a cover, which is then found for the result.
     val cover = song.artworkUrl ?: state.result?.takeIf { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) }?.artworkUrl
-    // The line open to study, and whether the lines kept are shown, over the words.
+    // The line open to study, over the words.
     var studying by rememberSaveable(song) { mutableStateOf<Int?>(null) }
-    var savedShown by rememberSaveable { mutableStateOf(false) }
     // The sheet about the whole song, open at what it means, its words to know, or its artist.
     var songTab by rememberSaveable(song) { mutableStateOf<SongTab?>(null) }
     val openTab = { tab: SongTab ->
@@ -200,12 +200,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         PracticeScreen(state, actions)
         return
     }
-    if (savedShown) {
-        SavedLines(state.savedLines, actions, onBack = { savedShown = false })
-        return
-    }
-    // The song's lines picked to learn, open over the words.
-    var learningSong by rememberSaveable(song) { mutableStateOf(false) }
+    // The song's lines to choose which to learn, open over the words; true when it's practised after.
+    var choosing by rememberSaveable(song) { mutableStateOf<Boolean?>(null) }
     // Saved lines take the place of the words, so only the words hold the screen, and only while a song plays.
     KeepScreenOn(state.following?.clock?.playing == true)
     BackHandler(onBack = actions.onDismissLyrics)
@@ -330,17 +326,16 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
         ) {
             LyricsActions(
-                state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
+                state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
-                onPractise = actions.onPractiseSong,
-                onLearnSong = { learningSong = true }
+                onChooseLines = { practise -> choosing = practise }
             )
         }
     }
     }
     }
     songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onDismiss = { songTab = null }) }
-    if (learningSong) LearnSongSheet(state, actions, onDismiss = { learningSong = false })
+    choosing?.let { practise -> ChooseLinesSheet(state, actions, practise, onDismiss = { choosing = null }) }
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -526,11 +521,10 @@ private fun LyricsActions(
     state: UiState,
     actions: ScreenActions,
     syncing: Boolean,
-    onOpenSaved: () -> Unit,
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
-    onPractise: () -> Unit,
-    onLearnSong: () -> Unit,
+    /** Opens the song's lines to choose from, to practise after when true. */
+    onChooseLines: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
@@ -564,7 +558,7 @@ private fun LyricsActions(
         // keep off the screen's edge.
         val close = { menu = null }
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, close)
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, onOpenSaved, onPractise, onLearnSong, close)
+        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions.onPractiseSong, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
@@ -667,90 +661,93 @@ private fun ReadingSize(scale: Float, actions: ScreenActions) {
     }
 }
 
-/** The song's lines to learn, the lines kept, to see, and this song's, to practise, with how many are due. */
+/** The song's lines, to choose which to learn, with how many are kept, and the song to practise, with how many are due. */
 @Composable
-private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, onPractise: () -> Unit, onLearnSong: () -> Unit, onClose: () -> Unit) {
+private fun StudyMenu(open: Boolean, state: UiState, onPractise: () -> Unit, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        val song = state.lyricsFor
+        val here = if (song == null) emptyList() else state.savedLines.filter { it.isOf(song) }
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.learn_song)) },
+            text = { Text(stringResource(R.string.choose_lines)) },
             leadingIcon = { AppIcon(R.drawable.ic_playlist_add, contentDescription = null) },
+            trailingIcon = { if (here.isNotEmpty()) Text(here.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
             onClick = {
                 onClose()
-                onLearnSong()
+                onChooseLines(false)
             }
         )
-        val saved = state.savedLines
-        if (saved.isNotEmpty()) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.lyrics_saved_lines)) },
-                leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
-                trailingIcon = { Text(saved.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = {
-                    onClose()
-                    onOpenSaved()
-                }
-            )
-        }
-        // Only lines with their meaning, or that can be heard, can be practised; here, only this song's.
-        val song = state.lyricsFor
-        val practisable = saved.filter { it.practisable && it.title == song?.title && it.artist == song.artist }
-        if (practisable.isNotEmpty()) {
-            val due = practisable.count { it.due <= System.currentTimeMillis() }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.practice_song)) },
-                leadingIcon = { AppIcon(R.drawable.ic_play, contentDescription = null) },
-                trailingIcon = { if (due > 0) Text(stringResource(R.string.practice_due, due), color = MaterialTheme.colorScheme.primary) },
-                onClick = {
-                    onClose()
-                    onPractise()
-                }
-            )
-        }
+        // Only lines with their meaning, or that can be heard, can be practised; with none, they're chosen first.
+        val practisable = here.filter { it.practisable }
+        val due = practisable.count { it.due <= System.currentTimeMillis() }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.practice_song)) },
+            leadingIcon = { AppIcon(R.drawable.ic_play, contentDescription = null) },
+            trailingIcon = { if (due > 0) Text(stringResource(R.string.practice_due, due), color = MaterialTheme.colorScheme.primary) },
+            onClick = {
+                onClose()
+                if (practisable.isEmpty()) onChooseLines(true) else onPractise()
+            }
+        )
     }
 }
 
-/** The lines of the song shown that are kept, by their words. */
-private fun savedHere(state: UiState): Set<String> {
-    val song = state.lyricsFor ?: return emptySet()
-    return state.savedLines.filter { it.title == song.title && it.artist == song.artist }.map { it.text }.toSet()
-}
-
-/**
- * The song's lines, each once, to pick which to learn: those worth it picked to start with, those
- * kept already shown so. Each says how many times it's sung, and whether it has words worth knowing.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** The lines of the song whose words show, to choose which to learn; practised after when [practise]. */
 @Composable
-private fun LearnSongSheet(state: UiState, actions: ScreenActions, onDismiss: () -> Unit) {
+private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: Boolean, onDismiss: () -> Unit) {
     val song = state.lyricsFor ?: return
     val texts = state.lyricLines.map { it.text }.ifEmpty { state.lyrics.lines() }
     val words = state.learning.wordsToKnow?.value.orEmpty().map { it.word }
+    ChooseLinesSheet(
+        song, texts, words, state.savedLines.filter { it.isOf(song) }, actions.loadArtwork, practise,
+        onSave = { add, remove -> actions.onChooseLines(add, remove, practise) }, onDismiss = onDismiss
+    )
+}
+
+/**
+ * [song]'s lines, each once, to choose which to learn: those [kept] checked, and after them the rest
+ * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
+ * those worth it are checked to start with. Each says how many times it's sung, and whether it has
+ * words worth knowing. Saved, or practised when [practise], what changed is given to [onSave].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ChooseLinesSheet(
+    song: MusicMetadata,
+    texts: List<String>,
+    words: List<String>,
+    kept: List<SavedLine>,
+    loadArtwork: suspend (String) -> ImageBitmap?,
+    practise: Boolean,
+    onSave: (add: List<Int>, remove: List<SavedLine>) -> Unit,
+    onDismiss: () -> Unit
+) {
     val lines = remember(texts, words) { songLines(texts, words) }
-    val kept = savedHere(state)
-    val picked = remember(lines) { mutableStateListOf<Int>().apply { addAll(lines.filter { !it.filler && it.text !in kept }.map { it.index }) } }
+    val keptLines = kept.filter { it.line == null }
+    val keptOf = { line: SongLine -> keptLines.firstOrNull { it.text.trim() == line.text } }
+    // Kept, but not a line of the words shown: a word, or a line sung otherwise now.
+    val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
+    val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
+    val dropped = remember(song) { mutableStateListOf<SavedLine>() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                CoverArt(song.artworkUrl, actions.loadArtwork, size = 40.dp)
+                CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
                 Column(modifier = Modifier.padding(start = 12.dp)) {
                     Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                items(lines, key = { it.index }) { line ->
-                    val saved = line.text in kept
-                    val on = saved || line.index in picked
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(on, enabled = !saved, role = Role.Checkbox) { if (it) picked.add(line.index) else picked.remove(line.index) }
-                            .heightIn(min = 48.dp)
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        Checkbox(checked = on, onCheckedChange = null, enabled = !saved)
-                        Text(line.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                items(lines, key = { "line|${it.index}" }) { line ->
+                    val saved = keptOf(line)
+                    val on = if (saved != null) saved !in dropped else line.index in picked
+                    ChoiceRow(line.text, on, onChange = { check ->
+                        when {
+                            saved == null -> if (check) picked.add(line.index) else picked.remove(line.index)
+                            check -> dropped.remove(saved)
+                            else -> dropped.add(saved)
+                        }
+                    }) {
                         if (line.newWords) {
                             AppIcon(R.drawable.ic_star, contentDescription = stringResource(R.string.learn_song_new_words), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         }
@@ -765,19 +762,43 @@ private fun LearnSongSheet(state: UiState, actions: ScreenActions, onDismiss: ()
                         }
                     }
                 }
+                items(others, key = { "kept|${it.text}|${it.line}" }) { saved ->
+                    ChoiceRow(saved.text, saved !in dropped, below = saved.line, onChange = { check -> if (check) dropped.remove(saved) else dropped.add(saved) })
+                }
             }
+            // Practised, it needs a line to practise; saved, something to change.
+            val left = kept.size - dropped.size + picked.size
             Button(
                 onClick = {
-                    actions.onLearnSong(picked.toList())
+                    onSave(picked.toList(), dropped.toList())
                     onDismiss()
                 },
-                enabled = picked.isNotEmpty(),
+                enabled = if (practise) left > 0 else picked.isNotEmpty() || dropped.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
             ) {
-                AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(stringResource(R.string.learn_song_add, picked.size), modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(if (practise) R.string.saved_practice else R.string.save_button))
             }
         }
+    }
+}
+
+/** A line to choose, checked or not, with the line a word is sung in [below] it, and what more there is to say about it after. */
+@Composable
+private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, below: String? = null, after: @Composable RowScope.() -> Unit = {}) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(on, role = Role.Checkbox, onValueChange = onChange)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Checkbox(checked = on, onCheckedChange = null)
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(text, style = MaterialTheme.typography.bodyLarge)
+            below?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        after()
     }
 }
 
@@ -1973,50 +1994,3 @@ private val ARTIST_PARTS = listOf(R.string.artist_who, R.string.artist_style, R.
 /** What a song's explanation says, in order. */
 private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
 
-/** The lines kept, newest first, each with what helped read it and the song it's from. */
-@Composable
-private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
-    // The last one removed, there's nothing left to show.
-    LaunchedEffect(lines.isEmpty()) { if (lines.isEmpty()) onBack() }
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)) {
-                IconButton(onClick = onBack) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
-                Text(stringResource(R.string.lyrics_saved_lines), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                // Lines with their meaning, or that can be heard, can be practised.
-                if (lines.any { it.practisable }) {
-                    TextButton(onClick = actions.onStartPractice, modifier = Modifier.padding(end = 8.dp)) { Text(stringResource(R.string.saved_practice)) }
-                }
-            }
-            LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(lines, key = { "${it.title}|${it.artist}|${it.text}" }) { line ->
-                    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-                        Row(modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 16.dp, end = 4.dp)) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                line.reading?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                Text(line.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                line.translation?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
-                                line.explanation?.let { Box(modifier = Modifier.padding(top = 4.dp)) { ExplanationParts(it, LINE_PARTS) } }
-                                Text(
-                                    line.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                                Text(line.artist, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = { actions.onRemoveSavedLine(line) }) {
-                                AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.remove_button))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

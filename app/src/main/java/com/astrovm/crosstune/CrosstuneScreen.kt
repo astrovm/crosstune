@@ -220,13 +220,14 @@ internal data class ScreenActions(
     val onRetryTranslation: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
-    val onRemoveSavedLine: (SavedLine) -> Unit = {},
     /** Looks up a word, in the line it's in, by the line's index. */
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
     val onStartPractice: () -> Unit = {},
     /** Practises only the lines of the song whose words show. */
     val onPractiseSong: () -> Unit = {},
+    /** Practises only the lines of the song given, from the list of songs to practise. */
+    val onPractiseSongOf: (MusicMetadata) -> Unit = {},
     /** The card's line read as given, one reading for each of its kanji, put right by hand. */
     val onReadCardAs: (List<String>) -> Unit = {},
     val onTurnPractice: () -> Unit = {},
@@ -234,7 +235,8 @@ internal data class ScreenActions(
     val onStopPractice: () -> Unit = {},
     val onReplayLine: () -> Unit = {},
     val onBackToBefore: () -> Unit = {},
-    val onLearnSong: (List<Int>) -> Unit = {},
+    /** Keeps the lines of the words shown given by index, lets the kept ones given go, and practises the song when asked. */
+    val onChooseLines: (List<Int>, List<SavedLine>, Boolean) -> Unit = { _, _, _ -> },
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
@@ -309,12 +311,14 @@ internal data class ScreenActions(
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
+    var showPracticeList by rememberSaveable { mutableStateOf(false) }
     // A link from another app is about to open or show its result, so don't leave the user in settings.
     // The request is consumed once handled, so a rotation keeps settings open, while a restored process
     // that re-resolves a pending link still asks for it.
     LaunchedEffect(state.leaveSettings) {
         if (state.leaveSettings) {
             showSettings = false
+            showPracticeList = false
             actions.onSettingsLeft()
         }
     }
@@ -350,6 +354,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         // Over the words, practice shows in their place, so they're as they were after.
         state.practice != null && state.lyricsFor == null -> Screen.PRACTICE
         state.lyricsFor != null -> Screen.LYRICS
+        showPracticeList -> Screen.PRACTICE_LIST
         else -> Screen.MAIN
     }
     AnimatedContent(
@@ -380,8 +385,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             LyricsScreen(state, actions)
         } else if (shown == Screen.PRACTICE) {
             PracticeScreen(state, actions)
+        } else if (shown == Screen.PRACTICE_LIST) {
+            PracticeList(state, actions, onBack = { showPracticeList = false })
         } else {
-            MainScreen(state, guided, onOpenSettings = { showSettings = true })
+            MainScreen(state, guided, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
         }
     }
     // Asked for from the words or from settings, so it shows over either.
@@ -391,7 +398,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 private enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), PRACTICE_LIST(1), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
 }
 
 private const val GUIDE_ALLOW = "allow"
@@ -525,7 +532,7 @@ internal fun Page(
 }
 
 @Composable
-private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit) {
+private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -> Unit, onOpenPractice: () -> Unit) {
     // The picker lists installed apps first, so it waits for Android to say which those are rather
     // than move a row from under the user's finger.
     if (state.showDestinationPicker && state.systemStateKnown) {
@@ -557,9 +564,10 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
         actions = {
-            // Saved lines due, a tap from practising, with how many.
-            val due = state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }
-            if (due > 0) PracticeButton(due, actions.onStartPractice)
+            // Saved lines, a tap from what there is to practise, with how many are due.
+            if (state.savedLines.any { it.practisable }) {
+                PracticeButton(state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }, onOpenPractice)
+            }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
@@ -1941,11 +1949,11 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
     )
 }
 
-/** Practice, in words, with how many saved lines are due. */
+/** Practice, in words, with how many saved lines are due when any are. */
 @Composable
 private fun PracticeButton(due: Int, onClick: () -> Unit) {
     val label = stringResource(R.string.saved_practice)
-    val description = "$label, ${stringResource(R.string.practice_due, due)}"
+    val description = if (due > 0) "$label, ${stringResource(R.string.practice_due, due)}" else label
     FilledTonalButton(
         onClick = onClick,
         contentPadding = PaddingValues(start = 12.dp, end = 10.dp),
@@ -1953,6 +1961,6 @@ private fun PracticeButton(due: Int, onClick: () -> Unit) {
     ) {
         AppIcon(R.drawable.ic_school, contentDescription = null, modifier = Modifier.size(18.dp))
         Text(label, modifier = Modifier.padding(start = 6.dp, end = 6.dp))
-        Badge { Text(due.toString()) }
+        if (due > 0) Badge { Text(due.toString()) }
     }
 }

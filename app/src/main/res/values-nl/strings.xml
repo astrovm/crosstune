@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">Stoppen met herhalen</string>
     <string name="lyrics_save_line">Regel bewaren</string>
     <string name="lyrics_line_saved">Bewaard</string>
-    <string name="lyrics_saved_lines">Bewaarde regels</string>
     <string name="lyrics_word_failed">Kon de betekenis nu niet vinden.</string>
     <string name="lyrics_word_unknown">Geen woordenboekvermelding voor dit woord.</string>
     <string name="lyrics_words_to_know_failed">Kon de woorden om te kennen niet vinden.</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">Over het nummer</string>
     <string name="lyrics_study">Leren</string>
     <string name="practice_due">%1$d te doen</string>
-    <string name="learn_song">Dit nummer leren</string>
+    <string name="choose_lines">Regels kiezen</string>
     <string name="practice_song">Dit nummer oefenen</string>
+    <string name="practice_all_songs">Alle nummers</string>
     <string name="practice_fix_reading">Lezing verbeteren</string>
-    <string name="learn_song_add">%1$d toevoegen</string>
     <string name="learn_song_times">%1$d keer gezongen</string>
     <string name="learn_song_new_words">Heeft woorden om te leren</string>
     <string name="practice_play">Regel afspelen</string>

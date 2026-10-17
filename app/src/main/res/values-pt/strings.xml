@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">Parar de repetir</string>
     <string name="lyrics_save_line">Salvar linha</string>
     <string name="lyrics_line_saved">Salva</string>
-    <string name="lyrics_saved_lines">Linhas salvas</string>
     <string name="lyrics_word_failed">Não foi possível achar o significado agora.</string>
     <string name="lyrics_word_unknown">Nenhuma entrada de dicionário para esta palavra.</string>
     <string name="lyrics_words_to_know_failed">Não foi possível achar as palavras para saber.</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">Sobre a música</string>
     <string name="lyrics_study">Estudar</string>
     <string name="practice_due">%1$d para hoje</string>
-    <string name="learn_song">Aprender esta música</string>
+    <string name="choose_lines">Escolher linhas</string>
     <string name="practice_song">Praticar esta música</string>
+    <string name="practice_all_songs">Todas as músicas</string>
     <string name="practice_fix_reading">Corrigir leitura</string>
-    <string name="learn_song_add">Adicionar %1$d</string>
     <string name="learn_song_times">Cantada %1$d vezes</string>
     <string name="learn_song_new_words">Tem palavras para saber</string>
     <string name="practice_play">Ouvir a linha</string>

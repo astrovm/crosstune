@@ -43,6 +43,9 @@ internal data class SavedLine(
 
     fun isSame(other: SavedLine) = text == other.text && title == other.title && artist == other.artist
 
+    /** Whether it's from [song]. */
+    fun isOf(song: MusicMetadata) = title == song.title && artist == song.artist
+
     /** What of it can be read otherwise: its kanji, each with its reading, or a word as a whole. */
     val readable: List<Ruby> get() = ruby?.filter { it.reading != null } ?: listOfNotNull(reading?.takeIf { line != null }?.let { Ruby(text, it) })
 
@@ -92,7 +95,9 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return save(listOf(line) + room.take(MAX - 1))
     }
 
-    fun remove(line: SavedLine): List<SavedLine> = save(load().filterNot { it.isSame(line) })
+    fun remove(line: SavedLine): List<SavedLine> = removeAll(listOf(line))
+
+    fun removeAll(lines: List<SavedLine>): List<SavedLine> = save(load().filterNot { kept -> lines.any(kept::isSame) })
 
     /** Keeps each of [lines] not kept yet, in their order, before the rest, as far as there's room. */
     fun addAll(lines: List<SavedLine>): List<SavedLine> {

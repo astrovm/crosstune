@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">停止重複</string>
     <string name="lyrics_save_line">儲存這一行</string>
     <string name="lyrics_line_saved">已儲存</string>
-    <string name="lyrics_saved_lines">已儲存的行</string>
     <string name="lyrics_word_failed">暫時找不到它的意思。</string>
     <string name="lyrics_word_unknown">字典裡沒有這個詞。</string>
     <string name="lyrics_words_to_know_failed">找不到要學的詞。</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">關於這首歌</string>
     <string name="lyrics_study">學習</string>
     <string name="practice_due">%1$d 項待複習</string>
-    <string name="learn_song">學這首歌</string>
+    <string name="choose_lines">選擇行</string>
     <string name="practice_song">練習這首歌</string>
+    <string name="practice_all_songs">所有歌曲</string>
     <string name="practice_fix_reading">修改讀音</string>
-    <string name="learn_song_add">新增 %1$d 項</string>
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要學的詞</string>
     <string name="practice_play">播放這一行</string>

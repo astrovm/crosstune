@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">Tekrarı durdur</string>
     <string name="lyrics_save_line">Satırı kaydet</string>
     <string name="lyrics_line_saved">Kaydedildi</string>
-    <string name="lyrics_saved_lines">Kaydedilen satırlar</string>
     <string name="lyrics_word_failed">Şu an anlamı bulunamadı.</string>
     <string name="lyrics_word_unknown">Bu kelime için sözlük kaydı yok.</string>
     <string name="lyrics_words_to_know_failed">Bilinmesi gereken kelimeler bulunamadı.</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">Şarkı hakkında</string>
     <string name="lyrics_study">Çalış</string>
     <string name="practice_due">%1$d tekrar</string>
-    <string name="learn_song">Bu şarkıyı öğren</string>
+    <string name="choose_lines">Satırları seç</string>
     <string name="practice_song">Bu şarkıyla pratik yap</string>
+    <string name="practice_all_songs">Tüm şarkılar</string>
     <string name="practice_fix_reading">Okunuşu düzelt</string>
-    <string name="learn_song_add">%1$d ekle</string>
     <string name="learn_song_times">%1$d kez söyleniyor</string>
     <string name="learn_song_new_words">Öğrenilecek kelimeler var</string>
     <string name="practice_play">Satırı çal</string>

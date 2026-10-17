@@ -300,7 +300,6 @@
     <string name="lyrics_stop_repeating">Berhenti mengulang</string>
     <string name="lyrics_save_line">Simpan baris</string>
     <string name="lyrics_line_saved">Tersimpan</string>
-    <string name="lyrics_saved_lines">Baris tersimpan</string>
     <string name="lyrics_word_failed">Tidak bisa menemukan artinya sekarang.</string>
     <string name="lyrics_word_unknown">Tidak ada entri kamus untuk kata ini.</string>
     <string name="lyrics_words_to_know_failed">Tidak dapat menemukan kata yang perlu diketahui.</string>
@@ -322,10 +321,10 @@
     <string name="lyrics_about_song">Tentang lagu</string>
     <string name="lyrics_study">Belajar</string>
     <string name="practice_due">%1$d jatuh tempo</string>
-    <string name="learn_song">Pelajari lagu ini</string>
+    <string name="choose_lines">Pilih baris</string>
     <string name="practice_song">Latihan lagu ini</string>
+    <string name="practice_all_songs">Semua lagu</string>
     <string name="practice_fix_reading">Perbaiki bacaan</string>
-    <string name="learn_song_add">Tambah %1$d</string>
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
     <string name="practice_play">Putar baris</string>
