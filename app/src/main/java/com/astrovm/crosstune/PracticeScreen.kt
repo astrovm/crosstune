@@ -271,25 +271,29 @@ private val SWIPE_DISTANCE = 96.dp
 /** What a card shows first, to think of the rest. One to hear that can't be played is read instead. */
 @Composable
 private fun CardFace(line: SavedLine, practice: Practice, actions: ScreenActions) {
-    when (practice.face) {
-        Face.LISTEN -> if (practice.sound == LineSound.NONE) CardLine(line) else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-                SoundButton(line, practice.sound, actions.onReplayLine, size = 96.dp)
-                // The meaning, to help, once peeked at; a word to hear has none of its own.
-                if (!practice.turned && line.translation != null) {
-                    if (practice.hint) {
-                        Text(line.translation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 20.dp))
-                    } else {
-                        IconButton(onClick = actions.onHintPractice, modifier = Modifier.padding(top = 12.dp)) {
-                            AppIcon(R.drawable.ic_visibility, contentDescription = stringResource(R.string.practice_hint), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+    val face = practice.face
+    if (face == Face.LISTEN && practice.sound == LineSound.NONE) {
+        CardLine(line)
+    } else if (face == Face.LISTEN) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+            SoundButton(line, practice.sound, actions.onReplayLine, size = 96.dp)
+            // The meaning, to help, once peeked at; a word to hear has none of its own.
+            if (!practice.turned && line.translation != null) {
+                if (practice.hint) {
+                    Text(line.translation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 20.dp))
+                } else {
+                    IconButton(onClick = actions.onHintPractice, modifier = Modifier.padding(top = 12.dp)) {
+                        AppIcon(R.drawable.ic_visibility, contentDescription = stringResource(R.string.practice_hint), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
-        Face.LINE -> CardLine(line)
-        Face.MEANING -> CardMeaning(line)
-        Face.GAP -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    } else if (face == Face.LINE) {
+        CardLine(line)
+    } else if (face == Face.MEANING) {
+        CardMeaning(line)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(line.line?.let { withGap(it, line.text) } ?: GAP, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(line.translation.orEmpty(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         }
@@ -299,14 +303,17 @@ private fun CardFace(line: SavedLine, practice: Practice, actions: ScreenActions
 /** What shows once a card's turned: the side it didn't show. */
 @Composable
 private fun CardBack(line: SavedLine, face: Face) {
-    when (face) {
-        Face.LISTEN -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    if (face == Face.LISTEN) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             CardLine(line)
             if (line.translation != null) CardMeaning(line)
         }
-        Face.LINE -> CardMeaning(line)
-        Face.MEANING -> CardLine(line)
-        Face.GAP -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    } else if (face == Face.LINE) {
+        CardMeaning(line)
+    } else if (face == Face.MEANING) {
+        CardLine(line)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CardLine(line)
             line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -340,10 +347,10 @@ private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit, s
         if (sound == LineSound.PLAYING) played.animateTo(1f, tween(((line.endMs ?: 0L) - (line.startMs ?: 0L)).toInt().coerceAtLeast(0), easing = LinearEasing))
     }
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size + 12.dp)) {
-        when (sound) {
-            LineSound.LOADING -> CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(size + 12.dp))
-            LineSound.PLAYING -> CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(size + 12.dp))
-            else -> {}
+        if (sound == LineSound.LOADING) {
+            CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(size + 12.dp))
+        } else if (sound == LineSound.PLAYING) {
+            CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(size + 12.dp))
         }
         Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(size)) {
             Box(contentAlignment = Alignment.Center) {
@@ -386,10 +393,12 @@ private fun GradeButton(label: Int, wait: String, grade: Grade, modifier: Modifi
             Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
         }
     }
-    when (grade) {
-        Grade.AGAIN -> OutlinedButton(onClick = { onGrade(grade) }, modifier = modifier) { content() }
-        Grade.GOOD -> FilledTonalButton(onClick = { onGrade(grade) }, modifier = modifier) { content() }
-        Grade.EASY -> Button(onClick = { onGrade(grade) }, modifier = modifier) { content() }
+    if (grade == Grade.AGAIN) {
+        OutlinedButton(onClick = { onGrade(grade) }, modifier = modifier) { content() }
+    } else if (grade == Grade.GOOD) {
+        FilledTonalButton(onClick = { onGrade(grade) }, modifier = modifier) { content() }
+    } else {
+        Button(onClick = { onGrade(grade) }, modifier = modifier) { content() }
     }
 }
 
@@ -418,12 +427,11 @@ private fun Done(practice: Practice, actions: ScreenActions) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 24.dp).semantics { contentDescription = done }
         )
-        if (practice.streak > 0) {
-            val streak = stringResource(R.string.practice_streak, practice.streak)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp).semantics(mergeDescendants = true) { contentDescription = streak }) {
-                AppIcon(R.drawable.ic_local_fire_department, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
-                Text(practice.streak.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
-            }
+        // Practice just now, so today's in a row.
+        val streak = stringResource(R.string.practice_streak, practice.streak)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp).semantics(mergeDescendants = true) { contentDescription = streak }) {
+            AppIcon(R.drawable.ic_local_fire_department, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+            Text(practice.streak.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
         }
         val tally = stringResource(R.string.practice_tally, practice.missed, practice.known, practice.easy)
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(top = 24.dp).semantics(mergeDescendants = true) { contentDescription = tally }) {

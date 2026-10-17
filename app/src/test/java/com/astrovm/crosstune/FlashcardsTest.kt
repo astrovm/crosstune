@@ -239,6 +239,29 @@ class FlashcardsTest {
     }
 
     @Test
+    fun aSongTheAppLostIsAskedForAgainOnTheCardWhileItLoads() {
+        saved(
+            """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""",
+            """{"text":"Two","title":"Other","artist":"Band","box":1,"start":15000,"end":20000,"app":"${app.packageName}"}"""
+        )
+        appHas("Other", atMs = 0)
+        launch()
+        click(string(R.string.practice_due, 2))
+        waitUntil { practice().sound == LineSound.PLAYING }
+        // The app lets the song go before the next card, of the same song, so it loads on the card itself.
+        phone.playing.value = null
+        waitUntil { practice().sound == LineSound.PLAYED }
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        waitUntil { practice().line?.text == "Two" && phone.songsAsked.isNotEmpty() }
+        assertTrue(practice().sound == LineSound.LOADING && !practice().intro)
+        assertTrue(described(string(R.string.practice_play)))
+        appHas("Other", atMs = 0)
+        waitUntil { practice().sound == LineSound.PLAYING }
+        assertEquals(15_000L, phone.seeks.last())
+    }
+
+    @Test
     fun aSongTheAppCantFindIsReadInsteadAndPracticeStopsWhatItPlays() {
         saved(
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",
