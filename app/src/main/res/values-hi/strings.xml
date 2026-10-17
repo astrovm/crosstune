@@ -323,6 +323,8 @@
     <string name="lyrics_study">पढ़ाई</string>
     <string name="practice_due">%1$d बाकी</string>
     <string name="learn_song">यह गाना सीखें</string>
+    <string name="practice_song">इस गाने का अभ्यास करें</string>
+    <string name="practice_fix_reading">उच्चारण ठीक करें</string>
     <string name="learn_song_add">%1$d जोड़ें</string>
     <string name="learn_song_times">%1$d बार गाया गया</string>
     <string name="learn_song_new_words">सीखने लायक शब्द हैं</string>

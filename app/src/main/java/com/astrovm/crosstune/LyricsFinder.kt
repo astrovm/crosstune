@@ -239,14 +239,15 @@ internal class LyricsFinder(
             .toString()
     }
 
-    /** A line as kept: when, what, and when each of its words is, when they're timed. */
+    /** A line as kept: when, what, when each of its words is, when they're timed, and when it ends, when that's known. */
     private fun lineToCache(line: LyricLine): JSONArray = JSONArray().put(line.timeMs).put(line.text).apply {
-        if (line.words.isNotEmpty()) put(JSONArray().apply { line.words.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+        if (line.words.isNotEmpty() || line.endMs != null) put(JSONArray().apply { line.words.forEach { put(JSONArray().put(it.timeMs).put(it.text)) } })
+        line.endMs?.let { put(it) }
     }
 
     private fun lineFromCache(kept: JSONArray): LyricLine {
         val words = kept.optJSONArray(2)?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { word -> TimedWord(word.getLong(0), word.getString(1)) } } }
-        return LyricLine(kept.getLong(0), kept.getString(1), words.orEmpty())
+        return LyricLine(kept.getLong(0), kept.getString(1), words.orEmpty(), kept.optLong(3, -1L).takeIf { it >= 0 })
     }
 
     /** Words kept, and whether they're still to be timed better. */

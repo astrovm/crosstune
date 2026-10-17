@@ -323,6 +323,8 @@
     <string name="lyrics_study">Nauka</string>
     <string name="practice_due">%1$d do powtórki</string>
     <string name="learn_song">Naucz się tej piosenki</string>
+    <string name="practice_song">Ćwicz tę piosenkę</string>
+    <string name="practice_fix_reading">Popraw czytanie</string>
     <string name="learn_song_add">Dodaj %1$d</string>
     <string name="learn_song_times">Śpiewany %1$d razy</string>
     <string name="learn_song_new_words">Ma słowa do nauki</string>

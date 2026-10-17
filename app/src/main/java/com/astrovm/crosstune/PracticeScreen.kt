@@ -40,12 +40,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -169,7 +176,7 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
                 if (practice.turned) {
                     HorizontalDivider()
                     LineSound(line, practice.sound, actions.onReplayLine)
-                    CardBack(line)
+                    CardBack(line, actions.onReadCardAs)
                 }
             }
         }
@@ -203,16 +210,55 @@ private fun CardFront(line: SavedLine) {
     }
 }
 
-/** The answer: the words again with how they read over them, in Latin letters, and what they mean. */
+/**
+ * The answer: the words again with how they read over them, in Latin letters, and what they mean.
+ * A reading that isn't how it's sung can be put right, kanji by kanji.
+ */
 @Composable
-private fun CardBack(line: SavedLine) {
+private fun CardBack(line: SavedLine, onReadAs: (List<String>) -> Unit) {
+    var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
         val ruby = line.ruby ?: line.reading?.takeIf { line.line != null }?.let { listOf(Ruby(line.text, it)) }
-        if (ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
-        else line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
+                else line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
+            }
+            if (line.readable.isNotEmpty() && !fixing) {
+                IconButton(onClick = { fixing = true }) { AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.practice_fix_reading)) }
+            }
+        }
+        if (fixing) ReadingFields(line, onSave = { readings -> fixing = false; onReadAs(readings) }, onCancel = { fixing = false })
         line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         line.translation?.let { Text(it, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
+    }
+}
+
+/** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */
+@Composable
+private fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCancel: () -> Unit) {
+    val parts = line.readable
+    val readings = rememberSaveable(line.text, line.title, line.artist, saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+        parts.map { it.reading.orEmpty() }.toMutableStateList()
+    }
+    val kana = readings.all { reading -> reading.isNotBlank() && reading.trim().all(Readings::isKana) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        parts.forEachIndexed { index, part ->
+            OutlinedTextField(
+                value = readings[index],
+                onValueChange = { readings[index] = it },
+                label = { Text(part.text) },
+                isError = readings[index].isNotBlank() && !readings[index].trim().all(Readings::isKana),
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Row(modifier = Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel_button)) }
+            TextButton(onClick = { onSave(readings.toList()) }, enabled = kana) { Text(stringResource(R.string.save_button)) }
+        }
     }
 }
 

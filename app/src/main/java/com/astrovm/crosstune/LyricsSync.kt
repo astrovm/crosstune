@@ -18,7 +18,7 @@ internal object LyricsSync {
     /** [lines] where the user says they are, by [points]. */
     fun adjust(lines: List<LyricLine>, points: List<SyncPoint>): List<LyricLine> =
         if (points.isEmpty()) lines else lines.map { line ->
-            line.copy(timeMs = timeOf(line.timeMs, points), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points)) })
+            line.copy(timeMs = timeOf(line.timeMs, points), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points)) }, endMs = line.endMs?.let { timeOf(it, points) })
         }
 
     /** Where in the song [lineMs] of the words is, by [points] in order. */

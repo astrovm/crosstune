@@ -114,6 +114,7 @@ class ListeningTest {
             .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "sung_readings.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
         shazamAnswers(MATCH)
     }
@@ -989,6 +990,8 @@ class ListeningTest {
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
         // The music app is paused 5 seconds in, where it's singing the second line, not the first as the words have it.
         val demo = MusicMetadata("Demo", "Band")
+        // A line kept to practise, timed as the words were found.
+        prefs().edit().putString("saved_lines", """[{"text":"Demo two","title":"Demo","artist":"Band","start":10000,"end":40000}]""").commit()
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(demo, null, 5_000, SystemClock.elapsedRealtime())
@@ -1012,11 +1015,15 @@ class ListeningTest {
         assertEquals(emptyList<Long>(), phone.seeks)
         // Kept for the song, so it's in time next time too.
         assertEquals(listOf(SyncPoint(10_000, 5_000)), LyricsSyncStore(prefs()).load(demo, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+        // The line kept to practise plays from where it's heard now.
+        fun kept() = SavedLinesStore(prefs()).load().single().let { it.startMs to it.endMs }
+        assertEquals(5_000L to 35_000L, kept())
 
         // Reset puts them back as found.
         click(string(R.string.lyrics_sync_reset))
         waitUntil(TIMEOUT_MS) { lit("Demo one") }
         assertFalse(shown(string(R.string.lyrics_sync_reset)))
+        assertEquals(10_000L to 40_000L, kept())
 
         // Done, a line tapped moves the app again: to where it is now that the words are in time.
         composeRule.onNodeWithText("Demo two").performClick()
@@ -1904,11 +1911,11 @@ class ListeningTest {
      * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers
      * [translations], and [openAi] for ChatGPT when signed in.
      */
-    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null) {
+    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null, sites: (okhttp3.Request) -> okhttp3.Response? = { null }) {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
-            openAi?.answer(request) ?: when (request.url.host) {
+            openAi?.answer(request) ?: sites(request) ?: when (request.url.host) {
                 "api.mymemory.translated.net" -> translation(request, translations)
                 else -> {
                     val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
@@ -2089,6 +2096,31 @@ class ListeningTest {
     }
 
     @Test
+    fun kanjiAreReadAsTheyreSungWhereALyricsSiteSaysAndLinesKeptAreReadSoButOnesPutRightByHand() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]]},""" +
+                """{"text":"都会の朝","reading":"とかいのあした","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["朝","あした"]],"byHand":true}]"""
+        ).commit()
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        wordsOf(null, "都会の夜\\n都会の朝", sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                request.url.encodedPath == "/search" ->
+                    FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+                else -> FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br />${ruby("都会", "まち")}の${ruby("朝", "あさ")}<br /></div>""")
+            }
+        })
+        // The dictionary reads 都会 as とかい; it's sung まち.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        assertFalse(readingShown("とかい"))
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals("まちのよる", kept.first { it.text == "都会の夜" }.reading)
+        // Put right by hand, it stays so.
+        assertEquals("とかいのあした", kept.first { it.text == "都会の朝" }.reading)
+    }
+
+    @Test
     fun signedInReadingsTheDictionaryGetsWrongArePutRight() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         val openAi = signedInWithChatGpt()
@@ -2109,10 +2141,10 @@ class ListeningTest {
         // The sheet closed, back to the words.
         composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
-        // The study menu says how many are due.
+        // The study menu says how many of this song's are due.
         studyMenu()
         assertTrue(shown(string(R.string.practice_due, 1)))
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)

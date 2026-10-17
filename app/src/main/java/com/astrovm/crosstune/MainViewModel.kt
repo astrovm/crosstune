@@ -507,7 +507,9 @@ internal class MainViewModel(
     /** Which language a song's words are in; nullable so tests need none. */
     private val lyricsLanguage: LyricsLanguage? = null,
     /** Setup in one tap, for people who run Shizuku; nullable so tests need none. */
-    private val oneTap: OneTapSetup? = null
+    private val oneTap: OneTapSetup? = null,
+    /** How a Japanese song's kanji are sung, which a dictionary can't say; nullable so tests need none. */
+    private val sungReadings: SungReadings? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -1914,6 +1916,8 @@ internal class MainViewModel(
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
         uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty())
+        // Lines kept to practise play from where they're heard now.
+        timeSavedLines(song, again = true)
     }
 
     private var romajiJob: Job? = null
@@ -1995,6 +1999,13 @@ internal class MainViewModel(
         val lines = indexes.sorted().mapNotNull(::savedLineAt)
         if (lines.isEmpty()) return
         uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
+        // Learning a song starts with it, on its own.
+        practiseSong()
+    }
+
+    /** Practises the lines of the song whose words show, and no other's. */
+    fun practiseSong() {
+        startPractice(uiState.lyricsFor ?: return)
     }
 
     /**
@@ -2022,31 +2033,54 @@ internal class MainViewModel(
     private fun SavedLine.timedAt(index: Int): SavedLine {
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return copy(artworkUrl = uiState.lyricsFor?.artworkUrl)
-        val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
+        // Timed again, it stays with the app it was kept from, when none follows the words now.
         val app = appFollowing
         return copy(
-            startMs = start, endMs = end, leadMs = videoLeadMs?.takeIf { app?.video == true } ?: 0L, app = app?.appPackage,
-            artworkUrl = uiState.lyricsFor?.artworkUrl
+            startMs = start, endMs = endOf(lines, index), leadMs = videoLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
+            app = app?.appPackage ?: this.app, artworkUrl = uiState.lyricsFor?.artworkUrl ?: artworkUrl
         )
     }
 
-    /** Lines of [song] kept before they could be timed are timed now, by the timed words found for it. */
-    private fun timeSavedLines(song: MusicMetadata) {
+    /**
+     * Where line [index] of [lines] ends: where the words say, when they're timed that closely, or
+     * else where the next line starts; the last line, with no next one, is given a few seconds.
+     */
+    private fun endOf(lines: List<LyricLine>, index: Int): Long {
+        val line = lines[index]
+        return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
+    }
+
+    /** Lines of [song] kept are read as its lines are now, put right, but for the ones put right by hand. */
+    private fun rereadSavedLines(song: MusicMetadata) {
+        val lines = wordLines()
+        val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand }
+            .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
+        if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
+    }
+
+    /**
+     * Lines of [song] kept before they could be timed are timed now, by the timed words found for it;
+     * [again], all its lines are, as when the words were put in time by hand.
+     */
+    private fun timeSavedLines(song: MusicMetadata, again: Boolean = false) {
         val lines = uiState.lyricLines.takeIf { it.isNotEmpty() } ?: return
-        val untimed = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && !it.timed }
+        val untimed = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && (again || !it.timed) }
         untimed.forEach { saved ->
             val index = lines.indexOfFirst { it.text == (saved.line ?: saved.text) }.takeIf { it >= 0 } ?: return@forEach
-            uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index)))
+            uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index), again))
         }
     }
 
     /**
-     * Practises the lines due, as cards, each song's together. What the music app plays now is kept,
-     * to go back to once done.
+     * Practises the lines due, as cards, each song's together; or only [song]'s, all of them when none
+     * is due, to learn it. What the music app plays now is kept, to go back to once done.
      */
-    fun startPractice() {
+    fun startPractice(song: MusicMetadata? = null) {
         stopRepeating()
-        val queue = sessionOf(uiState.savedLines, wallClock())
+        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
+            val its = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist }
+            sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
+        }
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { song -> playing?.let { Before(song, inApp(it.clock.positionAt(now())), it.appPackage) } }
@@ -2086,7 +2120,8 @@ internal class MainViewModel(
                 practiceSong = line
                 val lead = if (app()?.video == true) line.leadMs else 0L
                 val start = (line.startMs ?: 0L) + lead
-                val end = (line.endMs ?: 0L) + lead
+                // A moment past where the words say it ends, so its last word isn't cut short.
+                val end = (line.endMs ?: 0L) + lead + LINE_TAIL_MS
                 source.seekTo(song, start)
                 // Turned while the app got there, it plays now.
                 val now = play || uiState.practice?.turned == true
@@ -2145,6 +2180,17 @@ internal class MainViewModel(
         val practice = uiState.practice?.takeIf { !it.turned } ?: return
         uiState = uiState.copy(practice = practice.copy(turned = true))
         if (practice.sound == LineSound.PLAYED) replayLine()
+    }
+
+    /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
+    fun readCardAs(readings: List<String>) {
+        val practice = uiState.practice ?: return
+        val line = practice.line ?: return
+        val read = line.readAs(readings).takeIf { it != line } ?: return
+        uiState = uiState.copy(
+            savedLines = savedLinesStore.readAs(read),
+            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true) else it })
+        )
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
@@ -2426,8 +2472,7 @@ internal class MainViewModel(
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return
         if (uiState.following?.canSeek != true) return
-        // The last line has no next one to end at, so it's given a few seconds.
-        val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
+        val end = endOf(lines, index) + LINE_TAIL_MS
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)
         playback?.seekTo(song, inApp(start))
@@ -2462,13 +2507,24 @@ internal class MainViewModel(
         if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-                val read = withContext(systemDispatcher) { Readings.of(lines, script) }
+                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
-                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
                 val song = uiState.lyricsFor
-                if (script == Script.JAPANESE && usesChatGpt() && song != null) {
+                if (script != Script.JAPANESE || song == null) return@launch
+                // Sung readings, 都会 as まち, from a site that writes them over the words.
+                sungReadings?.of(song, lines, read)?.takeIf { it.isNotEmpty() }?.let { fixes ->
+                    if (wordLines() != lines || uiState.learning.lines != read) return@launch
+                    read = Readings.corrected(read, fixes)
+                    uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+                    rereadSavedLines(song)
+                }
+                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
+                if (usesChatGpt()) {
                     val checked = tutor?.checkReadings(song, lines, read) ?: return@launch
-                    if (wordLines() == lines && uiState.learning.lines == read) uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+                    if (wordLines() == lines && uiState.learning.lines == read) {
+                        uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+                        rereadSavedLines(song)
+                    }
                 }
             }
         }
@@ -3054,6 +3110,11 @@ internal class MainViewModel(
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L
+        /**
+         * How long a line plays on past where the words say it ends: timed by ear, words are often
+         * timed a little early, and a line cut short loses its last word.
+         */
+        const val LINE_TAIL_MS = 500L
         private const val REPEAT_CHECK_MS = 100L
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long a song the music app has already takes to be found. */

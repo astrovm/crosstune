@@ -2,9 +2,10 @@ package com.astrovm.crosstune
 
 /**
  * One line of a song's words, and when in the song it's sung; with when each of its [words] is,
- * when the words are timed that closely. The words, put together, are the line.
+ * when the words are timed that closely, and when it ends, when that's known. The words, put
+ * together, are the line.
  */
-internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList())
+internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList(), val endMs: Long? = null)
 
 /** A word of a line, or a syllable, as it's timed, and when in the song it's sung. */
 internal data class TimedWord(val timeMs: Long, val text: String)
@@ -29,7 +30,7 @@ internal object SyncedLyrics {
     private val wordStamp = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
 
     /** A line as NetEase times it word by word: "[start,length]" and then "(start,length,0)" before each word. */
-    private val netEaseLine = Regex("""^\[(\d+),\d+](.*)""")
+    private val netEaseLine = Regex("""^\[(\d+),(\d+)](.*)""")
     private val netEaseWord = Regex("""\((\d+),\d+,\d+\)""")
 
     /** "[offset:+500]": how many milliseconds sooner every line comes, or later when it's less than none. */
@@ -58,9 +59,9 @@ internal object SyncedLyrics {
      */
     fun parseWordByWord(yrc: String): List<LyricLine> =
         yrc.lineSequence().mapNotNull { raw ->
-            val (start, rest) = netEaseLine.matchEntire(raw.trim())?.destructured ?: return@mapNotNull null
+            val (start, length, rest) = netEaseLine.matchEntire(raw.trim())?.destructured ?: return@mapNotNull null
             val words = timedWords(rest, netEaseWord) { it.groupValues[1].toLong() }
-            LyricLine(start.toLong(), words.joinToString("") { it.text }.trim(), words)
+            LyricLine(start.toLong(), words.joinToString("") { it.text }.trim(), words, (start.toLong() + length.toLong()).takeIf { length.toLong() > 0 })
         }.filter { it.text.isNotEmpty() }.sortedBy { it.timeMs }.toList()
 
     /**

@@ -342,6 +342,8 @@
     <string name="lyrics_study">Study</string>
     <string name="practice_due">%1$d due</string>
     <string name="learn_song">Learn this song</string>
+    <string name="practice_song">Practice this song</string>
+    <string name="practice_fix_reading">Fix reading</string>
     <string name="learn_song_add">Add %1$d</string>
     <string name="learn_song_times">Sung %1$d times</string>
     <string name="learn_song_new_words">Has words to know</string>

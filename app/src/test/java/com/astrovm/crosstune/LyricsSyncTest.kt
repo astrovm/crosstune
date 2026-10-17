@@ -38,9 +38,12 @@ class LyricsSyncTest {
 
     @Test
     fun aLineTimedWordByWordMovesWithItsWords() {
-        val line = LyricLine(20_000, "Two words", listOf(TimedWord(20_000, "Two "), TimedWord(20_500, "words")))
+        val line = LyricLine(20_000, "Two words", listOf(TimedWord(20_000, "Two "), TimedWord(20_500, "words")), endMs = 21_000)
         val moved = LyricsSync.adjust(listOf(line), listOf(SyncPoint(20_000, 23_000))).single()
         assertEquals(listOf(23_000L, 23_500L), moved.words.map { it.timeMs })
+        // Where it ends moves too; one with no end of its own stays so.
+        assertEquals(24_000L, moved.endMs)
+        assertEquals(null, LyricsSync.adjust(listOf(line.copy(endMs = null)), listOf(SyncPoint(20_000, 23_000))).single().endMs)
         assertEquals(line.words.map { it.text }, moved.words.map { it.text })
     }
 

@@ -130,12 +130,15 @@ class SyncedLyricsTest {
             [23550,120](23550,120,0)Yeah
             [27360,1290](27360,240,0)I've (27600,90,0)been (27690,360,0)tryna (28050,600,0)call
             [30000,500](30000,500,0)
+            [31000,0](31000,0,0)Hm
             not a line
         """.trimIndent()
         assertEquals(
             listOf(
-                LyricLine(23_550, "Yeah", listOf(TimedWord(23_550, "Yeah"))),
-                LyricLine(27_360, "I've been tryna call", listOf(TimedWord(27_360, "I've "), TimedWord(27_600, "been "), TimedWord(27_690, "tryna "), TimedWord(28_050, "call")))
+                // Each ends when NetEase says, unless it gives it no length.
+                LyricLine(23_550, "Yeah", listOf(TimedWord(23_550, "Yeah")), endMs = 23_670),
+                LyricLine(27_360, "I've been tryna call", listOf(TimedWord(27_360, "I've "), TimedWord(27_600, "been "), TimedWord(27_690, "tryna "), TimedWord(28_050, "call")), endMs = 28_650),
+                LyricLine(31_000, "Hm", listOf(TimedWord(31_000, "Hm")))
             ),
             SyncedLyrics.parseWordByWord(yrc)
         )

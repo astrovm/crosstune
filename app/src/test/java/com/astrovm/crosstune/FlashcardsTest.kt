@@ -7,7 +7,9 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -16,8 +18,11 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
+import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -32,8 +37,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
-import java.io.File
-import java.time.Duration
 
 /** Saved lines practised as cards that play in the music app, and whole songs learned. */
 @RunWith(RobolectricTestRunner::class)
@@ -155,7 +158,7 @@ class FlashcardsTest {
         // The line as written, the app paused where it's sung: heard, it would say how it reads.
         click(string(R.string.lyrics_study))
         val played = phone.plays.size
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         waitUntil { model().uiState.practice?.sound == LineSound.PLAYED }
         assertTrue(shown("Stars"))
         assertEquals(10_000L, phone.seeks.last())
@@ -167,9 +170,12 @@ class FlashcardsTest {
         card().performClick()
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(true, phone.plays.last())
-        // Once the app is there, at the next line it pauses, to be played again; turned again, it isn't.
+        // Once the app is there, it pauses a moment past the next line, so the last word isn't cut short, to
+        // be played again; turned again, it isn't.
         appHas(atMs = 10_000)
-        pass(10_500)
+        pass(10_000)
+        assertEquals(LineSound.PLAYING, practice().sound)
+        pass(500)
         waitUntil { practice().sound == LineSound.PLAYED }
         assertEquals(false, phone.plays.last())
         val seeks = phone.seeks.size
@@ -189,8 +195,49 @@ class FlashcardsTest {
         waitUntil { shown("Moon") }
         // None due now: all caught up.
         click(string(R.string.lyrics_study))
+        click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         waitUntil { shown(string(R.string.practice_caught_up)) }
+    }
+
+    @Test
+    fun aReadingThatIsntHowItsSungIsPutRightByHandOnTheCardsBack() {
+        saved(
+            """{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","title":"Other","artist":"Band",""" +
+                """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""",
+            """{"text":"Moon","translation":"Luna","title":"Other","artist":"Band","box":1}"""
+        )
+        launch()
+        click(practiceDue(2))
+        // Only once turned, with its reading shown.
+        assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_show))
+        assertTrue(readingShown("よる"))
+        click(string(R.string.practice_fix_reading))
+        // Each kanji, with its reading to change.
+        assertTrue(shown("夜") && shown("空"))
+        composeRule.onNode(hasText("よる") and hasSetTextAction()).performTextReplacement("night")
+        // Not kana: it can't be saved.
+        composeRule.onNode(hasText(string(R.string.save_button))).assertIsNotEnabled()
+        composeRule.onNode(hasText("night") and hasSetTextAction()).performTextReplacement("よ")
+        click(string(R.string.save_button))
+        // On the card now, and kept, in kana and romaji too.
+        waitUntil { readingShown("よ") }
+        assertFalse(readingShown("よる"))
+        assertTrue(shown("yo no sora"))
+        val kept = savedLine("夜の空")
+        assertEquals("よのそら", kept.reading)
+        assertTrue(kept.readByHand)
+        // Cancelled, nothing changes.
+        click(string(R.string.practice_fix_reading))
+        composeRule.onNode(hasText("そら") and hasSetTextAction()).performTextReplacement("から")
+        click(string(R.string.cancel_button))
+        assertEquals("よのそら", savedLine("夜の空").reading)
+        // A line with no kanji has nothing to put right.
+        click(string(R.string.practice_good))
+        waitUntil { practice().line?.text == "Moon" }
+        click(string(R.string.practice_show))
+        assertFalse(described(string(R.string.practice_fix_reading)))
     }
 
     @Test
@@ -353,6 +400,7 @@ class FlashcardsTest {
         saved("""{"text":"Uno","translation":"One","title":"Other","artist":"Band"}""")
         wordsOfDemo()
         click(string(R.string.lyrics_study))
+        click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         // Not timed, it's read.
         waitUntil { shown("Uno") }
@@ -367,7 +415,8 @@ class FlashcardsTest {
         // Where it was, about two seconds in, playing again; practice closed, back to its words.
         assertTrue(phone.seeks.last() in 2_000L..4_000L)
         assertEquals(true, phone.plays.last())
-        waitUntil { shown("Moon") }
+        waitUntil { model().uiState.practice == null }
+        assertEquals("Demo", model().uiState.lyricsFor?.title)
     }
 
     @Test
@@ -389,6 +438,7 @@ class FlashcardsTest {
 
     @Test
     fun aWholeSongIsLearnedFromItsLinesEachOnce() {
+        saved("""{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}""")
         wordsOfDemo()
         click(string(R.string.lyrics_study))
         click(string(R.string.learn_song))
@@ -398,13 +448,21 @@ class FlashcardsTest {
         val tall = 48 * app.resources.displayMetrics.density
         assertTrue(composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes().all { it.size.height >= tall })
         click(string(R.string.learn_song_add, 3))
+        // Added, they're practised at once, on their own, without other songs' lines.
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Night sky", "Stars", "Moon"), practice().queue.map { it.text })
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
         click(string(R.string.lyrics_study))
         click(string(R.string.learn_song))
         // Kept ones stay picked and can't be let go here; a sound can still be picked.
-        assertEquals(3, SavedLinesStore(prefs()).load().size)
+        assertEquals(4, SavedLinesStore(prefs()).load().size)
         click("La la la")
         click(string(R.string.learn_song_add, 1))
-        val kept = SavedLinesStore(prefs()).load()
+        waitUntil { model().uiState.practice != null }
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        val kept = SavedLinesStore(prefs()).load().filter { it.title == "Demo" }
         assertEquals(listOf("La la la", "Night sky", "Stars", "Moon"), kept.map { it.text })
         assertEquals(0L to 10_000L, savedLine("Night sky").startMs to savedLine("Night sky").endMs)
         // The last line has no next one to end at, so it's given a few seconds.
@@ -415,6 +473,28 @@ class FlashcardsTest {
         composeRule.onNode(hasText(string(R.string.learn_song_add, 0))).assertExists()
         click("Stars")
         composeRule.onNode(hasText(string(R.string.learn_song_add, 0))).assertExists()
+    }
+
+    @Test
+    fun aSongIsPractisedOnItsOwnFromItsWordsAllOfItWhenNoneIsDue() {
+        val later = System.currentTimeMillis() + 86_400_000L
+        saved(
+            """{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}""",
+            """{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","box":2,"due":$later}""",
+            """{"text":"Stars","translation":"Estrellas","title":"Demo","artist":"Band","box":2,"due":$later}"""
+        )
+        wordsOfDemo()
+        click(string(R.string.lyrics_study))
+        // Only this song's lines, none due, so all of them, in the order they're sung.
+        click(string(R.string.practice_song))
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Stars", "Moon"), practice().queue.map { it.text })
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        // From the main screen, it's every song's lines that are due.
+        model().startPractice()
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Elsewhere"), practice().queue.map { it.text })
     }
 
     @Test
