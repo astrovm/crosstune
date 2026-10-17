@@ -113,9 +113,9 @@ class FlashcardsTest {
     private fun card() = composeRule.onNodeWithTag(PRACTICE_CARD_TAG)
 
     /** The music app has [song] at [atMs], playing or not, as a video or not. */
-    private fun appHas(song: String = "Demo", atMs: Long = 2_000, playing: Boolean = true, video: Boolean = false, app: String = this.app.packageName) {
+    private fun appHas(song: String = "Demo", atMs: Long = 2_000, playing: Boolean = true, video: Boolean = false, app: String = this.app.packageName, canSeek: Boolean = true) {
         phone.onThePhone = Heard.Song(MusicMetadata(song, "Band"), null, atMs, SystemClock.elapsedRealtime())
-        phone.playing.value = Following(PlaybackClock(atMs, SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = true, appPackage = app, video = video)
+        phone.playing.value = Following(PlaybackClock(atMs, SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = canSeek, appPackage = app, video = video)
     }
 
     /** Demo plays in the music app, and its words are open. */
@@ -259,6 +259,14 @@ class FlashcardsTest {
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         waitUntil { practice().sound == LineSound.NONE }
         assertFalse(practice().intro)
+        // There, but where the app can't move it, e.g. during an ad, it isn't asked for again, and it's read.
+        val asked = phone.songsAsked.size
+        appHas(practice().line!!.title, canSeek = false)
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        click(string(R.string.practice_due, 1))
+        waitUntil { model().uiState.practice?.sound == LineSound.NONE }
+        assertEquals(asked, phone.songsAsked.size)
         // Stopped while a line plays, the app pauses it.
         val playing = practice().line!!
         appHas(playing.title, atMs = 0)

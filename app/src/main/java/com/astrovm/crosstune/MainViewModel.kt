@@ -2140,9 +2140,11 @@ internal class MainViewModel(
         val following = launch { source.follow(song).collect { latest = it } }
         try {
             val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }
-            // Not already there, it's asked for by name, which takes the app a moment.
-            val there = withTimeoutOrNull(FIND_SONG_MS) { ready() } != null ||
-                (source.playSong(song, app) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null)
+            // Not already there, it's asked for by name, which takes the app a moment. There, but where
+            // it can't be moved, e.g. during an ad, asking again would only start it over.
+            val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
+            val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
+            else source.playSong(song, app) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
             if (there) block { latest } else null
         } finally {
             following.cancel()
@@ -2190,9 +2192,9 @@ internal class MainViewModel(
         showCard()
     }
 
-    /** Stops practising, the line playing paused. */
+    /** Stops practising, the line playing, or the song on its way, paused. */
     fun stopPractice() {
-        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING }?.line
+        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING }?.line
         soundJob?.cancel()
         soundJob = null
         playing?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false) }
