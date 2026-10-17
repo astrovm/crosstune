@@ -1998,7 +1998,7 @@ internal class MainViewModel(
      * The lines of a song chosen to learn: lines [add] of the words shown kept, each with what helps
      * read it, and [remove] let go; then, when asked to [practise], the song's practised on its own.
      */
-    fun chooseLines(add: List<Int>, remove: List<SavedLine>, practise: Boolean = false) {
+    fun chooseLines(add: List<Int>, remove: List<SavedLine>, practise: Boolean) {
         val lines = add.sorted().mapNotNull(::savedLineAt)
         if (lines.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
         if (remove.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.removeAll(remove))

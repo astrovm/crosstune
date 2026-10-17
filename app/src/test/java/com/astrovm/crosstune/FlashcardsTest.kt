@@ -583,6 +583,21 @@ class FlashcardsTest {
     }
 
     @Test
+    fun aSongWithNothingToRecallIsAllCaughtUp() {
+        val later = System.currentTimeMillis() + 86_400_000L
+        saved(
+            """{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","due":$later}""",
+            """{"text":"Hum","title":"Other","artist":"Band"}"""
+        )
+        launch()
+        click(string(R.string.saved_practice))
+        // Kept before it could be read or played, there's nothing of it to practise.
+        click("Other")
+        waitUntil { shown(string(R.string.practice_caught_up)) }
+        assertEquals(0, practice().total)
+    }
+
+    @Test
     fun withNoneDueThePracticeButtonStillOpensTheList() {
         val later = System.currentTimeMillis() + 86_400_000L
         saved("""{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","due":$later}""")
