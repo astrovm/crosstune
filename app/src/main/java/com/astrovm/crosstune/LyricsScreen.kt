@@ -1,5 +1,13 @@
 package com.astrovm.crosstune
 
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import android.os.Build
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
@@ -193,11 +201,17 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         if (tab == SongTab.WORDS) actions.onFindWordsToKnow()
         if (tab == SongTab.ARTIST) actions.onAboutArtist()
     }
-    if (savedShown) {
-        state.practice?.let { PracticeScreen(it, actions) } ?: SavedLines(state.savedLines, actions, onBack = { savedShown = false })
+    if (state.practice != null) {
+        PracticeScreen(state, actions)
         return
     }
-    // Saved lines and practice take the place of the words, so only the words hold the screen, and only while a song plays.
+    if (savedShown) {
+        SavedLines(state.savedLines, actions, onBack = { savedShown = false })
+        return
+    }
+    // The song's lines picked to learn, open over the words.
+    var learningSong by rememberSaveable(song) { mutableStateOf(false) }
+    // Saved lines take the place of the words, so only the words hold the screen, and only while a song plays.
     KeepScreenOn(state.following?.clock?.playing == true)
     BackHandler(onBack = actions.onDismissLyrics)
     // Where the timed words are scrolled to, kept out here so they're right where they were when they
@@ -323,16 +337,15 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             LyricsActions(
                 state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
-                onPractise = {
-                    savedShown = true
-                    actions.onStartPractice()
-                }
+                onPractise = actions.onStartPractice,
+                onLearnSong = { learningSong = true }
             )
         }
     }
     }
     }
     songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onDismiss = { songTab = null }) }
+    if (learningSong) LearnSongSheet(state, actions, onDismiss = { learningSong = false })
     studying?.let { line ->
         LineSheet(line, state, actions) {
             studying = null
@@ -522,6 +535,7 @@ private fun LyricsActions(
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
     onPractise: () -> Unit,
+    onLearnSong: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menu by remember { mutableStateOf<BarMenu?>(null) }
@@ -535,9 +549,13 @@ private fun LyricsActions(
                 if (state.lyrics.isNotEmpty()) {
                     LearnButton(state.learning.translating || state.chords.loading, onClick = { menu = BarMenu.LEARN })
                 }
-                // Lines kept are studied.
-                if (state.lyrics.isNotEmpty() && state.savedLines.isNotEmpty()) {
+                // The song's lines are learned, and lines kept are studied.
+                if (state.lyrics.isNotEmpty()) {
                     IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
+                }
+                // Lines of this song kept can hide until they're sung, to say them first.
+                if (savedHere(state).isNotEmpty() && state.lyricLines.isNotEmpty()) {
+                    LitButton(state.quiz, R.drawable.ic_quiz, stringResource(R.string.quiz_listen), onClick = { actions.onQuizChange(!state.quiz) })
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
@@ -555,7 +573,7 @@ private fun LyricsActions(
         // keep off the screen's edge.
         val close = { menu = null }
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, close)
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, onOpenSaved, onPractise, close)
+        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, onOpenSaved, onPractise, onLearnSong, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
     }
 }
@@ -658,22 +676,32 @@ private fun ReadingSize(scale: Float, actions: ScreenActions) {
     }
 }
 
-/** The lines kept, to see or practise, with how many are due. */
+/** The song's lines to learn, and the lines kept, to see or practise, with how many are due. */
 @Composable
-private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, onPractise: () -> Unit, onClose: () -> Unit) {
+private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, onPractise: () -> Unit, onLearnSong: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        val saved = state.savedLines
         DropdownMenuItem(
-            text = { Text(stringResource(R.string.lyrics_saved_lines)) },
-            leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
-            trailingIcon = { Text(saved.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            text = { Text(stringResource(R.string.learn_song)) },
+            leadingIcon = { AppIcon(R.drawable.ic_playlist_add, contentDescription = null) },
             onClick = {
                 onClose()
-                onOpenSaved()
+                onLearnSong()
             }
         )
-        // Only lines with their meaning can be practised.
-        val practisable = saved.filter { it.translation != null }
+        val saved = state.savedLines
+        if (saved.isNotEmpty()) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.lyrics_saved_lines)) },
+                leadingIcon = { AppIcon(R.drawable.ic_bookmark, contentDescription = null) },
+                trailingIcon = { Text(saved.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = {
+                    onClose()
+                    onOpenSaved()
+                }
+            )
+        }
+        // Only lines with their meaning, or that can be heard, can be practised.
+        val practisable = saved.filter { it.practisable }
         if (practisable.isNotEmpty()) {
             val due = practisable.count { it.due <= System.currentTimeMillis() }
             DropdownMenuItem(
@@ -685,6 +713,77 @@ private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, on
                     onPractise()
                 }
             )
+        }
+    }
+}
+
+/** The lines of the song shown that are kept, by their words. */
+private fun savedHere(state: UiState): Set<String> {
+    val song = state.lyricsFor ?: return emptySet()
+    return state.savedLines.filter { it.title == song.title && it.artist == song.artist }.map { it.text }.toSet()
+}
+
+/**
+ * The song's lines, each once, to pick which to learn: those worth it picked to start with, those
+ * kept already shown so. Each says how many times it's sung, and whether it has words worth knowing.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LearnSongSheet(state: UiState, actions: ScreenActions, onDismiss: () -> Unit) {
+    val song = state.lyricsFor ?: return
+    val texts = state.lyricLines.map { it.text }.ifEmpty { state.lyrics.lines() }
+    val words = state.learning.wordsToKnow?.value.orEmpty().map { it.word }
+    val lines = remember(texts, words) { songLines(texts, words) }
+    val kept = savedHere(state)
+    val picked = remember(lines) { mutableStateListOf<Int>().apply { addAll(lines.filter { !it.filler && it.text !in kept }.map { it.index }) } }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(modifier = Modifier.padding(bottom = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                CoverArt(song.artworkUrl, actions.loadArtwork, size = 40.dp)
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                items(lines, key = { it.index }) { line ->
+                    val saved = line.text in kept
+                    val on = saved || line.index in picked
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(on, enabled = !saved, role = Role.Checkbox) { if (it) picked.add(line.index) else picked.remove(line.index) }
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Checkbox(checked = on, onCheckedChange = null, enabled = !saved)
+                        Text(line.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                        if (line.newWords) {
+                            AppIcon(R.drawable.ic_star, contentDescription = stringResource(R.string.learn_song_new_words), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        }
+                        if (line.times > 1) {
+                            val times = stringResource(R.string.learn_song_times, line.times)
+                            Text(
+                                "×${line.times}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = times }
+                            )
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = {
+                    actions.onLearnSong(picked.toList())
+                    onDismiss()
+                },
+                enabled = picked.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.learn_song_add, picked.size), modifier = Modifier.padding(start = 8.dp))
+            }
         }
     }
 }
@@ -1007,6 +1106,11 @@ private fun TimedLyrics(
     LaunchedEffect(active) {
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
     }
+    // Quizzing, the lines kept hide until they're sung, or said to be known or not as they are.
+    val kept = if (state.quiz) savedHere(state) else emptySet()
+    val revealed = remember(state.lyricsFor) { mutableStateListOf<Int>() }
+    val hidden = { index: Int -> lines[index].text in kept && index !in revealed && (active < 0 || index >= active) }
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 240.dp),
@@ -1032,9 +1136,36 @@ private fun TimedLyrics(
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index)
+                help = state.learning.helpFor(index),
+                hidden = hidden(index)
             )
         }
+    }
+    if (active >= 0 && hidden(active)) {
+        QuizButtons(
+            onAnswer = { known ->
+                revealed.add(active)
+                actions.onQuizLine(active, known)
+            },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)
+        )
+    }
+    }
+}
+
+/** Whether the line hidden, being sung, was known before it showed. */
+@Composable
+private fun QuizButtons(onAnswer: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val haptics = LocalHapticFeedback.current
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier) {
+        OutlinedButton(onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.Reject)
+            onAnswer(false)
+        }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.quiz_missed)) }
+        Button(onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+            onAnswer(true)
+        }) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.quiz_knew)) }
     }
 }
 
@@ -1136,7 +1267,8 @@ private fun LyricLineText(
     onStudy: () -> Unit,
     help: LineHelp? = null,
     waiting: Boolean = false,
-    seekLabel: Int = R.string.lyrics_jump
+    seekLabel: Int = R.string.lyrics_jump,
+    hidden: Boolean = false
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1182,6 +1314,8 @@ private fun LyricLineText(
             .padding(vertical = 6.dp)
     ) {
         val reading = help?.reading
+        // Hidden to be said first, the words blur, or fade away where they can't, and aren't read out.
+        Box(modifier = if (hidden) Modifier.hiddenWords() else Modifier) {
         if (instead != null) {
             Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
         } else if (chords != null && !chords.isEmpty) {
@@ -1196,14 +1330,20 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
+        }
         val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
         // Shown in them already, they'd say it twice.
-        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
+        if (help?.romanized == true && !hidden) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
     }
 }
+
+/** Words hidden to be said first: blurred where Android can, or else faded away, and not read out either way. */
+private fun Modifier.hiddenWords(): Modifier = clearAndSetSemantics {}.then(
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(12.dp, BlurredEdgeTreatment.Unbounded) else Modifier.alpha(0.06f)
+)
 
 /** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable
@@ -1881,80 +2021,6 @@ private val ARTIST_PARTS = listOf(R.string.artist_who, R.string.artist_style, R.
 /** What a song's explanation says, in order. */
 private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
 
-/**
- * A saved line to practise as a card: the line or its meaning, tapped or shown to turn it to the
- * other side, then said how well it was known; or, with none due, a check that all are caught up.
- */
-@Composable
-private fun PracticeScreen(practice: Practice, actions: ScreenActions) {
-    BackHandler(onBack = actions.onStopPractice)
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 24.dp)) {
-                IconButton(onClick = actions.onStopPractice) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
-                Text(stringResource(R.string.saved_practice), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                if (practice.due > 0) Text(stringResource(R.string.practice_due, practice.due), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            }
-            val line = practice.line
-            if (line == null) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-                    Text(stringResource(R.string.practice_caught_up), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-                }
-                return@Column
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp)
-            ) {
-                // The card: the side shown first, then, turned, the other under it.
-                Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    onClick = actions.onTurnPractice,
-                    enabled = !practice.turned,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        if (practice.meaningFirst) CardMeaning(line) else CardLine(line)
-                        if (practice.turned) {
-                            HorizontalDivider()
-                            if (practice.meaningFirst) CardLine(line) else CardMeaning(line)
-                        }
-                        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            // How well it was known, once turned, sets when it comes back.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-                if (!practice.turned) {
-                    Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.practice_show)) }
-                } else {
-                    OutlinedButton(onClick = { actions.onGradePractice(Grade.AGAIN) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_again)) }
-                    FilledTonalButton(onClick = { actions.onGradePractice(Grade.GOOD) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_good)) }
-                    Button(onClick = { actions.onGradePractice(Grade.EASY) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.practice_easy)) }
-                }
-            }
-        }
-    }
-}
-
-/** A card's side with the line, as kept: how it reads over it, and in Latin letters under it. */
-@Composable
-private fun CardLine(line: SavedLine) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        line.reading?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    }
-}
-
-/** A card's side with what the line means. */
-@Composable
-private fun CardMeaning(line: SavedLine) {
-    Text(line.translation.orEmpty(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-}
-
 /** The lines kept, newest first, each with what helped read it and the song it's from. */
 @Composable
 private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: () -> Unit) {
@@ -1966,8 +2032,8 @@ private fun SavedLines(lines: List<SavedLine>, actions: ScreenActions, onBack: (
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)) {
                 IconButton(onClick = onBack) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
                 Text(stringResource(R.string.lyrics_saved_lines), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                // Lines with their meaning can be practised.
-                if (lines.any { it.translation != null }) {
+                // Lines with their meaning, or that can be heard, can be practised.
+                if (lines.any { it.practisable }) {
                     TextButton(onClick = actions.onStartPractice, modifier = Modifier.padding(end = 8.dp)) { Text(stringResource(R.string.saved_practice)) }
                 }
             }

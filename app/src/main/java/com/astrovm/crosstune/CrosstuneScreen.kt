@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
@@ -227,6 +229,12 @@ internal data class ScreenActions(
     val onTurnPractice: () -> Unit = {},
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
+    val onReplayLine: () -> Unit = {},
+    val onHintPractice: () -> Unit = {},
+    val onBackToBefore: () -> Unit = {},
+    val onLearnSong: (List<Int>) -> Unit = {},
+    val onQuizChange: (Boolean) -> Unit = {},
+    val onQuizLine: (Int, Boolean) -> Unit = { _, _ -> },
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
@@ -339,6 +347,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
+        // Over the words, practice shows in their place, so they're as they were after.
+        state.practice != null && state.lyricsFor == null -> Screen.PRACTICE
         state.lyricsFor != null -> Screen.LYRICS
         else -> Screen.MAIN
     }
@@ -347,7 +357,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
-            if (initialState == Screen.LYRICS || targetState == Screen.LYRICS) rise(up = targetState == Screen.LYRICS)
+            if (initialState == Screen.LYRICS || targetState == Screen.LYRICS) rise(up = targetState.depth > initialState.depth)
             else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
         },
         label = "screen"
@@ -368,6 +378,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             ListeningScreen(actions)
         } else if (shown == Screen.LYRICS) {
             LyricsScreen(state, actions)
+        } else if (shown == Screen.PRACTICE) {
+            PracticeScreen(state, actions)
         } else {
             MainScreen(state, guided, onOpenSettings = { showSettings = true })
         }
@@ -379,7 +391,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 private enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
 }
 
 private const val GUIDE_ALLOW = "allow"
@@ -545,6 +557,15 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
         actions = {
+            // Saved lines due, a tap from practising, with how many.
+            val due = state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }
+            if (due > 0) {
+                IconButton(onClick = actions.onStartPractice) {
+                    BadgedBox(badge = { Badge { Text(due.toString()) } }) {
+                        AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.practice_due, due))
+                    }
+                }
+            }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }

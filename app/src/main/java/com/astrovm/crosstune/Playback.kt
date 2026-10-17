@@ -10,6 +10,8 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.Bundle
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -60,6 +62,12 @@ internal interface PlaybackSource {
 
     /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
     fun skip(song: MusicMetadata, next: Boolean)
+
+    /**
+     * Has [app], or else the music app that last played, find [song] by its name and play it, in the
+     * background; false with no app to ask.
+     */
+    fun playSong(song: MusicMetadata, app: String?): Boolean
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
@@ -159,6 +167,20 @@ internal class MediaSessionPlayback(
             }
         }
     }
+
+    override fun playSong(song: MusicMetadata, app: String?): Boolean = runCatching {
+        // Without the user's say-so Android shows none, and says so by throwing.
+        val apps = sessions.getActiveSessions(listener).filter { it.packageName != context.packageName }
+        val asked = apps.firstOrNull { it.packageName == app } ?: apps.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L } ?: return false
+        // Asked the way a voice assistant asks, which music apps answer without coming to the front.
+        val wanted = Bundle().apply {
+            putString(MediaStore.EXTRA_MEDIA_FOCUS, MediaStore.Audio.Media.ENTRY_CONTENT_TYPE)
+            putString(MediaStore.EXTRA_MEDIA_TITLE, song.title)
+            putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
+        }
+        asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
+        true
+    }.getOrDefault(false)
 
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
