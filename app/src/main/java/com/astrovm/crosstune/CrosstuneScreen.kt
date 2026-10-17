@@ -225,6 +225,8 @@ internal data class ScreenActions(
     val onLookUpWord: (Word, Int) -> Unit = { _, _ -> },
     val onExplainLine: (Int) -> Unit = {},
     val onStartPractice: () -> Unit = {},
+    /** Practises only the lines of the song whose words show. */
+    val onPractiseSong: () -> Unit = {},
     val onTurnPractice: () -> Unit = {},
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},

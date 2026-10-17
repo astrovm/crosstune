@@ -155,7 +155,7 @@ class FlashcardsTest {
         // The line as written, the app paused where it's sung: heard, it would say how it reads.
         click(string(R.string.lyrics_study))
         val played = phone.plays.size
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         waitUntil { model().uiState.practice?.sound == LineSound.PLAYED }
         assertTrue(shown("Stars"))
         assertEquals(10_000L, phone.seeks.last())
@@ -192,6 +192,7 @@ class FlashcardsTest {
         waitUntil { shown("Moon") }
         // None due now: all caught up.
         click(string(R.string.lyrics_study))
+        click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         waitUntil { shown(string(R.string.practice_caught_up)) }
     }
@@ -356,6 +357,7 @@ class FlashcardsTest {
         saved("""{"text":"Uno","translation":"One","title":"Other","artist":"Band"}""")
         wordsOfDemo()
         click(string(R.string.lyrics_study))
+        click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
         // Not timed, it's read.
         waitUntil { shown("Uno") }
@@ -370,7 +372,8 @@ class FlashcardsTest {
         // Where it was, about two seconds in, playing again; practice closed, back to its words.
         assertTrue(phone.seeks.last() in 2_000L..4_000L)
         assertEquals(true, phone.plays.last())
-        waitUntil { shown("Moon") }
+        waitUntil { model().uiState.practice == null }
+        assertEquals("Demo", model().uiState.lyricsFor?.title)
     }
 
     @Test
@@ -392,6 +395,7 @@ class FlashcardsTest {
 
     @Test
     fun aWholeSongIsLearnedFromItsLinesEachOnce() {
+        saved("""{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}""")
         wordsOfDemo()
         click(string(R.string.lyrics_study))
         click(string(R.string.learn_song))
@@ -401,13 +405,21 @@ class FlashcardsTest {
         val tall = 48 * app.resources.displayMetrics.density
         assertTrue(composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes().all { it.size.height >= tall })
         click(string(R.string.learn_song_add, 3))
+        // Added, they're practised at once, on their own, without other songs' lines.
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Night sky", "Stars", "Moon"), practice().queue.map { it.text })
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
         click(string(R.string.lyrics_study))
         click(string(R.string.learn_song))
         // Kept ones stay picked and can't be let go here; a sound can still be picked.
-        assertEquals(3, SavedLinesStore(prefs()).load().size)
+        assertEquals(4, SavedLinesStore(prefs()).load().size)
         click("La la la")
         click(string(R.string.learn_song_add, 1))
-        val kept = SavedLinesStore(prefs()).load()
+        waitUntil { model().uiState.practice != null }
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        val kept = SavedLinesStore(prefs()).load().filter { it.title == "Demo" }
         assertEquals(listOf("La la la", "Night sky", "Stars", "Moon"), kept.map { it.text })
         assertEquals(0L to 10_000L, savedLine("Night sky").startMs to savedLine("Night sky").endMs)
         // The last line has no next one to end at, so it's given a few seconds.
@@ -418,6 +430,28 @@ class FlashcardsTest {
         composeRule.onNode(hasText(string(R.string.learn_song_add, 0))).assertExists()
         click("Stars")
         composeRule.onNode(hasText(string(R.string.learn_song_add, 0))).assertExists()
+    }
+
+    @Test
+    fun aSongIsPractisedOnItsOwnFromItsWordsAllOfItWhenNoneIsDue() {
+        val later = System.currentTimeMillis() + 86_400_000L
+        saved(
+            """{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}""",
+            """{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","box":2,"due":$later}""",
+            """{"text":"Stars","translation":"Estrellas","title":"Demo","artist":"Band","box":2,"due":$later}"""
+        )
+        wordsOfDemo()
+        click(string(R.string.lyrics_study))
+        // Only this song's lines, none due, so all of them, in the order they're sung.
+        click(string(R.string.practice_song))
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Stars", "Moon"), practice().queue.map { it.text })
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        // From the main screen, it's every song's lines that are due.
+        model().startPractice()
+        waitUntil { model().uiState.practice != null }
+        assertEquals(listOf("Elsewhere"), practice().queue.map { it.text })
     }
 
     @Test

@@ -323,6 +323,7 @@
     <string name="lyrics_study">Учить</string>
     <string name="practice_due">%1$d к повторению</string>
     <string name="learn_song">Выучить эту песню</string>
+    <string name="practice_song">Практиковать эту песню</string>
     <string name="learn_song_add">Добавить %1$d</string>
     <string name="learn_song_times">Поётся %1$d раз</string>
     <string name="learn_song_new_words">Есть слова для изучения</string>

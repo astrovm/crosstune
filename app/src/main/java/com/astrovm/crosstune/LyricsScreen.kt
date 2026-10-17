@@ -332,7 +332,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             LyricsActions(
                 state, actions, syncing, onOpenSaved = { savedShown = true }, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
-                onPractise = actions.onStartPractice,
+                onPractise = actions.onPractiseSong,
                 onLearnSong = { learningSong = true }
             )
         }
@@ -667,7 +667,7 @@ private fun ReadingSize(scale: Float, actions: ScreenActions) {
     }
 }
 
-/** The song's lines to learn, and the lines kept, to see or practise, with how many are due. */
+/** The song's lines to learn, the lines kept, to see, and this song's, to practise, with how many are due. */
 @Composable
 private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, onPractise: () -> Unit, onLearnSong: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
@@ -691,12 +691,13 @@ private fun StudyMenu(open: Boolean, state: UiState, onOpenSaved: () -> Unit, on
                 }
             )
         }
-        // Only lines with their meaning, or that can be heard, can be practised.
-        val practisable = saved.filter { it.practisable }
+        // Only lines with their meaning, or that can be heard, can be practised; here, only this song's.
+        val song = state.lyricsFor
+        val practisable = saved.filter { it.practisable && it.title == song?.title && it.artist == song.artist }
         if (practisable.isNotEmpty()) {
             val due = practisable.count { it.due <= System.currentTimeMillis() }
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.saved_practice)) },
+                text = { Text(stringResource(R.string.practice_song)) },
                 leadingIcon = { AppIcon(R.drawable.ic_play, contentDescription = null) },
                 trailingIcon = { if (due > 0) Text(stringResource(R.string.practice_due, due), color = MaterialTheme.colorScheme.primary) },
                 onClick = {

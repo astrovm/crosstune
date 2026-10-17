@@ -1997,6 +1997,13 @@ internal class MainViewModel(
         val lines = indexes.sorted().mapNotNull(::savedLineAt)
         if (lines.isEmpty()) return
         uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
+        // Learning a song starts with it, on its own.
+        practiseSong()
+    }
+
+    /** Practises the lines of the song whose words show, and no other's. */
+    fun practiseSong() {
+        startPractice(uiState.lyricsFor ?: return)
     }
 
     /**
@@ -2055,12 +2062,15 @@ internal class MainViewModel(
     }
 
     /**
-     * Practises the lines due, as cards, each song's together. What the music app plays now is kept,
-     * to go back to once done.
+     * Practises the lines due, as cards, each song's together; or only [song]'s, all of them when none
+     * is due, to learn it. What the music app plays now is kept, to go back to once done.
      */
-    fun startPractice() {
+    fun startPractice(song: MusicMetadata? = null) {
         stopRepeating()
-        val queue = sessionOf(uiState.savedLines, wallClock())
+        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
+            val its = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist }
+            sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
+        }
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
         val before = uiState.lyricsFor?.let { song -> playing?.let { Before(song, inApp(it.clock.positionAt(now())), it.appPackage) } }

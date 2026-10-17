@@ -2115,10 +2115,10 @@ class ListeningTest {
         // The sheet closed, back to the words.
         composeRule.onNode(hasText(string(R.string.lyrics_save_line)) or hasText(string(R.string.lyrics_line_saved))).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_line_saved)) }
-        // The study menu says how many are due.
+        // The study menu says how many of this song's are due.
         studyMenu()
         assertTrue(shown(string(R.string.practice_due, 1)))
-        click(string(R.string.saved_practice))
+        click(string(R.string.practice_song))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)

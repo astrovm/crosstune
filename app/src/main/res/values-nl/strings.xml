@@ -323,6 +323,7 @@
     <string name="lyrics_study">Leren</string>
     <string name="practice_due">%1$d te doen</string>
     <string name="learn_song">Dit nummer leren</string>
+    <string name="practice_song">Dit nummer oefenen</string>
     <string name="learn_song_add">%1$d toevoegen</string>
     <string name="learn_song_times">%1$d keer gezongen</string>
     <string name="learn_song_new_words">Heeft woorden om te leren</string>
