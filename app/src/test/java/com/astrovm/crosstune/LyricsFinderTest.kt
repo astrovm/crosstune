@@ -365,11 +365,19 @@ class LyricsFinderTest {
         assertEquals("五月雨は緑色\n悲しくさせたよ", found.words)
         assertEquals(
             listOf(
-                LyricLine(16_100, "五月雨は緑色", listOf(TimedWord(16_100, "五月雨は"), TimedWord(17_000, "緑色"))),
-                LyricLine(23_200, "悲しくさせたよ", listOf(TimedWord(23_200, "悲しくさせたよ")))
+                LyricLine(16_100, "五月雨は緑色", listOf(TimedWord(16_100, "五月雨は"), TimedWord(17_000, "緑色")), endMs = 18_100),
+                LyricLine(23_200, "悲しくさせたよ", listOf(TimedWord(23_200, "悲しくさせたよ")), endMs = 25_200)
             ),
             found.lines
         )
+        // Kept, they're the same next time, where each line ends too.
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        val first = runBlocking { kept.lyricsOf(hatsukoi) }
+        val handler = fake.handler
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 500) }
+        assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).lyricsOf(hatsukoi) })
+        fake.handler = handler
         assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") && "yv=1" in it })
         // Without them, the line-timed words from LRCLIB are the ones.
         val noWords = fake.handler

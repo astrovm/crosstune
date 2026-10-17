@@ -1914,6 +1914,8 @@ internal class MainViewModel(
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
         uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty())
+        // Lines kept to practise play from where they're heard now.
+        timeSavedLines(song, again = true)
     }
 
     private var romajiJob: Job? = null
@@ -2022,21 +2024,33 @@ internal class MainViewModel(
     private fun SavedLine.timedAt(index: Int): SavedLine {
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return copy(artworkUrl = uiState.lyricsFor?.artworkUrl)
-        val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
+        // Timed again, it stays with the app it was kept from, when none follows the words now.
         val app = appFollowing
         return copy(
-            startMs = start, endMs = end, leadMs = videoLeadMs?.takeIf { app?.video == true } ?: 0L, app = app?.appPackage,
-            artworkUrl = uiState.lyricsFor?.artworkUrl
+            startMs = start, endMs = endOf(lines, index), leadMs = videoLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
+            app = app?.appPackage ?: this.app, artworkUrl = uiState.lyricsFor?.artworkUrl ?: artworkUrl
         )
     }
 
-    /** Lines of [song] kept before they could be timed are timed now, by the timed words found for it. */
-    private fun timeSavedLines(song: MusicMetadata) {
+    /**
+     * Where line [index] of [lines] ends: where the words say, when they're timed that closely, or
+     * else where the next line starts; the last line, with no next one, is given a few seconds.
+     */
+    private fun endOf(lines: List<LyricLine>, index: Int): Long {
+        val line = lines[index]
+        return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
+    }
+
+    /**
+     * Lines of [song] kept before they could be timed are timed now, by the timed words found for it;
+     * [again], all its lines are, as when the words were put in time by hand.
+     */
+    private fun timeSavedLines(song: MusicMetadata, again: Boolean = false) {
         val lines = uiState.lyricLines.takeIf { it.isNotEmpty() } ?: return
-        val untimed = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && !it.timed }
+        val untimed = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && (again || !it.timed) }
         untimed.forEach { saved ->
             val index = lines.indexOfFirst { it.text == (saved.line ?: saved.text) }.takeIf { it >= 0 } ?: return@forEach
-            uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index)))
+            uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index), again))
         }
     }
 
@@ -2086,7 +2100,8 @@ internal class MainViewModel(
                 practiceSong = line
                 val lead = if (app()?.video == true) line.leadMs else 0L
                 val start = (line.startMs ?: 0L) + lead
-                val end = (line.endMs ?: 0L) + lead
+                // A moment past where the words say it ends, so its last word isn't cut short.
+                val end = (line.endMs ?: 0L) + lead + LINE_TAIL_MS
                 source.seekTo(song, start)
                 // Turned while the app got there, it plays now.
                 val now = play || uiState.practice?.turned == true
@@ -2426,8 +2441,7 @@ internal class MainViewModel(
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return
         if (uiState.following?.canSeek != true) return
-        // The last line has no next one to end at, so it's given a few seconds.
-        val end = lines.drop(index + 1).firstOrNull { it.timeMs > start }?.timeMs ?: (start + LAST_LINE_MS)
+        val end = endOf(lines, index) + LINE_TAIL_MS
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)
         playback?.seekTo(song, inApp(start))
@@ -3054,6 +3068,11 @@ internal class MainViewModel(
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L
+        /**
+         * How long a line plays on past where the words say it ends: timed by ear, words are often
+         * timed a little early, and a line cut short loses its last word.
+         */
+        const val LINE_TAIL_MS = 500L
         private const val REPEAT_CHECK_MS = 100L
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long a song the music app has already takes to be found. */

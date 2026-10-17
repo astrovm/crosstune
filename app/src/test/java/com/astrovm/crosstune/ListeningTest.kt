@@ -989,6 +989,8 @@ class ListeningTest {
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
         // The music app is paused 5 seconds in, where it's singing the second line, not the first as the words have it.
         val demo = MusicMetadata("Demo", "Band")
+        // A line kept to practise, timed as the words were found.
+        prefs().edit().putString("saved_lines", """[{"text":"Demo two","title":"Demo","artist":"Band","start":10000,"end":40000}]""").commit()
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(demo, null, 5_000, SystemClock.elapsedRealtime())
@@ -1012,11 +1014,15 @@ class ListeningTest {
         assertEquals(emptyList<Long>(), phone.seeks)
         // Kept for the song, so it's in time next time too.
         assertEquals(listOf(SyncPoint(10_000, 5_000)), LyricsSyncStore(prefs()).load(demo, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+        // The line kept to practise plays from where it's heard now.
+        fun kept() = SavedLinesStore(prefs()).load().single().let { it.startMs to it.endMs }
+        assertEquals(5_000L to 35_000L, kept())
 
         // Reset puts them back as found.
         click(string(R.string.lyrics_sync_reset))
         waitUntil(TIMEOUT_MS) { lit("Demo one") }
         assertFalse(shown(string(R.string.lyrics_sync_reset)))
+        assertEquals(10_000L to 40_000L, kept())
 
         // Done, a line tapped moves the app again: to where it is now that the words are in time.
         composeRule.onNodeWithText("Demo two").performClick()

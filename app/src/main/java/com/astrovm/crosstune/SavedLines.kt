@@ -82,8 +82,8 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return save(kept)
     }
 
-    /** Puts timing, the app and the cover on [line], kept before without them, for the next time it's practised. */
-    fun timed(line: SavedLine): List<SavedLine> = save(load().map { if (it.isSame(line) && !it.timed) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it })
+    /** Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised. */
+    fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = save(load().map { if (it.isSame(line) && (again || !it.timed)) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it })
 
     /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> {
