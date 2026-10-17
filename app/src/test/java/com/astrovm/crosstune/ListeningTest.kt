@@ -2666,6 +2666,12 @@ class ListeningTest {
         aboutSong(R.string.song_tab_words)
         waitForText("cielo")
         assertEquals(asked, openAi.asked.size)
+        // Learning the song, the lines with words worth knowing say so.
+        composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
+        waitUntil(TIMEOUT_MS) { !shown("cielo") }
+        studyMenu()
+        click(string(R.string.learn_song))
+        assertTrue(described(string(R.string.learn_song_new_words)))
     }
 
     @Test

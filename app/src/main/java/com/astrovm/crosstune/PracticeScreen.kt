@@ -16,7 +16,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,7 +80,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.launch
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 internal const val PRACTICE_CARD_TAG = "practice-card"
@@ -192,7 +191,8 @@ private fun AppLoading(app: String?, modifier: Modifier = Modifier) {
 
 /**
  * A card: its face, the rest under it once turned, and the song it's from. Turned, it's said how well
- * it was known with the buttons, each saying when it's back, or swiped: left, again; right, good; up, easy.
+ * it was known with the buttons, each saying when it's back, or swiped: left, again; right, good.
+ * Not up, which scrolls a long card.
  */
 @Composable
 private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
@@ -220,20 +220,18 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
                 .then(
                     if (!practice.turned) Modifier
                     else Modifier.pointerInput(Unit) {
-                        detectDragGestures(
+                        detectHorizontalDragGestures(
                             onDragEnd = {
-                                val (x, y) = dragged.value
                                 val swiped = when {
-                                    -y > swipe && -y > abs(x) -> Grade.EASY
-                                    x > swipe -> Grade.GOOD
-                                    x < -swipe -> Grade.AGAIN
+                                    dragged.value.x > swipe -> Grade.GOOD
+                                    dragged.value.x < -swipe -> Grade.AGAIN
                                     else -> null
                                 }
                                 if (swiped != null) grade(swiped) else scope.launch { dragged.animateTo(Offset.Zero) }
                             },
-                            onDrag = { change, amount ->
+                            onHorizontalDrag = { change, amount ->
                                 change.consume()
-                                scope.launch { dragged.snapTo(dragged.value + amount) }
+                                scope.launch { dragged.snapTo(dragged.value + Offset(amount, 0f)) }
                             }
                         )
                     }

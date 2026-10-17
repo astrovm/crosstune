@@ -594,6 +594,24 @@ class PlaybackTest {
         playback.skip(MusicMetadata("Other", "Band"), next = true)
     }
 
+    @Test
+    fun aSongIsAskedForByNameFromTheAppItWasIn() {
+        // Without access, or with no music app to ask, there's no one to ask.
+        assertFalse(playback.playSong(song, "com.spotify.music"))
+        allow()
+        assertFalse(playback.playSong(song, "com.spotify.music"))
+        // Crosstune's own session isn't asked.
+        shadowOf(sessions).addController(player(app.packageName, "Crosstune", "Other", "Band"))
+        assertFalse(playback.playSong(song, null))
+        // The app it was in is asked; without it, the one that played last. Robolectric doesn't pass
+        // what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band", at = PLAYED_AT - 1))
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Other", "Band"))
+        assertTrue(playback.playSong(song, "com.spotify.music"))
+        assertTrue(playback.playSong(song, "com.example.gone"))
+        assertTrue(playback.playSong(song, null))
+    }
+
     private companion object {
         const val NOW = 500_000L
         const val PLAYED_AT = 400_000L

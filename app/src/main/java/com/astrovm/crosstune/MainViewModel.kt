@@ -2181,7 +2181,8 @@ internal class MainViewModel(
         uiState = uiState.copy(savedLines = savedLinesStore.practised(line, grade, wallClock()))
         uiState = uiState.copy(
             practice = when (grade) {
-                Grade.AGAIN -> practice.copy(queue = missedAgain(practice.queue), missed = practice.missed + 1)
+                // Missed, it starts over, so it comes back read and heard.
+                Grade.AGAIN -> practice.copy(queue = missedAgain(listOf(line.copy(box = 0)) + practice.queue.drop(1)), missed = practice.missed + 1)
                 Grade.GOOD -> practice.copy(queue = practice.queue.drop(1), done = practice.done + 1, known = practice.known + 1)
                 Grade.EASY -> practice.copy(queue = practice.queue.drop(1), done = practice.done + 1, easy = practice.easy + 1)
             }

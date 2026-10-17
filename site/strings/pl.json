@@ -49,7 +49,7 @@
     ],
     [
       "Ucz się tekstu",
-      "Kana, pinyin, romaji i tłumaczenia, słowo po słowie."
+      "Kana, pinyin, romaji i tłumaczenia, słowo po słowie. Potem ćwicz każdy wiersz, gdy gra."
     ],
     [
       "ChatGPT, jeśli go masz",
@@ -69,7 +69,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 15 października 2026",
+  "updated": "Ostatnia aktualizacja: 17 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida."
+      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza."
     ],
     [
       "p",
