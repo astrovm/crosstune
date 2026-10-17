@@ -6,6 +6,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -53,7 +54,7 @@ class SungReadingsTest {
         <br />
         OH YEAH<br />
         ${ruby("存在", "こと")}を${ruby("知", "し")}って &amp; <br />
-        ${ruby("星", "ほし")}が${ruby("光", "ひか")}る<br />
+        ${ruby("星", "ほし")}が${ruby("光", "ひか")}る${ruby("夜", "よる")}<br />
         </div><div class="romaji">machi</div></div></div></html>"""
 
     @Test
@@ -77,7 +78,7 @@ class SungReadingsTest {
         assertTrue(ReadingFix(3, "光", "ひか") in fixes)
         // Only kanji in the line, each in its own line.
         assertTrue(fixes.none { it.line == 1 })
-        assertTrue(fixes.none { it.line == 0 && it.kanji == "星" })
+        assertTrue(fixes.none { it.line == 3 && it.kanji == "夜" })
         // A line like none there takes nothing.
         assertEquals(emptyList<ReadingFix>(), SungReadings.matched(listOf("全然違う言葉"), read(listOf("全然違う言葉")), SungReadings.linesOf(page)))
     }
@@ -104,6 +105,8 @@ class SungReadingsTest {
         assertEquals("Band", search.queryParameter("artist_name"))
         assertEquals("夜の都会 ～Night Town～", search.queryParameter("title"))
         assertTrue(fake.requestHeaders.any { (name, value) -> name == "User-Agent" && value == SungReadings.BROWSER })
+        // As a computer: a phone is sent pages laid out otherwise.
+        assertFalse("Mobile" in SungReadings.BROWSER || "Android" in SungReadings.BROWSER)
         // Asked again, it's kept.
         val asked = fake.requestedUrls.size
         assertEquals(fixes, ask(LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)))
@@ -136,6 +139,14 @@ class SungReadingsTest {
         assertEquals(emptyList<ReadingFix>(), ask())
         // At most a few pages are read.
         assertEquals(SungReadings.MAX_PAGES, fake.requestedUrls.count { "/lyric/" in it })
+    }
+
+    @Test
+    fun aPageWithTooFewLinesLikeOursIsntThisSong() {
+        // One line of four alike: another song that shares it.
+        val other = """<div class="hiragana" >${ruby("星", "ほし")}が${ruby("光", "ひか")}る<br /></div>"""
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to other))
+        assertEquals(emptyList<ReadingFix>(), ask(lines = listOf("都会の夜が", "存在を知って", "星が光る", "雨が降る")))
     }
 
     @Test

@@ -24,6 +24,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -141,6 +142,23 @@ class FlashcardsTest {
     ).fetchSemanticsNodes().isNotEmpty()
 
     // endregion
+
+    @Test
+    fun aLineSavedFromWordsTimedWordByWordEndsWhereTheySay() {
+        // Kept from before, as NetEase's words timed word by word are: each line says where it ends.
+        runBlocking {
+            LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined).apply {
+                put("6\u0000demo\u0000band", """{"words":"Night sky\nStars\nMoon","lines":[[0,"Night sky",[],6000],[10000,"Stars",[],14500],[20000,"Moon"]]}""")
+                save()
+            }
+        }
+        wordsOfDemo()
+        composeRule.onAllNodes(hasText("Stars")).onLast().performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_save_line))
+        // Where it ends, not where the next starts.
+        assertEquals(10_000L to 14_500L, savedLine("Stars").let { it.startMs to it.endMs })
+    }
 
     @Test
     fun aLineSavedIsAskedAsWrittenAndPlaysInTheMusicAppOnceTurned() {
