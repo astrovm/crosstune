@@ -284,7 +284,6 @@
     <string name="practice_show">Показать ответ</string>
     <string name="practice_again">Ещё раз</string>
     <string name="practice_good">Хорошо</string>
-    <string name="practice_easy">Легко</string>
     <string name="practice_caught_up">Всё повторено</string>
     <string name="lyrics_ask_line">Спросите об этой строке</string>
     <string name="lyrics_ask_send">Отправить</string>
@@ -323,6 +322,15 @@
     <string name="lyrics_about_song">О песне</string>
     <string name="lyrics_study">Учить</string>
     <string name="practice_due">%1$d к повторению</string>
+    <string name="learn_song">Выучить эту песню</string>
+    <string name="learn_song_add">Добавить %1$d</string>
+    <string name="learn_song_times">Поётся %1$d раз</string>
+    <string name="learn_song_new_words">Есть слова для изучения</string>
+    <string name="practice_play">Включить строку</string>
+    <string name="practice_loading">Открывается в %1$s</string>
+    <string name="practice_done">Повторено: %1$d</string>
+    <string name="practice_back_to">Вернуться к %1$s</string>
+    <string name="practice_progress">%1$d из %2$d</string>
     <string name="song_tab_meaning">Смысл</string>
     <string name="song_tab_words">Слова</string>
     <string name="song_tab_artist">Исполнитель</string>

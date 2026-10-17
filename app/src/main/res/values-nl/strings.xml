@@ -284,7 +284,6 @@
     <string name="practice_show">Antwoord tonen</string>
     <string name="practice_again">Nog eens</string>
     <string name="practice_good">Goed</string>
-    <string name="practice_easy">Makkelijk</string>
     <string name="practice_caught_up">Alles bijgewerkt</string>
     <string name="lyrics_ask_line">Vraag iets over deze regel</string>
     <string name="lyrics_ask_send">Versturen</string>
@@ -323,6 +322,15 @@
     <string name="lyrics_about_song">Over het nummer</string>
     <string name="lyrics_study">Leren</string>
     <string name="practice_due">%1$d te doen</string>
+    <string name="learn_song">Dit nummer leren</string>
+    <string name="learn_song_add">%1$d toevoegen</string>
+    <string name="learn_song_times">%1$d keer gezongen</string>
+    <string name="learn_song_new_words">Heeft woorden om te leren</string>
+    <string name="practice_play">Regel afspelen</string>
+    <string name="practice_loading">Openen in %1$s</string>
+    <string name="practice_done">%1$d geoefend</string>
+    <string name="practice_back_to">Terug naar %1$s</string>
+    <string name="practice_progress">%1$d van %2$d</string>
     <string name="song_tab_meaning">Betekenis</string>
     <string name="song_tab_words">Woorden</string>
     <string name="song_tab_artist">Artiest</string>

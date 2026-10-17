@@ -49,7 +49,7 @@
     ],
     [
       "Pelajari liriknya",
-      "Kana, pinyin, romaji, dan terjemahan, kata demi kata."
+      "Kana, pinyin, romaji, dan terjemahan, kata demi kata. Lalu latih setiap baris saat diputar."
     ],
     [
       "ChatGPT, kalau kamu punya",
@@ -69,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 15 Oktober 2026",
+  "updated": "Terakhir diperbarui: 17 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android."
+      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android. Saat kamu melatih baris yang disimpan, Crosstune juga meminta aplikasi musikmu memutar lagu dari setiap baris, tepat di baris itu."
     ],
     [
       "p",

@@ -180,6 +180,8 @@ class ListeningTest {
 
     private fun waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
 
+    private fun waitForDescription(label: String) = waitUntil(TIMEOUT_MS) { described(label) }
+
     /** Whether [reading] is drawn over a line's words. */
     private fun readingShown(reading: String) = composeRule.onAllNodes(
         androidx.compose.ui.test.SemanticsMatcher("reads $reading") { reading in it.config.getOrElseNullable(ReadingsShown) { null }.orEmpty() },
@@ -2114,8 +2116,11 @@ class ListeningTest {
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         assertEquals(1, SavedLinesStore(prefs()).load().single().box)
-        // Nothing else is due.
-        waitForText(string(R.string.practice_caught_up))
+        // Nothing else is due: one practised.
+        waitForText(string(R.string.practice_done, 1))
+        // Closed, it's back to the words.
+        click(string(R.string.floating_close))
+        waitForText("«Night sky»")
     }
 
     @Test
@@ -2127,12 +2132,11 @@ class ListeningTest {
         studyMenu()
         click(string(R.string.lyrics_saved_lines))
         click(string(R.string.saved_practice))
-        // The one due longest first, the line on its face, its meaning to think of; with how many are left.
-        waitForText(string(R.string.practice_due, 2))
-        assertFalse(controllerModel().uiState.practice!!.meaningFirst)
+        // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
+        waitForDescription(string(R.string.practice_progress, 0, 2))
         assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
-        controllerModel().gradePractice(Grade.EASY)
+        controllerModel().gradePractice(Grade.GOOD)
         assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
         // Tapped, the card turns.
         composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
@@ -2143,16 +2147,15 @@ class ListeningTest {
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
         assertEquals(1, good.box)
         assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
-        // Known once before, the next shows its meaning first; known easily, it's back much later.
-        waitForText(string(R.string.practice_due, 1))
-        assertTrue(controllerModel().uiState.practice!!.meaningFirst && shown("Estrellas"))
+        // Known once before, it asks the same, and known again, it's back later.
+        waitForDescription(string(R.string.practice_progress, 1, 2))
+        assertTrue(shown("Stars") && !shown("Estrellas"))
         click(string(R.string.practice_show))
-        click(string(R.string.practice_easy))
-        val easy = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
-        assertEquals(3, easy.box)
-        assertTrue(easy.due >= before + 7 * DAY_MS)
-        waitForText(string(R.string.practice_caught_up))
-        assertFalse(shown(string(R.string.practice_due, 0)))
+        click(string(R.string.practice_good))
+        val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
+        assertEquals(2, again.box)
+        assertTrue(again.due >= before + 3 * DAY_MS)
+        waitForText(string(R.string.practice_done, 2))
     }
 
     @Test
@@ -2166,10 +2169,11 @@ class ListeningTest {
         click(string(R.string.saved_practice))
         click(string(R.string.practice_show))
         waitForText("Cielo nocturno")
-        // Missed, it's back in ten minutes, so nothing's due now.
+        // Missed, it's back in ten minutes, and once more before the session's done.
         click(string(R.string.practice_again))
-        waitForText(string(R.string.practice_caught_up))
         assertEquals(0, SavedLinesStore(prefs()).load().single().box)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.practice?.missed == 1 && shown(string(R.string.practice_show)) }
+        assertEquals(1, controllerModel().uiState.practice!!.queue.size)
         // Back goes back to the lines.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
@@ -2564,10 +2568,10 @@ class ListeningTest {
         click(string(R.string.lyrics_translation_failed))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(described(string(R.string.lyrics_translation_failed)))
-        // English has no readings to offer, only a translation; signed out, with no lines kept, there's
-        // nothing to say about the song or study.
+        // English has no readings to offer, only a translation; signed out, there's nothing to say about
+        // the song, but it can still be learned.
         assertFalse(described(string(R.string.lyrics_about_song)))
-        assertFalse(described(string(R.string.lyrics_study)))
+        assertTrue(described(string(R.string.lyrics_study)))
         learnMenu()
         assertFalse(shown(string(R.string.lyrics_as_written)))
         assertFalse(shown(string(R.string.lyrics_readings)))
@@ -2647,7 +2651,7 @@ class ListeningTest {
         assertTrue(shown("estrellas"))
         // Saved, it's practised like a line, with its meaning.
         click(string(R.string.lyrics_save_word, "sky"))
-        assertEquals(SavedLine("sky", translation = "cielo", title = "Demo", artist = "Band"), SavedLinesStore(prefs()).load().single())
+        assertEquals(SavedLine("sky", translation = "cielo", title = "Demo", artist = "Band", line = "Night sky"), SavedLinesStore(prefs()).load().single())
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_word_saved, "sky"))).fetchSemanticsNodes().isNotEmpty())
         // Tapped again, it's let go.
         click(string(R.string.lyrics_word_saved, "sky"))
@@ -2659,6 +2663,12 @@ class ListeningTest {
         aboutSong(R.string.song_tab_words)
         waitForText("cielo")
         assertEquals(asked, openAi.asked.size)
+        // Learning the song, the lines with words worth knowing say so.
+        composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
+        waitUntil(TIMEOUT_MS) { !shown("cielo") }
+        studyMenu()
+        click(string(R.string.learn_song))
+        assertTrue(described(string(R.string.learn_song_new_words)))
     }
 
     @Test

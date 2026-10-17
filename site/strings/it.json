@@ -49,7 +49,7 @@
     ],
     [
       "Impara il testo",
-      "Kana, pinyin, romaji e traduzioni, parola per parola."
+      "Kana, pinyin, romaji e traduzioni, parola per parola. Poi esercitati su ogni riga mentre suona."
     ],
     [
       "ChatGPT, se ce l'hai",
@@ -69,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 15 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 17 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Se fai seguire al testo il brano in riproduzione nella tua app di musica, Android ti chiede di consentire l'accesso alle notifiche di Crosstune. Crosstune lo usa solo per vedere quale brano le tue app di musica dicono di riprodurre e a che punto sono, così il testo segue e una riga toccata può portare il brano lì. Non legge mai le tue notifiche, e nulla di tutto ciò lascia il tuo telefono. Puoi disattivarlo in qualsiasi momento nelle impostazioni di Android."
+      "Se fai seguire al testo il brano in riproduzione nella tua app di musica, Android ti chiede di consentire l'accesso alle notifiche di Crosstune. Crosstune lo usa solo per vedere quale brano le tue app di musica dicono di riprodurre e a che punto sono, così il testo segue e una riga toccata può portare il brano lì. Non legge mai le tue notifiche, e nulla di tutto ciò lascia il tuo telefono. Puoi disattivarlo in qualsiasi momento nelle impostazioni di Android. Quando ti eserciti sulle righe salvate, Crosstune chiede anche alla tua app di musica di riprodurre il brano di ogni riga, da quella riga."
     ],
     [
       "p",

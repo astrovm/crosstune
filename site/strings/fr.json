@@ -49,7 +49,7 @@
     ],
     [
       "Apprenez les paroles",
-      "Kana, pinyin, romaji et traductions, mot par mot."
+      "Kana, pinyin, romaji et traductions, mot par mot. Puis révisez chaque ligne pendant qu'elle joue."
     ],
     [
       "ChatGPT, si vous l'avez",
@@ -69,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 15 octobre 2026",
+  "updated": "Dernière mise à jour : 17 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android."
+      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne."
     ],
     [
       "p",

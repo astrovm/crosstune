@@ -284,7 +284,6 @@
     <string name="practice_show">정답 보기</string>
     <string name="practice_again">다시</string>
     <string name="practice_good">좋음</string>
-    <string name="practice_easy">쉬움</string>
     <string name="practice_caught_up">모두 완료</string>
     <string name="lyrics_ask_line">이 줄에 대해 질문</string>
     <string name="lyrics_ask_send">보내기</string>
@@ -323,6 +322,15 @@
     <string name="lyrics_about_song">이 노래에 대해</string>
     <string name="lyrics_study">공부</string>
     <string name="practice_due">복습 %1$d개</string>
+    <string name="learn_song">이 노래 배우기</string>
+    <string name="learn_song_add">%1$d개 추가</string>
+    <string name="learn_song_times">%1$d번 불림</string>
+    <string name="learn_song_new_words">알아둘 단어 있음</string>
+    <string name="practice_play">이 줄 재생</string>
+    <string name="practice_loading">%1$s에서 여는 중</string>
+    <string name="practice_done">%1$d개 연습함</string>
+    <string name="practice_back_to">%1$s(으)로 돌아가기</string>
+    <string name="practice_progress">%1$d/%2$d</string>
     <string name="song_tab_meaning">의미</string>
     <string name="song_tab_words">단어</string>
     <string name="song_tab_artist">아티스트</string>

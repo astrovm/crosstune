@@ -49,7 +49,7 @@
     ],
     [
       "Lerne die Texte",
-      "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort."
+      "Kana, Pinyin, Romaji und Übersetzungen, Wort für Wort. Dann übe jede Zeile, während sie läuft."
     ],
     [
       "ChatGPT, wenn du es hast",
@@ -69,7 +69,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 15. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 17. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten."
+      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten. Wenn du gespeicherte Zeilen übst, bittet Crosstune deine Musik-App außerdem, den Song jeder Zeile an genau dieser Stelle abzuspielen."
     ],
     [
       "p",

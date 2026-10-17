@@ -303,7 +303,6 @@
     <string name="practice_show">Show answer</string>
     <string name="practice_again">Again</string>
     <string name="practice_good">Good</string>
-    <string name="practice_easy">Easy</string>
     <string name="practice_caught_up">All caught up</string>
     <string name="lyrics_ask_line">Ask about this line</string>
     <string name="lyrics_ask_send">Send</string>
@@ -342,6 +341,15 @@
     <string name="lyrics_about_song">About the song</string>
     <string name="lyrics_study">Study</string>
     <string name="practice_due">%1$d due</string>
+    <string name="learn_song">Learn this song</string>
+    <string name="learn_song_add">Add %1$d</string>
+    <string name="learn_song_times">Sung %1$d times</string>
+    <string name="learn_song_new_words">Has words to know</string>
+    <string name="practice_play">Play the line</string>
+    <string name="practice_loading">Opening in %1$s</string>
+    <string name="practice_done">%1$d practiced</string>
+    <string name="practice_back_to">Back to %1$s</string>
+    <string name="practice_progress">%1$d of %2$d</string>
     <string name="song_tab_meaning">Meaning</string>
     <string name="song_tab_words">Words</string>
     <string name="song_tab_artist">Artist</string>
