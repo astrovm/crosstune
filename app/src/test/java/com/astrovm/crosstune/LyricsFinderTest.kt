@@ -553,6 +553,26 @@ class LyricsFinderTest {
 
 
     @Test
+    fun aJapaneseTitleNetEaseWritesWithChinasKanjiCountsForARecordingAsLong() {
+        // YouTube Music's "終わらない夢 - Owaranai Yume", 3:20 long; NetEase writes it 终わらない夢.
+        val song = MusicMetadata("終わらない夢 - Owaranai Yume", "Band", lengthMs = 200_000)
+        fun netEaseHas(lengthMs: Long) = japaneseSong(
+            ownNames = false,
+            netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":$lengthMs}]}}""" },
+            lyric = "[00:01.00]终わらない夢を見よう"
+        )
+        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS)
+        assertEquals("终わらない夢を見よう", words(song))
+        assertTrue((found(song) as Lyrics.Found).lines.isNotEmpty())
+        // A recording of another length is another song of that name.
+        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS + 1)
+        assertEquals(Lyrics.None, found(song))
+        // Not knowing how long it is, only its own kanji are.
+        netEaseHas(200_000)
+        assertEquals(Lyrics.None, found(song.copy(lengthMs = null)))
+    }
+
+    @Test
     fun aTitleThatsTwoNamesIsLookedUpUnderEach() {
         fake.handler = { request ->
             val url = request.url

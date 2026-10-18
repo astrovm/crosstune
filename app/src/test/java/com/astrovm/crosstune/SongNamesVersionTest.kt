@@ -27,6 +27,19 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun aNameWithSomeKanjiAsChinaWritesThemIsTheSameButForThem() {
+        assertTrue(SongNames.sameButKanji("終わらない歌", "终わらない歌"))
+        assertTrue(SongNames.sameButKanji("僕の右手", "仆の右手 (Remastered 2018)"))
+        // Kana, or a letter, for a kanji isn't a way to write it.
+        assertFalse(SongNames.sameButKanji("終わらない歌", "おわらない歌"))
+        assertFalse(SongNames.sameButKanji("Song", "Sung"))
+        // Nor is a name mostly other kanji, or longer.
+        assertTrue(SongNames.sameButKanji("黄金時代", "黄金时代"))
+        assertFalse(SongNames.sameButKanji("東京物語", "南京故事"))
+        assertFalse(SongNames.sameButKanji("終わらない歌", "终わらない歌声"))
+    }
+
+    @Test
     fun aTagThatAlsoNamesAnotherRecordingIsntJustAnEdition() {
         assertEquals("Hotel California", SongNames.withoutEditionTag("Hotel California (2013 Remaster)"))
         assertEquals("Hotel California (Live; 2013 Remaster)", SongNames.withoutEditionTag("Hotel California (Live; 2013 Remaster)"))
