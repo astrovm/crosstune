@@ -243,3 +243,11 @@ internal class ServiceApis(
 }
 
 internal fun JSONArray?.objects(): List<JSONObject> = this?.let { array -> (0 until array.length()).mapNotNull { array.optJSONObject(it) } }.orEmpty()
+
+/** A YouTube text, as it comes in pieces, "runs", put back together. */
+internal fun JSONObject?.runsText(): String = this?.optJSONArray("runs").objects().joinToString("") { it.optString("text") }
+
+/** What kind of video YouTube Music says [answer] is about: ATV, a song; OMV, an official video; UGC, someone's upload. */
+internal fun musicVideoTypeIn(answer: Any): String? = musicVideoType.find(answer.toString())?.groupValues?.get(1)
+
+private val musicVideoType = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")

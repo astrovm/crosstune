@@ -132,7 +132,9 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     }
 
     /** Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised. */
-    fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = save(load().map { if (it.isSame(line) && (again || !it.timed)) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it })
+    fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = update(line) {
+        if (again || !it.timed) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it
+    }
 
     /** Keeps each line kept as the first of [changes] as the second, practised as far as it had been. */
     fun replaceAll(changes: List<Pair<SavedLine, SavedLine>>): List<SavedLine> =
@@ -146,30 +148,27 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     )
 
     /** Keeps [line] read as it is now, put right by hand. */
-    fun readAs(line: SavedLine): List<SavedLine> =
-        save(load().map { if (it.isSame(line)) it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true) else it })
+    fun readAs(line: SavedLine): List<SavedLine> = update(line) { it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true) }
 
     /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
-    fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> {
-        val key = SavedLine(text, title = title, artist = artist)
-        return save(load().map { if (it.isSame(key)) it.copy(explanation = explanation) else it })
-    }
+    fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> =
+        update(SavedLine(text, title = title, artist = artist)) { it.copy(explanation = explanation) }
 
     /**
      * [line] practised at [now], as [grade] says: known, it comes back after longer each time, 1, 3,
      * 7, 16, 35, 75 then 150 days, and known easily, a step further; missed, in ten minutes, from the
      * start again.
      */
-    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = save(
-        load().map {
-            if (!it.isSame(line)) it
-            else when (grade) {
-                Grade.AGAIN -> it.copy(box = 0, due = now + waitFor(it, grade))
-                Grade.GOOD -> it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
-                Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
-            }
+    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) {
+        when (grade) {
+            Grade.AGAIN -> it.copy(box = 0, due = now + waitFor(it, grade))
+            Grade.GOOD -> it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
+            Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
         }
-    )
+    }
+
+    /** Keeps the line kept as [line] as [change] makes it. */
+    private fun update(line: SavedLine, change: (SavedLine) -> SavedLine): List<SavedLine> = save(load().map { if (it.isSame(line)) change(it) else it })
 
     private fun save(lines: List<SavedLine>): List<SavedLine> {
         val array = JSONArray()

@@ -718,14 +718,10 @@ internal class MainViewModel(
         val account = chatGpt ?: return
         preferences.edit { putString(KEY_CHATGPT_MODEL, slug) }
         account.picked = slug
-        translationJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()
-        uiState = uiState.copy(
-            chatGpt = uiState.chatGpt.copy(model = slug),
-            learning = uiState.learning.copy(translations = emptyList(), translating = false, translationFailed = false, explanation = null, songExplanation = null)
-        )
-        learn()
+        uiState = uiState.copy(chatGpt = uiState.chatGpt.copy(model = slug))
+        translateAgain(uiState.learning.copy(explanation = null, songExplanation = null))
     }
 
     fun signOutOfChatGpt() {
@@ -2094,7 +2090,7 @@ internal class MainViewModel(
      */
     private fun rereadSavedLines(song: MusicMetadata, unread: Boolean = false) {
         val lines = wordLines()
-        val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
+        val again = uiState.savedLines.filter { it.isOf(song) && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
             .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
         if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
     }
@@ -2141,7 +2137,7 @@ internal class MainViewModel(
      */
     private fun timeSavedLines(song: MusicMetadata, again: Boolean = false) {
         val lines = uiState.lyricLines.takeIf { it.isNotEmpty() } ?: return
-        val untimed = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && (again || !it.timed) }
+        val untimed = uiState.savedLines.filter { it.isOf(song) && (again || !it.timed) }
         untimed.forEach { saved ->
             val index = lines.indexOfFirst { it.text == (saved.line ?: saved.text) }.takeIf { it >= 0 } ?: return@forEach
             uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index), again))
@@ -2155,7 +2151,7 @@ internal class MainViewModel(
     fun startPractice(song: MusicMetadata? = null) {
         stopRepeating()
         val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
-            val its = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist }
+            val its = uiState.savedLines.filter { it.isOf(song) }
             sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
         }
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
@@ -2713,8 +2709,13 @@ internal class MainViewModel(
     fun setChatGptTranslation(on: Boolean) {
         preferences.edit { putBoolean(KEY_TRANSLATION_CHATGPT, on) }
         // What the other said is no answer from this one.
+        translateAgain(uiState.learning.copy(chatGptTranslation = on))
+    }
+
+    /** The words shown translated again, as [learning] says to now, rather than as they were. */
+    private fun translateAgain(learning: Learning) {
         translationJob?.cancel()
-        uiState = uiState.copy(learning = uiState.learning.copy(chatGptTranslation = on, translations = emptyList(), translating = false, translationFailed = false))
+        uiState = uiState.copy(learning = learning.copy(translations = emptyList(), translating = false, translationFailed = false))
         learn()
     }
 
@@ -2727,9 +2728,7 @@ internal class MainViewModel(
         val untranslated = languages.filter { it in AppLanguage.untranslatedTags }.toSet()
         preferences.edit { putStringSet(KEY_UNTRANSLATED, untranslated) }
         // The song shown may be in one of them now, or not any more.
-        translationJob?.cancel()
-        uiState = uiState.copy(learning = uiState.learning.copy(untranslated = untranslated, translations = emptyList(), translating = false, translationFailed = false))
-        learn()
+        translateAgain(uiState.learning.copy(untranslated = untranslated))
     }
 
     /** Translates into [tag], one of [AppLanguage.translationTags], from now on, or into the app's own with null. */
@@ -2737,9 +2736,8 @@ internal class MainViewModel(
         val into = tag?.takeIf { it in AppLanguage.translationTags }
         preferences.edit { if (into == null) remove(KEY_TRANSLATE_INTO) else putString(KEY_TRANSLATE_INTO, into) }
         // Lines translated into the last language are no use in this one.
-        translationJob?.cancel()
-        uiState = uiState.copy(word = null, learning = uiState.learning.copy(into = into, translations = emptyList(), translating = false, translationFailed = false))
-        learn()
+        uiState = uiState.copy(word = null)
+        translateAgain(uiState.learning.copy(into = into))
     }
 
     private suspend fun prepareDestination(destination: Destination): String? {

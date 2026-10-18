@@ -201,7 +201,8 @@ class LinkResolverTest {
     fun youTubeMusicsAlbumAndArtistPagesAreNamedByTheirHeaders() {
         val song = { title: String -> """{"musicResponsiveListItemRenderer":{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}}]}}""" }
         respond(
-            """{"header":{"musicResponsiveHeaderRenderer":{"title":{"runs":[{"text":"Pocket Park"}]},"straplineTextOne":{"runs":[{"text":"Miki Matsubara"}]},
+            // Text comes in pieces, put back together as they come.
+            """{"header":{"musicResponsiveHeaderRenderer":{"title":{"runs":[{"text":"Pocket "},{"text":"Park"}]},"straplineTextOne":{"runs":[{"text":"Miki Matsubara"}]},
             "thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://yt3/small"},{"url":"https://yt3/big"}]}}}}},
             "contents":{"shelf":{"contents":[${song("真夜中のドア")},${song("Cross My Heart")}]}}}"""
         )
