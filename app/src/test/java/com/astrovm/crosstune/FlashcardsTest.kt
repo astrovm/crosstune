@@ -597,6 +597,19 @@ class FlashcardsTest {
     }
 
     @Test
+    fun theCountOfLinesDueIsShownWhole() {
+        saved(*Array(48) { """{"text":"Line $it","translation":"Línea $it","title":"Demo","artist":"Band"}""" })
+        launch()
+        assertTrue(described(practiceDue(48)))
+        // Nothing of it is cut off: a button clips what's in it to its circle, so it's over the button, not in it.
+        var node = composeRule.onNodeWithTag(PRACTICE_BADGE_TAG, useUnmergedTree = true).fetchSemanticsNode().parent
+        while (node != null) {
+            assertFalse(SemanticsActions.OnClick in node.config)
+            node = node.parent
+        }
+    }
+
+    @Test
     fun thePracticeListPractisesEverySongOrOneAndLetsItsLinesGo() {
         val later = System.currentTimeMillis() + 86_400_000L
         saved(

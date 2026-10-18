@@ -124,6 +124,7 @@ import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import com.astrovm.crosstune.ui.theme.Palette
 
 internal const val RESULT_TAG = "result"
+internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
 
@@ -1962,10 +1963,13 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
 private fun PracticeButton(due: Int, onClick: () -> Unit) {
     val label = stringResource(R.string.saved_practice)
     val description = if (due > 0) "$label, ${stringResource(R.string.practice_due, due)}" else label
-    IconButton(onClick = onClick) {
-        // The count is in what the icon says, so it isn't said twice.
-        BadgedBox(badge = { if (due > 0) Badge { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) } }) {
-            AppIcon(R.drawable.ic_school, contentDescription = description)
+    // Over the button, not in it: the button clips what's inside to its circle, cutting the count off.
+    BadgedBox(
+        badge = {
+            // The count is in what the icon says, so it isn't said twice.
+            if (due > 0) Badge(Modifier.offset(x = (-6).dp, y = 8.dp).testTag(PRACTICE_BADGE_TAG)) { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) }
         }
+    ) {
+        IconButton(onClick = onClick) { AppIcon(R.drawable.ic_school, contentDescription = description) }
     }
 }
