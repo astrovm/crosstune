@@ -391,6 +391,7 @@ class MainActivity : ComponentActivity() {
                         onReplayLine = viewModel::replayLine,
                         onBackToBefore = viewModel::backToBefore,
                         onChooseLines = viewModel::chooseLines,
+                        onKeepAgain = viewModel::keepAgain,
                         onAskAboutLine = viewModel::askAboutLine,
                         onExplainSong = viewModel::explainSong,
                         onAskAboutSong = viewModel::askAboutSong,

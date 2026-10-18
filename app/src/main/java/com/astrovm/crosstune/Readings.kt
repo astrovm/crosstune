@@ -82,6 +82,46 @@ internal object Readings {
         "燒焼爲為畫画當当盡尽眞真禮礼經経綠緑總総續続處処號号螢蛍觀観讀読豐豊賣売輕軽辭辞醉酔黃黄齒歯淚涙")
         .chunked(2).associate { it[0] to it[1] }
 
+    /**
+     * [line] of a Japanese song as Japan writes it, when a Chinese site wrote it China's way: kanji
+     * Japan doesn't use, as 间 or 仆, as Japan's own, 間 and 僕, which have readings, and the comma
+     * Chinese ends a line with, "，", left off.
+     */
+    fun asJapanWrites(line: String): String = inJapansKanji(line).let { if (it.trimEnd().endsWith('，')) it.trimEnd().dropLast(1).trimEnd() else it }
+
+    /** [text] with China's kanji as Japan's, one for one, so its timings stay where they were. */
+    fun inJapansKanji(text: String): String = if (text.none { it in JAPANS_KANJI }) text else text.map { JAPANS_KANJI[it] ?: it }.joinToString("")
+
+    /**
+     * Kanji as China writes them, each before Japan's own. Each of China's is one Japan doesn't
+     * write, but for 仆, which Japan only has for an old word, and Chinese sites write for 僕.
+     */
+    internal val JAPANS_KANJI = ("仆僕终終间間爱愛话話时時门門见見记記忆憶让譲这這远遠还還过過进進连連达達运運边辺对対发発东東车車" +
+        "长長开開关関问問闻聞闪閃风風飞飛马馬鸟鳥鱼魚龙竜头頭颜顔题題认認讲講识識语語读読谁誰谢謝词詞试試诗詩请請调調" +
+        "谈談论論设設许許证証评評访訪计計议議译訳诉訴课課实実汉漢满満线線红紅纸紙经経结結给給继継续続练練组組细細约約" +
+        "级級纯純织織统統绘絵罗羅编編刚剛别別则則剑剣创創动動劳労势勢华華单単卖売压圧县県变変响響团団围囲园園图図场場" +
+        "块塊坚堅处処备備复復夺奪奋奮孙孫宁寧宫宮寻尋导導岛島带帯庆慶应応废廃张張弹弾归帰彻徹怀懐态態恶悪恼悩惊驚惯慣" +
+        "戏戯战戦扑撲执執扩拡扫掃扬揚护護报報拥擁择択挥揮损損换換摇揺摄摂敌敵显顕晓暁暂暫术術杀殺杂雑权権杨楊极極构構" +
+        "树樹样様桥橋检検欢歓毕畢泽沢洁潔测測济済浓濃润潤渐漸渔漁灭滅灵霊灾災炼錬烦煩烧焼热熱爷爺牵牽猎猟环環现現电電" +
+        "畅暢疗療盘盤码碼础礎确確离離种種积積稳穏穷窮竞競笔筆笼籠简簡紧緊纪紀纷紛绍紹络絡绩績绪緒维維绵綿缓緩缠纏缩縮" +
+        "罚罰职職聪聡肠腸肤膚胜勝脑脳腾騰舰艦艺芸节節荣栄药薬获獲营営萤蛍蓝藍虑慮虽雖补補观観规規视視览覧觉覚讨討训訓" +
+        "诚誠诞誕该該详詳误誤诸諸谊誼谜謎谦謙谱譜贝貝负負贡貢财財责責败敗货貨质質贫貧购購贯貫贵貴贸貿费費贺賀资資赏賞" +
+        "赞賛赠贈跃躍轨軌轮輪软軟转転轻軽载載较較辈輩辉輝输輸迁遷违違迟遅适適选選遗遺邮郵邻隣释釈针針钟鐘钢鋼钱銭铁鉄" +
+        "铃鈴银銀锁鎖错錯锦錦键鍵镜鏡闭閉队隊阳陽阴陰阵陣阶階际際陆陸险険隐隠难難雾霧韩韓项項顺順须須顽頑预預领領频頻" +
+        "额額饥飢饭飯饮飲饱飽馆館驱駆验験骑騎骚騒鲜鮮鸣鳴齐斉齿歯龄齢龟亀为為乐楽买買亚亜产産亲親亿億仓倉仪儀优優传伝" +
+        "伤傷伦倫伪偽侦偵侧側俭倹债債倾傾偿償兰蘭兴興养養兽獣军軍农農冻凍净浄减減凤鳳剂剤剧劇劝勧务務协協厅庁厌厭叹嘆" +
+        "员員圆円圣聖坟墳坠墜垒塁壳殻奖奨妇婦婴嬰宠寵审審宪憲尔爾尘塵层層岭嶺币幣师師帐帳库庫庙廟异異强強总総恳懇惩懲" +
+        "愤憤扰擾抚撫拟擬挚摯斋斎标標栋棟栏欄毁毀沟溝滥濫滨浜灿燦烛燭牺犠狮獅狱獄盐塩监監矫矯矿鉱类類绳縄缔締缚縛聋聾" +
+        "肃粛肾腎艰艱艳艶苍蒼苏蘇茧繭莲蓮虏虜蚁蟻袭襲谓謂说説绿緑绝絶缘縁历歴宽寛岁歳录録赖頼闲閑阅閲鸡鶏众衆击撃" +
+        "伞傘乡郷书書习習丽麗举挙义義仅僅侣侶储儲冈岡卫衛叠畳吓嚇吴呉哑唖唤喚喷噴宾賓帅帥忧憂悬懸户戸斩斬昙曇晕暈" +
+        "枪槍栈桟汤湯浊濁涡渦涩渋溃潰滤濾滩灘烂爛疯瘋皱皺瞒瞞硕碩祸禍秃禿窝窩竖竪纠糾纤繊纬緯纱紗纲綱纳納纵縦纹紋" +
+        "纺紡纽紐绅紳绊絆绞絞绢絹绣繍绮綺综綜绽綻缀綴缝縫罢罷耸聳肿腫胀脹胁脅胧朧脓膿荡蕩莺鶯萧蕭萨薩蔷薔蕴蘊蚀蝕蜗蝸" +
+        "蝇蝿衔銜衬襯觅覓订訂讯訊讳諱讶訝讽諷诀訣诈詐诊診询詢诫誡诱誘诵誦诺諾谅諒谋謀谐諧谣謡谨謹贞貞贤賢贩販贪貪贱賤" +
+        "贴貼贼賊赋賦赌賭赐賜赔賠赵趙趋趨轩軒轰轟辅輔辆輌辖轄辽遼迈邁逊遜递逓酱醤酿醸鉴鑑钓釣钝鈍钦欽铅鉛铜銅铭銘铺舗" +
+        "锅鍋锋鋒锐鋭锻鍛镇鎮闷悶阀閥阁閣阔闊陈陳雏雛页頁顶頂顾顧顿頓颁頒颇頗颠顛颤顫飘飄饰飾饲飼饶饒饼餅驰馳驳駁" +
+        "驻駐驾駕骂罵骏駿骗騙骤驟鲁魯鲸鯨鳞鱗鸥鴎鸭鴨鹅鵝鹤鶴鹰鷹")
+        .chunked(2).associate { it[0] to it[1] }
+
     /** The dictionary draws out おう as おー, but not えい, as in せんせい, said せんせー. */
     private fun drawnOutE(kana: String) = kana.replace(Regex("([えけげせぜてでねへべぺめれ])い"), "$1ー")
 

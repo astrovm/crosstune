@@ -237,6 +237,8 @@ internal data class ScreenActions(
     val onBackToBefore: () -> Unit = {},
     /** Keeps the lines of the words shown given by index, lets the kept ones given go, and practises the song when asked. */
     val onChooseLines: (List<Int>, List<SavedLine>, Boolean) -> Unit = { _, _, _ -> },
+    /** Lines let go kept again, as they were, as when a song's removal is undone. */
+    val onKeepAgain: (List<SavedLine>) -> Unit = {},
     /** Asks ChatGPT a question about a line, by its index. */
     val onAskAboutLine: (Int, String) -> Unit = { _, _ -> },
     /** Has ChatGPT explain what the whole song is about. */
@@ -1660,7 +1662,7 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
 
 /** What shows under a row as it's swiped: the error color, and a bin on the side it's going to. */
 @Composable
-private fun RemoveBackground(direction: SwipeToDismissBoxValue) {
+internal fun RemoveBackground(direction: SwipeToDismissBoxValue) {
     Box(
         modifier = Modifier
             .fillMaxSize()

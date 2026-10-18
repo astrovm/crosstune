@@ -237,4 +237,25 @@ class SavedLinesPracticeTest {
         assertTrue(kept.readByHand)
         assertFalse(SavedLinesStore(prefs).load().first { it.text == night.text }.readByHand)
     }
+
+    @Test
+    fun linesOfAJapaneseSongKeptAsAChineseSiteWroteThemLoadAsJapanWritesThem() {
+        // Kept before, from words NetEase wrote China's way: 瞬间 for 瞬間, 仆 for 僕, 终 for 終, with China's comma.
+        val moment = SavedLine(
+            "真実の瞬间はいつも，", reading = "しんじつのまどか间はいつも，", romanized = "shinjitsu no madoka 间 wa itsumo,", translation = "El momento", title = "Song", artist = "Band", box = 2,
+            ruby = listOf(Ruby("真実", "しんじつ"), Ruby("の"), Ruby("瞬", "まどか"), Ruby("间はいつも，"))
+        )
+        val me = SavedLine("仆", reading = "ふ", translation = "yo", title = "Song", artist = "Band", line = "仆や君のため，")
+        val byHand = SavedLine("终わらない，", reading = "おわらない，", title = "Song", artist = "Band", ruby = listOf(Ruby("终", "お"), Ruby("わらない，")), readByHand = true)
+        val chinese = SavedLine("我爱你的时间，", reading = "wǒ ài nǐ de shí jiān，", title = "时间", artist = "Band")
+        SavedLinesStore(prefs).addAll(listOf(moment, me, byHand, chinese))
+        val loaded = SavedLinesStore(prefs).load()
+        // Their readings, worked out from China's kanji, are left to be worked out again...
+        assertEquals(moment.copy(text = "真実の瞬間はいつも", reading = null, romanized = null, ruby = null), loaded[0])
+        assertEquals(me.copy(text = "僕", reading = null, line = "僕や君のため"), loaded[1])
+        // ...but for those put right by hand.
+        assertEquals(byHand.copy(text = "終わらない", ruby = listOf(Ruby("終", "お"), Ruby("わらない"))), loaded[2])
+        // A Chinese song's are as China writes them.
+        assertEquals(chinese, loaded[3])
+    }
 }

@@ -1,0 +1,4 @@
+Japanese lyrics that a Chinese site wrote with China's kanji now show Japan's, with their readings, and without a comma ending every line.
+Japanese lines now break between phrases, not inside a word.
+Swipe a song off the Practice list to stop practicing it, with Undo.
+The Choose lines sheet no longer shakes when dragged.

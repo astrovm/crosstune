@@ -201,11 +201,11 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
 private fun CardFront(line: SavedLine) {
     val sungIn = line.line
     if (sungIn == null) {
-        Text(line.text, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(line.text, style = MaterialTheme.typography.headlineMedium.writing(line.text), fontWeight = FontWeight.Bold)
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(line.text, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text(sungIn, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(sungIn, style = MaterialTheme.typography.bodyLarge.writing(sungIn), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -218,7 +218,7 @@ private fun CardFront(line: SavedLine) {
 private fun CardBack(line: SavedLine, onReadAs: (List<String>) -> Unit) {
     var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+        val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold).writing(line.text)
         val ruby = line.ruby ?: line.reading?.takeIf { line.line != null }?.let { listOf(Ruby(line.text, it)) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {

@@ -117,14 +117,14 @@ internal class LyricsFinder(
     suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(words, final = !provisional) } }
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) } }
         val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
         cache?.let { cache ->
             toCache(found, provisional = true)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return FirstLook(found, final = false)
+        return FirstLook(asJapanWrites(found), final = false)
     }
 
     /**
@@ -137,7 +137,25 @@ internal class LyricsFinder(
             toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return answer
+        return asJapanWrites(answer)
+    }
+
+    /**
+     * Words in Japanese as Japan writes them, as NetEase, a Chinese site, often has them written
+     * China's way: see [Readings.asJapanWrites].
+     */
+    private fun asJapanWrites(found: Lyrics): Lyrics {
+        if (found !is Lyrics.Found || Readings.scriptOf(found.words.lines()) != Script.JAPANESE) return found
+        return Lyrics.Found(
+            found.words.lines().joinToString("\n", transform = Readings::asJapanWrites),
+            found.lines.map { line ->
+                // The comma left off a line is left off its last word.
+                val words = line.words.map { it.copy(text = Readings.inJapansKanji(it.text)) }.toMutableList()
+                val last = words.indexOfLast { it.text.isNotBlank() }
+                if (last >= 0) words[last] = words[last].copy(text = Readings.asJapanWrites(words[last].text))
+                line.copy(text = Readings.asJapanWrites(line.text), words = words)
+            }
+        )
     }
 
     /**

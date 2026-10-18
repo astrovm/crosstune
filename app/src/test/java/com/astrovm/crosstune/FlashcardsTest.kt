@@ -27,6 +27,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Duration
@@ -597,6 +599,53 @@ class FlashcardsTest {
         click(string(R.string.save_button))
         waitUntil { !shown(string(R.string.practice_all_songs)) }
         assertFalse(described(string(R.string.saved_practice)))
+    }
+
+    @Test
+    fun aSongSwipedFromThePracticeListIsLetGoUntilUndone() {
+        val later = System.currentTimeMillis() + 86_400_000L
+        saved(
+            """{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","box":2,"due":$later}""",
+            """{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}"""
+        )
+        launch()
+        click(practiceDue(1))
+        fun song(title: String) = composeRule.onNode(hasClickAction() and hasText(title))
+        // TalkBack, which can't swipe, removes it with an action of its own.
+        fun removeByAction(title: String) {
+            val row = song(title).fetchSemanticsNode()
+            composeRule.runOnUiThread { row.config[SemanticsActions.CustomActions].single { it.label == string(R.string.remove_button) }.action() }
+            composeRule.waitForIdle()
+        }
+        // Swiped away, all its lines go, until undone.
+        song("Other").performTouchInput { swipeLeft() }
+        waitUntil { !shown("Other") }
+        assertEquals(listOf("Moon"), SavedLinesStore(prefs()).load().map { it.text })
+        click(string(R.string.undo_button))
+        waitUntil { shown("Other") }
+        // Kept again, each is practised as far as it had been.
+        removeByAction("Demo")
+        waitUntil { !shown("Demo") }
+        click(string(R.string.undo_button))
+        waitUntil { shown("Demo") }
+        assertEquals(2, savedLine("Moon").box)
+        assertEquals(later, savedLine("Moon").due)
+        // A second removal's offer replaces the first's; with none left, the list stays while it shows.
+        song("Other").performTouchInput { swipeRight() }
+        waitUntil { !shown("Other") }
+        removeByAction("Demo")
+        waitUntil { !shown("Demo") }
+        assertTrue(shown(string(R.string.practice_all_songs)))
+        click(string(R.string.undo_button))
+        waitUntil { shown("Demo") }
+        assertFalse(shown("Other"))
+        // Not undone, it's back to the main screen once the offer's gone.
+        removeByAction("Demo")
+        composeRule.mainClock.advanceTimeBy(5_000)
+        assertTrue(shown(string(R.string.practice_all_songs)))
+        composeRule.mainClock.advanceTimeBy(10_000)
+        waitUntil { !shown(string(R.string.practice_all_songs)) }
+        assertEquals(emptyList<SavedLine>(), SavedLinesStore(prefs()).load())
     }
 
     @Test

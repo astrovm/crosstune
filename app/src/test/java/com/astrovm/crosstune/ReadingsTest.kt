@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -201,5 +202,30 @@ class ReadingsTest {
         // Romaji drawn out as it's said is put right drawn out too.
         val said = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と")), "せいと", "seeto"))
         assertEquals("shooto", Readings.corrected(said, listOf(ReadingFix(0, "生", "しょう")))[0].romanized)
+    }
+
+    @Test
+    fun aJapaneseLineWrittenChinasWayIsWrittenAndReadAsJapanWritesIt() {
+        // 瞬间 is how China writes 瞬間, which the dictionary reads; the line ends in China's comma.
+        val line = Readings.asJapanWrites("真実の瞬间はいつも，")
+        assertEquals("真実の瞬間はいつも", line)
+        assertEquals("しんじつのしゅんかんはいつも", Readings.of(listOf(line), Script.JAPANESE).single().reading)
+        // 仆 is Japan's own, but only for an old word, and Chinese sites write it for 僕.
+        assertEquals("僕や君のため", Readings.asJapanWrites("仆や君のため，  "))
+        // A comma inside the line, and anything Japan writes already, stays.
+        assertEquals("夢，夢 ", Readings.asJapanWrites("夢，夢 "))
+        assertEquals("Plastic Love", Readings.asJapanWrites("Plastic Love"))
+        // One for one, so a word's timings stay where they were.
+        assertEquals("瞬間は，", Readings.inJapansKanji("瞬间は，"))
+    }
+
+    @Test
+    fun eachOfChinasKanjiIsOneJapanDoesntWriteAndEachOfJapansOneItDoes() {
+        // Japan writes what Shift_JIS, its own way of storing text, has room for.
+        val japan = java.nio.charset.Charset.forName("Shift_JIS").newEncoder()
+        Readings.JAPANS_KANJI.forEach { (china, japans) ->
+            assertTrue("$china", china == '仆' || !japan.canEncode(china))
+            assertTrue("$japans", japan.canEncode(japans) && Readings.isHan(japans))
+        }
     }
 }

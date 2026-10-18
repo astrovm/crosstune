@@ -2143,6 +2143,24 @@ class ListeningTest {
     }
 
     @Test
+    fun japaneseWordsWrittenChinasWayAreReadAsJapanWritesThemAndSoAreLinesKeptFromThem() {
+        // Kept from words a Chinese site wrote with 瞬间 for 瞬間, and China's comma, so read wrong.
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"真実の瞬间はいつも，","reading":"しんじつのまどか间はいつも，","title":"Demo","artist":"Band","ruby":[["真実","しんじつ"],["の",null],["瞬","まどか"],["间はいつも，",null]]},""" +
+                """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち"],["の",null],["夜","よる"]]}]"""
+        ).commit()
+        wordsOf(null, "真実の瞬间はいつも，\\n仆や君のため，\\n都会の夜")
+        waitUntil(TIMEOUT_MS) { readingShown("しゅんかん") && readingShown("ぼく") }
+        assertTrue(shown("真実の瞬間はいつも"))
+        val kept = SavedLinesStore(prefs()).load()
+        assertEquals("真実の瞬間はいつも", kept[0].text)
+        assertEquals("しんじつのしゅんかんはいつも", kept[0].reading)
+        // One read already, as it's sung, stays so.
+        assertEquals("まちのよる", kept[1].reading)
+    }
+
+    @Test
     fun signedInReadingsTheDictionaryGetsWrongArePutRight() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         val openAi = signedInWithChatGpt()
