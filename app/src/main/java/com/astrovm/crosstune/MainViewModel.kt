@@ -119,7 +119,8 @@ internal class MainViewModel(
     /** What [UiState.playingNow] was heard as, with where in the song it was. */
     private var playingHeard: Heard.Song? = null
 
-    var uiState by mutableStateOf(
+    /** The screen's state, which the parts work is handed to change too. */
+    private val screen = mutableStateOf(
         UiState(
             askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
@@ -165,7 +166,12 @@ internal class MainViewModel(
             canSetUpInOneTap = oneTap?.available() == true
         ).withDestinations()
     )
+
+    var uiState by screen
         private set
+
+    /** Kept lines practised as cards. */
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.copy(canSetUpInOneTap = oneTap.available()) }
@@ -1729,163 +1735,24 @@ internal class MainViewModel(
      */
     fun startPractice(song: MusicMetadata? = null) {
         stopRepeating()
-        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
-            val its = uiState.savedLines.filter { it.isOf(song) }
-            sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
-        }
         // The song the words follow, in its app; or else whatever plays, which the last app played has.
         val playing = uiState.following?.takeIf { it.clock.playing && it.appPackage != null }
-        val before = uiState.lyricsFor?.let { song -> playing?.let { Before(song, inApp(it.clock.positionAt(now())), it.appPackage) } }
+        val before = uiState.lyricsFor?.let { shown -> playing?.let { Before(shown, inApp(it.clock.positionAt(now())), it.appPackage) } }
             ?: playback?.nowPlaying()?.let { heard -> heard.clock?.let { Before(heard.metadata, it.positionAt(now()), app = null) } }
-        practiceSong = null
-        uiState = uiState.copy(practice = Practice(queue, total = queue.size, before = before))
-        showCard()
+        cards.start(song, before)
     }
 
-    /** The song the music app has for practice, ready to be moved around in, once it does. */
-    private var practiceSong: SavedLine? = null
-    private var soundJob: Job? = null
+    fun replayLine() = cards.replay()
 
-    /**
-     * Shows the next card, with its line ready in the music app, not played: heard, it would say how
-     * it reads, which is what's asked. It plays once the card's turned.
-     */
-    private fun showCard() {
-        soundJob?.cancel()
-        val practice = uiState.practice ?: return
-        val line = practice.line ?: return
-        val playable = line.timed && playback?.hasAccess() == true
-        uiState = uiState.copy(practice = practice.copy(turned = false, lastSong = line, sound = if (playable) LineSound.LOADING else LineSound.NONE))
-        if (playable) sound(line, play = false)
-    }
+    fun turnPractice() = cards.turn()
 
-    /**
-     * Has the music app play [line], from where it's sung to the next line, then pause; or, when not
-     * [play] and the card isn't turned yet, only get there. A song it isn't playing it's asked to find first.
-     */
-    private fun sound(line: SavedLine, play: Boolean = true) {
-        val source = playback ?: return
-        soundJob?.cancel()
-        soundJob = viewModelScope.launch {
-            val song = MusicMetadata(line.title, line.artist)
-            val reached = inApp(source, song, line.app) { app ->
-                practiceSong = line
-                val lead = if (app()?.video == true) line.leadMs else 0L
-                val start = (line.startMs ?: 0L) + lead
-                // A moment past where the words say it ends, so its last word isn't cut short.
-                val end = (line.endMs ?: 0L) + lead + LINE_TAIL_MS
-                source.seekTo(song, start)
-                // Turned while the app got there, it plays now.
-                val now = play || uiState.practice?.turned == true
-                source.playPause(song, now)
-                if (!now) return@inApp setSound(line, LineSound.PLAYED)
-                setSound(line, LineSound.PLAYING)
-                // Once the app says it's there, it plays to the end of the line.
-                withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
-                withTimeoutOrNull(end - start + SEEK_WAIT_MS) { while ((app()?.clock?.positionAt(now()) ?: end) < end) delay(SOUND_CHECK_MS) }
-                source.playPause(song, false)
-                setSound(line, LineSound.PLAYED)
-            }
-            if (reached == null) setSound(line, LineSound.NONE)
-        }
-    }
+    fun readCardAs(readings: List<String>) = cards.readAs(readings)
 
-    /**
-     * Follows [song] in the music app, asking [app] for it by name when no app has it, then does
-     * [block] once it can be moved around in, with where it is as that changes; null when it never can.
-     */
-    private suspend fun <T> inApp(source: PlaybackSource, song: MusicMetadata, app: String?, block: suspend (() -> Following?) -> T): T? = coroutineScope {
-        var latest: Following? = null
-        val following = launch { source.follow(song).collect { latest = it } }
-        try {
-            val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }
-            // Not already there, it's asked for by name, which takes the app a moment. There, but where
-            // it can't be moved, e.g. during an ad, asking again would only start it over.
-            val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
-            var opened = false
-            val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
-                val link = youTubeMusicLink(song, app)
-                // YouTube Music not running has nothing to ask in the background, so it's opened on
-                // the song, as it is with no app to ask at all, and left again once it has it.
-                val asked = (link == null || app == null || source.runs(app)) && source.playSong(song, app, link)
-                opened = !asked && link != null && source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link)
-                (asked || opened) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
-            }
-            if (opened) source.comesBack()
-            if (there) block { latest } else null
-        } finally {
-            following.cancel()
-        }
-    }
+    fun gradePractice(grade: Grade) = cards.grade(grade)
 
-    /** [song]'s link on YouTube Music when that's the app to ask, or may be; null when it isn't, or isn't there. */
-    private suspend fun youTubeMusicLink(song: MusicMetadata, app: String?): String? =
-        if (app == null || app == MusicService.YOUTUBE_MUSIC.packageName) matcher.find(MusicService.YOUTUBE_MUSIC, song) else null
+    fun stopPractice() = cards.stop()
 
-    /** How [line] sounds, unless another card's shown by now. */
-    private fun setSound(line: SavedLine, sound: LineSound) {
-        val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
-        uiState = uiState.copy(practice = practice.copy(sound = sound))
-    }
-
-    /** Plays the card's line again. */
-    fun replayLine() {
-        val practice = uiState.practice ?: return
-        val line = practice.line?.takeIf { practice.sound != LineSound.NONE } ?: return
-        sound(line)
-    }
-
-    /** Turns the card, to say whether it was known, and plays its line, now that it's the answer. */
-    fun turnPractice() {
-        val practice = uiState.practice?.takeIf { !it.turned } ?: return
-        uiState = uiState.copy(practice = practice.copy(turned = true))
-        if (practice.sound == LineSound.PLAYED) replayLine()
-    }
-
-    /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
-    fun readCardAs(readings: List<String>) {
-        val practice = uiState.practice ?: return
-        val line = practice.line ?: return
-        val read = line.readAs(readings).takeIf { it != line } ?: return
-        uiState = uiState.copy(
-            savedLines = savedLinesStore.readAs(read),
-            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true) else it })
-        )
-    }
-
-    /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
-    fun gradePractice(grade: Grade) {
-        val practice = uiState.practice?.takeIf { it.turned } ?: return
-        val line = practice.line ?: return
-        uiState = uiState.copy(savedLines = savedLinesStore.practised(line, grade, wallClock()))
-        uiState = uiState.copy(
-            practice = if (grade == Grade.AGAIN) practice.copy(queue = missedAgain(practice.queue), missed = practice.missed + 1)
-            else practice.copy(queue = practice.queue.drop(1), done = practice.done + 1)
-        )
-        showCard()
-    }
-
-    /** Stops practising, the line playing, or the song on its way, paused. */
-    fun stopPractice() {
-        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING }?.line
-        soundJob?.cancel()
-        soundJob = null
-        playing?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false) }
-        uiState = uiState.copy(practice = null)
-    }
-
-    /** Done, the music app goes back to what it played before, where it was, and practice closes. */
-    fun backToBefore() {
-        val before = uiState.practice?.before ?: return
-        val source = playback ?: return
-        stopPractice()
-        soundJob = viewModelScope.launch {
-            inApp(source, before.song, before.app) {
-                source.seekTo(before.song, before.positionMs)
-                source.playPause(before.song, true)
-            }
-        }
-    }
+    fun backToBefore() = cards.backToBefore()
 
     private var wordJob: Job? = null
 
@@ -2778,15 +2645,8 @@ internal class MainViewModel(
         const val LINE_TAIL_MS = 1_000L
         private const val REPEAT_CHECK_MS = 100L
         private const val SEEK_SETTLE_MS = 1_000L
-        /** How long a song the music app has already takes to be found. */
-        private const val FIND_SONG_MS = 400L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
-        /** How long the music app has to say it went where it was sent. */
-        private const val SEEK_WAIT_MS = 3_000L
-        /** How far before a line the app may say it is, having gone there, as apps round where they are. */
-        private const val SEEK_SLACK_MS = 1_500L
-        private const val SOUND_CHECK_MS = 50L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */
