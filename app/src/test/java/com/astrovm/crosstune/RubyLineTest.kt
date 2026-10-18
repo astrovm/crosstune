@@ -101,6 +101,41 @@ class RubyLineTest {
     }
 
     @Test
+    fun onlyRowsWithReadingsHaveRoomOverThem() {
+        // Seven kanji and kana a row, at most: the last piece goes to the next row.
+        val first = listOf(Ruby("夜空", "よぞら"), Ruby("にきらめく"), Ruby("星"))
+        assertEquals(listOf(10f, 10f), rowShifts(first, laidOut(first, 140), 10f))
+        val second = listOf(Ruby("夜空"), Ruby("にきらめく"), Ruby("星", "ほし"))
+        assertEquals(listOf(10f, 20f), rowShifts(second, laidOut(second, 140), 10f))
+        // The first row has room even with none, so a line stays where it is as its readings come.
+        val none = listOf(Ruby("夜空にきらめく星"))
+        assertEquals(listOf(10f, 10f), rowShifts(none, laidOut(none, 140), 10f))
+        assertEquals(listOf(10f), rowShifts(none, laidOut(none, 400), 10f))
+    }
+
+    @Test
+    fun aRowWithNoReadingsSitsRightUnderTheOneBefore() {
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("にきらめく星"))
+        val style = TextStyle(fontSize = 40.sp, lineHeight = 48.sp)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                Box(Modifier.width(280.dp)) { RubyLine(parts, style) }
+            }
+        }
+        // Seven a row: two rows, readings over the first only.
+        val words = measurer.measure(rubyText(parts), style, constraints = Constraints(maxWidth = 280))
+        assertEquals(2, words.lineCount)
+        // The words, and one row of readings, 40 × (0.45 + 0.05) high, over the first.
+        assertEquals(words.size.height + 20, compose.onRoot().fetchSemanticsNode().size.height)
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val ground = image.getPixel(image.width - 1, 0)
+        fun inked(top: Float, bottom: Float) = (top.toInt() until bottom.toInt()).any { y -> (0 until image.width).any { x -> image.getPixel(x, y) != ground } }
+        // The second row's words are right under the first's, with no room for readings between.
+        assertTrue(inked(20 + words.getLineTop(1), 20 + words.getLineBottom(1)))
+        assertFalse(inked(20 + words.getLineBottom(1), image.height.toFloat()))
+    }
+
+    @Test
     fun aPieceBrokenOverTwoRowsHasItsReadingOverItsFirst() {
         val parts = listOf(Ruby("あいうえお"), Ruby("夜空", "よぞら"))
         // Six a row: 夜 ends the first, 空 starts the second.
