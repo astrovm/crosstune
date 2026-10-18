@@ -22,6 +22,12 @@ internal class FakePlayback : PlaybackSource {
     val linksAsked = mutableListOf<String?>()
     /** Whether there's an app to ask for a song. */
     var canPlaySongs = true
+    /** The apps running, with songs to be asked for; any, when null. */
+    var running: Set<String>? = null
+    /** Each app opened on a song's link, and the link. */
+    val opened = mutableListOf<Pair<String, String>>()
+    /** How many times Crosstune came back to the front. */
+    var cameBack = 0
     private val songs = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
@@ -50,6 +56,17 @@ internal class FakePlayback : PlaybackSource {
         songsAsked += song to app
         linksAsked += link
         return true
+    }
+
+    override fun runs(app: String) = running?.contains(app) ?: true
+
+    override fun openSong(app: String, link: String): Boolean {
+        opened += app to link
+        return true
+    }
+
+    override fun comesBack() {
+        cameBack++
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {

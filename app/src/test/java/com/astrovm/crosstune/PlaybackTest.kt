@@ -615,6 +615,28 @@ class PlaybackTest {
         assertTrue(playback.playSong(song, "com.spotify.music", "https://music.youtube.com/watch?v=other000000"))
     }
 
+    @Test
+    fun anAppNotRunningIsOpenedOnTheSongAndCrosstuneComesBackOverIt() {
+        val youTubeMusic = "com.google.android.apps.youtube.music"
+        // Without access, nothing's known to run.
+        assertFalse(playback.runs(youTubeMusic))
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
+        assertFalse(playback.runs(youTubeMusic))
+        assertTrue(playback.runs("com.spotify.music"))
+        // Opened on the song's link, in that app.
+        assertTrue(playback.openSong(youTubeMusic, "https://music.youtube.com/watch?v=other000000"))
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(android.content.Intent.ACTION_VIEW, opened.action)
+        assertEquals("https://music.youtube.com/watch?v=other000000", opened.dataString)
+        assertEquals(youTubeMusic, opened.`package`)
+        // Then Crosstune's brought back over it, as it was.
+        playback.comesBack()
+        val back = shadowOf(app).nextStartedActivity
+        assertEquals(MainActivity::class.java.name, back.component?.className)
+        assertTrue(back.flags and android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT != 0)
+    }
+
     private companion object {
         const val NOW = 500_000L
         const val PLAYED_AT = 400_000L
