@@ -218,8 +218,34 @@ val shots = tasks.register<Test>("shots") {
     outputs.upToDateWhen { false }
 }
 
+// Robolectric's Android runtimes, one for each SDK level the tests run on, fetched by Gradle and kept
+// with its caches, rather than by Robolectric as the tests run: on CI, a test process once read one
+// before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
+// Gradle would otherwise keep only the newest of one library's versions.
+val robolectricRuntimes = files(
+    listOf("9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "16-robolectric-13921718-i7").map {
+        configurations.detachedConfiguration(dependencies.create("org.robolectric:android-all-instrumented:$it")).apply { isTransitive = false }
+    }
+)
+
+// Where each runtime is, for Robolectric to read; one it isn't told of fails the tests, not fetched.
+val robolectricDeps = tasks.register("robolectricDeps") {
+    val runtimes = robolectricRuntimes
+    val out = layout.buildDirectory.file("robolectric-deps.properties")
+    inputs.files(runtimes)
+    outputs.file(out)
+    doLast {
+        // Keyed by each one's coordinates, their colons escaped, as a properties file reads one as "=".
+        out.get().asFile.writeText(runtimes.files.sortedBy { it.name }.joinToString("") {
+            "org.robolectric\\:android-all-instrumented\\:${it.name.removePrefix("android-all-instrumented-").removeSuffix(".jar")}=${it.absolutePath}\n"
+        })
+    }
+}
+
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
+    dependsOn(robolectricDeps)
+    systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
     // Two test processes, each with that heap, where there's room for them, like CI's runner:
