@@ -195,6 +195,7 @@ internal data class ScreenActions(
     val onShowAppsGuide: () -> Unit = {},
     val onDismissLinkSettingsHelper: () -> Unit = {},
     val onDismissNotices: (Set<String>) -> Unit = {},
+    val onUpdate: () -> Unit = {},
     /** Shows the song a music app plays now, with its words when true. */
     val onShowPlayingNow: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
@@ -762,6 +763,10 @@ private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean)
             stringResource(R.string.link_settings_helper_title), allow, actions.onShowAllowGuide,
             onDismiss = actions.onDismissLinkSettingsHelper, fixing = state.fixingInOneTap == OneTapFix.LINKS
         )
+    }
+    // Closed, it's back for the next version, not this one.
+    state.update?.takeIf { !inSettings && "update:${it.version}" !in dismissed }?.let { update ->
+        NoticeStrip(stringResource(R.string.notice_update, update.version), stringResource(R.string.update_button), actions.onUpdate, dismiss(setOf("update:${update.version}")))
     }
     val apps = state.blockingApps.orEmpty().sortedBy { it.label }
     val appKeys = apps.map { "app:${it.packageName}" }.toSet()

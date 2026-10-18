@@ -1,0 +1,1 @@
+Installed from GitHub, Crosstune now says when a new version is out, one tap from downloading it. Copies from Google Play, F-Droid or Obtainium are left to update there.

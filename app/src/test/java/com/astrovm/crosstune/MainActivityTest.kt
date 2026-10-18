@@ -134,6 +134,7 @@ class MainActivityTest {
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.shellFactory = ::ShizukuShell
+        MainActivity.checksForUpdates = ::looksForUpdates
     }
 
     // region helpers
@@ -6387,7 +6388,67 @@ class MainActivityTest {
 
     // endregion
 
+    // region updates
+
+    /** GitHub has Crosstune 99.0.0 out, with its APK. */
+    private fun newerReleaseOnGitHub() {
+        MainActivity.checksForUpdates = { true }
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        fake.handler = { request ->
+            if (request.url.host == "api.github.com") {
+                FakeSpotify.html(request, """{"tag_name":"v99.0.0","assets":[{"name":"Crosstune-v99.0.0.apk","browser_download_url":"$UPDATE_APK"}]}""")
+            } else {
+                FakeSpotify.html(request, "")
+            }
+        }
+    }
+
+    @Test
+    fun aNewerCrosstuneIsOneTapFromDownloading() {
+        newerReleaseOnGitHub()
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        launch()
+        waitForText(string(R.string.notice_update, "99.0.0"))
+        click(string(R.string.update_button))
+        // The browser downloads it, and Crosstune stays open.
+        val opened = nextStartedActivity()!!
+        assertEquals(UPDATE_APK, opened.dataString)
+        assertFalse(controller!!.get().isFinishing)
+    }
+
+    @Test
+    fun aClosedUpdateNoticeStaysClosedForThatVersion() {
+        newerReleaseOnGitHub()
+        launch()
+        waitForText(string(R.string.notice_update, "99.0.0"))
+        composeRule.onNodeWithContentDescription(string(R.string.dismiss_button)).performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_update, "99.0.0"))
+        // Settings says nothing of it either.
+        click(string(R.string.settings_button))
+        assertTextAbsent(string(R.string.notice_update, "99.0.0"))
+        click(string(R.string.back_button))
+
+        controller!!.pause().stop().destroy()
+        launch()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_update, "99.0.0"))
+    }
+
+    @Test
+    fun aCopyAnAppStoreUpdatesNeverAsksGitHub() {
+        newerReleaseOnGitHub()
+        MainActivity.checksForUpdates = { false }
+        launch()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_update, "99.0.0"))
+        assertTrue(fake.requestedUrls.none { "api.github.com" in it })
+    }
+
+    // endregion
+
     private companion object {
+        const val UPDATE_APK = "https://github.com/astrovm/crosstune/releases/download/v99.0.0/Crosstune-v99.0.0.apk"
         const val TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
         const val OTHER_TRACK_ID = "0VjIjW4GlUZAMYd2vXMi3b"
         const val TIMEOUT_MS = 5_000L

@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s masih membuka tautannya sendiri</string>
     <string name="notice_apps_still_open">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
+    <string name="notice_update">Crosstune %1$s sudah tersedia</string>
+    <string name="update_button">Perbarui</string>
     <string name="history_cleared">Riwayat dihapus</string>
     <string name="history_removed">Dihapus</string>
     <string name="undo_button">Urungkan</string>

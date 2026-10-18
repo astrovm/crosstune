@@ -89,7 +89,9 @@ internal class MainViewModel(
     /** Setup in one tap, for people who run Shizuku; nullable so tests need none. */
     private val oneTap: OneTapSetup? = null,
     /** How a Japanese song's kanji are sung, which a dictionary can't say; nullable so tests need none. */
-    private val sungReadings: SungReadings? = null
+    private val sungReadings: SungReadings? = null,
+    /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
+    private val updates: UpdateChecker? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -246,6 +248,13 @@ internal class MainViewModel(
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
     init {
+        updates?.let { checker ->
+            viewModelScope.launch {
+                // Asked first, so what changed on screen meanwhile is kept.
+                val update = checker.newer()
+                uiState = uiState.copy(update = update)
+            }
+        }
         chatGpt?.let { account ->
             account.picked = preferences.getString(KEY_CHATGPT_MODEL, null)
             viewModelScope.launch {
@@ -2555,6 +2564,12 @@ internal class MainViewModel(
     fun dismissLinkSettingsHelper() {
         uiState = uiState.copy(showLinkSettingsHelper = false)
         preferences.edit { putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true) }
+    }
+
+    /** Downloads the newer Crosstune, which Android then offers to install over this one. */
+    fun openUpdate() {
+        val update = uiState.update ?: return
+        viewModelScope.launch { effectChannel.send(Effect.Open(update.apkUrl, packageName = null, finishAfterOpen = false)) }
     }
 
     /** Closes the main screen's notices about [keys]; one about anything else still shows. */

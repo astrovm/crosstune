@@ -113,7 +113,10 @@ class MainActivity : ComponentActivity() {
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
-                    sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300))
+                    sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300)),
+                    updates = UpdateChecker(
+                        client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+                    ).takeIf { checksForUpdates(applicationContext) }
                 )
             }
         }
@@ -254,6 +257,10 @@ class MainActivity : ComponentActivity() {
         /** How long listening along first rests after hearing nothing; tests don't wait. */
         @VisibleForTesting
         internal var quietPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
+
+        /** Whether this copy looks for a newer Crosstune, so a test can say. */
+        @VisibleForTesting
+        internal var checksForUpdates: (Context) -> Boolean = ::looksForUpdates
 
         /** What hears songs nearby, when a test stands in for the microphone and Shazam both. */
         @VisibleForTesting
@@ -491,6 +498,7 @@ class MainActivity : ComponentActivity() {
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
                         onDismissNotices = viewModel::dismissNotices,
+                        onUpdate = viewModel::openUpdate,
                         onShowPlayingNow = viewModel::showPlayingNow,
                         onSettingsLeft = viewModel::settingsLeft,
                         loadArtwork = viewModel.artwork::load

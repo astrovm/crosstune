@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s ouvre encore ses propres liens</string>
     <string name="notice_apps_still_open">%1$s ouvrent encore leurs propres liens</string>
     <string name="fix_button">Corriger</string>
+    <string name="notice_update">Crosstune %1$s est disponible</string>
+    <string name="update_button">Mettre à jour</string>
     <string name="history_cleared">Historique effacé</string>
     <string name="history_removed">Supprimé</string>
     <string name="undo_button">Annuler</string>
