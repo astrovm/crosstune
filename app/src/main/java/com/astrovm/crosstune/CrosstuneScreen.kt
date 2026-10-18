@@ -1957,9 +1957,10 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
 private fun PracticeButton(due: Int, onClick: () -> Unit) {
     val label = stringResource(R.string.saved_practice)
     val description = if (due > 0) "$label, ${stringResource(R.string.practice_due, due)}" else label
-    IconButton(onClick = onClick, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description }) {
+    IconButton(onClick = onClick) {
+        // The count is in what the icon says, so it isn't said twice.
         BadgedBox(badge = { if (due > 0) Badge { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) } }) {
-            AppIcon(R.drawable.ic_school, contentDescription = null)
+            AppIcon(R.drawable.ic_school, contentDescription = description)
         }
     }
 }
