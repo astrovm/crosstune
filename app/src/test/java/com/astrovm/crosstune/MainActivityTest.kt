@@ -1713,6 +1713,69 @@ class MainActivityTest {
     }
 
     @Test
+    fun aCopiedYouTubeVideoIsOnlyLookedUpOnceYouTubeMusicSaysItsMusic() {
+        val activity = launch()
+        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
+        fun copiedVideo(id: String) {
+            copied("https://www.youtube.com/watch?v=$id")
+            comeBack()
+            waitUntil { fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") } && !viewModel.checkingCopy }
+        }
+        // Someone's own upload, like a vlog, is left alone, as is one YouTube Music can't tell about.
+        respondNotMusic()
+        copiedVideo("jNQXAC9IVRw")
+        fake.handler = { request -> FakeSpotify.html(request, "{}") }
+        copiedVideo("jNQXAC9IVRx")
+        assertEquals("", viewModel.uiState.linkText)
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://www.youtube.com/") })
+
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
+            else FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
+        }
+        copiedVideo("4NRXx6U8ABQ")
+        waitForText("Blinding Lights")
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun aSongTypedWhileACopiedVideoIsCheckedIsntReplaced() {
+        val typed = CountDownLatch(1)
+        fake.handler = { request ->
+            typed.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
+        }
+        val activity = launch()
+        val viewModel = ViewModelProvider(activity)[MainViewModel::class.java]
+        copied("https://www.youtube.com/watch?v=4NRXx6U8ABQ")
+        comeBack()
+        typeUrl("Some Song")
+        typed.countDown()
+        waitUntil { !viewModel.checkingCopy }
+        assertEquals("Some Song", viewModel.uiState.linkText)
+    }
+
+    @Test
+    fun aCopiedYouTubeVideoIsLookedUpRightAwayWhenAnyVideoMayBe() {
+        prefs().edit().putBoolean("only_music_videos", false).commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"How to tie a tie","author_name":"Someone"}""") }
+        launch()
+        copied("https://www.youtube.com/watch?v=jNQXAC9IVRw")
+        comeBack()
+        waitForText("How to tie a tie")
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://music.youtube.com/") })
+    }
+
+    @Test
+    fun aCopiedYouTubePlaylistIsLookedUpWithoutAskingIfItsMusic() {
+        launch()
+        copied("https://www.youtube.com/playlist?list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG")
+        comeBack()
+        waitUntil { fake.requestedUrls.any { it.startsWith("https://www.youtube.com/playlist") } }
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://music.youtube.com/") })
+    }
+
+    @Test
     fun aLinkCopiedInCrosstuneIsNotPastedBack() {
         prefs().edit().putString("default_target", "SPOTIFY").commit()
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")

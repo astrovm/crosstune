@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
@@ -735,6 +736,9 @@ internal class MainViewModel(
     }
 
     private var job: Job? = null
+
+    /** Asking YouTube Music whether a video just copied is music, before it's filled in. */
+    private var copyCheck: Job? = null
     private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
     private var pendingOpen = false
 
@@ -1018,6 +1022,23 @@ internal class MainViewModel(
         )
         showError(AppError.INVALID_URL)
     }
+
+    /** Whether a link just copied may be filled in: nothing else is shown or under way. */
+    val readyForCopy get() = uiState.let { it.setupComplete && it.linkText.isBlank() && it.result == null && !it.isLoading && !it.listening && it.lyricsFor == null }
+
+    /**
+     * A music link copied a moment ago, filled in as if pasted. A YouTube video only is once YouTube
+     * Music says it's music, as a video shared from another app; one it can't tell, e.g. offline, isn't.
+     */
+    fun pasteCopy(text: String) {
+        copyCheck?.cancel()
+        val video = (MusicLinks.parse(text) as? LinkInput.Link)?.link?.takeIf { it.service == MusicService.YOUTUBE && it.type == ItemType.TRACK && uiState.onlyMusicVideos }
+            ?: return pasteLink(text)
+        copyCheck = viewModelScope.launch { if (matcher.isMusicVideo(video.id) == true && readyForCopy) pasteLink(text) }
+    }
+
+    @VisibleForTesting
+    internal val checkingCopy get() = copyCheck?.isActive == true
 
     /** Clipboard text pasted with the field's Paste button: looked up, but only opened on request. */
     fun pasteLink(text: String?) {
@@ -2889,6 +2910,7 @@ internal class MainViewModel(
     private fun cancelContentWork() {
         job?.cancel()
         job = null
+        copyCheck?.cancel()
         lastRequest = null
         pendingOpen = false
         retryListens = false
