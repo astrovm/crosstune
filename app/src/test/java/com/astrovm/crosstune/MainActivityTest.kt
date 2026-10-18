@@ -1719,7 +1719,7 @@ class MainActivityTest {
         fun copiedVideo(id: String) {
             copied("https://www.youtube.com/watch?v=$id")
             comeBack()
-            waitUntil { fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") } && !viewModel.checkingCopy }
+            waitUntil { fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") } && !viewModel.lookingUp }
         }
         // Someone's own upload, like a vlog, is left alone, as is one YouTube Music can't tell about.
         respondNotMusic()
@@ -1727,7 +1727,9 @@ class MainActivityTest {
         fake.handler = { request -> FakeSpotify.html(request, "{}") }
         copiedVideo("jNQXAC9IVRx")
         assertEquals("", viewModel.uiState.linkText)
-        assertTrue(fake.requestedUrls.none { it.startsWith("https://www.youtube.com/") })
+        assertNull(viewModel.uiState.result)
+        assertFalse(viewModel.uiState.isLoading)
+        assertTrue(HistoryStore(prefs()).load().isEmpty())
 
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}""")
@@ -1735,6 +1737,7 @@ class MainActivityTest {
         }
         copiedVideo("4NRXx6U8ABQ")
         waitForText("Blinding Lights")
+        assertEquals("https://www.youtube.com/watch?v=4NRXx6U8ABQ", viewModel.uiState.linkText)
         assertNull(nextStartedActivity())
     }
 
@@ -1751,7 +1754,7 @@ class MainActivityTest {
         comeBack()
         typeUrl("Some Song")
         typed.countDown()
-        waitUntil { !viewModel.checkingCopy }
+        waitUntil { !viewModel.lookingUp }
         assertEquals("Some Song", viewModel.uiState.linkText)
     }
 

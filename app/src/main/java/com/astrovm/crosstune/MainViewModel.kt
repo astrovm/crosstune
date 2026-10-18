@@ -736,9 +736,6 @@ internal class MainViewModel(
     }
 
     private var job: Job? = null
-
-    /** Asking YouTube Music whether a video just copied is music, before it's filled in. */
-    private var copyCheck: Job? = null
     private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
     private var pendingOpen = false
 
@@ -1026,19 +1023,18 @@ internal class MainViewModel(
     /** Whether a link just copied may be filled in: nothing else is shown or under way. */
     val readyForCopy get() = uiState.let { it.setupComplete && it.linkText.isBlank() && it.result == null && !it.isLoading && !it.listening && it.lyricsFor == null }
 
-    /**
-     * A music link copied a moment ago, filled in as if pasted. A YouTube video only is once YouTube
-     * Music says it's music, as a video shared from another app; one it can't tell, e.g. offline, isn't.
-     */
+    /** A music link copied a moment ago, filled in as if pasted; a YouTube video only once it's known to be music. */
     fun pasteCopy(text: String) {
-        copyCheck?.cancel()
-        val video = (MusicLinks.parse(text) as? LinkInput.Link)?.link?.takeIf { it.service == MusicService.YOUTUBE && it.type == ItemType.TRACK && uiState.onlyMusicVideos }
-            ?: return pasteLink(text)
-        copyCheck = viewModelScope.launch { if (matcher.isMusicVideo(video.id) == true && readyForCopy) pasteLink(text) }
+        val input = MusicLinks.parse(text)
+        if (input !is LinkInput.Link || !input.link.mayNotBeMusic) return pasteLink(text)
+        resolve(input, openWhenReady = false, copied = true)
     }
 
+    /** A YouTube video, which Crosstune only takes once YouTube Music says it's music, unless any video may be. */
+    private val MusicLink.mayNotBeMusic get() = uiState.onlyMusicVideos && service == MusicService.YOUTUBE && type == ItemType.TRACK
+
     @VisibleForTesting
-    internal val checkingCopy get() = copyCheck?.isActive == true
+    internal val lookingUp get() = job?.isActive == true
 
     /** Clipboard text pasted with the field's Paste button: looked up, but only opened on request. */
     fun pasteLink(text: String?) {
@@ -1153,21 +1149,28 @@ internal class MainViewModel(
         uiState = uiState.copy(error = error, canRetry = error.canRetry)
     }
 
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null) {
+    /**
+     * Looks [input] up, and opens it when [openWhenReady]. A video [copied] a moment ago shows
+     * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
+     */
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false) {
         cancelContentWork()
         lastRequest = Triple(input, openWhenReady, destination)
         pendingOpen = openWhenReady
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
-        uiState = uiState.copy(
-            isLoading = true,
-            isMatching = false,
-            error = null,
-            result = null,
-            destinationUrls = emptyMap(),
-            selectedDestination = destination,
-            link = null,
-            showDestinationPicker = false
-        )
+        fun showLoading() {
+            uiState = uiState.copy(
+                isLoading = true,
+                isMatching = false,
+                error = null,
+                result = null,
+                destinationUrls = emptyMap(),
+                selectedDestination = destination,
+                link = null,
+                showDestinationPicker = false
+            )
+        }
+        if (!copied) showLoading()
         // A link already in Recent is shown from there rather than looked up again. A short link's
         // target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
@@ -1176,13 +1179,17 @@ internal class MainViewModel(
             // An album or playlist kept without its songs, e.g. by a version that couldn't read them, is looked up again for them.
             ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
         job = viewModelScope.launch {
-            // A video from another app that isn't music, like a tutorial, opens as it would without Crosstune.
-            val video = link?.takeIf {
-                openWhenReady && destination == null && uiState.onlyMusicVideos && it.service == MusicService.YOUTUBE
-            }
+            // A video from another app that isn't music, like a tutorial, opens as it would without
+            // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
+            val video = link?.takeIf { (copied || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
-            if (video != null && matcher.isMusicVideo(video.id) == false) {
+            val music = video?.let { matcher.isMusicVideo(it.id) }
+            if (copied) {
+                if (video == null || music != true || !readyForCopy) return@launch lookup.cancel()
+                uiState = uiState.copy(linkText = video.frontendUrl ?: video.url, handlingIncomingLink = false, handingOff = false)
+                showLoading()
+            } else if (video != null && music == false) {
                 lookup.cancel()
                 return@launch openAsIs(video)
             }
@@ -2910,7 +2917,6 @@ internal class MainViewModel(
     private fun cancelContentWork() {
         job?.cancel()
         job = null
-        copyCheck?.cancel()
         lastRequest = null
         pendingOpen = false
         retryListens = false
