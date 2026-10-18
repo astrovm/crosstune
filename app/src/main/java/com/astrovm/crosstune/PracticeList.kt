@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,24 +12,38 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
  * What there is to practise: every song's lines due at once, then each song with its own, to
- * practise on its own or to choose which of its lines to keep. Gone back from once none are left.
+ * practise on its own or to choose which of its lines to keep, or, swiped away, to let them all go,
+ * which can be undone. Gone back from once none are left.
  */
 @Composable
 internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
@@ -37,11 +52,24 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
     val songs = state.savedLines.groupBy { it.title to it.artist }
         .map { (song, lines) -> PracticeSong(MusicMetadata(song.first, song.second, artworkUrl = lines.firstNotNullOfOrNull { it.artworkUrl }), lines, lines.count { it.practisable && it.due <= now }) }
         .sortedWith(compareByDescending<PracticeSong> { it.due }.thenBy { it.song.title.lowercase() })
-    LaunchedEffect(songs.isEmpty()) { if (songs.isEmpty()) onBack() }
+    // A song's lines let go, until the offer to keep them again is gone.
+    var removed by remember { mutableStateOf<List<SavedLine>?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val removedMessage = stringResource(R.string.history_removed)
+    val undoLabel = stringResource(R.string.undo_button)
+    // Each removal gets its own offer, replacing one still showing.
+    LaunchedEffect(removed) {
+        val lines = removed ?: return@LaunchedEffect
+        if (snackbar.showSnackbar(removedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) actions.onKeepAgain(lines)
+        removed = null
+    }
+    // The last song removed, it's gone back from once that can't be undone.
+    LaunchedEffect(songs.isEmpty(), removed) { if (songs.isEmpty() && removed == null) onBack() }
     // The song whose lines are being chosen, by its name and singer, so it stays chosen on a turn.
     var editing by rememberSaveable { mutableStateOf<List<String>?>(null) }
     Page(
         title = stringResource(R.string.saved_practice),
+        snackbarHost = { SnackbarHost(snackbar) },
         navigationIcon = {
             IconButton(onClick = onBack) {
                 AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
@@ -55,8 +83,28 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
         songs.forEach { song ->
-            PracticeRow(song.song.title, song.due, below = song.song.artist, onClick = { actions.onPractiseSongOf(song.song) }, edit = { editing = listOf(song.song.title, song.song.artist) }) {
-                CoverArt(song.song.artworkUrl, actions.loadArtwork, size = 40.dp)
+            key(song.song.title, song.song.artist) {
+                val remove = {
+                    actions.onChooseLines(emptyList(), song.lines, false)
+                    removed = song.lines
+                }
+                val swipe = rememberSwipeToDismissBoxState()
+                val label = stringResource(R.string.remove_button)
+                SwipeToDismissBox(
+                    state = swipe,
+                    onDismiss = { remove() },
+                    // Only while it's swiped, so its color never shows at a resting row's rounded edge.
+                    backgroundContent = { if (swipe.dismissDirection != SwipeToDismissBoxValue.Settled) RemoveBackground(swipe.dismissDirection) },
+                    modifier = Modifier.clip(MaterialTheme.shapes.medium)
+                ) {
+                    PracticeRow(
+                        song.song.title, song.due, below = song.song.artist, onClick = { actions.onPractiseSongOf(song.song) }, edit = { editing = listOf(song.song.title, song.song.artist) },
+                        // Swiping isn't something TalkBack can do, so removing is an action of its own there.
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface).semantics { customActions = listOf(CustomAccessibilityAction(label) { remove(); true }) }
+                    ) {
+                        CoverArt(song.song.artworkUrl, actions.loadArtwork, size = 40.dp)
+                    }
+                }
             }
         }
     }
@@ -73,10 +121,19 @@ private data class PracticeSong(val song: MusicMetadata, val lines: List<SavedLi
 
 /** What a tap practises, with how many of its lines are due, and a way to choose them when it can [edit]. */
 @Composable
-private fun PracticeRow(title: String, due: Int, onClick: () -> Unit, below: String? = null, edit: (() -> Unit)? = null, enabled: Boolean = true, leading: @Composable () -> Unit) {
+private fun PracticeRow(
+    title: String,
+    due: Int,
+    onClick: () -> Unit,
+    below: String? = null,
+    edit: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    leading: @Composable () -> Unit
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)

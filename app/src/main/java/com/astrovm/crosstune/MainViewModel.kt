@@ -2005,6 +2005,11 @@ internal class MainViewModel(
         if (practise) practiseSong()
     }
 
+    /** Keeps [lines] let go again, as they were, practised as far as they had been. */
+    fun keepAgain(lines: List<SavedLine>) {
+        uiState = uiState.copy(savedLines = savedLinesStore.addAll(lines))
+    }
+
     /** Practises the lines of the song whose words show, and no other's. */
     fun practiseSong() {
         startPractice(uiState.lyricsFor ?: return)

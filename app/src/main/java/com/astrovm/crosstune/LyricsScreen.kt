@@ -705,6 +705,13 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
 }
 
 /**
+ * A sheet kept clear of the status bar. Material's own pads its top by however much of the status
+ * bar it's under, so one about as tall as the screen grew as it was dragged up, which moved it
+ * again, and it shook.
+ */
+private val ClearOfStatusBar = Modifier.statusBarsPadding()
+
+/**
  * [song]'s lines, each once, to choose which to learn: those [kept] checked, and after them the rest
  * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
  * those worth it are checked to start with. Each says how many times it's sung, and whether it has
@@ -729,7 +736,7 @@ internal fun ChooseLinesSheet(
     val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
     val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
     val dropped = remember(song) { mutableStateListOf<SavedLine>() }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
@@ -1605,7 +1612,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val words by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
     val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor?.artist }
     // Open all the way, so one back closes it rather than lowering it halfway first.
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
         // Scrolled, so a long explanation is read to its end.
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1797,7 +1804,7 @@ private fun Examples(asking: Asking<List<Example>>) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
