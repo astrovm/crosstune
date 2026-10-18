@@ -391,6 +391,47 @@ class FlashcardsTest {
     }
 
     @Test
+    fun youTubeMusicNotRunningIsOpenedOnTheSongAndLeftOnceItHasIt() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved(
+            """{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
+            // Kept before the app it was in was, with no app at all to ask.
+            """{"text":"Two","title":"Other","artist":"Band","box":2,"start":5000,"end":9000}"""
+        )
+        fake.handler = { request ->
+            val title = listOf("Another", "Other").firstOrNull { it in FakeSpotify.bodyOf(request) }
+            if (request.url.host == "music.youtube.com" && title != null) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"${title.lowercase().padEnd(11, '0')}"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
+        // Only another app runs, which isn't asked for a song kept from YouTube Music.
+        phone.running = setOf("com.spotify.music")
+        launch()
+        practiseAll(2)
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000", phone.opened.single())
+        assertTrue(phone.songsAsked.isEmpty())
+        appHas("Another", atMs = 0, app = youTubeMusic)
+        // Once it has the song, Crosstune's back in front, with the line ready.
+        waitUntil { practice().sound == LineSound.PLAYED }
+        assertEquals(1, phone.cameBack)
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        phone.playing.value = null
+        // With no app to ask at all, it's opened too.
+        phone.canPlaySongs = false
+        phone.running = emptySet()
+        waitUntil { phone.opened.size == 2 }
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000", phone.opened.last())
+        // Never getting there, Crosstune still comes back, with nothing to play.
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        waitUntil { practice().sound == LineSound.NONE }
+        assertEquals(2, phone.cameBack)
+    }
+
+    @Test
     fun aSongTheAppCantFindIsReadInsteadAndPracticeStopsWhatItPlays() {
         saved(
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",

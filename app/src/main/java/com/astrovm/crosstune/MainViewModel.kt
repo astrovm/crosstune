@@ -2160,8 +2160,16 @@ internal class MainViewModel(
             // Not already there, it's asked for by name, which takes the app a moment. There, but where
             // it can't be moved, e.g. during an ad, asking again would only start it over.
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
-            val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
-            else source.playSong(song, app, youTubeMusicLink(song, app)) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
+            var opened = false
+            val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
+                val link = youTubeMusicLink(song, app)
+                // YouTube Music not running has nothing to ask in the background, so it's opened on
+                // the song, as it is with no app to ask at all, and left again once it has it.
+                val asked = (link == null || app == null || source.runs(app)) && source.playSong(song, app, link)
+                opened = !asked && link != null && source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link)
+                (asked || opened) && withTimeoutOrNull(LOAD_SONG_MS) { ready() } != null
+            }
+            if (opened) source.comesBack()
             if (there) block { latest } else null
         } finally {
             following.cancel()

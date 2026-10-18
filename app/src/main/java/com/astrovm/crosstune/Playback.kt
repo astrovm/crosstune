@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
@@ -69,6 +70,18 @@ internal interface PlaybackSource {
      * background, or YouTube Music play its [link] there when it's known; false with no app to ask.
      */
     fun playSong(song: MusicMetadata, app: String?, link: String? = null): Boolean
+
+    /** Whether [app] is running, with a song to be asked for in the background. */
+    fun runs(app: String): Boolean
+
+    /**
+     * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
+     * background; false when it can't be. It comes to the front, so Crosstune [comesBack] once it plays.
+     */
+    fun openSong(app: String, link: String): Boolean
+
+    /** Brings Crosstune back to the front, over the app [openSong] opened. */
+    fun comesBack()
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
@@ -184,6 +197,19 @@ internal class MediaSessionPlayback(
         else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
         true
     }.getOrDefault(false)
+
+    // Without the user's say-so Android shows none, and says so by throwing.
+    override fun runs(app: String): Boolean = runCatching { sessions.getActiveSessions(listener).any { it.packageName == app } }.getOrDefault(false)
+
+    override fun openSong(app: String, link: String): Boolean = runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(app).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    }.getOrDefault(false)
+
+    // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
+    override fun comesBack() {
+        runCatching { context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
+    }
 
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
