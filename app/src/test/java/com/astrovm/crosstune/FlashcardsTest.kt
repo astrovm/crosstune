@@ -352,7 +352,7 @@ class FlashcardsTest {
     fun youTubeMusicIsAskedForTheSongByItsLinkThereAndOtherAppsByName() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         saved(
-            // Kept before the app it was in was, so the last one that played is asked: here YouTube Music.
+            // Kept before the app it was in was, so YouTube Music, which has it, is asked.
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""",
             """{"text":"Two","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
             """{"text":"Three","title":"Gone","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
@@ -388,6 +388,28 @@ class FlashcardsTest {
         waitUntil { phone.songsAsked.size == 4 }
         assertEquals(listOf("Gone", "Elsewhere"), phone.songsAsked.drop(2).map { it.first.title })
         assertEquals(listOf(null, null), phone.linksAsked.drop(2))
+    }
+
+    @Test
+    fun aSongKeptFromNoAppInParticularIsAskedOfYouTubeMusicWhenItHasIt() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved("""{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""")
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com" && "Other" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Other"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"other000000"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
+        // YouTube Music is stopped, and a video plays in YouTube, which wouldn't play the song if asked.
+        phone.running = setOf(youTubeMusic, "com.google.android.youtube")
+        launch()
+        practiseAll(1)
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("Other", "Band") to youTubeMusic, phone.songsAsked.single())
+        assertEquals("https://music.youtube.com/watch?v=other000000", phone.linksAsked.single())
+        appHas("Other", atMs = 0, app = youTubeMusic)
+        waitUntil { practice().sound == LineSound.PLAYED }
     }
 
     @Test
