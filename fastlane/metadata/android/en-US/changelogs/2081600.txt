@@ -1,1 +1,3 @@
 A YouTube video you copy only fills in Crosstune when it's music, not a vlog or a tutorial.
+Cards now follow their song: when its words or translation change, the cards change with them, practised as far as they were.
+The Practice button on the main screen is now just its icon, and Choose lines only shows once a song has lines kept.

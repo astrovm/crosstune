@@ -2205,13 +2205,13 @@ class ListeningTest {
         click(string(R.string.practice_song))
         // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
         waitForDescription(string(R.string.practice_progress, 0, 2))
-        assertFalse(shown("Cielo nocturno") || shown(string(R.string.practice_good)))
+        assertFalse(shown("[Night sky]") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
         controllerModel().gradePractice(Grade.GOOD)
         assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
         // Tapped, the card turns.
         composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
-        waitForText("Cielo nocturno")
+        waitForText("[Night sky]")
         assertFalse(shown(string(R.string.practice_show)))
         val before = System.currentTimeMillis()
         click(string(R.string.practice_good))
@@ -2220,13 +2220,52 @@ class ListeningTest {
         assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
         // Known once before, it asks the same, and known again, it's back later.
         waitForDescription(string(R.string.practice_progress, 1, 2))
-        assertTrue(shown("Stars") && !shown("Estrellas"))
+        assertTrue(shown("Stars") && !shown("[Stars]"))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
         assertEquals(2, again.box)
         assertTrue(again.due >= before + 3 * DAY_MS)
         waitForText(string(R.string.practice_done, 2))
+    }
+
+    @Test
+    fun linesKeptFollowTheSongsWordsWhenTheyChangeAndAreTranslatedAsTheyAreNow() {
+        // Kept from the words as another site wrote them, and translated then.
+        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5,"explanation":"Looking up."},""" +
+            """{"text":"Stars shine bright","title":"Demo","artist":"Band","box":1},""" +
+            """{"text":"Moonlight","translation":"Luz de luna","title":"Demo","artist":"Band","box":3,"byHand":true},""" +
+            """{"text":"sky","line":"Night  Sky!","translation":"cielo","title":"Demo","artist":"Band"},""" +
+            """{"text":"Rain on the roof","translation":"Lluvia","title":"Demo","artist":"Band"},""" +
+            """{"text":"Night sky","translation":"Noche","title":"Other","artist":"Band"}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", true).commit()
+        wordsOf(null, "Night sky\nStars shine so bright\nMoonlight")
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().any { it.translation == "[Night sky]" } }
+        val kept = SavedLinesStore(prefs()).load()
+        // Each the line it is now, practised as far as it was, translated as the song is now.
+        assertEquals(listOf("Night sky", "Stars shine so bright", "Moonlight", "sky", "Rain on the roof", "Night sky"), kept.map { it.text })
+        assertEquals(listOf(2, 1, 3), kept.take(3).map { it.box })
+        assertEquals(5L, kept[0].due)
+        assertEquals("Looking up.", kept[0].explanation)
+        assertEquals(listOf("[Night sky]", "[Stars shine so bright]", "[Moonlight]"), kept.take(3).map { it.translation })
+        // A word stays with its line, with its own meaning.
+        assertEquals("Night sky", kept[3].line)
+        assertEquals("cielo", kept[3].translation)
+        // A line no longer sung, and another song's, are left as they were.
+        assertEquals("Lluvia", kept[4].translation)
+        assertEquals("Noche", kept[5].translation)
+    }
+
+    @Test
+    fun aTimedLineKeptInRomajiFollowsItOnceWrittenInJapanese() {
+        prefs().edit().putString("saved_lines", """[{"text":"hoshi ga hikaru","title":"Demo","artist":"Band","box":2,"start":1000,"end":30000}]""").commit()
+        val openAi = signedInWithChatGpt()
+        wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "星が光る" }
+        val kept = SavedLinesStore(prefs()).load().single()
+        assertEquals(2, kept.box)
+        assertEquals(1000L, kept.startMs)
+        assertEquals(30000L, kept.endMs)
     }
 
     @Test
@@ -2238,7 +2277,8 @@ class ListeningTest {
         studyMenu()
         click(string(R.string.practice_song))
         click(string(R.string.practice_show))
-        waitForText("Cielo nocturno")
+        // The meaning the song has now, not the one it had when kept.
+        waitForText("[Night sky]")
         // Missed, it's back in ten minutes, and once more before the session's done.
         click(string(R.string.practice_again))
         assertEquals(0, SavedLinesStore(prefs()).load().single().box)
@@ -2738,7 +2778,7 @@ class ListeningTest {
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("cielo") }
         studyMenu()
-        click(string(R.string.choose_lines))
+        click(string(R.string.practice_song))
         assertTrue(described(string(R.string.learn_song_new_words)))
     }
 

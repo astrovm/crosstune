@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.offset
@@ -1951,18 +1952,14 @@ private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: Screen
     )
 }
 
-/** Practice, in words, with how many saved lines are due when any are. */
+/** Practice, by its icon, with how many saved lines are due when any are. */
 @Composable
 private fun PracticeButton(due: Int, onClick: () -> Unit) {
     val label = stringResource(R.string.saved_practice)
     val description = if (due > 0) "$label, ${stringResource(R.string.practice_due, due)}" else label
-    FilledTonalButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(start = 12.dp, end = 10.dp),
-        modifier = Modifier.padding(end = 4.dp).semantics { contentDescription = description }
-    ) {
-        AppIcon(R.drawable.ic_school, contentDescription = null, modifier = Modifier.size(18.dp))
-        Text(label, modifier = Modifier.padding(start = 6.dp, end = 6.dp))
-        if (due > 0) Badge { Text(due.toString()) }
+    IconButton(onClick = onClick, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description }) {
+        BadgedBox(badge = { if (due > 0) Badge { Text(due.toString(), modifier = Modifier.clearAndSetSemantics { }) } }) {
+            AppIcon(R.drawable.ic_school, contentDescription = null)
+        }
     }
 }
