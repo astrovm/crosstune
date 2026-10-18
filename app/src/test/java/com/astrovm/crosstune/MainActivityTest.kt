@@ -1943,7 +1943,7 @@ class MainActivityTest {
     fun aSharedLinkLeavesThePracticeList() {
         prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band"}]""").commit()
         launch()
-        click(string(R.string.saved_practice))
+        click("${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}")
         assertTextShown(string(R.string.practice_all_songs))
 
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)

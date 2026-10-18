@@ -1532,6 +1532,7 @@ internal class MainViewModel(
                             lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false
                         )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.scriptOf(wordLines())))
+                        followSavedLines(song)
                         timeSavedLines(song)
                         learn()
                         chords()
@@ -1561,6 +1562,7 @@ internal class MainViewModel(
         if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty()) return
         foundLines = better.lines
         uiState = uiState.copy(lyricLines = better.lines)
+        followSavedLines(song)
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
@@ -1967,6 +1969,7 @@ internal class MainViewModel(
                 learning = uiState.learning.fresh(Readings.scriptOf(written)).copy(fromRomaji = true),
                 chords = uiState.chords.fresh()
             )
+            followSavedLines(song)
             learn()
             chords()
         }
@@ -2094,6 +2097,42 @@ internal class MainViewModel(
         val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
             .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
         if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
+    }
+
+    /**
+     * Lines of [song] kept from its words as they were, before they changed, e.g. found again on another
+     * site, are kept as the lines they are now, practised as far as they had been: read and translated as
+     * these are, and where these are sung. One kept already as it is now is left as it was.
+     */
+    private fun followSavedLines(song: MusicMetadata) {
+        val lines = wordLines()
+        val times = uiState.lyricLines.takeIf { it.isNotEmpty() }?.map { it.timeMs }
+        val kept = uiState.savedLines.filter { it.isOf(song) }
+        val taken = kept.filter { it.line == null }.mapTo(mutableSetOf()) { it.text }
+        val changes = kept.mapNotNull { saved ->
+            val was = saved.line ?: saved.text
+            if (was in lines) return@mapNotNull null
+            val index = lineNow(was, saved.startMs, lines, times).takeIf { it >= 0 } ?: return@mapNotNull null
+            val now = lines[index]
+            // A word kept stays with its line, while it's still sung in it.
+            if (saved.line != null) return@mapNotNull (saved to saved.copy(line = now)).takeIf { saved.text in now }
+            if (!taken.add(now)) return@mapNotNull null
+            val read = savedLineAt(index) ?: return@mapNotNull null
+            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, translation = read.translation ?: saved.translation)
+            saved to if (times != null) moved.timedAt(index) else moved
+        }
+        if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+    }
+
+    /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */
+    private fun retranslateSavedLines(song: MusicMetadata) {
+        val lines = wordLines()
+        val translations = uiState.learning.translations
+        val changes = uiState.savedLines.filter { it.isOf(song) && it.line == null }.mapNotNull { saved ->
+            val now = translations.getOrNull(lines.indexOf(saved.text))?.takeIf { it != saved.translation } ?: return@mapNotNull null
+            saved to saved.copy(translation = now)
+        }
+        if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
     }
 
     /**
@@ -2600,6 +2639,7 @@ internal class MainViewModel(
                         translations = translated.orEmpty(), translating = false, translationFailed = translated == null
                     )
                 )
+                uiState.lyricsFor?.let(::retranslateSavedLines)
             }
         }
     }

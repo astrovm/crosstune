@@ -518,7 +518,9 @@ class FlashcardsTest {
         saved("""{"text":"Elsewhere","translation":"Otro lado","title":"Other","artist":"Band"}""")
         wordsOfDemo()
         click(string(R.string.lyrics_study))
-        click(string(R.string.choose_lines))
+        // With none of its lines kept, there's only practising it, which has them chosen first.
+        assertFalse(shown(string(R.string.choose_lines)))
+        click(string(R.string.practice_song))
         // Each line once, how often it's sung said; with none kept yet, all but sounds are checked.
         assertTrue(described(string(R.string.learn_song_times, 2)))
         line("Night sky").assertIsOn()
@@ -526,23 +528,19 @@ class FlashcardsTest {
         // Each a whole finger tall.
         val tall = 48 * app.resources.displayMetrics.density
         assertTrue(composeRule.onAllNodes(isToggleable()).fetchSemanticsNodes().all { it.size.height >= tall })
-        click(string(R.string.save_button))
-        // Saved, not practised yet.
-        assertNull(model().uiState.practice)
+        click(string(R.string.saved_practice))
         assertEquals(listOf("Night sky", "Stars", "Moon"), SavedLinesStore(prefs()).load().filter { it.title == "Demo" }.map { it.text })
         assertEquals(0L to 10_000L, savedLine("Night sky").startMs to savedLine("Night sky").endMs)
         // The last line has no next one to end at, so it's given a few seconds.
         assertEquals(40_000L to 46_000L, savedLine("Moon").startMs to savedLine("Moon").endMs)
-        // The menu says how many are kept; practised, it's them on their own, without other songs' lines.
-        click(string(R.string.lyrics_study))
-        assertTrue(shown("3"))
-        click(string(R.string.practice_song))
+        // Practised, it's them on their own, without other songs' lines.
         waitUntil { model().uiState.practice != null }
         assertEquals(listOf("Night sky", "Stars", "Moon"), practice().queue.map { it.text })
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
-        // Chosen again, the kept ones are checked: one more picked, one let go.
+        // Chosen again, the kept ones are checked: one more picked, one let go. The menu says how many are kept.
         click(string(R.string.lyrics_study))
+        assertTrue(shown("3"))
         click(string(R.string.choose_lines))
         line("Stars").assertIsOn()
         // Nothing changed, there's nothing to save.
@@ -709,8 +707,9 @@ class FlashcardsTest {
         val later = System.currentTimeMillis() + 86_400_000L
         saved("""{"text":"Moon","translation":"Luna","title":"Demo","artist":"Band","due":$later}""")
         launch()
-        // Nothing due, so no count.
+        // Nothing due, so no count; just its icon, with no words beside it.
         assertFalse(described(practiceDue(1)))
+        assertFalse(shown(string(R.string.saved_practice)))
         click(string(R.string.saved_practice))
         assertTrue(shown(string(R.string.practice_all_songs)) && shown("Demo"))
         // Back, it's the main screen.

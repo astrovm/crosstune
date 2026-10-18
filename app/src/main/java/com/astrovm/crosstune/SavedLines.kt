@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.abs
 
 /** A line kept to study later, with what helped read it then, and the song it's from. */
 internal data class SavedLine(
@@ -133,6 +134,10 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     /** Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised. */
     fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = save(load().map { if (it.isSame(line) && (again || !it.timed)) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it })
 
+    /** Keeps each line kept as the first of [changes] as the second, practised as far as it had been. */
+    fun replaceAll(changes: List<Pair<SavedLine, SavedLine>>): List<SavedLine> =
+        save(load().map { kept -> changes.firstOrNull { it.first.isSame(kept) }?.second ?: kept })
+
     /** Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand. */
     fun reread(lines: List<SavedLine>): List<SavedLine> = save(
         load().map { kept ->
@@ -208,6 +213,49 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         }
     }
 }
+
+/**
+ * Where a line kept from a song's words, [kept], is in its words now, [lines], once they've changed,
+ * e.g. found again on another site, or written in Japanese from romaji: the same words but for their
+ * spacing, punctuation, case or kanji; else, when kept sung at [keptAtMs] and the words are timed,
+ * [timesMs], the one line sung then; else words much the same, clearly more than any other line's.
+ * -1 when none is clearly it.
+ */
+internal fun lineNow(kept: String, keptAtMs: Long?, lines: List<String>, timesMs: List<Long>?): Int {
+    val words = plainWords(kept).ifEmpty { return -1 }
+    val plain = lines.map(::plainWords)
+    plain.indexOf(words).takeIf { it >= 0 }?.let { return it }
+    if (keptAtMs != null && timesMs != null) {
+        timesMs.indices.filter { plain[it].isNotEmpty() && abs(timesMs[it] - keptAtMs) <= SAME_MOMENT_MS }.singleOrNull()?.let { return it }
+    }
+    val likeness = plain.map { likeness(words, it) }
+    val best = likeness.indices.maxByOrNull { likeness[it] } ?: return -1
+    return best.takeIf { likeness[it] >= MUCH_THE_SAME && likeness.count { like -> like == likeness[it] } == 1 } ?: -1
+}
+
+/** A line's words alone, as Japan writes them, in lower case, without spaces or punctuation. */
+private fun plainWords(line: String) = Readings.inJapansKanji(line).lowercase().filter(Char::isLetterOrDigit)
+
+/** How alike [one] and [other] are, from 0 to 1, by the pairs of letters they share. */
+private fun likeness(one: String, other: String): Double {
+    if (one.length < 2 || other.length < 2) return if (one == other) 1.0 else 0.0
+    val left = other.windowed(2).groupingBy { it }.eachCount().toMutableMap()
+    var shared = 0
+    one.windowed(2).forEach { pair ->
+        val count = left[pair] ?: 0
+        if (count > 0) {
+            shared++
+            left[pair] = count - 1
+        }
+    }
+    return 2.0 * shared / (one.length - 1 + other.length - 1)
+}
+
+/** How close in time a line sung is to the one kept, to be the same line written otherwise. */
+private const val SAME_MOMENT_MS = 500L
+
+/** How alike a line's words are to a kept line's to be that line, changed a little. */
+private const val MUCH_THE_SAME = 0.7
 
 /** How many days a line known waits before it's practised again, the more times it's known in a row. */
 private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L, 75L, 150L)

@@ -662,21 +662,26 @@ private fun ReadingSize(scale: Float, actions: ScreenActions) {
     }
 }
 
-/** The song's lines, to choose which to learn, with how many are kept, and the song to practise, with how many are due. */
+/**
+ * The song's lines, to choose which to learn, with how many are kept, once any are, and the song to
+ * practise, with how many are due; with none kept, practising it chooses them first.
+ */
 @Composable
 private fun StudyMenu(open: Boolean, state: UiState, onPractise: () -> Unit, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
         val song = state.lyricsFor
         val here = if (song == null) emptyList() else state.savedLines.filter { it.isOf(song) }
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.choose_lines)) },
-            leadingIcon = { AppIcon(R.drawable.ic_playlist_add, contentDescription = null) },
-            trailingIcon = { if (here.isNotEmpty()) Text(here.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            onClick = {
-                onClose()
-                onChooseLines(false)
-            }
-        )
+        if (here.isNotEmpty()) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.choose_lines)) },
+                leadingIcon = { AppIcon(R.drawable.ic_playlist_add, contentDescription = null) },
+                trailingIcon = { Text(here.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onClick = {
+                    onClose()
+                    onChooseLines(false)
+                }
+            )
+        }
         // Only lines with their meaning, or that can be heard, can be practised; with none, they're chosen first.
         val practisable = here.filter { it.practisable }
         val due = practisable.count { it.due <= System.currentTimeMillis() }
