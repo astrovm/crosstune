@@ -75,16 +75,13 @@ internal class ExactMatcher(
         try {
             val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
             val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
-            val type = musicVideoTypeRegex.find(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body).toString())?.groupValues?.get(1)
-            type?.let { it in MUSIC_VIDEO_TYPES }
+            musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES }
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {
             null
         }
     }
-
-    private val musicVideoTypeRegex = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
 
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? = (lookFor(target, metadata) as? Match.Found)?.url
 
@@ -449,8 +446,11 @@ internal class ExactMatcher(
 
     private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
 
-    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(Regex("<[^>]+>"), " "), android.text.Html.FROM_HTML_MODE_LEGACY)
-        .toString().replace(Regex("\\s+"), " ").trim()
+    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
+        .toString().replace(spacesRegex, " ").trim()
+
+    private val tagRegex = Regex("<[^>]+>")
+    private val spacesRegex = Regex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
     private fun sameArtist(metadata: MusicMetadata, name: String): Boolean {
@@ -752,8 +752,7 @@ internal class ExactMatcher(
         return VERSION_MARKS.any { it in letters && it !in titleLetters }
     }
 
-    private fun JSONObject.text(): String =
-        optJSONObject("text")?.optJSONArray("runs")?.objects()?.joinToString("") { it.optString("text") }.orEmpty()
+    private fun JSONObject.text(): String = optJSONObject("text").runsText()
 
     /** The result rows, which sit at varying depths in the response depending on how it is sectioned. */
     private fun Any?.listItems(): List<JSONObject> = when (this) {
@@ -773,8 +772,6 @@ internal class ExactMatcher(
             JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
         }
     }
-
-    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 
     /**
      * Requires the same name and at least one artist in common, so remixes, covers and deluxe

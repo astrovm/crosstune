@@ -85,9 +85,11 @@ internal object MetadataParsers {
         } else {
             rawTitle
         }
-        val count = Regex("""<meta name="music:song_count" content="(\d+)"""").find(html)?.groupValues?.get(1)?.toIntOrNull()
+        val count = songCountRegex.find(html)?.groupValues?.get(1)?.toIntOrNull()
         return MusicMetadata(title, artist, type, tags.image(), trackCount = count)
     }
+
+    private val songCountRegex = Regex("""<meta name="music:song_count" content="(\d+)"""")
 
     private val spotifyStateRegex = Regex("""<script id="initialState" type="text/plain">([^<]*)</script>""")
 
@@ -129,10 +131,10 @@ internal object MetadataParsers {
      */
     fun youtubeMusicVideo(json: JSONObject, id: String): MusicMetadata? {
         val video = findObject(json) { it.optJSONObject("playlistPanelVideoRenderer")?.takeIf { video -> video.optString("videoId") == id } } ?: return null
-        fun text(key: String) = video.optJSONObject(key)?.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.optJSONObject(it)?.optString("text").orEmpty() } }.orEmpty()
+        fun text(key: String) = video.optJSONObject(key).runsText()
         val title = text("title").ifBlank { return null }
         val channel = text("longBylineText").substringBefore(" • ").trim()
-        val type = musicVideoType.find(video.toString())?.groupValues?.get(1)
+        val type = musicVideoTypeIn(video)
         val thumbnails = video.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
         val artwork = thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url")?.ifBlank { null }
         val song = type == "ATV"
@@ -147,19 +149,18 @@ internal object MetadataParsers {
      * and cover, and its songs below; an artist's name.
      */
     fun youtubeMusicPage(json: JSONObject, type: ItemType): MusicMetadata? {
-        fun text(value: JSONObject?) = value?.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.optJSONObject(it)?.optString("text").orEmpty() } }.orEmpty()
         val header = findObject(json) { it.optJSONObject("musicResponsiveHeaderRenderer") ?: it.optJSONObject("musicDetailHeaderRenderer") }
             ?: findObject(json) { it.optJSONObject("musicImmersiveHeaderRenderer") ?: it.optJSONObject("musicVisualHeaderRenderer") }
             ?: return null
-        val title = text(header.optJSONObject("title")).trim().ifEmpty { return null }
+        val title = header.optJSONObject("title").runsText().trim().ifEmpty { return null }
         if (type == ItemType.ARTIST) return MusicMetadata(title, "", ItemType.ARTIST)
-        val artist = text(header.optJSONObject("straplineTextOne")).trim()
+        val artist = header.optJSONObject("straplineTextOne").runsText().trim()
         val thumbnails = findObject(header) { it.optJSONArray("thumbnails")?.let { list -> list.optJSONObject(list.length() - 1) } }
         val songs = mutableListOf<MusicMetadata>()
         fun collect(value: Any?) {
             when (value) {
                 is JSONObject -> value.optJSONObject("musicResponsiveListItemRenderer")?.let { row ->
-                    val name = row.optJSONArray("flexColumns")?.optJSONObject(0)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.let { text(it.optJSONObject("text")) }.orEmpty().trim()
+                    val name = row.optJSONArray("flexColumns")?.optJSONObject(0)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.optJSONObject("text").runsText().trim()
                     if (name.isNotEmpty()) songs += MusicMetadata(name, artist)
                 } ?: value.keys().forEach { collect(value.opt(it)) }
                 is JSONArray -> (0 until value.length()).forEach { collect(value.opt(it)) }
@@ -168,8 +169,6 @@ internal object MetadataParsers {
         collect(json)
         return MusicMetadata(title, artist, ItemType.ALBUM, thumbnails?.optString("url")?.ifBlank { null }, songs)
     }
-
-    private val musicVideoType = Regex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
 
     /** The first object anywhere in [value] that [pick] picks. */
     private fun findObject(value: Any?, pick: (JSONObject) -> JSONObject?): JSONObject? = when (value) {
