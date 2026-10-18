@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s всё ещё открывает свои ссылки</string>
     <string name="notice_apps_still_open">%1$s всё ещё открывают свои ссылки</string>
     <string name="fix_button">Исправить</string>
+    <string name="notice_update">Вышел Crosstune %1$s</string>
+    <string name="update_button">Обновить</string>
     <string name="history_cleared">История очищена</string>
     <string name="history_removed">Удалено</string>
     <string name="undo_button">Отменить</string>

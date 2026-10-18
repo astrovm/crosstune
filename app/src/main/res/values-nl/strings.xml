@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s opent zijn eigen links nog</string>
     <string name="notice_apps_still_open">%1$s openen hun eigen links nog</string>
     <string name="fix_button">Oplossen</string>
+    <string name="notice_update">Crosstune %1$s is uit</string>
+    <string name="update_button">Bijwerken</string>
     <string name="history_cleared">Geschiedenis gewist</string>
     <string name="history_removed">Verwijderd</string>
     <string name="undo_button">Ongedaan maken</string>

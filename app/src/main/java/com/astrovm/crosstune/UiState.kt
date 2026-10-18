@@ -124,6 +124,8 @@ internal data class UiState(
     val showLinkSettingsHelper: Boolean = false,
     /** What the main screen's notices were about when the user closed them, by [noticeKeys]. */
     val dismissedNotices: Set<String> = emptySet(),
+    /** A newer Crosstune to update to, for a copy installed from a file. */
+    val update: Update? = null,
     /** The song a music app on the phone plays as Crosstune comes into sight, one tap from showing. */
     val playingNow: MusicMetadata? = null,
     val history: List<HistoryEntry> = emptyList(),

@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s अब भी अपने लिंक खुद खोलता है</string>
     <string name="notice_apps_still_open">%1$s अब भी अपने लिंक खुद खोलते हैं</string>
     <string name="fix_button">ठीक करें</string>
+    <string name="notice_update">Crosstune %1$s आ गया है</string>
+    <string name="update_button">अपडेट करें</string>
     <string name="history_cleared">इतिहास मिटाया गया</string>
     <string name="history_removed">हटाया गया</string>
     <string name="undo_button">वापस लें</string>

@@ -162,6 +162,8 @@
     <string name="notice_app_still_opens">%1$s 仍会打开自己的链接</string>
     <string name="notice_apps_still_open">%1$s 仍会打开自己的链接</string>
     <string name="fix_button">修复</string>
+    <string name="notice_update">Crosstune %1$s 已发布</string>
+    <string name="update_button">更新</string>
     <string name="history_cleared">已清除历史记录</string>
     <string name="history_removed">已移除</string>
     <string name="undo_button">撤销</string>
