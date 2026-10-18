@@ -24,6 +24,8 @@ class SavedLinesFollowTest {
         // One quite unlike any line isn't any of them.
         assertEquals(-1, lineNow("Rain on the roof", null, song, null))
         assertEquals(-1, lineNow("...", null, song, null))
+        // A sound sung over and over shares each pair of letters once, not each time it's sung.
+        assertEquals(-1, lineNow("la la la la", null, listOf("la", "Night sky"), null))
     }
 
     @Test
