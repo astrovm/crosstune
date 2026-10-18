@@ -29,6 +29,10 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.draw.drawWithCache
+import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
@@ -1461,35 +1465,60 @@ internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
 /**
  * A line with each piece's reading over it, in small type, the way furigana sit over kanji. The
  * line is laid out once, as a whole, rather than a piece at a time, so a screen of them shows at
- * once, and each reading is drawn over where its piece landed.
+ * once, and each reading is drawn over where its piece landed. Its rows are moved apart to make
+ * room for the readings, only over those that have some.
  */
 @Composable
 internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READING_SCALE) {
     val over = readingStyle(style, scale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val text = remember(parts, scale) { rubyText(parts, scale) }
     val measurer = rememberTextMeasurer()
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val room = with(LocalDensity.current) { over.lineHeight.toPx() }
+    var words by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val shifts = words?.let { rowShifts(parts, it, room) }
     Text(
         text,
-        // Room over each row of the words for the readings on it.
-        style = style.copy(lineHeight = (style.lineHeight.value + over.lineHeight.value).sp, lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Bottom, LineHeightStyle.Trim.None)),
+        style = style,
         color = MaterialTheme.colorScheme.onSurface,
-        onTextLayout = { layout = it },
+        onTextLayout = { words = it },
         modifier = Modifier
             .fillMaxWidth()
             .semantics { this[ReadingsShown] = parts.mapNotNull { it.reading } }
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height + (shifts?.lastOrNull() ?: room).roundToInt()) { placeable.place(0, 0) }
+            }
             .drawWithCache {
-                val places = layout?.let { readingPlaces(parts, it) }.orEmpty()
+                val laidOut = words
+                val places = laidOut?.let { readingPlaces(parts, it) }.orEmpty()
                 val labels = places.map { measurer.measure(it.reading, over) }
-                onDrawBehind {
+                onDrawWithContent {
+                    if (laidOut == null || shifts == null || shifts.size != laidOut.lineCount) return@onDrawWithContent drawContent()
+                    // Each row of the words where it's moved to, under its readings.
+                    for (row in 0 until laidOut.lineCount) {
+                        translate(top = shifts[row]) { clipRect(top = laidOut.getLineTop(row), bottom = laidOut.getLineBottom(row)) { this@onDrawWithContent.drawContent() } }
+                    }
                     places.forEachIndexed { index, place ->
                         val width = labels[index].size.width.toFloat()
                         val x = (place.center - width / 2).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
-                        drawText(labels[index], topLeft = Offset(x, place.top))
+                        drawText(labels[index], topLeft = Offset(x, place.top + shifts[place.row] - room))
                     }
                 }
             }
     )
+}
+
+/**
+ * How far down each row of [words] is moved, [room] over each for its readings: always over the
+ * first, so a line stays where it is as its readings come; over any other only when it has some.
+ */
+internal fun rowShifts(parts: List<Ruby>, words: TextLayoutResult, room: Float): List<Float> {
+    val read = readingPlaces(parts, words).mapTo(mutableSetOf()) { it.row }
+    var shift = 0f
+    return List(words.lineCount) { row ->
+        if (row == 0 || row in read) shift += room
+        shift
+    }
 }
 
 /**
@@ -1514,8 +1543,8 @@ internal fun rubyText(parts: List<Ruby>, scale: Float = READING_SCALE): Annotate
     }
 }
 
-/** A [reading] to draw centred on [center], at [top], the top of its piece's row. */
-internal data class ReadingPlace(val reading: String, val center: Float, val top: Float)
+/** A [reading] to draw centred on [center], at [top], the top of its piece's [row]. */
+internal data class ReadingPlace(val reading: String, val center: Float, val top: Float, val row: Int = 0)
 
 /** Where each reading goes over [words]: over its piece, or over what of it fits on the row it starts on. */
 internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<ReadingPlace> {
@@ -1529,7 +1558,7 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
         val row = words.getLineForOffset(from)
         val left = words.getBoundingBox(from).left
         val right = if (words.getLineForOffset(start - 1) == row) words.getBoundingBox(start - 1).right else words.getLineRight(row)
-        ReadingPlace(reading, (left + right) / 2, words.getLineTop(row))
+        ReadingPlace(reading, (left + right) / 2, words.getLineTop(row), row)
     }
 }
 
