@@ -1,1 +1,2 @@
-Behind-the-scenes upkeep.
+Timed lyrics for more Japanese songs, in Japanese rather than romaji, so they follow the song and their lines can be practiced with their sound.
+Songs with plain lyrics now show the music app playing them, to pause it from the lyrics.
