@@ -1712,10 +1712,10 @@ internal class MainViewModel(
     /**
      * Follows [song] as it plays, for its timed words: in the music app playing it, or else from
      * where Crosstune heard it, which can't tell a pause or a skip but is close while it plays on.
+     * Words that aren't timed still follow the app, to play and pause it from them.
      */
     private fun follow(song: MusicMetadata) {
         stopFollowing()
-        if (uiState.lyricLines.isEmpty()) return
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {

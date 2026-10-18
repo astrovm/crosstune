@@ -1371,6 +1371,28 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsThatArentTimedStillFollowTheAppPlayingThem() {
+        val phone = FakePlayback().apply {
+            access = true
+            playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Plain", 2.0) } }
+        fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Plain","artistName":"Band","plainLyrics":"Just words"}]""") }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Plain")
+        click(string(R.string.lyrics_button))
+        waitForText("Just words")
+        // The app playing them shows, to pause it from the words; with no times, there's nothing to put in time.
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_following_app, "Music")) }
+        assertFalse(described(string(R.string.lyrics_sync)))
+        click(string(R.string.lyrics_following_app, "Music"))
+        waitUntil(TIMEOUT_MS) { phone.plays.lastOrNull() == false }
+    }
+
+    @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun floatingOnToASongWithoutTimedWordsShowsTheSongWhole() {
         val title = "A Song With A Name Long Enough To Need Several Lines Of The Floating Window To Be Read Whole"
