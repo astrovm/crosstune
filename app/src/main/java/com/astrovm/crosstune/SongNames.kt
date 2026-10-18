@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.icu.text.Transliterator
 import android.os.Build
+import androidx.annotation.RequiresApi
 import java.text.Normalizer
 import java.util.Locale
 
@@ -113,17 +114,21 @@ internal object SongNames {
         normalize(withoutEditionTag(one)) == normalize(withoutEditionTag(other))
 
     /**
-     * Android's way of writing kanji as China does, 终 for 終 and 仆 for 僕, from Android 10; null
-     * before, or where it hasn't one. Kanji Japan simplified its own way, 楽 for 樂, it leaves.
+     * [name] with its kanji written as China writes them, so a name NetEase writes so reads as the
+     * same; as it is before Android 10, which can't.
      */
-    private val chinasKanji: Transliterator? by lazy {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) null else runCatching { Transliterator.getInstance("Hant-Hans") }.getOrNull()
-    }
+    fun asChinaWrites(name: String): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && name.any(Readings::isHan)) ChinasKanji.write(name) else name
 
-    /** [name] with its kanji written as China writes them, so a name NetEase writes so reads as the same. */
-    fun asChinaWrites(name: String): String {
-        val kanji = chinasKanji?.takeIf { name.any(Readings::isHan) } ?: return name
-        return synchronized(kanji) { kanji.transliterate(name) }
+    /**
+     * Android's way of writing kanji as China does, 终 for 終 and 仆 for 僕, where it has one.
+     * Kanji Japan simplified its own way, 楽 for 樂, it leaves.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private object ChinasKanji {
+        private val kanji: Transliterator? = runCatching { Transliterator.getInstance("Hant-Hans") }.getOrNull()
+
+        fun write(name: String): String = kanji?.let { synchronized(it) { it.transliterate(name) } } ?: name
     }
 
     /**
