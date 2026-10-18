@@ -2232,28 +2232,34 @@ class ListeningTest {
     @Test
     fun linesKeptFollowTheSongsWordsWhenTheyChangeAndAreTranslatedAsTheyAreNow() {
         // Kept from the words as another site wrote them, and translated then.
-        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5,"explanation":"Looking up."},""" +
+        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5,"explanation":"Looking up.","start":500,"end":4000},""" +
             """{"text":"Stars shine bright","title":"Demo","artist":"Band","box":1},""" +
+            """{"text":"Stars shine so  bright","title":"Demo","artist":"Band"},""" +
             """{"text":"Moonlight","translation":"Luz de luna","title":"Demo","artist":"Band","box":3,"byHand":true},""" +
             """{"text":"sky","line":"Night  Sky!","translation":"cielo","title":"Demo","artist":"Band"},""" +
+            """{"text":"shines","line":"Stars shines bright","translation":"brilla","title":"Demo","artist":"Band"},""" +
             """{"text":"Rain on the roof","translation":"Lluvia","title":"Demo","artist":"Band"},""" +
             """{"text":"Night sky","translation":"Noche","title":"Other","artist":"Band"}]"""
         prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", true).commit()
-        wordsOf(null, "Night sky\nStars shine so bright\nMoonlight")
+        wordsOf("[00:01.00] Night sky\\n[00:05.00] Stars shine so bright\\n[00:09.00] Moonlight", "Night sky\\nStars shine so bright\\nMoonlight")
         waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().any { it.translation == "[Night sky]" } }
         val kept = SavedLinesStore(prefs()).load()
-        // Each the line it is now, practised as far as it was, translated as the song is now.
-        assertEquals(listOf("Night sky", "Stars shine so bright", "Moonlight", "sky", "Rain on the roof", "Night sky"), kept.map { it.text })
-        assertEquals(listOf(2, 1, 3), kept.take(3).map { it.box })
+        // Each the line it is now, practised as far as it was, translated and timed as the song is now.
+        assertEquals(listOf("Night sky", "Stars shine so bright", "Stars shine so  bright", "Moonlight", "sky", "shines", "Rain on the roof", "Night sky"), kept.map { it.text })
+        assertEquals(listOf(2, 1), kept.take(2).map { it.box })
+        assertEquals(3, kept[3].box)
         assertEquals(5L, kept[0].due)
         assertEquals("Looking up.", kept[0].explanation)
-        assertEquals(listOf("[Night sky]", "[Stars shine so bright]", "[Moonlight]"), kept.take(3).map { it.translation })
-        // A word stays with its line, with its own meaning.
-        assertEquals("Night sky", kept[3].line)
-        assertEquals("cielo", kept[3].translation)
-        // A line no longer sung, and another song's, are left as they were.
-        assertEquals("Lluvia", kept[4].translation)
-        assertEquals("Noche", kept[5].translation)
+        assertEquals(1_000L to 5_000L, kept[0].startMs to kept[0].endMs)
+        assertEquals(listOf("[Night sky]", "[Stars shine so bright]"), kept.take(2).map { it.translation })
+        assertEquals("[Moonlight]", kept[3].translation)
+        // A word stays with its line, with its own meaning, while it's still sung in it.
+        assertEquals("Night sky", kept[4].line)
+        assertEquals("cielo", kept[4].translation)
+        assertEquals("Stars shines bright", kept[5].line)
+        // A line no longer sung, and another song's, are left as they were; so is one whose line is kept already.
+        assertEquals("Lluvia", kept[6].translation)
+        assertEquals("Noche", kept[7].translation)
     }
 
     @Test
