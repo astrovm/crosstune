@@ -65,7 +65,7 @@
   ],
   "play_note": "Crosstune jest testowany w Google Play. Może pojawić się dopiero po kilku minutach.",
   "works_with": "Działa z",
-  "made_with": "Stworzone z {heart} przez astro",
+  "made_with": "Stworzone z {heart} przez {astro}",
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",

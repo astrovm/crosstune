@@ -65,7 +65,7 @@
   ],
   "play_note": "Crosstune, Google Play'de test aşamasında. Görünmesi birkaç dakika sürebilir.",
   "works_with": "Uyumlu servisler",
-  "made_with": "astro tarafından {heart} ile yapıldı",
+  "made_with": "{astro} tarafından {heart} ile yapıldı",
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
