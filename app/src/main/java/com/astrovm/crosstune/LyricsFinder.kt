@@ -456,10 +456,14 @@ internal class LyricsFinder(
             val id = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.firstOrNull { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
                 // An artist only written in another script there, say パイパー for Piper, counts when
-                // the recording lasts as long as the store's.
-                val sameLength = lengthMs != null && abs(song.optLong("duration") - lengthMs) <= SAME_RECORDING_LENGTH_MS
-                // Its album may say what version it is, "Song" on "… Remix".
-                SongNames.sameVersion(metadata.title, song.optString("name"), song.optJSONObject("album")?.optString("name").orEmpty()) &&
+                // the recording lasts as long as the store's, or the music app's.
+                val length = lengthMs ?: metadata.lengthMs
+                val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
+                val name = song.optString("name")
+                // Its album may say what version it is, "Song" on "… Remix". A Japanese title written
+                // with China's kanji, as NetEase writes many, counts when the recording lasts as long.
+                (SongNames.sameVersion(metadata.title, name, song.optJSONObject("album")?.optString("name").orEmpty()) ||
+                    (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
                         listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
                     }
@@ -687,8 +691,8 @@ internal class LyricsFinder(
         const val APP_CLIENT = "ANDROID_MUSIC"
         const val APP_CLIENT_VERSION = "7.21.50"
 
-        /** Bumped when words kept from before should be looked up again: 6 for words without NetEase's closing credits. */
-        const val CACHE_VERSION = 6
+        /** Bumped when words kept from before should be looked up again: 7 for Japanese songs NetEase writes with China's kanji. */
+        const val CACHE_VERSION = 7
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

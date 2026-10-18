@@ -111,6 +111,19 @@ internal object SongNames {
         normalize(withoutEditionTag(one)) == normalize(withoutEditionTag(other))
 
     /**
+     * [one] and [other] are one name but for some kanji, as NetEase writes Japanese titles with
+     * China's characters, "终わらない歌" for "終わらない歌": each kanji where the other has one,
+     * and most of the name the same.
+     */
+    fun sameButKanji(one: String, other: String): Boolean {
+        val first = normalize(withoutEditionTag(one))
+        val second = normalize(withoutEditionTag(other))
+        if (first.length != second.length) return false
+        val differ = first.indices.filter { first[it] != second[it] }
+        return differ.all { Readings.isHan(first[it]) && Readings.isHan(second[it]) } && differ.size * 2 < first.length
+    }
+
+    /**
      * [candidate] is the recording [title] names, also when it says what version that is other
      * than in its name: "Song (Remix)" is "Song (2022 Remix)", or "Song" on the album "NEVER
      * ENDING SUMMER REMIX". The original "Song", on an album that doesn't say so, is another.
