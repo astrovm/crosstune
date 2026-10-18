@@ -673,8 +673,7 @@ class MainActivity : ComponentActivity() {
      * it, so other text isn't read, and Android's "pasted" note only shows for a link.
      */
     private fun pasteFreshCopy() {
-        val state = viewModel.uiState
-        if (!state.setupComplete || state.linkText.isNotBlank() || state.result != null || state.isLoading || state.listening || state.lyricsFor != null) return
+        if (!viewModel.readyForCopy) return
         val description = getSystemService(ClipboardManager::class.java)?.primaryClipDescription ?: return
         val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
         val copiedAt = description.timestamp
@@ -685,7 +684,7 @@ class MainActivity : ComponentActivity() {
             description.getConfidenceScore(TextClassifier.TYPE_URL) == 0f
         ) return
         val text = clipboardText() ?: return
-        if (MusicLinks.parse(text) != null) viewModel.pasteLink(text)
+        if (MusicLinks.parse(text) != null) viewModel.pasteCopy(text)
     }
 
     /**
