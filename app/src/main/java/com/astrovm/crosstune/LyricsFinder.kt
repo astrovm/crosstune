@@ -460,9 +460,12 @@ internal class LyricsFinder(
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
                 val name = song.optString("name")
-                // Its album may say what version it is, "Song" on "… Remix". A Japanese title written
-                // with China's kanji, as NetEase writes many, counts when the recording lasts as long.
-                (SongNames.sameVersion(metadata.title, name, song.optJSONObject("album")?.optString("name").orEmpty()) ||
+                val album = song.optJSONObject("album")?.optString("name").orEmpty()
+                // Its album may say what version it is, "Song" on "… Remix". A Japanese title NetEase writes
+                // with China's kanji, as it does many, is the same written so; one with kanji Japan simplified
+                // its own way, 楽 for 乐, counts when the recording lasts as long.
+                (SongNames.sameVersion(metadata.title, name, album) ||
+                    SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
                         listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())

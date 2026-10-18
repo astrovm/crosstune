@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -553,23 +554,37 @@ class LyricsFinderTest {
 
 
     @Test
-    fun aJapaneseTitleNetEaseWritesWithChinasKanjiCountsForARecordingAsLong() {
-        // YouTube Music's "終わらない夢 - Owaranai Yume", 3:20 long; NetEase writes it 终わらない夢.
+    fun aJapaneseTitleNetEaseWritesWithChinasKanjiIsTheSameSong() {
+        // YouTube Music's "終わらない夢 - Owaranai Yume"; NetEase writes it 终わらない夢.
         val song = MusicMetadata("終わらない夢 - Owaranai Yume", "Band", lengthMs = 200_000)
-        fun netEaseHas(lengthMs: Long) = japaneseSong(
+        japaneseSong(
             ownNames = false,
-            netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":$lengthMs}]}}""" },
+            netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":260000}]}}""" },
             lyric = "[00:01.00]终わらない夢を見よう"
         )
-        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS)
         assertEquals("终わらない夢を見よう", words(song))
         assertTrue((found(song) as Lyrics.Found).lines.isNotEmpty())
-        // A recording of another length is another song of that name.
-        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS + 1)
-        assertEquals(Lyrics.None, found(song))
-        // Not knowing how long it is, only its own kanji are.
-        netEaseHas(200_000)
+        // As its own name would, however long, and not knowing how long, as for a song heard or a Spotify link.
+        assertEquals("终わらない夢を見よう", words(song.copy(lengthMs = null)))
+    }
+
+    @Test
+    fun aTitleWithKanjiJapanSimplifiedItsOwnWayOnlyCountsForARecordingAsLong() {
+        // 楽 is how Japan writes 樂, China 乐: no way of writing one as the other, so only a recording as long counts.
+        val song = MusicMetadata("楽しい夢", "Band", lengthMs = 200_000)
+        japaneseSong(
+            ownNames = false,
+            netEase = { """{"result":{"songs":[{"id":3,"name":"乐しい夢","artists":[{"name":"Band"}],"duration":200000}]}}""" },
+            lyric = "[00:01.00]乐しい夢を見よう"
+        )
+        assertEquals("乐しい夢を見よう", words(song))
         assertEquals(Lyrics.None, found(song.copy(lengthMs = null)))
+        // A recording of another length is another song of that name.
+        assertEquals(Lyrics.None, found(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS + 1)))
+        assertEquals("乐しい夢を見よう", words(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS)))
+        // Other kanji, written either way, are another song.
+        assertFalse(SongNames.sameVersion(SongNames.asChinaWrites("東京物語"), SongNames.asChinaWrites("南京故事")))
+        assertEquals("Song", SongNames.asChinaWrites("Song"))
     }
 
     @Test
