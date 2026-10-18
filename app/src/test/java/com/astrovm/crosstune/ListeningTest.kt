@@ -2233,7 +2233,7 @@ class ListeningTest {
     fun linesKeptFollowTheSongsWordsWhenTheyChangeAndAreTranslatedAsTheyAreNow() {
         // Kept from the words as another site wrote them, and translated then.
         val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5,"explanation":"Looking up.","start":500,"end":4000},""" +
-            """{"text":"Stars shine bright","title":"Demo","artist":"Band","box":1},""" +
+            """{"text":"Stars shine bright","title":"Demo","artist":"Band","box":1,"byHand":true},""" +
             """{"text":"Stars shine so  bright","title":"Demo","artist":"Band"},""" +
             """{"text":"Moonlight","translation":"Luz de luna","title":"Demo","artist":"Band","box":3,"byHand":true},""" +
             """{"text":"sky","line":"Night  Sky!","translation":"cielo","title":"Demo","artist":"Band"},""" +
@@ -2251,6 +2251,8 @@ class ListeningTest {
         assertEquals(5L, kept[0].due)
         assertEquals("Looking up.", kept[0].explanation)
         assertEquals(1_000L to 5_000L, kept[0].startMs to kept[0].endMs)
+        // Its reading put right by hand was for words no longer sung.
+        assertFalse(kept[1].readByHand)
         assertEquals(listOf("[Night sky]", "[Stars shine so bright]"), kept.take(2).map { it.translation })
         assertEquals("[Moonlight]", kept[3].translation)
         // A word stays with its line, with its own meaning, while it's still sung in it.
