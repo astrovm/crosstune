@@ -266,13 +266,21 @@ internal class LyricsFinder(
 
     /**
      * Under the title as given, then, for one that's two names joined by a dash, as YouTube Music
-     * gives "ミステリー・ガール - Mystery Girl", under each of them.
+     * gives "ミステリー・ガール - Mystery Girl", under each of them. Words in romaji found under one
+     * give way to the song's own, in Japanese, under another, when they're timed as well.
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
+        var romaji: Lyrics.Found? = null
         val answers = SongNames.titleNames(metadata.title).map { title ->
-            underName(metadata.copy(title = title), timeoutMs).also { if (it is Lyrics.Found) return it }
+            underName(metadata.copy(title = title), timeoutMs).also { answer ->
+                val kept = romaji
+                if (answer is Lyrics.Found) {
+                    if (kept == null && isRomaji(answer.words)) romaji = answer
+                    else if (kept == null || (!isRomaji(answer.words) && timing(answer) >= timing(kept))) return answer
+                }
+            }
         }
-        return if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
+        return romaji ?: if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
     }
 
     /**
@@ -460,9 +468,12 @@ internal class LyricsFinder(
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
                 val name = song.optString("name")
-                // Its album may say what version it is, "Song" on "… Remix". A Japanese title written
-                // with China's kanji, as NetEase writes many, counts when the recording lasts as long.
-                (SongNames.sameVersion(metadata.title, name, song.optJSONObject("album")?.optString("name").orEmpty()) ||
+                val album = song.optJSONObject("album")?.optString("name").orEmpty()
+                // Its album may say what version it is, "Song" on "… Remix". A Japanese title NetEase writes
+                // with China's kanji, as it does many, is the same written so; one with kanji Japan simplified
+                // its own way, 楽 for 乐, counts when the recording lasts as long.
+                (SongNames.sameVersion(metadata.title, name, album) ||
+                    SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
                         listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
@@ -691,8 +702,11 @@ internal class LyricsFinder(
         const val APP_CLIENT = "ANDROID_MUSIC"
         const val APP_CLIENT_VERSION = "7.21.50"
 
-        /** Bumped when words kept from before should be looked up again: 7 for Japanese songs NetEase writes with China's kanji. */
-        const val CACHE_VERSION = 7
+        /**
+         * Bumped when words kept from before should be looked up again: 8 for Japanese songs NetEase writes
+         * with China's kanji, and words in romaji found under a song's name in Latin letters.
+         */
+        const val CACHE_VERSION = 8
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

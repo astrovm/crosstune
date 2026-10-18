@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import android.icu.text.Transliterator
+import android.os.Build
+import androidx.annotation.RequiresApi
 import java.text.Normalizer
 import java.util.Locale
 
@@ -109,6 +112,24 @@ internal object SongNames {
     /** The same name, whatever punctuation, spacing, accents or case write it. */
     fun same(one: String, other: String): Boolean =
         normalize(withoutEditionTag(one)) == normalize(withoutEditionTag(other))
+
+    /**
+     * [name] with its kanji written as China writes them, so a name NetEase writes so reads as the
+     * same; as it is before Android 10, which can't.
+     */
+    fun asChinaWrites(name: String): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && name.any(Readings::isHan)) ChinasKanji.write(name) else name
+
+    /**
+     * Android's way of writing kanji as China does, 终 for 終 and 仆 for 僕, where it has one.
+     * Kanji Japan simplified its own way, 楽 for 樂, it leaves.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private object ChinasKanji {
+        private val kanji: Transliterator? = runCatching { Transliterator.getInstance("Hant-Hans") }.getOrNull()
+
+        fun write(name: String): String = kanji?.let { synchronized(it) { it.transliterate(name) } } ?: name
+    }
 
     /**
      * [one] and [other] are one name but for some kanji, as NetEase writes Japanese titles with

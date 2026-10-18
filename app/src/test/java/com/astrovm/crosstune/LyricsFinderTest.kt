@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -553,23 +554,67 @@ class LyricsFinderTest {
 
 
     @Test
-    fun aJapaneseTitleNetEaseWritesWithChinasKanjiCountsForARecordingAsLong() {
-        // YouTube Music's "終わらない夢 - Owaranai Yume", 3:20 long; NetEase writes it 终わらない夢.
+    fun aJapaneseTitleNetEaseWritesWithChinasKanjiIsTheSameSong() {
+        // YouTube Music's "終わらない夢 - Owaranai Yume"; NetEase writes it 终わらない夢.
         val song = MusicMetadata("終わらない夢 - Owaranai Yume", "Band", lengthMs = 200_000)
-        fun netEaseHas(lengthMs: Long) = japaneseSong(
+        japaneseSong(
             ownNames = false,
-            netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":$lengthMs}]}}""" },
+            netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":260000}]}}""" },
             lyric = "[00:01.00]终わらない夢を見よう"
         )
-        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS)
         assertEquals("终わらない夢を見よう", words(song))
         assertTrue((found(song) as Lyrics.Found).lines.isNotEmpty())
-        // A recording of another length is another song of that name.
-        netEaseHas(200_000 + SAME_RECORDING_LENGTH_MS + 1)
-        assertEquals(Lyrics.None, found(song))
-        // Not knowing how long it is, only its own kanji are.
-        netEaseHas(200_000)
+        // As its own name would, however long, and not knowing how long, as for a song heard or a Spotify link.
+        assertEquals("终わらない夢を見よう", words(song.copy(lengthMs = null)))
+    }
+
+    @Test
+    fun aTitleWithKanjiJapanSimplifiedItsOwnWayOnlyCountsForARecordingAsLong() {
+        // 楽 is how Japan writes 樂, China 乐: no way of writing one as the other, so only a recording as long counts.
+        val song = MusicMetadata("楽しい夢", "Band", lengthMs = 200_000)
+        japaneseSong(
+            ownNames = false,
+            netEase = { """{"result":{"songs":[{"id":3,"name":"乐しい夢","artists":[{"name":"Band"}],"duration":200000}]}}""" },
+            lyric = "[00:01.00]乐しい夢を見よう"
+        )
+        assertEquals("乐しい夢を見よう", words(song))
         assertEquals(Lyrics.None, found(song.copy(lengthMs = null)))
+        // A recording of another length is another song of that name.
+        assertEquals(Lyrics.None, found(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS + 1)))
+        assertEquals("乐しい夢を見よう", words(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS)))
+        // Other kanji, written either way, are another song.
+        assertFalse(SongNames.sameVersion(SongNames.asChinaWrites("東京物語"), SongNames.asChinaWrites("南京故事")))
+        assertEquals("Song", SongNames.asChinaWrites("Song"))
+    }
+
+    @Test
+    fun wordsInRomajiUnderOneNameGiveWayToJapaneseUnderTheOther() {
+        // LRCLIB has "僕の手 - Boku no Te" timed in romaji; NetEase has 僕の手, written 仆の手, timed in Japanese.
+        val romaji = "[00:01.00] boku no te wo shirimasen ka\n[00:05.00] yukue fumei ni narimashita\n[00:09.00] ima sugu sagashi ni ikanai to"
+        fun sites(japanese: String) {
+            fake.handler = { request ->
+                val url = request.url
+                when {
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "僕の手 - Boku no Te" ->
+                        FakeSpotify.html(request, """[${answer("僕の手 - Boku no Te", "Band", romaji.replace(Regex("""\[[^]]*] """), ""), romaji)}]""")
+                    url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                    url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                    url.encodedPath == "/api/search/get" && url.queryParameter("s") == "僕の手 Band" ->
+                        FakeSpotify.html(request, """{"result":{"songs":[{"id":6,"name":"仆の手","artists":[{"name":"Band"}],"duration":250000}]}}""")
+                    url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                    url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(japanese)}}}""")
+                    else -> FakeSpotify.html(request, "", code = 404)
+                }
+            }
+        }
+        val song = MusicMetadata("僕の手 - Boku no Te", "Band")
+        sites("[00:01.00]僕の手を知りませんか\n[00:05.00]行方不明になりました")
+        assertEquals("僕の手を知りませんか\n行方不明になりました", words(song))
+        // Japanese not timed, or none at all, the romaji stays.
+        sites("僕の手を知りませんか\n行方不明になりました")
+        assertTrue(isRomaji(words(song).orEmpty()))
+        sites("")
+        assertTrue(isRomaji(words(song).orEmpty()))
     }
 
     @Test
