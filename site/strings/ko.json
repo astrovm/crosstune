@@ -65,7 +65,7 @@
   ],
   "play_note": "Crosstune은 Google Play에서 테스트 중이에요. 표시되기까지 몇 분 걸릴 수 있어요.",
   "works_with": "지원 서비스",
-  "made_with": "astro가 {heart}을 담아 만들었어요",
+  "made_with": "{astro}가 {heart}을 담아 만들었어요",
   "privacy_link": "개인정보처리방침",
   "language_label": "언어",
   "privacy_title": "Crosstune 개인정보처리방침",

@@ -65,7 +65,7 @@
   ],
   "play_note": "Crosstune अभी Google Play पर टेस्टिंग में है। इसे दिखने में कुछ मिनट लग सकते हैं।",
   "works_with": "इनके साथ काम करता है",
-  "made_with": "astro ने {heart} से बनाया",
+  "made_with": "{astro} ने {heart} से बनाया",
   "privacy_link": "गोपनीयता नीति",
   "language_label": "भाषा",
   "privacy_title": "Crosstune गोपनीयता नीति",

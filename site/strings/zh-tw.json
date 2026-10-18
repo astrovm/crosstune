@@ -65,7 +65,7 @@
   ],
   "play_note": "Crosstune 正在 Google Play 上測試。可能需要幾分鐘才會顯示。",
   "works_with": "支援的服務",
-  "made_with": "由 astro 用 {heart} 製作",
+  "made_with": "由 {astro} 用 {heart} 製作",
   "privacy_link": "隱私政策",
   "language_label": "語言",
   "privacy_title": "Crosstune 隱私政策",

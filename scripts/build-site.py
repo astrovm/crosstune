@@ -17,6 +17,9 @@ BASE = "https://crosstune.4st.li"
 LANGS = ["en", "es", "pt-br", "de", "fr", "it", "nl", "pl", "ru", "tr", "id", "hi", "ja", "ko", "zh-cn", "zh-tw"]
 HEART = '<svg class="heart" viewBox="0 0 960 960" width="14" height="14" role="img" aria-label="love"><path fill="#e34b5f" d="M480,840Q466,840 451.5,835Q437,830 426,819L357,756Q251,659 165.5,563.5Q80,468 80,354Q80,260 143,197Q206,134 300,134Q353,134 400,156.5Q447,179 480,218Q513,179 560,156.5Q607,134 660,134Q754,134 817,197Q880,260 880,354Q880,468 794.5,564Q709,660 602,757L534,819Q523,830 508.5,835Q494,840 480,840Z"/></svg>'
 
+# The footer's "astro" goes to astro's own site.
+ASTRO = '<a href="https://4st.li">astro</a>'
+
 # Material Symbols Rounded, in the same order as the cards in each strings file, each with its viewBox:
 # the app's own drawables are drawn from the top left, the others from the bottom left. ChatGPT's is
 # OpenAI's logo, the app's own (Simple Icons, CC0).
@@ -132,8 +135,9 @@ def main():
             "home": home(code),
             # App screenshots in this page's language, from docs/img/<code>/.
             "shots": code,
-            "made_with": s["made_with"].replace("{heart}", HEART),
+            "made_with": s["made_with"].replace("{heart}", HEART).replace("{astro}", ASTRO),
         }
+        assert "{astro}" in s["made_with"], code
         assert len(s["cards"]) == len(FEATURE_ICONS), code
         cards = "\n".join(
             f'        <div class="card"><svg viewBox="{box}" aria-hidden="true"><path d="{icon}"/></svg>'
