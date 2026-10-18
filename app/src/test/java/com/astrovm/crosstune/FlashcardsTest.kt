@@ -166,7 +166,7 @@ class FlashcardsTest {
         // Kept from before, as NetEase's words timed word by word are: each line says where it ends.
         runBlocking {
             LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined).apply {
-                put("7\u0000demo\u0000band", """{"words":"Night sky\nStars\nMoon","lines":[[0,"Night sky",[],6000],[10000,"Stars",[],14500],[20000,"Moon"]]}""")
+                put("8\u0000demo\u0000band", """{"words":"Night sky\nStars\nMoon","lines":[[0,"Night sky",[],6000],[10000,"Stars",[],14500],[20000,"Moon"]]}""")
                 save()
             }
         }

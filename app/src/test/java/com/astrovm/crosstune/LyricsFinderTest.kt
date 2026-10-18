@@ -588,6 +588,36 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun wordsInRomajiUnderOneNameGiveWayToJapaneseUnderTheOther() {
+        // LRCLIB has "僕の手 - Boku no Te" timed in romaji; NetEase has 僕の手, written 仆の手, timed in Japanese.
+        val romaji = "[00:01.00] boku no te wo shirimasen ka\n[00:05.00] yukue fumei ni narimashita\n[00:09.00] ima sugu sagashi ni ikanai to"
+        fun sites(japanese: String) {
+            fake.handler = { request ->
+                val url = request.url
+                when {
+                    url.host == "lrclib.net" && url.queryParameter("track_name") == "僕の手 - Boku no Te" ->
+                        FakeSpotify.html(request, """[${answer("僕の手 - Boku no Te", "Band", romaji.replace(Regex("""\[[^]]*] """), ""), romaji)}]""")
+                    url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                    url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                    url.encodedPath == "/api/search/get" && url.queryParameter("s") == "僕の手 Band" ->
+                        FakeSpotify.html(request, """{"result":{"songs":[{"id":6,"name":"仆の手","artists":[{"name":"Band"}],"duration":250000}]}}""")
+                    url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                    url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(japanese)}}}""")
+                    else -> FakeSpotify.html(request, "", code = 404)
+                }
+            }
+        }
+        val song = MusicMetadata("僕の手 - Boku no Te", "Band")
+        sites("[00:01.00]僕の手を知りませんか\n[00:05.00]行方不明になりました")
+        assertEquals("僕の手を知りませんか\n行方不明になりました", words(song))
+        // Japanese not timed, or none at all, the romaji stays.
+        sites("僕の手を知りませんか\n行方不明になりました")
+        assertTrue(isRomaji(words(song).orEmpty()))
+        sites("")
+        assertTrue(isRomaji(words(song).orEmpty()))
+    }
+
+    @Test
     fun aTitleThatsTwoNamesIsLookedUpUnderEach() {
         fake.handler = { request ->
             val url = request.url
