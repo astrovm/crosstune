@@ -21,14 +21,17 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2081300
-        versionName = "2.8.13"
+        versionCode = 2081400
+        versionName = "2.8.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // MilkDrop visuals, drawn by projectM, built for phones and for emulators.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            // One per line: Renovate reads listOf("a", "b", "c") as a Maven library.
+            abiFilters += "arm64-v8a"
+            abiFilters += "armeabi-v7a"
+            abiFilters += "x86_64"
         }
         if (projectM) {
             externalNativeBuild {
