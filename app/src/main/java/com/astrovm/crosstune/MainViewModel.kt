@@ -2052,10 +2052,13 @@ internal class MainViewModel(
         return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
     }
 
-    /** Lines of [song] kept are read as its lines are now, put right, but for the ones put right by hand. */
-    private fun rereadSavedLines(song: MusicMetadata) {
+    /**
+     * Lines of [song] kept are read as its lines are now, put right, but for the ones put right by
+     * hand; only those with no reading yet when [unread].
+     */
+    private fun rereadSavedLines(song: MusicMetadata, unread: Boolean = false) {
         val lines = wordLines()
-        val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand }
+        val again = uiState.savedLines.filter { it.title == song.title && it.artist == song.artist && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
             .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
         if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
     }
@@ -2508,6 +2511,8 @@ internal class MainViewModel(
                 var read = withContext(systemDispatcher) { Readings.of(lines, script) }
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
                 val song = uiState.lyricsFor
+                // Lines kept with no reading, as ones once written otherwise, are read as they are now.
+                song?.let { rereadSavedLines(it, unread = true) }
                 if (script != Script.JAPANESE || song == null) return@launch
                 // Sung readings, 都会 as まち, from a site that writes them over the words.
                 sungReadings?.of(song, lines, read)?.takeIf { it.isNotEmpty() }?.let { fixes ->

@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.geometry.Offset
@@ -795,7 +796,7 @@ private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, be
     ) {
         Checkbox(checked = on, onCheckedChange = null)
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyLarge)
+            Text(text, style = MaterialTheme.typography.bodyLarge.writing(text))
             below?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         after()
@@ -1266,7 +1267,7 @@ private fun LyricLineText(
         fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
         // Rows of about even length, broken between words, so no word or kana is left alone on the last.
         lineBreak = LineBreak.Heading
-    )
+    ).writing(text)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1479,6 +1480,12 @@ internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READIN
     )
 }
 
+/**
+ * This style for [text]: Japanese told to be Japanese, which Android then breaks between phrases,
+ * at their spaces, rather than inside a word, and draws with Japan's shapes of kanji.
+ */
+internal fun TextStyle.writing(text: String): TextStyle = if (text.any(Readings::isKana)) copy(localeList = LocaleList("ja"), lineBreak = LineBreak.Heading) else this
+
 /** The small type of readings over words in [style], [scale] times as big. */
 private fun readingStyle(style: TextStyle, scale: Float) =
     style.copy(fontSize = style.fontSize * scale, lineHeight = style.fontSize * (scale + READING_GAP), fontWeight = FontWeight.Medium)
@@ -1680,7 +1687,7 @@ private fun TappableLine(text: String, words: List<Word>, picked: Word?, onPick:
             from = at + word.text.length
         }
     }
-    Text(line, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
+    Text(line, style = MaterialTheme.typography.headlineSmall.writing(line.text), fontWeight = FontWeight.Bold, modifier = Modifier.testTag(STUDY_LINE_TAG))
 }
 
 /** [word] as a link to its meaning: underlined, or standing out in [highlight] once [picked]. */

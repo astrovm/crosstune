@@ -73,7 +73,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     fun load(): List<SavedLine> {
         val array = preferences.getString(KEY, null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index ->
+        return asJapanWrites((0 until array.length()).mapNotNull { index ->
             val json = array.optJSONObject(index) ?: return@mapNotNull null
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             SavedLine(
@@ -81,6 +81,26 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                 json.optInt("box"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
                 json.text("line"), json.ruby(), json.optBoolean("byHand")
             )
+        })
+    }
+
+    /**
+     * Lines of a Japanese song kept as a Chinese site wrote them, as Japan writes them, as the
+     * song's words show now: see [Readings.asJapanWrites]. Their readings, worked out from China's
+     * kanji, are left to be worked out again, but for those put right by hand.
+     */
+    private fun asJapanWrites(lines: List<SavedLine>): List<SavedLine> {
+        val japanese = lines.filter { line -> line.text.any(Readings::isKana) }.map { it.title to it.artist }.toSet()
+        return lines.map { line ->
+            val text = Readings.asJapanWrites(line.text)
+            val sungIn = line.line?.let(Readings::asJapanWrites)
+            when {
+                line.title to line.artist !in japanese || (text == line.text && sungIn == line.line) -> line
+                line.readByHand -> line.copy(text = text, line = sungIn, ruby = line.ruby?.let { parts ->
+                    parts.mapIndexed { index, part -> part.copy(text = if (index == parts.lastIndex) Readings.asJapanWrites(part.text) else Readings.inJapansKanji(part.text)) }
+                })
+                else -> line.copy(text = text, line = sungIn, reading = null, romanized = null, ruby = null)
+            }
         }
     }
 

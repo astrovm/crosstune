@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -117,5 +119,15 @@ class RubyLineTest {
         assertEquals(emptyList<ReadingPlace>(), readingPlaces(listOf(Ruby("夜空", "よぞら")), words))
         assertEquals(emptyList<ReadingPlace>(), readingPlaces(listOf(Ruby("", "よ")), words))
         assertEquals(listOf("よる"), readingPlaces(listOf(Ruby("夜", "よる")), words).map { it.reading })
+    }
+
+    @Test
+    fun japaneseIsLaidOutAsJapaneseBrokenBetweenItsPhrases() {
+        val style = TextStyle(fontSize = 20.sp)
+        val japanese = style.writing("終わらない歌を歌おう クソッタレの世界のため")
+        assertEquals(LocaleList("ja"), japanese.localeList)
+        assertEquals(LineBreak.WordBreak.Phrase, japanese.lineBreak.wordBreak)
+        // Anything else is laid out as it was.
+        assertEquals(style, style.writing("Plastic Love"))
     }
 }

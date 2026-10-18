@@ -562,10 +562,10 @@ class LyricsFinderTest {
             netEase = { """{"result":{"songs":[{"id":3,"name":"终わらない夢","artists":[{"name":"BAND"}],"duration":260000}]}}""" },
             lyric = "[00:01.00]终わらない夢を見よう"
         )
-        assertEquals("终わらない夢を見よう", words(song))
+        assertEquals("終わらない夢を見よう", words(song))
         assertTrue((found(song) as Lyrics.Found).lines.isNotEmpty())
         // As its own name would, however long, and not knowing how long, as for a song heard or a Spotify link.
-        assertEquals("终わらない夢を見よう", words(song.copy(lengthMs = null)))
+        assertEquals("終わらない夢を見よう", words(song.copy(lengthMs = null)))
     }
 
     @Test
@@ -577,14 +577,42 @@ class LyricsFinderTest {
             netEase = { """{"result":{"songs":[{"id":3,"name":"乐しい夢","artists":[{"name":"Band"}],"duration":200000}]}}""" },
             lyric = "[00:01.00]乐しい夢を見よう"
         )
-        assertEquals("乐しい夢を見よう", words(song))
+        assertEquals("楽しい夢を見よう", words(song))
         assertEquals(Lyrics.None, found(song.copy(lengthMs = null)))
         // A recording of another length is another song of that name.
         assertEquals(Lyrics.None, found(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS + 1)))
-        assertEquals("乐しい夢を見よう", words(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS)))
+        assertEquals("楽しい夢を見よう", words(song.copy(lengthMs = 200_000 + SAME_RECORDING_LENGTH_MS)))
         // Other kanji, written either way, are another song.
         assertFalse(SongNames.sameVersion(SongNames.asChinaWrites("東京物語"), SongNames.asChinaWrites("南京故事")))
         assertEquals("Song", SongNames.asChinaWrites("Song"))
+    }
+
+    @Test
+    fun japaneseWordsNetEaseWritesChinasWayShowAsJapanWritesThem() {
+        // NetEase writes 瞬間 as 瞬间 and 僕 as 仆, and ends each line with China's comma.
+        fun netEase(name: String, byWord: String) {
+            fake.handler = { request ->
+                when (request.url.encodedPath) {
+                    "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":3,"name":"$name","artists":[{"name":"Band"}],"duration":200000}]}}""")
+                    "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                    else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+                }
+            }
+        }
+        netEase("夢の歌", "[1000,2000](1000,900,0)真実の(1900,1100,0)瞬间は，\n[3000,2000](3000,900,0)仆や(3900,1100,0)君の(5000,500,0)，")
+        val japanese = found(MusicMetadata("夢の歌", "Band", lengthMs = 200_000)) as Lyrics.Found
+        assertEquals(listOf("真実の瞬間は", "僕や君の"), japanese.lines.map { it.text })
+        assertEquals(listOf(listOf("真実の", "瞬間は"), listOf("僕や", "君の", "")), japanese.lines.map { line -> line.words.map { it.text } })
+        // Kept as found, before they're timed better, they show the same again.
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        runBlocking { kept.firstLook(MusicMetadata("夢の歌", "Band")) }
+        fake.handler = { throw IOException("offline") }
+        assertEquals(japanese, runBlocking { kept.firstLook(MusicMetadata("夢の歌", "Band")) }.lyrics)
+
+        // Chinese, which has no kana, is as China writes it.
+        netEase("时间", "[1000,2000](1000,900,0)我爱你的(1900,1100,0)时间，")
+        assertEquals(listOf("我爱你的时间，"), (found(MusicMetadata("时间", "Band", lengthMs = 200_000)) as Lyrics.Found).lines.map { it.text })
     }
 
     @Test
