@@ -135,7 +135,7 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                 val reading = help?.reading
                 val helps = listOfNotNull(
                     reading?.reading?.takeIf { help.readings && it != first },
-                    reading?.romanized?.takeIf { help.romanized && it.isNotBlank() && it != first },
+                    help?.latin?.takeIf { help.romanized && it.isNotBlank() && it != first },
                     help?.translation
                 ).distinct()
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {

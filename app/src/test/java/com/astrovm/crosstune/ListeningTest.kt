@@ -2574,6 +2574,26 @@ class ListeningTest {
     }
 
     @Test
+    fun japaneseRomajiCanBeSpelledAsTyped() {
+        wordsOf("[00:00.00] 東京を\\n[00:30.00] 食べる", "東京を\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        // Only with romaji shown.
+        assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        click(string(R.string.lyrics_romanized))
+        waitUntil(TIMEOUT_MS) { shown("tookyoo o") }
+        click(string(R.string.lyrics_romaji_typed))
+        waitUntil(TIMEOUT_MS) { shown("toukyou wo") }
+        assertFalse(shown("tookyoo o"))
+        assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
+        // Only in romaji, too.
+        click(string(R.string.lyrics_only_latin))
+        waitUntil(TIMEOUT_MS) { !shown("東京を") }
+        assertTrue(shown("toukyou wo"))
+        assertTrue(shown(string(R.string.lyrics_romaji_typed)))
+    }
+
+    @Test
     fun koreanWordsFloatTheirLatinLettersOnce() {
         wordsOf("[00:00.00] 사랑해\\n[00:30.00] 좋아", "사랑해\\n좋아")
         waitForText("사랑해")

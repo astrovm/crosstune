@@ -270,6 +270,7 @@
     <string name="lyrics_readings">단어 위에 읽기</string>
     <string name="lyrics_reading_size">읽기 크기</string>
     <string name="lyrics_romanized">라틴 문자로</string>
+    <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
     <string name="lyrics_chords">코드</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">연습</string>
     <string name="practice_show">정답 보기</string>
     <string name="practice_again">다시</string>
+    <string name="practice_hard">어려움</string>
     <string name="practice_good">좋음</string>
+    <string name="practice_easy">쉬움</string>
     <string name="practice_caught_up">모두 완료</string>
     <string name="lyrics_ask_line">이 줄에 대해 질문</string>
     <string name="lyrics_ask_send">보내기</string>

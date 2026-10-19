@@ -340,6 +340,8 @@ class FlashcardsTest {
         // The app lets the song go before the next card, of the same song, so it loads again.
         phone.playing.value = null
         waitUntil { practice().sound == LineSound.PLAYED }
+        // Four grades, as Anki has them.
+        listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).forEach { assertTrue(shown(string(it))) }
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Two" && phone.songsAsked.isNotEmpty() }
         assertEquals(LineSound.LOADING, practice().sound)

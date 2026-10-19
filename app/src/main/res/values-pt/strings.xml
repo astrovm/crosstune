@@ -270,6 +270,7 @@
     <string name="lyrics_readings">Leitura sobre as palavras</string>
     <string name="lyrics_reading_size">Tamanho da leitura</string>
     <string name="lyrics_romanized">Em letras latinas</string>
+    <string name="lyrics_romaji_typed">Romaji como se digita</string>
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
     <string name="lyrics_chords">Acordes</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">Praticar</string>
     <string name="practice_show">Ver resposta</string>
     <string name="practice_again">De novo</string>
+    <string name="practice_hard">Difícil</string>
     <string name="practice_good">Bom</string>
+    <string name="practice_easy">Fácil</string>
     <string name="practice_caught_up">Tudo em dia</string>
     <string name="lyrics_ask_line">Pergunte sobre esta linha</string>
     <string name="lyrics_ask_send">Enviar</string>

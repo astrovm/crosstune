@@ -270,6 +270,7 @@
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_reading_size">Размер чтения</string>
     <string name="lyrics_romanized">Латиницей</string>
+    <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
     <string name="lyrics_chords">Аккорды</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">Практика</string>
     <string name="practice_show">Показать ответ</string>
     <string name="practice_again">Ещё раз</string>
+    <string name="practice_hard">Трудно</string>
     <string name="practice_good">Хорошо</string>
+    <string name="practice_easy">Легко</string>
     <string name="practice_caught_up">Всё повторено</string>
     <string name="lyrics_ask_line">Спросите об этой строке</string>
     <string name="lyrics_ask_send">Отправить</string>

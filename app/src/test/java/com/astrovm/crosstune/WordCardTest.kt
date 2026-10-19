@@ -42,4 +42,17 @@ class WordCardTest {
             assertTrue("$text: $bounds", bounds.right > bounds.left && height > 0.dp && height < 36.dp)
         }
     }
+
+    @Test
+    fun aWordSpelledOtherwiseWhenTypedShowsBothThePickedFirst() {
+        val word = Word("先生", reading = "せんせい", romanized = "sensee", typed = "sensei")
+        composeRule.setContent {
+            CrosstuneTheme {
+                WordCard(WordMeaning(word), examples = null, canFindExamples = false, romajiTyped = true) {}
+            }
+        }
+        val typed = composeRule.onNodeWithText("sensei").getBoundsInRoot()
+        val said = composeRule.onNodeWithText("sensee").getBoundsInRoot()
+        assertTrue("$typed before $said", typed.left < said.left)
+    }
 }

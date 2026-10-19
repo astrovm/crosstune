@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.edit
 import android.view.TextureView
 import kotlin.math.sin
 import kotlin.random.Random
@@ -118,7 +119,9 @@ private const val PRESETS = "milkdrop"
 
 /**
  * Draws [milkdrop] in a GL view: a preset at random, then another every [presetMs], blending in,
- * all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the battery.
+ * all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the battery. A
+ * preset this phone draws too slowly, which makes the words over it stutter too, is passed over
+ * from then on.
  */
 internal class MilkdropRenderer(
     private val milkdrop: Milkdrop,
@@ -129,7 +132,11 @@ internal class MilkdropRenderer(
     private val sleep: (Long) -> Unit = Thread::sleep,
     private val presetMs: Long = PRESET_MS,
     /** Skips asked for before it started, which it doesn't make. */
-    skips: Int = 0
+    skips: Int = 0,
+    /** The presets, by [presetKey], this phone drew too slowly before. */
+    tooSlow: Set<String> = emptySet(),
+    /** Told of a preset, by [presetKey], this phone draws too slowly, to pass it over next time too. */
+    private val onTooSlow: (String) -> Unit = {}
 ) {
     private var open = false
     private var sound: SoundTap? = null
@@ -140,6 +147,11 @@ internal class MilkdropRenderer(
     private var drawnWidth = 0
     private var drawnHeight = 0
     private val samples = ByteArray(OutputMixTap.SAMPLES)
+    private val slow = tooSlow.toMutableSet()
+    private var current: String? = null
+    private var timedMs = 0L
+    private var timedFrames = 0
+    private var timed = false
 
     /** Its GL context is ready. */
     fun created() {
@@ -164,6 +176,7 @@ internal class MilkdropRenderer(
 
     fun frame() {
         if (!open) return
+        timeLastFrame()
         val wait = drawnAt + FRAME_MS - now()
         if (wait > 0) sleep(wait)
         drawnAt = now()
@@ -184,13 +197,46 @@ internal class MilkdropRenderer(
 
     private var idleFrame = 0
 
-    /** The next preset that loads, trying each at most once. */
+    /**
+     * How long the last frame took to draw, from the end of its wait to now, timed once the preset
+     * has blended in, as two draw at once till then. Too slow, the preset's passed over at once.
+     */
+    private fun timeLastFrame() {
+        val at = now()
+        val since = at - shownAt
+        val took = at - drawnAt
+        // A frame that took this long was paused, out of sight, rather than slow.
+        if (since in TIME_FROM_MS..TIME_TO_MS && took < PAUSED_MS) {
+            timedMs += took
+            timedFrames++
+        }
+        if (timed || since < TIME_TO_MS) return
+        timed = true
+        val preset = current ?: return
+        if (timedFrames < TIMED_FRAMES || timedMs / timedFrames <= SLOW_FRAME_MS) return
+        presetKey(preset).let { key ->
+            slow += key
+            onTooSlow(key)
+        }
+        // Cut straight to the next, rather than blending in, which would draw this one a while longer.
+        showNext(smooth = false)
+    }
+
+    /** The next preset that loads, trying each at most once; one too slow only when they all are. */
     private fun showNext(smooth: Boolean) {
         shownAt = now()
+        timedMs = 0
+        timedFrames = 0
+        timed = false
+        val anyFast = shown.any { presetKey(it) !in slow }
         repeat(shown.size) {
-            val loaded = milkdrop.show(shown[next], smooth)
+            val preset = shown[next]
             next = (next + 1) % shown.size
-            if (loaded) return
+            if (anyFast && presetKey(preset) in slow) return@repeat
+            if (milkdrop.show(preset, smooth)) {
+                current = preset
+                return
+            }
         }
     }
 
@@ -226,9 +272,22 @@ internal class MilkdropRenderer(
             }
         }
 
+        /** A preset, the text of its .milk file, by a key short enough to keep. */
+        fun presetKey(preset: String): String = Integer.toHexString(preset.hashCode())
+
         const val PRESET_MS = 30_000L
         /** 30 frames a second. */
         const val FRAME_MS = 33L
+
+        /** When a preset's frames are timed, from when it's shown: once it's blended in, for a couple of seconds. */
+        private const val TIME_FROM_MS = 3_500L
+        private const val TIME_TO_MS = 5_500L
+        /** Fewer frames than this timed, and it's not known how fast it draws. */
+        private const val TIMED_FRAMES = 20
+
+        /** Slower than this a frame, on average, about 25 a second, and it stutters. */
+        const val SLOW_FRAME_MS = 40L
+        private const val PAUSED_MS = 1_000L
     }
 }
 
@@ -380,10 +439,19 @@ internal val LocalVisuals = staticCompositionLocalOf<@Composable (skips: Int, mo
 internal fun MilkdropVisuals(skips: Int, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { context ->
-            val renderer = MilkdropRenderer(MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory, skips = skips)
+            // The presets too slow on this phone are kept, to pass over from the start next time.
+            val kept = context.getSharedPreferences(VISUALS_PREFS, Context.MODE_PRIVATE)
+            val renderer = MilkdropRenderer(
+                MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory, skips = skips,
+                tooSlow = kept.getStringSet(KEY_TOO_SLOW, null).orEmpty(),
+                onTooSlow = { key -> synchronized(kept) { kept.edit { putStringSet(KEY_TOO_SLOW, kept.getStringSet(KEY_TOO_SLOW, null).orEmpty() + key) } } }
+            )
             MilkdropView(context, renderer)
         },
         update = { it.renderer.skipTo(skips) },
         modifier = modifier
     )
 }
+
+private const val VISUALS_PREFS = "milkdrop"
+private const val KEY_TOO_SLOW = "too_slow"

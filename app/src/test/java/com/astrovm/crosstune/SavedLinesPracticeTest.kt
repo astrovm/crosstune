@@ -45,6 +45,22 @@ class SavedLinesPracticeTest {
     }
 
     @Test
+    fun aLineKnownWithTroubleStaysOnItsStep() {
+        val store = SavedLinesStore(prefs)
+        store.toggle(line)
+        // First time, back in a day, as known; known with trouble after that, after as long as last time.
+        val first = store.practised(line, Grade.HARD, now = 0).single()
+        assertEquals(0, first.box)
+        assertEquals(day, first.due)
+        store.practised(line, Grade.GOOD, now = 0)
+        store.practised(line, Grade.GOOD, now = 0)
+        val hard = store.practised(line, Grade.HARD, now = 0).single()
+        assertEquals(2, hard.box)
+        assertEquals(3 * day, hard.due)
+        assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.HARD))
+    }
+
+    @Test
     fun aLineKnownEasilySkipsAStep() {
         val store = SavedLinesStore(prefs)
         store.toggle(line)
@@ -97,7 +113,7 @@ class SavedLinesPracticeTest {
     @Test
     fun aLineKeepsWhereItsSungTheAppItPlayedInItsCoverAndItsLine() {
         val store = SavedLinesStore(prefs)
-        val timed = line.copy(startMs = 10_000, endMs = 20_000, leadMs = 3_000, app = "com.example.music", artworkUrl = "https://example.com/cover.jpg", line = "風が噂をはこんでく夜")
+        val timed = line.copy(startMs = 10_000, endMs = 20_000, leadMs = 3_000, app = "com.example.music", artworkUrl = "https://example.com/cover.jpg", line = "風が噂をはこんでく夜", typed = "kaze ga uwasa wo")
         store.toggle(timed)
         assertEquals(timed, SavedLinesStore(prefs).load().single())
         assertTrue(timed.timed && timed.practisable)
@@ -182,8 +198,10 @@ class SavedLinesPracticeTest {
     @Test
     fun howLongALineWaitsDependsOnHowWellItsKnown() {
         assertEquals(10 * 60 * 1000L, SavedLinesStore.waitFor(line, Grade.AGAIN))
+        assertEquals(day, SavedLinesStore.waitFor(line, Grade.HARD))
         assertEquals(day, SavedLinesStore.waitFor(line, Grade.GOOD))
         assertEquals(3 * day, SavedLinesStore.waitFor(line, Grade.EASY))
+        assertEquals(7 * day, SavedLinesStore.waitFor(line.copy(box = 3), Grade.HARD))
         assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.EASY))
     }
 
@@ -200,6 +218,12 @@ class SavedLinesPracticeTest {
         assertEquals("まちのよる", read.reading)
         assertEquals("machi no yoru", read.romanized)
         assertTrue(read.readByHand)
+        // As typed, the same: it's only kept where it's spelled otherwise.
+        assertEquals(null, read.typed)
+        val typed = night.copy(reading = "せんせいのよる", romanized = "sensee no yoru", typed = "sensei no yoru", ruby = listOf(Ruby("先生", "せんせい"), Ruby("の"), Ruby("夜", "よる")))
+        val readTyped = typed.readAs(listOf("せんせい", "ばん"))
+        assertEquals("sensee no ban", readTyped.romanized)
+        assertEquals("sensei no ban", readTyped.typed)
         // In katakana, it's read the same.
         assertEquals(read, night.readAs(listOf(" マチ ", "よる")))
         // Not kana, or the same, nothing changes.

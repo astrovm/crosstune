@@ -297,4 +297,70 @@ class MilkdropTest {
         assertTrue(milkdrop.calls.last { it.startsWith("show") }.endsWith("smoothly"))
     }
 
+    /** projectM drawing each preset in [drawMs] of the clock, and the same as [FakeMilkdrop] otherwise. */
+    private inner class TimedMilkdrop(private val drawMs: Map<String, Long>) : Milkdrop {
+        val shows = mutableListOf<String>()
+        private var showing = ""
+
+        override fun open(width: Int, height: Int) = true
+        override fun size(width: Int, height: Int) = Unit
+        override fun show(preset: String, smooth: Boolean): Boolean {
+            shows += preset
+            showing = preset
+            return true
+        }
+        override fun hear(samples: ByteArray, count: Int) = Unit
+        override fun draw() {
+            clock += drawMs.getValue(showing)
+        }
+        override fun close() = Unit
+    }
+
+    private fun timed(milkdrop: Milkdrop, tooSlow: Set<String> = emptySet(), onTooSlow: (String) -> Unit = {}) =
+        MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, presetMs = 30_000, tooSlow = tooSlow, onTooSlow = onTooSlow)
+
+    @Test
+    fun aPresetTooSlowToDrawIsPassedOverAndKeptSo() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        val milkdrop = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        val kept = mutableListOf<String>()
+        val renderer = timed(milkdrop, onTooSlow = { kept += it })
+        renderer.created()
+        // Drawn at a frame each 60 ms, it's known slow once it's blended in, and cut straight from.
+        repeat(100) { renderer.frame() }
+        assertEquals(listOf(MilkdropRenderer.presetKey(order[0])), kept)
+        assertEquals(listOf(order[0], order[1]), milkdrop.shows)
+        // One fast enough stays on.
+        assertEquals(order[1], milkdrop.shows.last())
+
+        // Next time, it's passed over from the start, and again when its turn comes.
+        val again = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        val next = timed(again, tooSlow = kept.toSet())
+        next.created()
+        next.skipTo(1)
+        next.frame()
+        next.skipTo(2)
+        next.frame()
+        assertEquals(listOf(order[1], order[2], order[1]), again.shows)
+    }
+
+    @Test
+    fun withEveryPresetTooSlowItStillShowsThemAndAPauseIsntSlowness() {
+        val slow = setOf("a", "b", "c").map(MilkdropRenderer::presetKey).toSet()
+        val milkdrop = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        val kept = mutableListOf<String>()
+        val renderer = timed(milkdrop, tooSlow = slow)
+        renderer.created()
+        assertEquals(1, milkdrop.shows.size)
+        // Out of sight a while, the frame after isn't timed as slow.
+        val paused = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        val fast = timed(paused, onTooSlow = { kept += it })
+        fast.created()
+        // Once it's blended in, while it's timed.
+        repeat(109) { fast.frame() }
+        clock += 1_200
+        repeat(40) { fast.frame() }
+        assertEquals(emptyList<String>(), kept)
+        assertEquals(1, paused.shows.size)
+    }
 }

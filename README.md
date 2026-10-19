@@ -53,8 +53,8 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back.
 - **MilkDrop visuals.** 76 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, darken them, or show only the visuals.
 - **Floating lyrics.** Float them over any app. Drag them anywhere, pinch the text, and tap them for play, settings and close. Drop them on the ✕ at the bottom to close them.
-- **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
-- **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means. Learn a whole song in one tap.
+- **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, with romaji as it's sung or as you'd type it, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
+- **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means, and say how well you knew it: **Again**, **Hard**, **Good** or **Easy**. Learn a whole song in one tap.
 - **ChatGPT, if you have it.** Sign in with your paid ChatGPT plan to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
 - **Not on your app?** Crosstune says so and opens the song where it's from, or searches anyway, as you choose in **Settings**.
 - **Your colors.** Light or dark, your wallpaper's color or one of a few, and pure black for OLED screens.

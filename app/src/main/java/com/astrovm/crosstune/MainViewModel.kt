@@ -147,7 +147,8 @@ internal class MainViewModel(
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
                 untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
                 readingScale = preferences.getFloat(KEY_READING_SCALE, READING_SCALE).coerceIn(READING_SCALE, MAX_READING_SCALE),
-                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN,
+                romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false)
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -1653,7 +1654,8 @@ internal class MainViewModel(
             song.title,
             song.artist,
             learning.explanation?.takeIf { it.index == index && it.done }?.text,
-            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
+            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } },
+            typed = reading?.typed?.takeIf { it.isNotBlank() && it != reading.romanized }
         ).timedAt(index)
     }
 
@@ -1708,7 +1710,7 @@ internal class MainViewModel(
             if (saved.line != null) return@mapNotNull (saved to saved.copy(line = now)).takeIf { saved.text in now }
             if (!taken.add(now)) return@mapNotNull null
             val read = savedLineAt(index) ?: return@mapNotNull null
-            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, translation = read.translation ?: saved.translation)
+            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, typed = read.typed, translation = read.translation ?: saved.translation)
             saved to if (times != null) moved.timedAt(index) else moved
         }
         if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
@@ -2145,6 +2147,12 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
         learn()
+    }
+
+    /** Spells romaji as typed, sensei, or as said, sensee, from now on. */
+    fun setRomajiTyped(on: Boolean) {
+        preferences.edit { putBoolean(KEY_ROMAJI_TYPED, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(romajiTyped = on))
     }
 
     /** Shows the words as written, or only in kana or Latin letters, from now on. */
@@ -2605,6 +2613,7 @@ internal class MainViewModel(
         private const val KEY_READINGS = "lyrics_readings"
         private const val KEY_CHORDS = "lyrics_chords"
         private const val KEY_ROMANIZED = "lyrics_romanized"
+        private const val KEY_ROMAJI_TYPED = "lyrics_romaji_typed"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_WORDS_AS = "lyrics_words_as"

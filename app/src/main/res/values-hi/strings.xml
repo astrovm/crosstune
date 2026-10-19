@@ -270,6 +270,7 @@
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
     <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
+    <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">अभ्यास</string>
     <string name="practice_show">जवाब देखें</string>
     <string name="practice_again">फिर से</string>
+    <string name="practice_hard">कठिन</string>
     <string name="practice_good">ठीक</string>
+    <string name="practice_easy">आसान</string>
     <string name="practice_caught_up">सब हो गया</string>
     <string name="lyrics_ask_line">इस पंक्ति के बारे में पूछें</string>
     <string name="lyrics_ask_send">भेजें</string>

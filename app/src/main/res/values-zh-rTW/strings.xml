@@ -270,6 +270,7 @@
     <string name="lyrics_readings">在文字上方顯示讀音</string>
     <string name="lyrics_reading_size">讀音大小</string>
     <string name="lyrics_romanized">拉丁字母</string>
+    <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
     <string name="lyrics_chords">和絃</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">練習</string>
     <string name="practice_show">檢視答案</string>
     <string name="practice_again">再來</string>
+    <string name="practice_hard">困難</string>
     <string name="practice_good">良好</string>
+    <string name="practice_easy">簡單</string>
     <string name="practice_caught_up">全部完成</string>
     <string name="lyrics_ask_line">就這一行提問</string>
     <string name="lyrics_ask_send">傳送</string>

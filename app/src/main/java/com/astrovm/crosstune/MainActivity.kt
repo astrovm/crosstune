@@ -382,6 +382,7 @@ class MainActivity : ComponentActivity() {
                         onResetSync = viewModel::resetSync,
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
+                        onRomajiTypedChange = viewModel::setRomajiTyped,
                         onTranslationChange = viewModel::setTranslation,
                         onChordsChange = viewModel::setChords,
                         onRetryTranslation = viewModel::retryTranslation,

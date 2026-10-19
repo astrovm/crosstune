@@ -270,6 +270,7 @@
     <string name="lyrics_readings">Bacaan di atas kata</string>
     <string name="lyrics_reading_size">Ukuran bacaan</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
+    <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_translation">Terjemahan</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
     <string name="lyrics_chords">Kord</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">Latihan</string>
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_again">Lagi</string>
+    <string name="practice_hard">Sulit</string>
     <string name="practice_good">Baik</string>
+    <string name="practice_easy">Mudah</string>
     <string name="practice_caught_up">Semua sudah</string>
     <string name="lyrics_ask_line">Tanya tentang baris ini</string>
     <string name="lyrics_ask_send">Kirim</string>

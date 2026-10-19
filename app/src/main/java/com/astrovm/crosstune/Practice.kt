@@ -215,7 +215,7 @@ internal class PracticeCards(
         val read = line.readAs(readings).takeIf { it != line } ?: return
         uiState = uiState.copy(
             savedLines = store.readAs(read),
-            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true) else it })
+            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it })
         )
     }
 

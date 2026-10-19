@@ -270,6 +270,7 @@
     <string name="lyrics_readings">Czytanie nad słowami</string>
     <string name="lyrics_reading_size">Rozmiar czytania</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
+    <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_translation">Tłumaczenie</string>
     <string name="lyrics_translation_failed">Nie udało się teraz przetłumaczyć.</string>
     <string name="lyrics_chords">Akordy</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">Ćwicz</string>
     <string name="practice_show">Pokaż odpowiedź</string>
     <string name="practice_again">Jeszcze raz</string>
+    <string name="practice_hard">Trudne</string>
     <string name="practice_good">Dobrze</string>
+    <string name="practice_easy">Łatwe</string>
     <string name="practice_caught_up">Wszystko powtórzone</string>
     <string name="lyrics_ask_line">Zapytaj o ten wers</string>
     <string name="lyrics_ask_send">Wyślij</string>

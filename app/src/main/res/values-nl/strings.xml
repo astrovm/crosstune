@@ -270,6 +270,7 @@
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
     <string name="lyrics_reading_size">Grootte van de uitspraak</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
+    <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
     <string name="lyrics_chords">Akkoorden</string>
@@ -285,7 +286,9 @@
     <string name="saved_practice">Oefenen</string>
     <string name="practice_show">Antwoord tonen</string>
     <string name="practice_again">Nog eens</string>
+    <string name="practice_hard">Moeilijk</string>
     <string name="practice_good">Goed</string>
+    <string name="practice_easy">Makkelijk</string>
     <string name="practice_caught_up">Alles bijgewerkt</string>
     <string name="lyrics_ask_line">Vraag iets over deze regel</string>
     <string name="lyrics_ask_send">Versturen</string>

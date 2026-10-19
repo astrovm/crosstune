@@ -19,7 +19,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,7 +103,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, actions)
+                    else Card(line, shown, state.learning.romajiTyped, actions)
                 }
             }
         }
@@ -148,9 +150,9 @@ private fun CaughtUp() {
  * it means. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
+private fun Card(line: SavedLine, practice: Practice, romajiTyped: Boolean, actions: ScreenActions) {
     val haptics = LocalHapticFeedback.current
-    val grade = { grade: Grade ->
+    val answer = { grade: Grade ->
         haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
         actions.onGradePractice(grade)
     }
@@ -176,20 +178,21 @@ private fun Card(line: SavedLine, practice: Practice, actions: ScreenActions) {
                 if (practice.turned) {
                     HorizontalDivider()
                     LineSound(line, practice.sound, actions.onReplayLine)
-                    CardBack(line, actions.onReadCardAs)
+                    CardBack(line, romajiTyped, actions.onReadCardAs)
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             if (!practice.turned) {
                 Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(stringResource(R.string.practice_show)) }
             } else {
                 val locale = LocalConfiguration.current.locales[0]
-                OutlinedButton(onClick = { grade(Grade.AGAIN) }, modifier = Modifier.weight(1f).height(56.dp)) {
-                    GradeLabel(R.string.practice_again, waitText(SavedLinesStore.waitFor(line, Grade.AGAIN), locale))
-                }
-                Button(onClick = { grade(Grade.GOOD) }, modifier = Modifier.weight(1f).height(56.dp)) {
-                    GradeLabel(R.string.practice_good, waitText(SavedLinesStore.waitFor(line, Grade.GOOD), locale))
+                // Four, as Anki has them, each saying when the line's back; Good, the usual one, stands out.
+                GRADES.forEach { (grade, label) ->
+                    val modifier = Modifier.weight(1f).height(56.dp)
+                    val content: @Composable RowScope.() -> Unit = { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
+                    if (grade == Grade.GOOD) Button(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
+                    else OutlinedButton(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
                 }
             }
         }
@@ -211,11 +214,12 @@ private fun CardFront(line: SavedLine) {
 }
 
 /**
- * The answer: the words again with how they read over them, in Latin letters, and what they mean.
+ * The answer: the words again with how they read over them, in Latin letters, as said and as
+ * typed, and what they mean.
  * A reading that isn't how it's sung can be put right, kanji by kanji.
  */
 @Composable
-private fun CardBack(line: SavedLine, onReadAs: (List<String>) -> Unit) {
+private fun CardBack(line: SavedLine, romajiTyped: Boolean, onReadAs: (List<String>) -> Unit) {
     var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold).writing(line.text)
@@ -230,7 +234,8 @@ private fun CardBack(line: SavedLine, onReadAs: (List<String>) -> Unit) {
             }
         }
         if (fixing) ReadingFields(line, onSave = { readings -> fixing = false; onReadAs(readings) }, onCancel = { fixing = false })
-        line.romanized?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // As said and as typed, where they're spelled otherwise.
+        bothRomaji(line.romanized, line.typed, romajiTyped).forEach { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         line.translation?.let { Text(it, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
     }
 }
@@ -342,11 +347,16 @@ private fun SongChip(line: SavedLine, actions: ScreenActions) {
     }
 }
 
+private val GRADES = listOf(Grade.AGAIN to R.string.practice_again, Grade.HARD to R.string.practice_hard, Grade.GOOD to R.string.practice_good, Grade.EASY to R.string.practice_easy)
+
+/** Little room around a grade's words, so four fit side by side. */
+private val GRADE_PADDING = PaddingValues(horizontal = 4.dp)
+
 /** A grade button's words: how well it was known, and when it's back if so. */
 @Composable
 private fun GradeLabel(label: Int, wait: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(label))
+        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
     }
 }
