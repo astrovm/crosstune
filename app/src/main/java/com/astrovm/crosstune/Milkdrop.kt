@@ -7,7 +7,9 @@ import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLExt
+import android.opengl.GLES20
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -30,6 +32,8 @@ internal interface Milkdrop {
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
     fun draw()
+    /** Waits till what's drawn is on the screen, to time it. */
+    fun finish() = Unit
     fun close()
 }
 
@@ -47,6 +51,7 @@ internal class NativeMilkdrop : Milkdrop {
     override fun show(preset: String, smooth: Boolean) = nativeLoad(instance, preset, smooth)
     override fun hear(samples: ByteArray, count: Int) = nativeHear(instance, samples, count)
     override fun draw() = nativeDraw(instance)
+    override fun finish() = GLES20.glFinish()
 
     override fun close() {
         nativeDestroy(instance)
@@ -136,8 +141,18 @@ internal class MilkdropRenderer(
     /** The presets, by [presetKey], this phone drew too slowly before. */
     tooSlow: Set<String> = emptySet(),
     /** Told of a preset, by [presetKey], this phone draws too slowly, to pass it over next time too. */
-    private val onTooSlow: (String) -> Unit = {}
+    private val onTooSlow: (String) -> Unit = {},
+    /**
+     * A debug mode: each preset for [BENCH_MS], as fast as it draws, [report]ing its frames a second
+     * as "key fps", then all of them, slowest first, before it goes on as usual.
+     */
+    bench: Boolean = false,
+    private val report: (String) -> Unit = {}
 ) {
+    private var benching = bench
+    private var benchFrames = 0
+    private val benched = mutableListOf<Pair<String, Int>>()
+
     private var open = false
     private var sound: SoundTap? = null
     private var shown: List<String> = emptyList()
@@ -176,6 +191,7 @@ internal class MilkdropRenderer(
 
     fun frame() {
         if (!open) return
+        if (benching) return benchFrame()
         timeLastFrame()
         val wait = drawnAt + FRAME_MS - now()
         if (wait > 0) sleep(wait)
@@ -184,6 +200,11 @@ internal class MilkdropRenderer(
             skipsDone = skipsAsked
             showNext(smooth = true)
         }
+        listen()
+        milkdrop.draw()
+    }
+
+    private fun listen() {
         val heard = sound?.read(samples) ?: 0
         if (heard > 0 && !silent(samples, heard)) {
             milkdrop.hear(samples, heard)
@@ -192,10 +213,29 @@ internal class MilkdropRenderer(
             idle(samples, ++idleFrame)
             milkdrop.hear(samples, samples.size)
         }
-        milkdrop.draw()
     }
 
     private var idleFrame = 0
+
+    /** A frame timed: drawn as soon as the last is on the screen, counted once the preset's shaders are made. */
+    private fun benchFrame() {
+        val at = now()
+        if (at - shownAt >= BENCH_MS) {
+            val fps = (benchFrames * 1000 / (BENCH_MS - BENCH_FROM_MS)).toInt()
+            current?.let { benched += presetKey(it) to fps }
+            report("${current?.let(::presetKey)} $fps")
+            if (benched.size >= shown.size) {
+                report("slowest first: " + benched.sortedBy { it.second }.joinToString { "${it.first} ${it.second}" })
+                benching = false
+            }
+            showNext(smooth = false)
+            benchFrames = 0
+        }
+        if (now() - shownAt >= BENCH_FROM_MS) benchFrames++
+        listen()
+        milkdrop.draw()
+        milkdrop.finish()
+    }
 
     /**
      * How long the last frame took to draw, from the end of its wait to now, timed once the preset
@@ -232,7 +272,7 @@ internal class MilkdropRenderer(
         repeat(shown.size) {
             val preset = shown[next]
             next = (next + 1) % shown.size
-            if (anyFast && presetKey(preset) in slow) return@repeat
+            if (anyFast && !benching && presetKey(preset) in slow) return@repeat
             if (milkdrop.show(preset, smooth)) {
                 current = preset
                 return
@@ -284,6 +324,10 @@ internal class MilkdropRenderer(
         private const val TIME_TO_MS = 5_500L
         /** Fewer frames than this timed, and it's not known how fast it draws. */
         private const val TIMED_FRAMES = 20
+
+        /** How long each preset's timed for in the debug mode, from when it's had time to make its shaders. */
+        const val BENCH_MS = 1_500L
+        private const val BENCH_FROM_MS = 500L
 
         /** Slower than this a frame, on average, about 25 a second, and it stutters. */
         const val SLOW_FRAME_MS = 40L
@@ -444,7 +488,10 @@ internal fun MilkdropVisuals(skips: Int, modifier: Modifier = Modifier) {
             val renderer = MilkdropRenderer(
                 MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory, skips = skips,
                 tooSlow = kept.getStringSet(KEY_TOO_SLOW, null).orEmpty(),
-                onTooSlow = { key -> synchronized(kept) { kept.edit { putStringSet(KEY_TOO_SLOW, kept.getStringSet(KEY_TOO_SLOW, null).orEmpty() + key) } } }
+                onTooSlow = { key -> synchronized(kept) { kept.edit { putStringSet(KEY_TOO_SLOW, kept.getStringSet(KEY_TOO_SLOW, null).orEmpty() + key) } } },
+                // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
+                bench = systemProperty("debug.crosstune.visuals_bench") == "1",
+                report = { Log.i("CrosstuneVisuals", it) }
             )
             MilkdropView(context, renderer)
         },
@@ -455,3 +502,8 @@ internal fun MilkdropVisuals(skips: Int, modifier: Modifier = Modifier) {
 
 private const val VISUALS_PREFS = "milkdrop"
 private const val KEY_TOO_SLOW = "too_slow"
+
+/** A system property, set with adb shell setprop; null when it can't be read. */
+private fun systemProperty(name: String): String? = runCatching {
+    Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as String
+}.getOrNull()

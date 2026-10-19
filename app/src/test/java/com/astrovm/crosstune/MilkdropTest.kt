@@ -363,4 +363,25 @@ class MilkdropTest {
         assertEquals(emptyList<String>(), kept)
         assertEquals(1, paused.shows.size)
     }
+
+    @Test
+    fun theDebugModeTimesEachPresetAsFastAsItDrawsThenGoesOnAsUsual() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        // a draws in 20 ms, b in 50, c in 10, each waited for till it's on the screen.
+        val milkdrop = TimedMilkdrop(mapOf("a" to 20L, "b" to 50L, "c" to 10L))
+        val reports = mutableListOf<String>()
+        val renderer = MilkdropRenderer(
+            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, presetMs = 30_000,
+            tooSlow = setOf(MilkdropRenderer.presetKey("b")), bench = true, report = { reports += it }
+        )
+        renderer.created()
+        repeat(400) { renderer.frame() }
+        // No wait between frames: as many as each draws in its second timed, even one kept as too slow.
+        val fps = mapOf("a" to 50, "b" to 20, "c" to 100)
+        assertEquals(order.map { "${MilkdropRenderer.presetKey(it)} ${fps.getValue(it)}" }, reports.take(3))
+        assertEquals("slowest first: " + listOf("b", "a", "c").joinToString { "${MilkdropRenderer.presetKey(it)} ${fps.getValue(it)}" }, reports[3])
+        assertEquals(4, reports.size)
+        // Then as usual: the one too slow is passed over.
+        assertEquals(order + order.first { it != "b" }, milkdrop.shows.take(4))
+    }
 }
