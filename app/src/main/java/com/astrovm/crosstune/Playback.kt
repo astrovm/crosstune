@@ -217,7 +217,7 @@ internal class MediaSessionPlayback(
         // it's only believed while the phone is playing something.
         if (!hasAccess() || !audio.isMusicActive) return null
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() }
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && !it.elsewhere() }
             // The one that last said where it is, over one that said so long ago.
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             .firstNotNullOfOrNull(::playing)
@@ -310,6 +310,12 @@ internal class MediaSessionPlayback(
         val state = playbackState ?: return false
         return state.position < 0 && now() - state.lastPositionUpdateTime > LEFT_BEHIND_MS
     }
+
+    /**
+     * Playing on another device, e.g. a computer's video shown through KDE Connect, or a TV it casts
+     * to: what the phone plays is another one.
+     */
+    private fun MediaController.elsewhere(): Boolean = playbackInfo?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
 
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
