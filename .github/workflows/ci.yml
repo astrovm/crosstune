@@ -37,7 +37,7 @@ jobs:
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
