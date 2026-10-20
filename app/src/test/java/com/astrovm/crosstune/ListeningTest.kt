@@ -2951,6 +2951,19 @@ class ListeningTest {
     }
 
     @Test
+    fun russianWordsShowAsWrittenOrInLatinLettersWithTheirOwnLetterForWritten() {
+        wordsOf(null, "Привет мир")
+        waitForText("Привет мир")
+        learnMenu()
+        // Each script has a letter of its own in the picker, and only Japanese has kana.
+        assertTrue(described(string(R.string.lyrics_as_written)))
+        assertFalse(described(string(R.string.lyrics_only_kana)))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        click(string(R.string.lyrics_only_latin))
+        waitUntil(TIMEOUT_MS) { shown("Privet mir") }
+    }
+
+    @Test
     fun untimedKoreanWordsAreRomanizedLineByLine() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         wordsOf(null, "사랑해\\n한국")

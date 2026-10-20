@@ -22,6 +22,28 @@ class ReadingsTest {
     }
 
     @Test
+    fun otherScriptsAreToldApartWhenMostOfTheLettersAreInThem() {
+        assertEquals(Script.CYRILLIC, Readings.scriptOf(listOf("Привет, мир", "baby")))
+        assertEquals(Script.GREEK, Readings.scriptOf(listOf("Αγάπη μου")))
+        assertEquals(Script.ARABIC, Readings.scriptOf(listOf("أحبك")))
+        assertEquals(Script.HEBREW, Readings.scriptOf(listOf("שלום")))
+        assertEquals(Script.INDIC, Readings.scriptOf(listOf("मेरा दिल")))
+        assertEquals(Script.THAI, Readings.scriptOf(listOf("รักเธอ")))
+        // A Russian word in an English song doesn't make the song Russian.
+        assertNull(Readings.scriptOf(listOf("I love you my dear", "спасибо")))
+        assertEquals(listOf("日", "中", "한", "Я", "Ω", "ع", "א", "अ", "ก"), Script.entries.map { it.glyph })
+    }
+
+    @Test
+    fun otherScriptsReadInPlainLatinLetters() {
+        val (line) = Readings.of(listOf("Привет мир"), Script.CYRILLIC)
+        assertEquals(listOf(Ruby("Привет мир")), line.parts)
+        assertEquals("Privet mir", line.romanized)
+        assertEquals(listOf(Word("мир", null, "mir")), Readings.words("мир", Script.CYRILLIC))
+        assertEquals(listOf(Word("love")), Readings.words("love", null))
+    }
+
+    @Test
     fun aChineseTitleIsWrittenInSimplifiedCharacters() {
         assertEquals("小幸运", Readings.simplified("小幸運"))
         assertEquals("我的少女时代 Our Times - 小幸运", Readings.simplified("我的少女時代 Our Times - 小幸運"))

@@ -554,11 +554,11 @@ private fun LyricsActions(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
-                    LearnButton(state.learning.translating || state.chords.loading, onClick = { menu = BarMenu.LEARN })
+                    BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, onClick = { menu = BarMenu.LEARN })
                 }
                 // The song's lines are learned, and lines kept are studied.
                 if (state.lyrics.isNotEmpty()) {
-                    IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
+                    BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, onClick = { menu = BarMenu.STUDY })
                 }
                 VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
@@ -642,7 +642,6 @@ private val Learning.shows get() = translation || (script != null && (readings |
 @Composable
 private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        MenuTitle(R.drawable.ic_translate, R.string.song_tab_words)
         SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
         val script = learning.script
         // A script that reads otherwise can show as written, or only in kana for Japanese, or in Latin letters.
@@ -664,15 +663,6 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions,
             LearnItem(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
         }
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-    }
-}
-
-/** What a menu is about, at its top. */
-@Composable
-private fun MenuTitle(@DrawableRes icon: Int, @StringRes title: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
-        AppIcon(icon, contentDescription = null)
-        Text(stringResource(title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
@@ -719,7 +709,6 @@ private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatin
 @Composable
 private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        MenuTitle(R.drawable.ic_school, R.string.saved_practice)
         val song = state.lyricsFor
         val here = if (song == null) emptyList() else state.savedLines.filter { it.isOf(song) }
         if (here.isNotEmpty()) {
@@ -877,7 +866,7 @@ private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, be
 @Composable
 private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenActions) {
     val choices = buildList {
-        add(Triple(WordsAs.WRITTEN, "文", R.string.lyrics_as_written))
+        add(Triple(WordsAs.WRITTEN, script.glyph, R.string.lyrics_as_written))
         if (script == Script.JAPANESE) add(Triple(WordsAs.KANA, "あ", R.string.lyrics_only_kana))
         add(Triple(WordsAs.LATIN, "Aa", R.string.lyrics_only_latin))
     }
@@ -1046,17 +1035,13 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
     }
 }
 
-/** What helps read the words, its icon breathing while a translation is on its way. */
+/** A tool of the bar, its icon breathing while what it brings is on its way: a translation, or chords. */
 @Composable
-private fun LearnButton(translating: Boolean, onClick: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "translating")
+private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, onClick: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "working")
     val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
     IconButton(onClick = onClick) {
-        AppIcon(
-            R.drawable.ic_translate,
-            contentDescription = stringResource(R.string.lyrics_learn),
-            modifier = Modifier.graphicsLayer { alpha = if (translating) breath else 1f }
-        )
+        AppIcon(icon, contentDescription = stringResource(description), modifier = Modifier.graphicsLayer { alpha = if (working) breath else 1f })
     }
 }
 
@@ -1084,7 +1069,6 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
 @Composable
 private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        MenuTitle(R.drawable.ic_visuals, R.string.settings_visuals_title)
         // How dark the ground over them is, from none to nearly black.
         val darken = stringResource(R.string.visuals_shade)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {

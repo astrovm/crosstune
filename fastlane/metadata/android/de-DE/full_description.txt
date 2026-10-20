@@ -15,7 +15,7 @@ Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem an
 <li>Link nicht lesbar? Öffne ihn in der App, aus der er stammt, kopiere den Suchtext oder teile einen Such-Link.</li>
 <li>Finde einen Song, indem du seinen Namen statt eines Links eintippst, und lies den Songtext jedes Songs, den du öffnest.</li>
 <li>Songtexte im Takt: Sie folgen deiner Musik-App oder hören mit, schweben über anderen Apps und laufen mit MilkDrop-Visuals dahinter.</li>
-<li>Lerne die Wörter mit Kana, Pinyin und Romaji und Übersetzungen für die Sprachen, die du noch nicht liest.</li>
+<li>Lerne die Wörter mit Kana, Pinyin, Romaji, jeder anderen Schrift in lateinischen Buchstaben und Übersetzungen für die Sprachen, die du noch nicht liest.</li>
 <li>Melde dich mit deinem bezahlten ChatGPT-Abo an, um ganze Songs zu übersetzen, Zeilen zu erklären, lernenswerte Wörter zu finden und Songs per Beschreibung zu suchen.</li>
 <li>Material-You-Farben ab Android 12.</li>
 </ul>

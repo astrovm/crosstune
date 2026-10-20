@@ -15,7 +15,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
 <li>Find a song by typing its name instead of a link, and read the lyrics of any song you open.</li>
 <li>Lyrics in time: they follow your music app or listen along, float over other apps, and play with MilkDrop visuals behind them.</li>
-<li>Learn the words with kana, pinyin and romaji, and translations for the languages you don't already read.</li>
+<li>Learn the words with kana, pinyin, romaji and any other script in Latin letters, and translations for the languages you don't already read.</li>
 <li>Sign in with your paid ChatGPT plan to translate whole songs, explain lines, find words worth learning, and find songs by describing them.</li>
 <li>Material You colors on Android 12 and later.</li>
 </ul>
