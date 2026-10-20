@@ -23,7 +23,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -118,8 +120,9 @@ internal class MainViewModel(
     /** The last look at what Android says about apps and links, null until the first one finishes. */
     private var linkState: LinkState? = null
     private var systemJob: Job? = null
-    /** What [UiState.playingNow] was heard as, with where in the song it was. */
-    private var playingHeard: Heard.Song? = null
+    /** What [UiState.playingNow] is made of: the song heard playing, and the one an app is followed on. */
+    private var heardNow: MusicMetadata? = null
+    private var followedNow: Pair<MusicMetadata, Following>? = null
 
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
@@ -696,36 +699,64 @@ internal class MainViewModel(
     }
 
     /**
-     * Offers what music apps play while Crosstune is in sight, fetching each song's words ahead.
+     * Offers what music apps play while Crosstune is in sight, fetching each song's words ahead. A
+     * song an app paused stays offered, with its app's buttons, as long as the app has it.
      */
     suspend fun watchPlayingNow() {
+        heardNow = null
+        followedNow = null
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
-            playingHeard = null
             uiState = uiState.copy(playingNow = null)
             return
         }
         // Registration, callbacks and cancellation share the main thread, so none can reattach
         // a controller while the lifecycle is releasing its listeners.
-        source.nowPlayingUpdates()
-            .onEach { heard ->
-                playingHeard = heard
-                uiState = uiState.copy(playingNow = heard?.metadata)
+        coroutineScope {
+            launch {
+                source.nowPlayingUpdates()
+                    .onEach { heard ->
+                        heardNow = heard?.metadata
+                        showPlayingNow()
+                    }
+                    // Clock updates keep the offer current without restarting its lyrics lookup.
+                    .distinctUntilChangedBy { it?.metadata }
+                    .collectLatest { heard -> heard?.let { lyricsFinder?.firstLook(it.metadata) } }
             }
-            // Clock updates keep the offer current without restarting its lyrics lookup.
-            .distinctUntilChangedBy { it?.metadata }
-            .collectLatest { heard -> heard?.let { lyricsFinder?.firstLook(it.metadata) } }
+            launch {
+                source.nowPlayingUpdates()
+                    .mapNotNull { it?.metadata }
+                    .distinctUntilChanged()
+                    .collectLatest { song ->
+                        source.follow(song).collect { following ->
+                            followedNow = following?.let { song to it }
+                            showPlayingNow()
+                        }
+                    }
+            }
+        }
     }
 
-    /** Shows the song playing now as if just heard, with its words when [lyrics], in time with the app. */
-    fun showPlayingNow(lyrics: Boolean) {
-        val heard = playingHeard ?: return
-        cancelContentWork()
-        uiState = uiState.copy(
-            error = null, result = null, destinationUrls = emptyMap(), selectedDestination = null, link = null,
-            showDestinationPicker = false, handlingIncomingLink = false, handingOff = false
-        )
-        showHeard(heard, lyrics)
+    private fun showPlayingNow() {
+        val song = heardNow ?: followedNow?.first
+        uiState = uiState.copy(playingNow = song?.let { NowPlaying(it, followedNow?.takeIf { (followed) -> followed == song }?.second) })
+    }
+
+    /** Opens the player on the song playing now, which then stays in sight. */
+    fun openPlayingNow() {
+        val now = uiState.playingNow ?: return
+        openPlayer(now.song, now.following?.appPackage, played = true)
+    }
+
+    /** Pauses the song playing now, or plays it again. */
+    fun playingNowPlayPause() {
+        val now = uiState.playingNow ?: return
+        playback?.playPause(now.song, now.following?.clock?.playing != true)
+    }
+
+    fun playingNowSkip() {
+        val now = uiState.playingNow ?: return
+        playback?.skip(now.song, true)
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {

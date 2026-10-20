@@ -512,7 +512,9 @@ class MainActivity : ComponentActivity() {
                         onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
                         onDismissNotices = viewModel::dismissNotices,
                         onUpdate = viewModel::openUpdate,
-                        onShowPlayingNow = viewModel::showPlayingNow,
+                        onOpenPlayingNow = viewModel::openPlayingNow,
+                        onPlayingNowPlayPause = viewModel::playingNowPlayPause,
+                        onPlayingNowSkip = viewModel::playingNowSkip,
                         onSettingsLeft = viewModel::settingsLeft,
                         loadArtwork = viewModel.artwork::load
                     )

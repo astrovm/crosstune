@@ -22,6 +22,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -134,6 +135,9 @@ class FlashcardsTest {
     private fun wordsOfDemo() {
         appHas()
         launch()
+        // The bar for the song playing opens its player, and the player has the words.
+        waitUntil { composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil { described(string(R.string.lyrics_button)) }
         click(string(R.string.lyrics_button))
         waitUntil { shown("Moon") }

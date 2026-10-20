@@ -89,6 +89,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -171,7 +172,8 @@ class MainActivityTest {
     }
 
     private fun click(text: String) {
-        composeRule.onNode(hasText(resultActionText(text)) or hasContentDescription(text)).performClick()
+        val action = resultActionText(text)
+        composeRule.onNode(hasText(action) or hasContentDescription(action) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
     }
 
@@ -222,7 +224,7 @@ class MainActivityTest {
 
     private fun waitForDestinationReady() {
         waitUntil(TIMEOUT_MS) {
-            !composeRule.onNodeWithText(string(R.string.copy_link_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
+            !composeRule.onNodeWithContentDescription(string(R.string.copy_link_button)).fetchSemanticsNode().config.contains(SemanticsProperties.Disabled)
         }
     }
 
@@ -245,7 +247,9 @@ class MainActivityTest {
 
     /** Resolved titles also appear in the history list, so any matching node counts. */
     private fun assertTextShown(text: String) {
-        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(resultActionText(text)) > 0)
+        val action = resultActionText(text)
+        // The main button says one word, and its description says where.
+        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(action) > 0 || composeRule.onAllNodes(hasContentDescription(action)).fetchSemanticsNodes().isNotEmpty())
     }
 
     /** An icon that says [description] to screen readers, in place of words on screen. */
@@ -541,7 +545,7 @@ class MainActivityTest {
     fun launcherShowsLinkHelperUntilDismissed() {
         launch()
         assertTextShown(string(R.string.link_settings_helper_title))
-        assertTextShown(string(R.string.spotify_link_label))
+        assertTextShown(string(R.string.spotify_link_placeholder))
 
         click(string(R.string.dismiss_button))
 
@@ -3017,6 +3021,32 @@ class MainActivityTest {
     }
 
     @Test
+    fun playAndOpenStackWhenTheWordsAreTooBigToShareTheWidth() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val open = string(MusicService.YOUTUBE_MUSIC.openLabelRes)
+        val bounds = { description: String -> composeRule.onNode(hasContentDescription(description)).fetchSemanticsNode().boundsInRoot }
+        launch()
+        resolveTyped(link)
+        // Side by side: one starts where the other ends.
+        assertTrue(bounds(open).left >= bounds(play).right)
+        controller!!.pause().stop().destroy()
+        RuntimeEnvironment.setFontScale(2f)
+        try {
+            launch()
+            resolveTyped(link)
+            // Bigger, one above the other, so neither word breaks.
+            assertTrue(bounds(open).top >= bounds(play).bottom)
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
     fun aSongPlaysInItsAppWithoutLeavingCrosstuneOrOpensThereWhenItCant() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
@@ -3102,7 +3132,7 @@ class MainActivityTest {
         // Playing there already, it keeps on, and its player follows it.
         inTheApp(true)
         tapPlay()
-        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertTrue(phone.songsAsked.isEmpty())
         assertTrue(phone.plays.isEmpty())
 
@@ -3136,7 +3166,7 @@ class MainActivityTest {
 
         // It opens on the song at once, waiting for the app to play it.
         waitForText(string(R.string.player_waiting, "YouTube Music"))
-        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         composeRule.onNode(hasText("Dakare Ni Kita Onna")).assertExists()
         composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song))).assertIsNotEnabled()
         val now = SystemClock.elapsedRealtime()
@@ -3181,20 +3211,20 @@ class MainActivityTest {
         waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
-        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
 
         // The next song the app plays takes over, followed in the same app; with no artist, it has no words to look up.
         phone.playing.value = null
         phone.onThePhone = Heard.Song(MusicMetadata("Other Song", ""), null)
         waitForText("Other Song")
-        waitForText(string(R.string.player_playing_in, "YouTube Music"))
-        assertTrue(composeRule.onAllNodes(hasText(string(R.string.lyrics_button))).fetchSemanticsNodes().isEmpty())
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_button))).fetchSemanticsNodes().isEmpty())
 
         // Closed, it's the song's card again.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitForDescription(play)
-        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -4292,9 +4322,9 @@ class MainActivityTest {
 
         waitForText(string(R.string.matching_text))
         assertTextAbsent(string(R.string.resolve_button))
-        composeRule.onNodeWithText(string(R.string.open_in_deezer)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.copy_link_button)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.share_link_button)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.open_in_deezer)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.copy_link_button)).assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription(string(R.string.share_link_button)).assertIsNotEnabled()
         assertNull(ViewModelProvider(activity)[MainViewModel::class.java].destinationUrl())
         assertNull(nextStartedActivity())
 
@@ -5060,7 +5090,7 @@ class MainActivityTest {
         // Links are still to allow, so leaving now is skipping that.
         assertTextAbsent(string(R.string.setup_finish))
         click(string(R.string.setup_skip_for_now))
-        assertTextShown(string(R.string.spotify_link_label))
+        assertTextShown(string(R.string.spotify_link_placeholder))
         assertTextAbsent(string(R.string.link_settings_helper_title))
         assertTrue(prefs().getBoolean("setup_complete", false))
         assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
@@ -6367,7 +6397,7 @@ class MainActivityTest {
         launch()
 
         // The screen is up while Android is still to be asked, with no notice yet rather than a wrong one.
-        assertTextShown(string(R.string.spotify_link_label))
+        assertTextShown(string(R.string.spotify_link_placeholder))
         assertTextAbsent(string(R.string.notice_app_still_opens, "Spotify"))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
         // Share sheet targets wait for the installed apps too, rather than drop out for a moment.

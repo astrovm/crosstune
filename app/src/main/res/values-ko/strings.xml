@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_label">음악 링크</string>
     <string name="spotify_link_placeholder">음악 링크 또는 노래 제목을 붙여넣으세요</string>
     <string name="resolve_button">링크 변환</string>
+    <string name="open_button">열기</string>
     <string name="search_button">검색</string>
     <string name="paste_button">붙여넣기</string>
     <string name="recognize_button">노래 인식</string>
@@ -202,7 +202,6 @@
     <string name="open_settings_button">설정 열기</string>
     <string name="open_app_button">%1$s 열기</string>
     <string name="lyrics_button">가사</string>
-    <string name="playing_now">지금 재생 중</string>
     <string name="lyrics_loading">가사를 찾는 중…</string>
     <string name="lyrics_none">이 노래의 가사를 찾지 못했습니다.</string>
     <string name="lyrics_sync_service">Crosstune 가사 동기화</string>

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="spotify_link_label">音楽リンク</string>
     <string name="spotify_link_placeholder">音楽リンクまたは曲名を貼り付け</string>
     <string name="resolve_button">変換</string>
+    <string name="open_button">開く</string>
     <string name="search_button">検索</string>
     <string name="paste_button">貼り付け</string>
     <string name="recognize_button">曲を認識</string>
@@ -203,7 +203,6 @@
     <string name="open_settings_button">設定を開く</string>
     <string name="open_app_button">%1$s を開く</string>
     <string name="lyrics_button">歌詞</string>
-    <string name="playing_now">再生中</string>
     <string name="lyrics_loading">歌詞を検索しています…</string>
     <string name="lyrics_none">この曲の歌詞は見つかりませんでした。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞シンク</string>

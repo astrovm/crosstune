@@ -30,7 +30,7 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 - **Not on your app?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
 - **Recent.** Search your recent songs, and swipe one away to remove it.
-- **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek.
+- **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek. Whatever is playing waits in a bar on the home screen.
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
 - **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.

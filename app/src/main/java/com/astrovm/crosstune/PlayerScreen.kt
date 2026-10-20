@@ -18,12 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -74,20 +73,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     .align(Alignment.TopCenter)
                     .widthIn(max = ContentMaxWidth)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp)) {
-                    IconButton(onClick = actions.onClosePlayer) {
-                        AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.dismiss_button))
-                    }
-                    Text(
-                        app?.let { stringResource(R.string.player_playing_in, it) }.orEmpty(),
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    // As wide as the button, so the app's name sits in the middle.
-                    Spacer(Modifier.size(48.dp))
+                IconButton(onClick = actions.onClosePlayer, modifier = Modifier.align(Alignment.Start).padding(horizontal = 4.dp, vertical = 8.dp)) {
+                    AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.dismiss_button))
                 }
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -122,15 +109,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                             !player.played && app != null -> PlayerWaiting(app)
                         }
                     }
-                    PlayerButtons(following, actions)
-                    // One whose artist is unknown can't be looked up safely.
-                    if (song.artist.isNotBlank()) {
-                        OutlinedButton(onClick = actions.onPlayerLyrics, modifier = Modifier.padding(top = 8.dp)) {
-                            AppIcon(R.drawable.ic_lyrics, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                            Text(stringResource(R.string.lyrics_button))
-                        }
-                    }
+                    PlayerButtons(following, actions, hasLyrics = song.artist.isNotBlank(), service = MusicService.ofPackage(player.app), appName = app)
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -183,13 +162,19 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
 
 /** Previous, play or pause, and next, as the app lets them; play asks the app again when it isn't playing the song. */
 @Composable
-private fun PlayerButtons(following: Following?, actions: ScreenActions) {
+private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyrics: Boolean, service: MusicService?, appName: String?) {
     val playing = following?.clock?.playing == true
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(vertical = 8.dp)
     ) {
+        // One whose artist is unknown can't be looked up safely, so its place is left empty.
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
+            if (hasLyrics) IconButton(onClick = actions.onPlayerLyrics) {
+                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
+            }
+        }
         IconButton(onClick = { actions.onPlayerSkip(false) }, enabled = following?.canSkipPrevious == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_previous, contentDescription = stringResource(R.string.lyrics_previous_song), modifier = Modifier.size(32.dp))
         }
@@ -202,6 +187,14 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions) {
         }
         IconButton(onClick = { actions.onPlayerSkip(true) }, enabled = following?.canSkipNext == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song), modifier = Modifier.size(32.dp))
+        }
+        // Where it plays, by its icon.
+        val playingIn = appName?.let { stringResource(R.string.player_playing_in, it) }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(48.dp).then(if (playingIn != null) Modifier.semantics { contentDescription = playingIn } else Modifier)
+        ) {
+            if (service != null) DestinationIcon(Destination.Service(service), setOf(service), size = 28.dp)
         }
     }
 }
