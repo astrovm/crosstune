@@ -1347,7 +1347,7 @@ private fun LyricLineText(
     help: LineHelp? = null,
     waiting: Boolean = false,
     seekLabel: Int = R.string.lyrics_jump,
-    textScale: Float = 1f
+    textScale: Float
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
