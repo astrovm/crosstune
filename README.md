@@ -1,7 +1,5 @@
 # Crosstune
 
-**The companion for the music app you already use.**
-
 Open a link from any service in the app you listen on, name the song playing nearby, and follow its lyrics and chords. Learn the words, and practice them with the music.
 
 <p align="center">
