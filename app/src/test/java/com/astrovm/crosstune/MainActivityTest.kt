@@ -3326,7 +3326,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun signedOutTranslationsComeFromMyMemoryWithNothingToPick() {
+    fun signedOutTranslationsComeFromGoogleTranslateWithNothingToPick() {
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_translate_into)).performScrollTo()
