@@ -1101,7 +1101,8 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
 @Composable
 private fun VisualsMoreMenu(open: Boolean, settings: VisualsSettings, actions: ScreenActions, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        VisualsChangeRow(settings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(280.dp))
+        // In line with the menu's items.
+        VisualsChangeRow(settings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(280.dp), inset = 12.dp)
         LearnItem(R.string.setting_skip_heavy_visuals, settings.skipHeavy, actions.onSkipHeavyVisualsChange)
     }
 }

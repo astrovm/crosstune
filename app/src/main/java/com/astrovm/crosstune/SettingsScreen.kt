@@ -93,6 +93,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
@@ -602,11 +603,11 @@ private fun changeEveryText(ms: Long): String {
  * what it's set to beside it. Also in the visuals' own menu, held down.
  */
 @Composable
-internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier) {
+internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp) {
     val steps = VisualsSettings.CHANGE_EVERY
     val label = stringResource(R.string.setting_visuals_change)
     val shown = changeEveryText(changeMs)
-    Column(modifier = modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
+    Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
