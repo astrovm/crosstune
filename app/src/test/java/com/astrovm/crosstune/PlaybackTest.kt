@@ -33,6 +33,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
@@ -371,6 +372,19 @@ class PlaybackTest {
         assertEquals(song, playback.nowPlaying()?.metadata)
         assertNull(playback.nowPlaying()?.clock)
         assertNull(followed().last())
+    }
+
+    @Test
+    fun whatPlaysOnAnotherDeviceIsntWhatThePhonePlays() {
+        allow()
+        sounding()
+        // A video on the computer, shown through KDE Connect, says where it is more often than the music app on the phone.
+        val computer = player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Talk Show - Episode 12", "Fake Channel", at = NOW)
+        shadowOf(computer).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        shadowOf(sessions).addController(computer)
+        assertNull(playback.nowPlaying())
+        shadowOf(sessions).addController(player("com.music", "Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000))
+        assertEquals(song, playback.nowPlaying()?.metadata)
     }
 
     @Test
