@@ -34,7 +34,7 @@ internal interface Milkdrop {
     fun hear(samples: ByteArray, count: Int)
     fun draw()
     /** Waits till what's drawn is on the screen, to time it. */
-    fun finish() = Unit
+    fun finish()
     fun close()
 }
 

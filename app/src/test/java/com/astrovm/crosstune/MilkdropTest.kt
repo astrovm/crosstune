@@ -43,6 +43,7 @@ class MilkdropTest {
         override fun draw() {
             calls += "draw"
         }
+        override fun finish() = Unit
         override fun close() {
             calls += "close"
         }
