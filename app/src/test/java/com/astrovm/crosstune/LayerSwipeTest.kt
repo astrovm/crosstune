@@ -78,6 +78,15 @@ class LayerSwipeTest {
     }
 
     @Test
+    fun aFlingTakesOverASwipeUnderWayAndLeavesAnyOtherBe() {
+        assertEquals(0f, swipe.flung(900f), 0f)
+        swipe.drag(-100f, 0)
+        // Flicked up, it carries on without waiting for a third of the way.
+        assertEquals(-900f, swipe.flung(-900f), 0f)
+        assertEquals(true, swipe.carryOn)
+    }
+
+    @Test
     fun theFingerMovesOnlyAsFarAsThereIsToGo() {
         swipe.drag(900f, 0)
         // Only what's left of the way is taken, so what's left over scrolls.

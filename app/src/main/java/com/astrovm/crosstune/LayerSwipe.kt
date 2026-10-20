@@ -79,6 +79,13 @@ internal class LayerSwipe {
         carryOn = carry
     }
 
+    /** A fling lifts the finger too: how much of it a swipe under way takes, all of it, or none. */
+    fun flung(velocity: Float): Float {
+        if (!swiping) return 0f
+        release(velocity)
+        return velocity
+    }
+
     /** The screens are where they're going, so the swipe is over. */
     fun finish() {
         layer = null

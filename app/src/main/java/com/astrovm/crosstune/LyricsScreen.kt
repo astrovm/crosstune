@@ -249,11 +249,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
                 if (source == NestedScrollSource.UserInput && available.y > 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
 
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (!layers.swiping) return Velocity.Zero
-                layers.release(available.y)
-                return available
-            }
+            override suspend fun onPreFling(available: Velocity): Velocity = Velocity(0f, layers.flung(available.y))
         }
     }
     WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
