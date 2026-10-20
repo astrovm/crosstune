@@ -1,5 +1,19 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import android.os.Build
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
@@ -28,9 +42,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
@@ -57,7 +71,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -91,6 +104,8 @@ internal fun SettingsScreen(
     onOpenSource: (String?) -> Unit = {}
 ) {
     val sources = sourceSettings(state, actions)
+    // Kept out here, so the list is where it was on coming back from a page.
+    val listScroll = rememberScrollState()
     // A source's page slides in over the list, and back out the other way.
     // The visuals' list too.
     AnimatedContent(
@@ -104,7 +119,7 @@ internal fun SettingsScreen(
         } else if (item != null) {
             SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(null) })
         } else {
-            SettingsList(state, actions, sources, onBack, onOpenSource)
+            SettingsList(state, actions, sources, listScroll, onBack, onOpenSource)
         }
     }
 }
@@ -114,6 +129,7 @@ private fun SettingsList(
     state: UiState,
     actions: ScreenActions,
     sources: List<SourceSettings>,
+    scroll: ScrollState,
     onBack: () -> Unit,
     onOpenSource: (String?) -> Unit
 ) {
@@ -128,7 +144,8 @@ private fun SettingsList(
             IconButton(onClick = onBack) {
                 AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
             }
-        }
+        },
+        scrollState = scroll
     ) {
         Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
 
@@ -640,20 +657,20 @@ private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
 
 /**
  * Every visual, each with a still and switched on or off; those too heavy for this phone say so,
- * and can be switched on anyway. The last one on stays on. Tapped, one plays on its own page.
+ * and can be switched on anyway. The last one on stays on. Tapped, they play one at a time, to swipe through.
  */
 @Composable
 private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val names = presetNames()
     val on = names.count(settings::shows)
-    var seeing by rememberSaveable { mutableStateOf<String?>(null) }
+    var seeing by rememberSaveable { mutableStateOf<Int?>(null) }
     // Kept out here, so the list is where it was on coming back from one.
     val scroll = rememberScrollState()
     val canTurnOff = { name: String -> !(settings.shows(name) && on == 1) }
     val playing = seeing
     if (playing != null) {
-        key(playing) { VisualPage(playing, settings, canTurnOff(playing), actions, onBack = { seeing = null }) }
+        VisualsPager(names, playing, settings, canTurnOff, actions, onBack = { seeing = null })
         return
     }
     Page(
@@ -668,7 +685,7 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
         Group(modifier = Modifier.padding(top = 8.dp)) {
             names.forEachIndexed { index, name ->
                 if (index > 0) GroupDivider()
-                VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = name })
+                VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = index })
             }
         }
     }
@@ -709,33 +726,102 @@ private fun HeavyNote() = Text(
     modifier = Modifier.padding(top = 2.dp)
 )
 
-/** One visual playing on its own, as it would behind the words, with its switch under it. */
+/**
+ * The visuals one at a time, from [start], to swipe through and pick fast: the one in view plays as it
+ * would behind the words, with how many frames a second this phone draws it at, and its switch stays
+ * in the same spot under it. Those beside it show their still till swiped to, so swiping stays smooth.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VisualPage(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onBack: () -> Unit) {
+internal fun VisualsPager(
+    names: List<String>,
+    start: Int,
+    settings: VisualsSettings,
+    canTurnOff: (String) -> Boolean,
+    actions: ScreenActions,
+    onBack: () -> Unit
+) {
     BackHandler(onBack = onBack)
-    val shows = settings.shows(name)
-    Page(
-        title = name,
-        navigationIcon = {
-            IconButton(onClick = onBack) {
-                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+    val pager = rememberPagerState(initialPage = start) { names.size }
+    val name = names[pager.currentPage]
+    // Drawn even when off or too heavy, and kept on it, so it can be judged before it's picked.
+    val alone = VisualsSettings(skipHeavy = false, changeMs = VisualsSettings.NEVER)
+    var fps by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pager.settledPage) { fps = null }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            TopAppBar(
+                title = { Text(name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+                    }
+                },
+                actions = {
+                    Text(
+                        stringResource(R.string.visuals_position, pager.currentPage + 1, names.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            )
+        },
+        bottomBar = {
+            Group(modifier = Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)) {
+                SettingSwitch(
+                    label = stringResource(R.string.visual_show),
+                    description = if (name in settings.heavy) stringResource(R.string.visual_heavy) else null,
+                    checked = settings.shows(name),
+                    onCheckedChange = { actions.onVisualOnChange(name, it) },
+                    enabled = canTurnOff(name)
+                )
             }
         }
-    ) {
-        // Drawn even when off or too heavy, and kept on it, so it can be judged before it's picked.
-        LocalVisuals.current(
-            VisualsPlay(settings = VisualsSettings(skipHeavy = false, changeMs = VisualsSettings.NEVER), only = name),
-            Modifier.padding(top = 8.dp).fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large)
-        )
-        Group(modifier = Modifier.padding(top = 16.dp)) {
-            SettingSwitch(
-                label = stringResource(R.string.visual_show),
-                description = if (name in settings.heavy) stringResource(R.string.visual_heavy) else null,
-                checked = shows,
-                onCheckedChange = { actions.onVisualOnChange(name, it) },
-                enabled = canTurnOff
-            )
+    ) { padding ->
+        HorizontalPager(
+            state = pager,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            pageSpacing = 8.dp,
+            key = { names[it] },
+            modifier = Modifier.padding(padding).fillMaxSize()
+        ) { page ->
+            Box(Modifier.fillMaxSize().clip(MaterialTheme.shapes.large).background(Color.Black)) {
+                VisualStill(names[page], Modifier.fillMaxSize())
+                if (page == pager.settledPage) {
+                    LocalVisuals.current(VisualsPlay(settings = alone, only = names[page], onFps = { fps = it }), Modifier.fillMaxSize())
+                    fps?.let { FpsBadge(it, Modifier.align(Alignment.TopEnd).padding(12.dp)) }
+                }
+            }
         }
+    }
+}
+
+/** A visual's still, filling [modifier], once loaded. */
+@Composable
+private fun VisualStill(name: String, modifier: Modifier) {
+    val assets = LocalContext.current.assets
+    val still by produceState<ImageBitmap?>(null, name) { value = withContext(Dispatchers.IO) { milkdropThumb(assets, name) } }
+    still?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.testTag(ARTWORK_TAG)) }
+}
+
+/** How many frames a second, red when too few to keep it, as with those skipped as too heavy. */
+@Composable
+private fun FpsBadge(fps: Int, modifier: Modifier) {
+    val slow = fps < MilkdropRenderer.SLOW_FPS
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (slow) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier
+    ) {
+        Text(
+            stringResource(R.string.visual_fps, fps),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (slow) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
     }
 }
 

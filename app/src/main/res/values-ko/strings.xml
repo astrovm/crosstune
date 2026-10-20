@@ -234,6 +234,8 @@
     <string name="visual_heavy">이 폰에는 너무 무거움</string>
     <string name="visual_show">이것 표시</string>
     <string name="visual_see">보기</string>
+    <string name="visuals_position">%1$d / %2$d</string>
+    <string name="visual_fps">%1$d fps</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
     <string name="visuals_show_words">가사 보기</string>

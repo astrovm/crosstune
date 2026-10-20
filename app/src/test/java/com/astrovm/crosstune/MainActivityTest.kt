@@ -1624,7 +1624,8 @@ class MainActivityTest {
         assertEquals(setOf(first), prefs().getStringSet("visuals_off", null))
         assertEquals(setOf(names[1]), prefs().getStringSet("visuals_keep", null))
         click(string(R.string.back_button))
-        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo()
+        // Back in Settings where it was, not at the top.
+        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).assertIsDisplayed()
         // Heavy ones shown, and each for a minute.
         composeRule.onNodeWithText(string(R.string.setting_skip_heavy_visuals)).performScrollTo().performClick()
         composeRule.onNodeWithText(string(R.string.setting_visuals_change)).performScrollTo().performClick()
