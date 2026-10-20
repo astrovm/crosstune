@@ -45,7 +45,7 @@
     <string name="custom_template_label">Search URL</string>
     <string name="custom_template_hint">Write {query} where the song name goes, e.g. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Enter a name and a URL that contains {query}.</string>
-    <string name="settings_behaviour_title">Behavior</string>
+    <string name="settings_advanced_title">Advanced</string>
     <string name="settings_listening_title">Recognition and lyrics</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_chatgpt_title" translatable="false">ChatGPT</string>
@@ -186,6 +186,7 @@
     <string name="visual_kind_classics">Classics</string>
     <string name="visuals_only">Only visuals</string>
     <string name="visuals_options">Visuals options</string>
+    <string name="visuals_more">More visuals options</string>
     <string name="visuals_show_words">Show the words</string>
     <string name="setting_theme">Theme</string>
     <string name="theme_light">Light</string>

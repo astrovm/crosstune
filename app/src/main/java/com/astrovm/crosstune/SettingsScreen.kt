@@ -86,11 +86,14 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
+import kotlin.math.roundToInt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 
@@ -107,15 +110,17 @@ internal fun SettingsScreen(
     // Kept out here, so the list is where it was on coming back from a page.
     val listScroll = rememberScrollState()
     // A source's page slides in over the list, and back out the other way.
-    // The visuals' list too.
+    // The visuals' list and the advanced settings too.
     AnimatedContent(
-        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || sources.any { it.key == key } },
+        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || sources.any { it.key == key } },
         transitionSpec = { slide(forward = targetState != null) },
         label = "source"
     ) { key ->
         val item = sources.firstOrNull { it.key == key }
         if (key == VISUALS_PAGE) {
             VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
+        } else if (key == ADVANCED_PAGE) {
+            AdvancedPage(state, actions, onBack = { onOpenSource(null) })
         } else if (item != null) {
             SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(null) })
         } else {
@@ -220,37 +225,6 @@ private fun SettingsList(
             }
         }
 
-        SectionHeader(stringResource(R.string.settings_behaviour_title))
-        Group {
-            SettingSwitch(
-                label = stringResource(R.string.setting_exact_match),
-                description = stringResource(R.string.setting_exact_match_description),
-                checked = state.exactMatch,
-                onCheckedChange = actions.onExactMatchChange
-            )
-            // Only a song looked for can be not found; without exact matching, everything is searched.
-            AnimatedVisibility(visible = state.exactMatch, enter = Motion.appear, exit = Motion.disappear) {
-                Column {
-                    GroupDivider()
-                    NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
-                }
-            }
-            GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_clean_links),
-                description = stringResource(R.string.setting_clean_links_description),
-                checked = state.cleanLinks,
-                onCheckedChange = actions.onCleanLinksChange
-            )
-            GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_share_sheet_apps),
-                description = stringResource(R.string.setting_share_sheet_apps_description),
-                checked = state.shareSheetApps,
-                onCheckedChange = actions.onShareSheetAppsChange
-            )
-        }
-
         // What happens around a song once it's found: naming one playing nearby, and its words.
         SectionHeader(stringResource(R.string.settings_listening_title))
         Group {
@@ -299,26 +273,12 @@ private fun SettingsList(
         }
         if (state.chatGpt.welcome) ChatGptWelcome(onDismiss = actions.onDismissChatGptWelcome)
 
-        // Which visuals move behind the words, how long each shows, and how dark they are.
+        // Which visuals move behind the words, and how long each shows; how dark they are is set over them.
         SectionHeader(stringResource(R.string.settings_visuals_title))
         Group {
             VisualsListRow(state.visualsSettings, onOpen = { onOpenSource(VISUALS_PAGE) })
             GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_skip_heavy_visuals),
-                description = stringResource(R.string.setting_skip_heavy_visuals_description),
-                checked = state.visualsSettings.skipHeavy,
-                onCheckedChange = actions.onSkipHeavyVisualsChange
-            )
-            GroupDivider()
-            ChoiceRow(
-                label = stringResource(R.string.setting_visuals_change),
-                choices = VisualsSettings.CHANGE_EVERY.map { it to changeEveryText(it) },
-                selected = state.visualsSettings.changeMs,
-                onSelect = actions.onVisualsChangeEveryChange
-            )
-            GroupDivider()
-            VisualsShadeRow(state.visualsShade, actions)
+            VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange)
         }
 
         SectionHeader(stringResource(R.string.settings_appearance_title))
@@ -336,6 +296,10 @@ private fun SettingsList(
             GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
+
+        // What few change, out of the way.
+        Spacer(Modifier.height(16.dp))
+        Group { PageRow(stringResource(R.string.settings_advanced_title), onOpen = { onOpenSource(ADVANCED_PAGE) }) }
 
         SectionHeader(stringResource(R.string.settings_about_title))
         Group {
@@ -634,24 +598,103 @@ private fun changeEveryText(ms: Long): String {
     return if (ms < 60_000) format.format(Measure(ms / 1000, MeasureUnit.SECOND)) else format.format(Measure(ms / 60_000, MeasureUnit.MINUTE))
 }
 
-/** How dark the ground over the visuals is, as the visuals' own menu sets it. */
+/**
+ * How long each visual shows, on a slider from swapping every few seconds to staying on one, with
+ * what it's set to beside it. Also in the visuals' own menu, held down.
+ */
 @Composable
-private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
-    val darken = stringResource(R.string.visuals_shade)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)) {
-        AppIcon(R.drawable.ic_shade, contentDescription = null)
-        // Where it was let go is kept, even before the screen has caught up with it.
-        var latest by remember { mutableFloatStateOf(shade) }
+internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp) {
+    val steps = VisualsSettings.CHANGE_EVERY
+    val label = stringResource(R.string.setting_visuals_change)
+    val shown = changeEveryText(changeMs)
+    Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
         Slider(
-            value = shade,
-            onValueChange = {
-                latest = it
-                actions.onVisualsShadeChange(it, false)
-            },
-            onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
-            valueRange = 0f..MAX_VISUALS_SHADE,
-            modifier = Modifier.padding(start = 16.dp).heightIn(min = 48.dp).semantics { contentDescription = darken }
+            value = steps.indexOf(changeMs).coerceAtLeast(0).toFloat(),
+            onValueChange = { at -> steps[at.roundToInt().coerceIn(steps.indices)].takeIf { it != changeMs }?.let(onChange) },
+            valueRange = 0f..steps.lastIndex.toFloat(),
+            steps = steps.size - 2,
+            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                contentDescription = label
+                stateDescription = shown
+            }
         )
+    }
+}
+
+/** A row that opens a page of its own. */
+@Composable
+private fun PageRow(label: String, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** The page of advanced settings. */
+private const val ADVANCED_PAGE = "advanced"
+
+/**
+ * What few change: whether a link opens the exact match, and what's done when there's none; tracking
+ * dropped from links; the music apps in the share sheet; and heavy visuals skipped.
+ */
+@Composable
+private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    Page(
+        title = stringResource(R.string.settings_advanced_title),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        },
+        scrollState = rememberScrollState()
+    ) {
+        Spacer(Modifier.height(16.dp))
+        Group {
+            SettingSwitch(
+                label = stringResource(R.string.setting_exact_match),
+                description = stringResource(R.string.setting_exact_match_description),
+                checked = state.exactMatch,
+                onCheckedChange = actions.onExactMatchChange
+            )
+            // Only a song looked for can be not found; without exact matching, everything is searched.
+            AnimatedVisibility(visible = state.exactMatch, enter = Motion.appear, exit = Motion.disappear) {
+                Column {
+                    GroupDivider()
+                    NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
+                }
+            }
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_clean_links),
+                description = stringResource(R.string.setting_clean_links_description),
+                checked = state.cleanLinks,
+                onCheckedChange = actions.onCleanLinksChange
+            )
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_share_sheet_apps),
+                description = stringResource(R.string.setting_share_sheet_apps_description),
+                checked = state.shareSheetApps,
+                onCheckedChange = actions.onShareSheetAppsChange
+            )
+        }
+        SectionHeader(stringResource(R.string.settings_visuals_title))
+        Group {
+            SettingSwitch(
+                label = stringResource(R.string.setting_skip_heavy_visuals),
+                description = stringResource(R.string.setting_skip_heavy_visuals_description),
+                checked = state.visualsSettings.skipHeavy,
+                onCheckedChange = actions.onSkipHeavyVisualsChange
+            )
+        }
     }
 }
 

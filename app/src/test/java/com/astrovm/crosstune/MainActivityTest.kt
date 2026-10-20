@@ -276,6 +276,18 @@ class MainActivityTest {
         click(string(R.string.back_button))
     }
 
+    /** In Settings' advanced page, then back out of it and Settings. */
+    private fun inAdvancedSettings(block: () -> Unit) = inSettings {
+        openAdvanced()
+        block()
+        click(string(R.string.back_button))
+    }
+
+    private fun openAdvanced() {
+        composeRule.onNodeWithText(string(R.string.settings_advanced_title)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun installActivity(component: ComponentName, filter: IntentFilter) {
         val pm = shadowOf(app.packageManager)
         pm.addActivityIfNotPresent(component)
@@ -1600,6 +1612,7 @@ class MainActivityTest {
 
         // Android shows them for any shared text, so they can be turned off, leaving the song.
         click(string(R.string.settings_button))
+        openAdvanced()
         composeRule.onNodeWithText(string(R.string.setting_share_sheet_apps)).performScrollTo().performClick()
         waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 1 }
         assertEquals("No Cover", dynamicShortcuts().single().shortLabel)
@@ -1626,17 +1639,24 @@ class MainActivityTest {
         click(string(R.string.back_button))
         // Back in Settings where it was, not at the top.
         composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).assertIsDisplayed()
-        // Heavy ones shown, and each for a minute.
+        // Each for a minute, slid to it, and said beside it.
+        composeRule.onNode(hasContentDescription(string(R.string.setting_visuals_change))).performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(VisualsSettings.CHANGE_EVERY.indexOf(60_000L).toFloat()) }
+        composeRule.waitForIdle()
+        assertEquals(60_000L, prefs().getLong("visuals_change_ms", 0))
+        assertTextShown("1 min")
+        // Slid all the way, one stays on.
+        composeRule.onNode(hasContentDescription(string(R.string.setting_visuals_change)))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(VisualsSettings.CHANGE_EVERY.lastIndex.toFloat()) }
+        composeRule.waitForIdle()
+        assertEquals(VisualsSettings.NEVER, prefs().getLong("visuals_change_ms", 0))
+        // How dark they are is set over them, not here.
+        assertEquals(0, composeRule.onAllNodes(hasContentDescription(string(R.string.visuals_shade))).fetchSemanticsNodes().size)
+        // Heavy ones shown, from the advanced settings.
+        openAdvanced()
         composeRule.onNodeWithText(string(R.string.setting_skip_heavy_visuals)).performScrollTo().performClick()
-        composeRule.onNodeWithText(string(R.string.setting_visuals_change)).performScrollTo().performClick()
-        composeRule.onNodeWithText("1 min").performClick()
         composeRule.waitForIdle()
         assertFalse(prefs().getBoolean("visuals_skip_heavy", true))
-        assertEquals(60_000L, prefs().getLong("visuals_change_ms", 0))
-        // And darker.
-        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
-        composeRule.waitForIdle()
-        assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
     }
 
     @Test
@@ -1956,7 +1976,7 @@ class MainActivityTest {
     fun aSharedLinkLeavesSettings() {
         launch()
         click(string(R.string.settings_button))
-        assertTextShown(string(R.string.setting_exact_match))
+        assertTextShown(string(R.string.settings_advanced_title))
 
         val onNewIntent = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java)
         onNewIntent.isAccessible = true
@@ -1969,7 +1989,7 @@ class MainActivityTest {
         )
         composeRule.waitForIdle()
 
-        assertTextAbsent(string(R.string.setting_exact_match))
+        assertTextAbsent(string(R.string.settings_advanced_title))
         assertTextShown(string(R.string.error_invalid_url))
     }
 
@@ -3842,7 +3862,7 @@ class MainActivityTest {
         assertEquals("https://www.deezer.com/track/1",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
 
-        inSettings { click(string(R.string.setting_exact_match)) }
+        inAdvancedSettings { click(string(R.string.setting_exact_match)) }
         controller!!.pause().stop().destroy()
         fake.requestedUrls.clear()
         val restored = launch()
@@ -3874,7 +3894,7 @@ class MainActivityTest {
         click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/us/album/clean/1?i=2", clipboard.primaryClip!!.getItemAt(0).text.toString())
 
-        inSettings { composeRule.onNodeWithText(string(R.string.setting_clean_links)).performScrollTo().performClick() }
+        inAdvancedSettings { composeRule.onNodeWithText(string(R.string.setting_clean_links)).performScrollTo().performClick() }
         assertFalse(prefs().getBoolean("clean_links", true))
         click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/us/album/clean/1?i=2&uo=4", clipboard.primaryClip!!.getItemAt(0).text.toString())
@@ -3950,7 +3970,7 @@ class MainActivityTest {
             }
         }
         launch()
-        inSettings { click(string(R.string.setting_exact_match)) }
+        inAdvancedSettings { click(string(R.string.setting_exact_match)) }
         assertTrue(prefs().getBoolean("exact_match", false))
         resolveTyped()
 
@@ -3982,7 +4002,7 @@ class MainActivityTest {
         assertEquals("https://www.deezer.com/search/Exact%20Artist", nextStartedActivity()!!.dataString)
 
         // Searching anyway picked in settings, it's a search like before.
-        inSettings {
+        inAdvancedSettings {
             composeRule.onNodeWithText(string(R.string.setting_not_found)).performScrollTo().performClick()
             composeRule.onNodeWithText(string(R.string.not_found_search)).performClick()
         }
@@ -3998,7 +4018,7 @@ class MainActivityTest {
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
 
-        inSettings {
+        inAdvancedSettings {
             click(string(R.string.setting_exact_match))
             // Nothing's looked for without it, so nothing's ever not found.
             composeRule.waitForIdle()

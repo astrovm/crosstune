@@ -1294,6 +1294,27 @@ class ListeningTest {
     }
 
     @Test
+    fun theVisualsButtonHeldDownSetsHowLongEachShowsAndWhetherHeavyOnesAreSkipped() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        // Held down, it offers more than tapped does.
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_options))).performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.visuals_next)))
+        // Swapping every few seconds.
+        composeRule.onNode(hasContentDescription(string(R.string.setting_visuals_change)))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        composeRule.waitForIdle()
+        assertEquals(5_000L, prefs().getLong("visuals_change_ms", 0))
+        assertEquals(5_000L, controllerModel().uiState.visualsSettings.changeMs)
+        assertTrue(shown("5 sec"))
+        click(string(R.string.setting_skip_heavy_visuals))
+        assertFalse(prefs().getBoolean("visuals_skip_heavy", true))
+        assertTrue(visualsShown().isNotEmpty())
+    }
+
+    @Test
     fun eachVisualHasAStillAndPlaysOneAtATimeOnceTapped() {
         val names = milkdropPresets(app.assets)
         names.forEach { assertNotNull(it, milkdropThumb(app.assets, it)) }

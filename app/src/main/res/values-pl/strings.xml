@@ -34,7 +34,7 @@
     <string name="custom_template_label">Adres wyszukiwania</string>
     <string name="custom_template_hint">Wpisz {query} w miejscu nazwy utworu, np. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Wpisz nazwę i adres URL zawierający {query}.</string>
-    <string name="settings_behaviour_title">Działanie</string>
+    <string name="settings_advanced_title">Zaawansowane</string>
     <string name="settings_listening_title">Rozpoznawanie i teksty</string>
     <string name="settings_appearance_title">Wygląd</string>
     <string name="chatgpt_use_plan">Używaj płatnego planu ChatGPT</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">Klasyki</string>
     <string name="visuals_only">Tylko wizualizacje</string>
     <string name="visuals_options">Opcje wizualizacji</string>
+    <string name="visuals_more">Więcej opcji wizualizacji</string>
     <string name="visuals_show_words">Pokaż tekst</string>
     <string name="setting_theme">Motyw</string>
     <string name="theme_light">Jasny</string>

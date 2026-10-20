@@ -34,7 +34,7 @@
     <string name="custom_template_label">सर्च URL</string>
     <string name="custom_template_hint">गाने के नाम की जगह {query} लिखें, जैसे https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">कोई नाम और {query} वाला URL डालें।</string>
-    <string name="settings_behaviour_title">व्यवहार</string>
+    <string name="settings_advanced_title">उन्नत</string>
     <string name="settings_listening_title">पहचान और बोल</string>
     <string name="settings_appearance_title">दिखावट</string>
     <string name="chatgpt_use_plan">अपना पेड ChatGPT प्लान इस्तेमाल करें</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">क्लासिक</string>
     <string name="visuals_only">सिर्फ़ विज़ुअल</string>
     <string name="visuals_options">विज़ुअल विकल्प</string>
+    <string name="visuals_more">विज़ुअल के और विकल्प</string>
     <string name="visuals_show_words">बोल दिखाएँ</string>
     <string name="setting_theme">थीम</string>
     <string name="theme_light">लाइट</string>

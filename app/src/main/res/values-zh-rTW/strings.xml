@@ -34,7 +34,7 @@
     <string name="custom_template_label">搜尋網址</string>
     <string name="custom_template_hint">在歌名的位置寫上 {query}，例如 https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">請輸入名稱和包含 {query} 的網址。</string>
-    <string name="settings_behaviour_title">行為</string>
+    <string name="settings_advanced_title">進階</string>
     <string name="settings_listening_title">辨識與歌詞</string>
     <string name="settings_appearance_title">外觀</string>
     <string name="chatgpt_use_plan">使用你的 ChatGPT 付費方案</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">經典</string>
     <string name="visuals_only">僅視覺效果</string>
     <string name="visuals_options">視覺效果選項</string>
+    <string name="visuals_more">更多視覺效果選項</string>
     <string name="visuals_show_words">顯示歌詞</string>
     <string name="setting_theme">主題</string>
     <string name="theme_light">淺色</string>

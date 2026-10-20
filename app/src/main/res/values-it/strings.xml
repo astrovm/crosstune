@@ -35,7 +35,7 @@
     <string name="custom_template_label">URL di ricerca</string>
     <string name="custom_template_hint">Scrivi {query} dove va il nome del brano, ad es. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Inserisci un nome e un URL che contenga {query}.</string>
-    <string name="settings_behaviour_title">Comportamento</string>
+    <string name="settings_advanced_title">Avanzate</string>
     <string name="settings_listening_title">Riconoscimento e testi</string>
     <string name="settings_appearance_title">Aspetto</string>
     <string name="chatgpt_use_plan">Usa il tuo piano ChatGPT a pagamento</string>
@@ -249,6 +249,7 @@
     <string name="visual_kind_classics">Classici</string>
     <string name="visuals_only">Solo effetti visivi</string>
     <string name="visuals_options">Opzioni effetti visivi</string>
+    <string name="visuals_more">Altre opzioni effetti visivi</string>
     <string name="visuals_show_words">Mostra il testo</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Chiaro</string>

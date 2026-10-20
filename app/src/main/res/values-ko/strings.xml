@@ -34,7 +34,7 @@
     <string name="custom_template_label">검색 URL</string>
     <string name="custom_template_hint">노래 이름이 들어갈 자리에 {query}를 입력하세요. 예: https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">이름과 {query}가 포함된 URL을 입력하세요.</string>
-    <string name="settings_behaviour_title">동작</string>
+    <string name="settings_advanced_title">고급</string>
     <string name="settings_listening_title">인식 및 가사</string>
     <string name="settings_appearance_title">화면 표시</string>
     <string name="chatgpt_use_plan">ChatGPT 유료 요금제 사용</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">클래식</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
+    <string name="visuals_more">비주얼 옵션 더보기</string>
     <string name="visuals_show_words">가사 보기</string>
     <string name="setting_theme">테마</string>
     <string name="theme_light">라이트</string>
