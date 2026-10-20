@@ -108,6 +108,11 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    lint {
+        // Lint runs in full on the debug build in CI, so a release build doesn't check again.
+        checkReleaseBuilds = false
+    }
 }
 
 baselineProfile {
