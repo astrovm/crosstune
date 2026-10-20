@@ -212,6 +212,10 @@
     <string name="lyrics_pause">रोकें</string>
     <string name="lyrics_next_song">अगला गाना</string>
     <string name="lyrics_previous_song">पिछला गाना</string>
+    <string name="player_playing_in">%1$s में चल रहा है</string>
+    <string name="player_waiting">%1$s का इंतज़ार</string>
+    <string name="player_follow_allow">Crosstune को अपने म्यूज़िक ऐप में चल रहा गाना देखने और कंट्रोल करने दें।</string>
+    <string name="player_position">%2$s में से %1$s</string>
     <string name="lyrics_jump">यहाँ जाएँ</string>
     <string name="lyrics_sync">समय ठीक करें</string>
     <string name="lyrics_sync_hint">जो पंक्ति अभी सुन रहे हैं, उस पर टैप करें</string>

@@ -3034,17 +3034,19 @@ class MainActivityTest {
         launch()
         resolveTyped(link)
         val playing = { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = youTubeMusic) }
-        // Tapped once it's done with the last time, as a tap while it's asking does nothing.
+        val playerShown = { composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isNotEmpty() }
+        // Tapped on the song's card, back from the player, once it's done with the last time, as a tap while it's asking does nothing.
         val tapPlay = {
+            if (playerShown()) click(string(R.string.dismiss_button))
             waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             click(play)
         }
 
-        // Asked in the background, with its link there; once only, until it plays, and Crosstune stays.
+        // Asked in the background, with its link there, and Crosstune stays, in its player.
         tapPlay()
         assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to youTubeMusic, phone.songsAsked.single())
         assertEquals(link, phone.linksAsked.single())
-        composeRule.onNode(hasContentDescription(play)).assertIsNotEnabled()
+        assertTrue(playerShown())
         playing()
         assertNull(nextStartedActivity())
 
@@ -3075,6 +3077,94 @@ class MainActivityTest {
         assertEquals(link, nextStartedActivity()?.dataString)
         assertEquals(2, phone.opened.size)
         assertEquals(2, phone.cameBack)
+        assertFalse(playerShown())
+    }
+
+    @Test
+    fun aPlayedSongShowsInCrosstunesPlayerWhichPlaysPausesSkipsAndSeeksIt() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+
+        // It opens on the song at once, waiting for the app to play it.
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        composeRule.onNode(hasText("Dakare Ni Kita Onna")).assertExists()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_next_song))).assertIsNotEnabled()
+        val now = SystemClock.elapsedRealtime()
+        phone.playing.value = Following(
+            PlaybackClock(30_000, now, playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic,
+            canSkipNext = true, durationMs = 200_000
+        )
+        waitForText("3:20")
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+
+        // Its buttons are the app's: pause, the next song but not the one before, and anywhere in it.
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_previous_song))).assertIsNotEnabled()
+        click(string(R.string.lyrics_next_song))
+        assertEquals(listOf(true), phone.skips)
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(100_000f) }
+        composeRule.waitForIdle()
+        assertEquals(listOf(100_000L), phone.seeks)
+        // Paused, it plays again.
+        phone.playing.value = Following(PlaybackClock(100_000, now, playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
+        waitForDescription(string(R.string.lyrics_play))
+        click(string(R.string.lyrics_play))
+        assertEquals(listOf(false, true), phone.plays)
+
+        // The next song the app plays takes over, followed in the same app.
+        phone.playing.value = null
+        phone.onThePhone = Heard.Song(MusicMetadata("Other Song", "Someone Else"), null)
+        waitForText("Other Song")
+        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+
+        // Its words open over it, and close back to it; closed, it's the song's card again.
+        click(string(R.string.lyrics_button))
+        waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        waitForDescription(play)
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun withoutAccessThePlayerSaysHowToAllowItAndPlayAsksTheAppAgain() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback()
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForText(string(R.string.player_follow_allow))
+        assertEquals(1, phone.songsAsked.size)
+        assertNull(nextStartedActivity())
+        // Unable to see whether it plays, Play asks the app for it again.
+        click(string(R.string.lyrics_play))
+        waitUntil { phone.songsAsked.size == 2 }
+        // Allowed meanwhile, it follows the app from then on.
+        phone.access = true
+        phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = false, appPackage = youTubeMusic)
+        controller!!.pause().resume()
+        waitForDescription(string(R.string.lyrics_pause))
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_follow_allow))).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
