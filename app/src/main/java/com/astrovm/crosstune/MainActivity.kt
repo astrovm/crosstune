@@ -271,7 +271,7 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         /** What draws the visuals behind the words; replaced in tests, which have no GPU or native library. */
-        internal var milkdropFactory: () -> Milkdrop = ::NativeMilkdrop
+        internal var milkdropFactory: (Context) -> Milkdrop = ::NativeMilkdrop
 
         @VisibleForTesting
         /** What the visuals hear the phone play through. */

@@ -1,0 +1,1 @@
+Visuals that draw with images, like fire, clouds or moss, show them now, so they no longer draw blank.

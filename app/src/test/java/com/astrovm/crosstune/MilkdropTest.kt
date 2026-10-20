@@ -4,6 +4,7 @@ import android.app.Application
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.Visualizer
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowVisualizer
 import kotlin.random.Random
@@ -201,6 +203,27 @@ class MilkdropTest {
         // By name, without .milk, each read as a .milk file.
         assertTrue(presets.none { it.endsWith(".milk") })
         assertTrue(presets.all { "[preset00]" in milkdropPreset(assets, it) })
+    }
+
+    @Test
+    fun theImagesPresetsDrawWithAreCopiedOutOnceForEachInstall() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val shipped = app.assets.list("milkdrop-textures").orEmpty().sorted()
+        assertTrue(shipped.isNotEmpty())
+        fun bytes(name: String) = app.assets.open("milkdrop-textures/$name").use { it.readBytes() }
+        val dir = milkdropTextures(app)!!
+        assertEquals(shipped, dir.list()!!.filterNot { it.startsWith(".") }.sorted())
+        shipped.forEach { assertArrayEquals(bytes(it), File(dir, it).readBytes()) }
+        // Already copied, they're left as they are.
+        File(dir, shipped[0]).writeText("changed")
+        File(dir, "gone.jpg").writeText("gone")
+        assertEquals(dir, milkdropTextures(app))
+        assertEquals("changed", File(dir, shipped[0]).readText())
+        // Once the app is updated, they're copied again, and those it no longer has go.
+        shadowOf(app.packageManager).getInternalMutablePackageInfo(app.packageName).lastUpdateTime += 1000
+        assertEquals(dir, milkdropTextures(app))
+        assertArrayEquals(bytes(shipped[0]), File(dir, shipped[0]).readBytes())
+        assertFalse(File(dir, "gone.jpg").exists())
     }
 
     @Test
