@@ -198,8 +198,8 @@ internal data class VisualsSettings(
 
     companion object {
         const val NEVER = Long.MAX_VALUE
-        /** How long each can show, as Settings offers. */
-        val CHANGE_EVERY = listOf(15_000L, 30_000L, 60_000L, NEVER)
+        /** How long each can show, as the slider in Settings offers, from swapping fast to staying on one. */
+        val CHANGE_EVERY = listOf(5_000L, 10_000L, 15_000L, 30_000L, 45_000L, 60_000L, 120_000L, 300_000L, NEVER)
     }
 }
 

@@ -547,7 +547,11 @@ private fun LyricsActions(
                 if (state.lyrics.isNotEmpty()) {
                     IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
                 }
-                VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
+                VisualsButton(
+                    state.visuals,
+                    onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) },
+                    onLongClick = { menu = BarMenu.VISUALS_MORE }
+                )
                 // Floating shows the line being sung, which only timed words have.
                 if (state.lyricLines.isNotEmpty()) {
                     IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
@@ -565,10 +569,11 @@ private fun LyricsActions(
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, close)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions.onPractiseSong, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
+        VisualsMoreMenu(menu == BarMenu.VISUALS_MORE, state.visualsSettings, actions, close)
     }
 }
 
-private enum class BarMenu { LEARN, STUDY, VISUALS }
+private enum class BarMenu { LEARN, STUDY, VISUALS, VISUALS_MORE }
 
 /** What the sheet about the whole song shows: what it means, its words to know, or its artist. */
 internal enum class SongTab(@StringRes val label: Int) {
@@ -1000,20 +1005,36 @@ private fun LearnButton(translating: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off. */
+/**
+ * MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off.
+ * Held down, it sets how long each shows, and whether heavy ones are skipped.
+ */
 @Composable
-private fun VisualsButton(on: Boolean, onClick: () -> Unit) =
-    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
+private fun VisualsButton(on: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) =
+    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick, onLongClick)
 
-/** A button in the bar, lit while what it does is on. */
+/** A button in the bar, lit while what it does is on, and held down for more when it has [onLongClick]. */
 @Composable
-private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -> Unit) {
+private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "button background")
     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "button tint")
-    IconButton(onClick = onClick, modifier = Modifier.semantics { selected = on }) {
+    val lit = @Composable {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
             Icon(painterResource(icon), contentDescription = description, tint = tint, modifier = Modifier.size(22.dp))
         }
+    }
+    if (onLongClick == null) {
+        IconButton(onClick = onClick, modifier = Modifier.semantics { selected = on }) { lit() }
+    } else {
+        // An IconButton can't be held down: the same size and ripple, with a long press.
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .combinedClickable(role = Role.Button, onLongClickLabel = stringResource(R.string.visuals_more), onLongClick = onLongClick, onClick = onClick)
+                .semantics { selected = on }
+        ) { lit() }
     }
 }
 
@@ -1073,6 +1094,15 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
                 actions.onVisualsChange(false)
             }
         )
+    }
+}
+
+/** The visuals' menu held down: how long each shows, from swapping fast to staying on one, and whether heavy ones are skipped. */
+@Composable
+private fun VisualsMoreMenu(open: Boolean, settings: VisualsSettings, actions: ScreenActions, onClose: () -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        VisualsChangeRow(settings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(280.dp))
+        LearnItem(R.string.setting_skip_heavy_visuals, settings.skipHeavy, actions.onSkipHeavyVisualsChange)
     }
 }
 

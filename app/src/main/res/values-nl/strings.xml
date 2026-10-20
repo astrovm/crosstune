@@ -34,7 +34,7 @@
     <string name="custom_template_label">Zoek-URL</string>
     <string name="custom_template_hint">Zet {query} waar de titel van het nummer moet komen, bijv. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
-    <string name="settings_behaviour_title">Gedrag</string>
+    <string name="settings_advanced_title">Geavanceerd</string>
     <string name="settings_listening_title">Herkenning en songteksten</string>
     <string name="settings_appearance_title">Weergave</string>
     <string name="chatgpt_use_plan">Je betaalde ChatGPT-abonnement gebruiken</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">Klassiekers</string>
     <string name="visuals_only">Alleen visuals</string>
     <string name="visuals_options">Visuals-opties</string>
+    <string name="visuals_more">Meer visuals-opties</string>
     <string name="visuals_show_words">Songtekst tonen</string>
     <string name="setting_theme">Thema</string>
     <string name="theme_light">Licht</string>

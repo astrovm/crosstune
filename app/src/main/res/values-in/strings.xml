@@ -34,7 +34,7 @@
     <string name="custom_template_label">URL pencarian</string>
     <string name="custom_template_hint">Tulis {query} di tempat judul lagu, misalnya https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Masukkan nama dan URL yang berisi {query}.</string>
-    <string name="settings_behaviour_title">Perilaku</string>
+    <string name="settings_advanced_title">Lanjutan</string>
     <string name="settings_listening_title">Pengenalan dan lirik</string>
     <string name="settings_appearance_title">Tampilan</string>
     <string name="chatgpt_use_plan">Gunakan paket ChatGPT berbayar Anda</string>
@@ -248,6 +248,7 @@
     <string name="visual_kind_classics">Klasik</string>
     <string name="visuals_only">Visual saja</string>
     <string name="visuals_options">Opsi visual</string>
+    <string name="visuals_more">Opsi visual lainnya</string>
     <string name="visuals_show_words">Tampilkan lirik</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Terang</string>
