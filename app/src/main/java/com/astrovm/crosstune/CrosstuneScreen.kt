@@ -8,6 +8,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.alpha
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.ExperimentalTransitionApi
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -340,6 +347,7 @@ internal data class ScreenActions(
 
 /** Switches between the main screen and settings; system back returns from settings. */
 @Composable
+@OptIn(ExperimentalTransitionApi::class)
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
@@ -391,15 +399,45 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         showPracticeList -> Screen.PRACTICE_LIST
         else -> Screen.MAIN
     }
-    AnimatedContent(
-        targetState = screen,
+    val layers = remember { LayerSwipe() }
+    layers.up = when {
+        screen == Screen.MAIN && state.playingNow != null -> Layer(Screen.PLAYER, actions.onOpenPlayingNow, back = actions.onClosePlayer)
+        screen == Screen.PLAYER && state.player?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
+        else -> null
+    }
+    layers.down = when (screen) {
+        Screen.LYRICS -> Layer(if (state.player != null) Screen.PLAYER else Screen.MAIN, actions.onDismissLyrics)
+        Screen.PLAYER -> Layer(Screen.MAIN, actions.onClosePlayer)
+        else -> null
+    }
+    val density = LocalDensity.current
+    layers.distance = LocalWindowInfo.current.containerSize.height.toFloat().coerceAtLeast(1f)
+    layers.flick = with(density) { 500.dp.toPx() }
+    val moving = remember { SeekableTransitionState(screen) }
+    // A change that isn't a swipe plays through; the finger holds the screens while it's on them.
+    LaunchedEffect(screen, layers.to) {
+        if (layers.to != null) return@LaunchedEffect
+        moving.animateTo(screen, Motion.rise.takeIf { screen in RISING || moving.currentState in RISING })
+    }
+    LaunchedEffect(layers) {
+        snapshotFlow { Triple(layers.to, layers.fraction, layers.carryOn) }.collectLatest { (to, fraction, carryOn) ->
+            if (to == null) return@collectLatest
+            if (carryOn == null) {
+                moving.seekTo(fraction, to)
+            } else {
+                moving.animateTo(if (carryOn) to else moving.currentState, Motion.rise)
+                layers.finish()
+            }
+        }
+    }
+    CompositionLocalProvider(LocalLayerSwipe provides layers) {
+    rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
             if (initialState in RISING || targetState in RISING) rise(up = targetState.depth > initialState.depth)
             else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
-        },
-        label = "screen"
+        }
     ) { shown ->
         // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
         if (shown == Screen.SETUP) {
@@ -427,13 +465,14 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             MainScreen(state, guided, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
         }
     }
+    }
     // Asked for from the words or from settings, so it shows over either.
     if (state.followHelp) FollowHelp(state, actions)
     state.notFoundOffer?.let { NotFoundDialog(it, state, actions) }
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
-private enum class Screen(val depth: Int) {
+internal enum class Screen(val depth: Int) {
     SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), LYRICS(2), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
 }
 
@@ -676,7 +715,7 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
         onClick = actions.onOpenPlayingNow,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         // Swiped up, it opens the player.
-        modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers(onUp = actions.onOpenPlayingNow)
+        modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers()
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(

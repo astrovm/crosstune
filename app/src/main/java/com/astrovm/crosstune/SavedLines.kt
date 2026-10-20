@@ -252,7 +252,8 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         /** How long [line] waits before it's practised again, answered as [grade]. */
         fun waitFor(line: SavedLine, grade: Grade): Long = when (grade) {
             Grade.AGAIN -> AGAIN_MS
-            Grade.HARD -> PRACTICE_DAYS[(minOf(line.box, PRACTICE_DAYS.size) - 1).coerceAtLeast(0)] * DAY_MS
+            // On its first day a card has no step to stay on, so known with trouble comes back sooner than known, as in Anki.
+            Grade.HARD -> if (line.box == 0) DAY_MS / 2 else PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.size) - 1] * DAY_MS
             Grade.GOOD -> PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.lastIndex)] * DAY_MS
             Grade.EASY -> PRACTICE_DAYS[minOf(line.box + 1, PRACTICE_DAYS.lastIndex)] * DAY_MS
         }

@@ -71,7 +71,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 .fillMaxSize()
                 .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
                 // Up for its words, down to put it away.
-                .swipeLayers(onUp = actions.onPlayerLyrics.takeIf { song.artist.isNotBlank() }, onDown = actions.onClosePlayer)
+                .swipeLayers()
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -95,9 +95,10 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
                     // Bigger text takes more of the room, so the cover gives way, which also leaves the swipes the whole screen.
                     val coverSize = (maxHeight - PLAYER_CONTROLS_HEIGHT * LocalDensity.current.fontScale.coerceAtLeast(1f)).coerceIn(PLAYER_COVER_MIN, minOf(maxWidth, PLAYER_COVER_MAX))
+                    // As wide as the cover can be, so its edges, the progress bar's and the times' line up.
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.widthIn(max = PLAYER_COVER_MAX).fillMaxWidth()
                     ) {
                         CoverArt(cover, actions.loadArtwork, size = coverSize)
                         Text(

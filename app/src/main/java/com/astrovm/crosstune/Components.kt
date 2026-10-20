@@ -6,7 +6,6 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,13 +33,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.alpha
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
@@ -256,19 +251,5 @@ internal fun OneTapButton(label: String, onClick: () -> Unit, fixing: Boolean) {
             )
         }
         Text(label)
-    }
-}
-
-/** A swipe up or down moves a layer: the player, the words, and back. A tap or a slide sideways is left to what's under it. */
-internal fun Modifier.swipeLayers(onUp: (() -> Unit)? = null, onDown: (() -> Unit)? = null): Modifier = composed {
-    val up by rememberUpdatedState(onUp)
-    val down by rememberUpdatedState(onDown)
-    val reach = with(LocalDensity.current) { 64.dp.toPx() }
-    pointerInput(Unit) {
-        var dragged = 0f
-        detectVerticalDragGestures(
-            onDragStart = { dragged = 0f },
-            onDragEnd = { if (dragged <= -reach) up?.invoke() else if (dragged >= reach) down?.invoke() }
-        ) { _, amount -> dragged += amount }
     }
 }

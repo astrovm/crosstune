@@ -236,31 +236,23 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         delay(BAR_BACK_MS)
         barShown = true
     }
-    val dismissPull = with(LocalDensity.current) { 96.dp.toPx() }
-    val dismiss by rememberUpdatedState(actions.onDismissLyrics)
-    var pulled by remember { mutableFloatStateOf(0f) }
+    val layers = LocalLayerSwipe.current
     val scrolling = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
-                return Offset.Zero
+                // Pulled back up, the words stay put until the pull is undone.
+                return if (layers.swiping && available.y < 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
             }
 
-            // Pulled down past the first line, the words go back to what's under them.
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput) {
-                    pulled = if (available.y > 0f) pulled + available.y else 0f
-                    if (pulled >= dismissPull) {
-                        pulled = 0f
-                        dismiss()
-                    }
-                }
-                return Offset.Zero
-            }
+            // Pulled down past the first line, the words follow the finger back to what's under them.
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (source == NestedScrollSource.UserInput && available.y > 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
 
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                pulled = 0f
-                return Velocity.Zero
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (!layers.swiping) return Velocity.Zero
+                layers.release(available.y)
+                return available
             }
         }
     }
@@ -271,7 +263,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             .fillMaxSize()
             .nestedScroll(scrolling)
             // Where there's no list to pull down, e.g. while the words are found, a swipe down does the same.
-            .swipeLayers(onDown = actions.onDismissLyrics)
+            .swipeLayers()
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier

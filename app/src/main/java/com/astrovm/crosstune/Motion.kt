@@ -7,6 +7,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -44,6 +45,8 @@ internal object Motion {
     /** Movement and size: quick, settling without a wobble. */
     val offset: FiniteAnimationSpec<IntOffset> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1))
     val size: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntSize(1, 1))
+    /** How a screen rises or sinks once the finger is off it, or it was a tap: it carries on from where it is. */
+    val rise: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = 0.001f)
     /** What comes in fades in a touch slower than what goes, so the two don't blur together. */
     val fadeIn: FiniteAnimationSpec<Float> = tween(durationMillis = 220, delayMillis = 60)
     val fadeOut: FiniteAnimationSpec<Float> = tween(durationMillis = 120)
@@ -63,13 +66,19 @@ internal fun <S> AnimatedContentTransitionScope<S>.slide(forward: Boolean): Cont
         (slideOutHorizontally(Motion.offset) { width -> -direction * width / 5 } + fadeOut(Motion.fadeOut))
 }
 
-/** A screen rising over the one below it, [up], or sinking back down to show it again. */
+/**
+ * A screen rising over the one below it, [up], or sinking back down to show it again. It moves the
+ * whole way and evenly, so a swipe can hold it where the finger is; the rest is [Motion.rise].
+ */
 internal fun <S> AnimatedContentTransitionScope<S>.rise(up: Boolean): ContentTransform =
     if (up) {
-        (slideInVertically(Motion.offset) { height -> height / 3 } + fadeIn(Motion.fadeIn)) togetherWith fadeOut(Motion.fadeOut)
+        slideInVertically(RISE) { height -> height } togetherWith ExitTransition.KeepUntilTransitionsFinished
     } else {
-        fadeIn(Motion.fadeIn) togetherWith (slideOutVertically(Motion.offset) { height -> height / 3 } + fadeOut(Motion.fadeOut))
+        // What goes is the one on top, so the one coming back is under it.
+        (EnterTransition.None togetherWith slideOutVertically(RISE) { height -> height }).apply { targetContentZIndex = -1f }
     }
+
+private val RISE = tween<IntOffset>(durationMillis = 300, easing = LinearEasing)
 
 /** One thing swapping for another in place, e.g. a new result for the last one, or nothing for something. */
 internal fun <S> AnimatedContentTransitionScope<S>.swap(): ContentTransform =

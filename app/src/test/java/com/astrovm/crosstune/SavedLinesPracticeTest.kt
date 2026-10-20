@@ -48,10 +48,10 @@ class SavedLinesPracticeTest {
     fun aLineKnownWithTroubleStaysOnItsStep() {
         val store = SavedLinesStore(prefs)
         store.toggle(line)
-        // First time, back in a day, as known; known with trouble after that, after as long as last time.
+        // First time, back in half a day, sooner than known; known with trouble after that, after as long as last time.
         val first = store.practised(line, Grade.HARD, now = 0).single()
         assertEquals(0, first.box)
-        assertEquals(day, first.due)
+        assertEquals(day / 2, first.due)
         store.practised(line, Grade.GOOD, now = 0)
         store.practised(line, Grade.GOOD, now = 0)
         val hard = store.practised(line, Grade.HARD, now = 0).single()
@@ -198,11 +198,20 @@ class SavedLinesPracticeTest {
     @Test
     fun howLongALineWaitsDependsOnHowWellItsKnown() {
         assertEquals(10 * 60 * 1000L, SavedLinesStore.waitFor(line, Grade.AGAIN))
-        assertEquals(day, SavedLinesStore.waitFor(line, Grade.HARD))
+        assertEquals(day / 2, SavedLinesStore.waitFor(line, Grade.HARD))
         assertEquals(day, SavedLinesStore.waitFor(line, Grade.GOOD))
         assertEquals(3 * day, SavedLinesStore.waitFor(line, Grade.EASY))
         assertEquals(7 * day, SavedLinesStore.waitFor(line.copy(box = 3), Grade.HARD))
         assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.EASY))
+    }
+
+    @Test
+    fun theFourAnswersOfACardNeverWaitTheSame() {
+        // As in Anki, so the buttons show different times, until the last step of all.
+        (0..5).forEach { box ->
+            val waits = Grade.entries.map { SavedLinesStore.waitFor(line.copy(box = box), it) }
+            assertEquals("box $box: $waits", waits.sorted().distinct(), waits)
+        }
     }
 
     private val night = SavedLine(
