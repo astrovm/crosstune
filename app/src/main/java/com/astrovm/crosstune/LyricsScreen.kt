@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.draw.drawWithCache
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -235,11 +236,31 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         delay(BAR_BACK_MS)
         barShown = true
     }
+    val dismissPull = with(LocalDensity.current) { 96.dp.toPx() }
+    val dismiss by rememberUpdatedState(actions.onDismissLyrics)
+    var pulled by remember { mutableFloatStateOf(0f) }
     val scrolling = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
                 return Offset.Zero
+            }
+
+            // Pulled down past the first line, the words go back to what's under them.
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput) {
+                    pulled = if (available.y > 0f) pulled + available.y else 0f
+                    if (pulled >= dismissPull) {
+                        pulled = 0f
+                        dismiss()
+                    }
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                pulled = 0f
+                return Velocity.Zero
             }
         }
     }
@@ -249,6 +270,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrolling)
+            // Where there's no list to pull down, e.g. while the words are found, a swipe down does the same.
+            .swipeLayers(onDown = actions.onDismissLyrics)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier

@@ -155,6 +155,8 @@ internal data class ScreenActions(
     val onOpen: () -> Unit = {},
     val onPlayResult: () -> Unit = {},
     val onClosePlayer: () -> Unit = {},
+    val onPlayerOpenApp: () -> Unit = {},
+    val onPlayerOpenWith: () -> Unit = {},
     val onPlayerPlayPause: () -> Unit = {},
     val onPlayerSkip: (next: Boolean) -> Unit = {},
     val onPlayerSeek: (Long) -> Unit = {},
@@ -600,7 +602,6 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     // At the bottom, unless it's the song shown; not while a link is typed in.
     val playing = state.playingNow?.takeIf { now ->
         state.error == null && !state.isLoading && !state.listening &&
-            state.result?.let { SongNames.same(it.title, now.song.title) && SongNames.sameArtist(it.artist, now.song.artist) } != true &&
             (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
     }
     Page(
@@ -674,7 +675,8 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     Surface(
         onClick = actions.onOpenPlayingNow,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG)
+        // Swiped up, it opens the player.
+        modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG).swipeLayers(onUp = actions.onOpenPlayingNow)
     ) {
         Column(modifier = Modifier.navigationBarsPadding()) {
             Row(

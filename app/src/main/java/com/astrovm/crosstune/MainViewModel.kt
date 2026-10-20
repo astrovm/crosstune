@@ -46,8 +46,11 @@ internal sealed interface Effect {
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean, val atMs: Long = SystemClock.elapsedRealtime()) : Effect
     data class Share(val url: String) : Effect
 
-    /** Brings [packageName] forward as it is, for a song it already plays, which opening it on the song would restart. */
-    data class Show(val packageName: String, val finishAfterOpen: Boolean) : Effect
+    /**
+     * Brings [packageName] forward as it is, for a song it already plays, which opening it on the song would restart.
+     * The player covers where an error would show, so it's left unsaid there.
+     */
+    data class Show(val packageName: String, val finishAfterOpen: Boolean, val saysWhenItFails: Boolean = true) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -745,9 +748,13 @@ internal class MainViewModel(
         uiState = uiState.copy(playingNow = song?.let { NowPlaying(it, followedNow?.takeIf { (followed) -> followed == song }?.second) })
     }
 
-    /** Opens the player on the song playing now, which then stays in sight. */
+    /**
+     * Opens the player on the song playing now, which then stays in sight. Its card is shown under
+     * the player, so its link, Copy and Share are a swipe down away.
+     */
     fun openPlayingNow() {
         val now = uiState.playingNow ?: return
+        if (uiState.result?.let { sameSong(it, now.song) } != true) showSong(now.song)
         openPlayer(now.song, now.following?.appPackage, played = true)
     }
 
@@ -762,12 +769,16 @@ internal class MainViewModel(
         playback?.skip(now.song, true)
     }
 
-    private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
-        retryListens = false
-        val input = heard.appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") }
-            ?: MusicLinks.recognizedSong(heard.metadata)
+    /** Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's known. */
+    private fun showSong(song: MusicMetadata, appleMusicId: String? = null) {
+        val input = appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") } ?: MusicLinks.recognizedSong(song)
         uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
         resolve(input, openWhenReady = false)
+    }
+
+    private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+        retryListens = false
+        showSong(heard.metadata, heard.appleMusicId)
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
         heardSong = heard.metadata
         heardClock = heard.clock
@@ -1103,6 +1114,19 @@ internal class MainViewModel(
         playerJob?.cancel()
         playerJob = null
         uiState = uiState.copy(player = null)
+    }
+
+    /** Brings the app the player's song plays in forward as it is, which opening the song there would restart. */
+    fun openPlayerApp() {
+        val player = uiState.player ?: return
+        val app = player.following?.appPackage ?: player.app ?: return
+        effectChannel.trySend(Effect.Show(app, finishAfterOpen = false, saysWhenItFails = false))
+    }
+
+    /** Closes the player on the song's card, with the apps to open it in over it. */
+    fun playerOpenWith() {
+        closePlayer()
+        uiState = uiState.copy(showDestinationPicker = true, pickerHides = null)
     }
 
     /** Plays or pauses the player's song; asked of its app again when it isn't playing it. */

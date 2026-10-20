@@ -51,6 +51,9 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
@@ -3185,6 +3188,65 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_MAIN, shown.action)
         assertNull(shown.data)
         assertEquals(youTubeMusic, shown.component?.packageName ?: shown.`package`)
+    }
+
+    @Test
+    fun thePlayerKeepsTheSongsLinkToolsInAMenuItsAppIconOpensItsAppAndSwipesMoveBetweenLayers() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        val playingIn = string(R.string.player_playing_in, "YouTube Music")
+        waitForDescription(playingIn)
+        phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+
+        // The link tools are a menu away, not another screen: copy, share, and the apps to open it in.
+        val item = { label: String -> hasText(label) and isEnabled() }
+        val tapItem = { label: String ->
+            click(string(R.string.more_button))
+            waitUntil { composeRule.onAllNodes(item(label)).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNode(item(label)).performClick()
+            composeRule.waitForIdle()
+        }
+        tapItem(string(R.string.copy_link_button))
+        assertEquals("https://music.youtube.com/watch?v=sPmul8b17AU", app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        tapItem(string(R.string.share_link_button))
+        assertEquals(Intent.ACTION_CHOOSER, nextStartedActivity()!!.action)
+
+        // Its app's icon brings that app forward as it is; with nothing to open it with, nothing happens.
+        click(playingIn)
+        assertNull(nextStartedActivity())
+        installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        click(playingIn)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val shown = nextStartedActivity()!!
+        assertEquals(Intent.ACTION_MAIN, shown.action)
+        assertNull(shown.data)
+
+        // Up opens its words, down goes back to the player and then to the song.
+        composeRule.onRoot().performTouchInput { swipeUp() }
+        waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onRoot().performTouchInput { swipeDown() }
+        waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isEmpty() }
+        waitForDescription(playingIn)
+        composeRule.onRoot().performTouchInput { swipeDown() }
+        waitForDescription(play)
+        assertTrue(composeRule.onAllNodes(hasContentDescription(playingIn)).fetchSemanticsNodes().isEmpty())
+
+        // Open with closes the player on the song, with its apps to choose from.
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForDescription(playingIn)
+        tapItem(string(R.string.picker_title))
+        waitForText(string(R.string.picker_title))
+        assertTrue(composeRule.onAllNodes(hasContentDescription(playingIn)).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
