@@ -68,10 +68,11 @@ class LookupCacheTest {
     fun aBrokenOrUnwritableFileJustStartsOver() = runBlocking {
         file.writeText("not json")
         assertNull(cache().get("song"))
-        file.writeText("[]")
-        file.setReadable(false)
-        assertNull(cache().get("song"))
-        file.setReadable(true)
+        // A file can disappear after isFile. Unlike permission bits, this fails even in a root container.
+        val vanished = object : File(dir, "gone.json") {
+            override fun isFile() = true
+        }
+        assertNull(cache(vanished).get("song"))
 
         // Somewhere it can't write, it still remembers for now.
         val notADirectory = File(dir, "file").apply { writeText("x") }
