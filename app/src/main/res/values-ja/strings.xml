@@ -294,6 +294,7 @@
     <string name="lyrics_learn">読みと翻訳</string>
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
+    <string name="lyrics_words_size">歌詞のサイズ</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>

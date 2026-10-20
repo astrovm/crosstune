@@ -313,6 +313,7 @@
     <string name="lyrics_learn">Readings and translation</string>
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
+    <string name="lyrics_words_size">Words size</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_translation">Translation</string>

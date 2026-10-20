@@ -293,6 +293,7 @@
     <string name="lyrics_learn">Czytanie i tłumaczenie</string>
     <string name="lyrics_readings">Czytanie nad słowami</string>
     <string name="lyrics_reading_size">Rozmiar czytania</string>
+    <string name="lyrics_words_size">Rozmiar tekstu</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_translation">Tłumaczenie</string>

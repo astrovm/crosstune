@@ -2424,6 +2424,22 @@ class ListeningTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsCanBeMadeBiggerOrSmallerAndStaySo() {
+        // Kept bigger than they go, from a build that let them, they're as big as they go now.
+        prefs().edit().putFloat("words_scale", 5f).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertEquals(MAX_WORDS_SCALE, controllerModel().uiState.learning.wordsScale)
+        val big = composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top }
+        learnMenu()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
+        assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
+    }
+
+    @Test
     fun readingsAreOnFromTheStartAndCanBeMadeBigger() {
         // Kept bigger than they go, from a build that let them, they're as big as they go now.
         prefs().edit().putFloat("reading_scale", 5f).commit()

@@ -319,7 +319,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         // Read line by line, each with what helps read it, or its chords.
                         LyricLines(state, onStudy = { studying = it })
                     } else {
-                        PlainLyrics(state.lyrics)
+                        PlainLyrics(state.lyrics, state.learning.wordsScale)
                     }
                 }
             }
@@ -630,6 +630,9 @@ private val Learning.shows get() = translation || (script != null && (readings |
 @Composable
 private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, actions: ScreenActions, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        // How big the words are, for any song.
+        SizeSlider(R.string.lyrics_words_size, R.drawable.ic_text_increase, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+        HorizontalDivider()
         val script = learning.script
         // A script that reads otherwise can show as written, or only in kana for Japanese, or in Latin letters.
         if (script != null) {
@@ -641,7 +644,9 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
         // Readings sit over the words as written; Latin letters under them, unless they're what shows.
         if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
             LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-            if (learning.readings) ReadingSize(learning.readingScale, actions)
+            if (learning.readings) {
+                SizeSlider(R.string.lyrics_reading_size, R.drawable.ic_format_size, learning.readingScale, READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+            }
         }
         if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
         // Romaji shown, it can be spelled as typed rather than as said.
@@ -654,22 +659,25 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
     }
 }
 
-/** How big the readings are, from as they start to nearly as big as the words. */
+/**
+ * How big something is, slid within [range]: the words, from smaller to much bigger than they start,
+ * or the readings, from as they start to nearly as big as the words.
+ */
 @Composable
-private fun ReadingSize(scale: Float, actions: ScreenActions) {
-    val size = stringResource(R.string.lyrics_reading_size)
+private fun SizeSlider(@StringRes label: Int, @DrawableRes icon: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
+    val size = stringResource(label)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
-        AppIcon(R.drawable.ic_format_size, contentDescription = null)
+        AppIcon(icon, contentDescription = null)
         // Where it was let go is kept, even before the menu has caught up with it.
         var latest by remember { mutableFloatStateOf(scale) }
         Slider(
             value = scale,
             onValueChange = {
                 latest = it
-                actions.onReadingScaleChange(it, false)
+                onChange(it, false)
             },
-            onValueChangeFinished = { actions.onReadingScaleChange(latest, true) },
-            valueRange = READING_SCALE..MAX_READING_SCALE,
+            onValueChangeFinished = { onChange(latest, true) },
+            valueRange = range,
             modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = size }
         )
     }
@@ -1133,10 +1141,10 @@ private fun LoadingLines() {
 
 /** Words with no timings, read as a page. */
 @Composable
-private fun PlainLyrics(words: String) {
+private fun PlainLyrics(words: String, scale: Float) {
     Text(
         text = words,
-        style = MaterialTheme.typography.titleLarge.copy(lineHeight = 34.sp),
+        style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * scale, lineHeight = 34.sp * scale) },
         modifier = Modifier
             .fillMaxSize()
             .fadedEdges()
@@ -1208,7 +1216,8 @@ private fun TimedLyrics(
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index)
+                help = state.learning.helpFor(index),
+                textScale = state.learning.wordsScale
             )
         }
     }
@@ -1225,7 +1234,10 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
         modifier = Modifier.fillMaxSize().fadedEdges()
     ) {
         itemsIndexed(lines) { index, line ->
-            LyricLineText(line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index))
+            LyricLineText(
+                line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
+                textScale = state.learning.wordsScale
+            )
         }
     }
 }
@@ -1317,7 +1329,8 @@ private fun LyricLineText(
     onStudy: () -> Unit,
     help: LineHelp? = null,
     waiting: Boolean = false,
-    seekLabel: Int = R.string.lyrics_jump
+    seekLabel: Int = R.string.lyrics_jump,
+    textScale: Float = 1f
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1329,8 +1342,8 @@ private fun LyricLineText(
     )
     val scale by animateFloatAsState(if (lit || place == null) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
     val style = MaterialTheme.typography.headlineSmall.copy(
-        fontSize = if (place == null) 22.sp else 26.sp,
-        lineHeight = if (place == null) 30.sp else 34.sp,
+        fontSize = (if (place == null) 22.sp else 26.sp) * textScale,
+        lineHeight = (if (place == null) 30.sp else 34.sp) * textScale,
         fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
         // Rows of about even length, broken between words, so no word or kana is left alone on the last.
         lineBreak = LineBreak.Heading
@@ -1616,6 +1629,10 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
 /** How big readings are beside the words they're over, to start with; and as big as they can be made. */
 internal const val READING_SCALE = 0.45f
 internal const val MAX_READING_SCALE = 0.8f
+
+/** How small and how big the words can be made, beside how they start. */
+internal const val MIN_WORDS_SCALE = 0.75f
+internal const val MAX_WORDS_SCALE = 1.6f
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f

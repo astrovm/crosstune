@@ -293,6 +293,7 @@
     <string name="lyrics_learn">Uitspraak en vertaling</string>
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
     <string name="lyrics_reading_size">Grootte van de uitspraak</string>
+    <string name="lyrics_words_size">Tekstgrootte</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>

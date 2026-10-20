@@ -354,6 +354,8 @@ internal data class Learning(
     val untranslated: Set<String> = emptySet(),
     /** How big readings are beside the words they're over. */
     val readingScale: Float = READING_SCALE,
+    /** How big the words are, beside how they start. */
+    val wordsScale: Float = 1f,
     /** The script the words are in, when it reads differently from how it looks. */
     val script: Script? = null,
     /** How each line reads, once worked out. */
@@ -387,7 +389,8 @@ internal data class Learning(
     val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, script, wordsAs = wordsAs, romajiTyped = romajiTyped)
+    fun fresh(script: Script? = null) =
+        Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, wordsScale, script, wordsAs = wordsAs, romajiTyped = romajiTyped)
 }
 
 /** What the visuals are asked to do, as the screen has it. */

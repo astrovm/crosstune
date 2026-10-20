@@ -293,6 +293,7 @@
     <string name="lyrics_learn">Leituras e tradução</string>
     <string name="lyrics_readings">Leitura sobre as palavras</string>
     <string name="lyrics_reading_size">Tamanho da leitura</string>
+    <string name="lyrics_words_size">Tamanho da letra</string>
     <string name="lyrics_romanized">Em letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se digita</string>
     <string name="lyrics_translation">Tradução</string>

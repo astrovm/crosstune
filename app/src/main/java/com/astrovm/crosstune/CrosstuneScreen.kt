@@ -276,6 +276,7 @@ internal data class ScreenActions(
     val onUntranslatedChange: (Set<String>) -> Unit = {},
     /** How big readings are beside the words; kept when [save]d, once let go. */
     val onReadingScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
+    val onWordsScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onSignInWithChatGpt: () -> Unit = {},
     val onCancelChatGptSignIn: () -> Unit = {},
     val onSignOutOfChatGpt: () -> Unit = {},
