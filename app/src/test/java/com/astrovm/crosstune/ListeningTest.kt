@@ -1960,9 +1960,12 @@ class ListeningTest {
 
     /** Google Translate translating each line it's asked into "[line]", or answering [code]. */
     private fun translation(request: okhttp3.Request, code: Int = 200): okhttp3.Response {
-        val rows = FakeSpotify.bodyOf(request).split("&").map { org.json.JSONArray().put("[${java.net.URLDecoder.decode(it.removePrefix("q="), "UTF-8")}]").put("en") }
-        return FakeSpotify.html(request, org.json.JSONArray(rows).toString(), code = code)
+        return FakeSpotify.html(request, googleRows(request) { "[$it]" }, code = code)
     }
+
+    /** Google Translate's answer to [request]: each line it asked as [row], and the language it was in. */
+    private fun googleRows(request: okhttp3.Request, row: (String) -> String): String =
+        org.json.JSONArray(FakeSpotify.bodyOf(request).split("&").map { org.json.JSONArray().put(row(java.net.URLDecoder.decode(it.removePrefix("q="), "UTF-8"))).put("en") }).toString()
 
     /** MyMemory, where Google Translate can't: answering [code], with each row of what it's asked as "[row]". */
     private fun myMemoryTranslation(request: okhttp3.Request, code: Int = 200): okhttp3.Response {
@@ -2655,8 +2658,8 @@ class ListeningTest {
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
         fake.handler = { request ->
             when {
-                // Already in English, each line comes back as it was.
-                request.url.host == GOOGLE_TRANSLATE_HOST -> FakeSpotify.html(request, """[["Night sky","en"],["Stars","en"]]""")
+                // Already in English, each line, or word, comes back as it was.
+                request.url.host == GOOGLE_TRANSLATE_HOST -> FakeSpotify.html(request, googleRows(request) { it })
                 request.url.encodedPath.endsWith("/night") -> FakeSpotify.html(request, """{"en":[{"definitions":[{"definition":"The time between sunset and sunrise."}]}]}""")
                 else -> FakeSpotify.html(request, "{}", code = 404)
             }
