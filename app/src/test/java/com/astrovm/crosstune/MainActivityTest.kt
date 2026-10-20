@@ -3116,24 +3116,32 @@ class MainActivityTest {
         composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(100_000f) }
         composeRule.waitForIdle()
         assertEquals(listOf(100_000L), phone.seeks)
+        // Held where it was dragged a moment, then back to where the app says, when it never says it moved.
+        composeRule.onNode(hasText("1:40")).assertExists()
+        composeRule.mainClock.advanceTimeBy(2_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("1:40")).fetchSemanticsNodes().isEmpty())
         // Paused, it plays again.
         phone.playing.value = Following(PlaybackClock(100_000, now, playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
         waitForDescription(string(R.string.lyrics_play))
         click(string(R.string.lyrics_play))
         assertEquals(listOf(false, true), phone.plays)
 
-        // The next song the app plays takes over, followed in the same app.
-        phone.playing.value = null
-        phone.onThePhone = Heard.Song(MusicMetadata("Other Song", "Someone Else"), null)
-        waitForText("Other Song")
-        waitForText(string(R.string.player_playing_in, "YouTube Music"))
-
-        // Its words open over it, and close back to it; closed, it's the song's card again.
+        // Its words open over it, and close back to it.
         click(string(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitForText(string(R.string.player_playing_in, "YouTube Music"))
+
+        // The next song the app plays takes over, followed in the same app; with no artist, it has no words to look up.
+        phone.playing.value = null
+        phone.onThePhone = Heard.Song(MusicMetadata("Other Song", ""), null)
+        waitForText("Other Song")
+        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.lyrics_button))).fetchSemanticsNodes().isEmpty())
+
+        // Closed, it's the song's card again.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         waitForDescription(play)
