@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
                     playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
-                    ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
+                    ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR)),
                     PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
                     systemDispatcher,
                     listenAlongPauseMs,
@@ -419,6 +419,7 @@ class MainActivity : ComponentActivity() {
                         onTranslateIntoChange = viewModel::setTranslateInto,
                         onUntranslatedChange = viewModel::setUntranslated,
                         onReadingScaleChange = viewModel::setReadingScale,
+                        onWordsScaleChange = viewModel::setWordsScale,
                         onSignInWithChatGpt = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -750,8 +751,9 @@ class MainActivity : ComponentActivity() {
 
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
-        val packageName = effect.packageName
-        val opened = packageName != null && tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(packageName)) ||
+        // A music app may be installed as a build patched from it, under a name of its own.
+        val packages = effect.packageName?.let { MusicService.ofPackage(it)?.packageNames ?: listOf(it) }.orEmpty()
+        val opened = packages.any { tryStartActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(it)) } ||
             openOutsideCrosstune(uri)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)

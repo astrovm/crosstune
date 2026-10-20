@@ -50,8 +50,8 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
 - **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back.
-- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, never show that one again, darken them, or show only the visuals. Hold them to set how long each one shows, from a few seconds to staying on one. See each one, sorted by kind, and pick which ones show in **Settings** → **Visuals**. Ones too heavy for your phone are skipped, unless you turn that off in **Settings** → **Advanced**.
+- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back. Make the words bigger or smaller, and report wrong words or timing, from the lyrics' menu. Works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe too.
+- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, never show that one again, darken them, or show only the visuals. Hold them to set how long each one shows, from a few seconds to staying on one. See each one, sorted by kind, and pick which ones show in **Settings** → **Visuals**. Ones too heavy for your phone are skipped, unless you turn that off.
 - **Floating lyrics.** Float them over any app. Drag them anywhere, pinch the text, and tap them for play, settings and close. Drop them on the ✕ at the bottom to close them.
 - **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, with romaji as it's sung or as you'd type it, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
 - **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means, and say how well you knew it: **Again**, **Hard**, **Good** or **Easy**. Learn a whole song in one tap.
@@ -60,7 +60,8 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Your colors.** Light or dark, your wallpaper's color or one of a few, and pure black for OLED screens.
 - **Shortcuts.** One-tap paste, home screen widgets with your Recent songs or one tap to name a song or show its lyrics, Quick Settings tiles, and a long-press shortcut on the app icon.
 - **Recent.** Search it, and swipe a song away to remove it.
-- **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off.
+- **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off in **Settings** → **Advanced**.
+- **Feedback.** **Settings** → **Send feedback** opens a GitHub issue or an email, already filled in.
 - **16 languages.** Follows your phone, or pick one in Settings.
 
 ## Supported links

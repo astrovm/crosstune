@@ -293,6 +293,11 @@
     <string name="lyrics_learn">Lecturas y traducción</string>
     <string name="lyrics_readings">Lectura sobre las palabras</string>
     <string name="lyrics_reading_size">Tamaño de la lectura</string>
+    <string name="lyrics_words_size">Tamaño de la letra</string>
+    <string name="report_problem">Reportar un problema</string>
+    <string name="report_problem_text">Letra equivocada, mal sincronizada o lo que sea. Contá qué está mal y envialo.</string>
+    <string name="report_by_email">Email</string>
+    <string name="send_feedback">Enviar comentarios</string>
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se teclea</string>
     <string name="lyrics_translation">Traducción</string>

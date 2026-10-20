@@ -234,6 +234,7 @@
     <!-- %1$s is where the heart icon goes. -->
     <string name="made_with_love">Made with %1$s by astro</string>
     <string name="github_repo_url" translatable="false">https://github.com/astrovm/crosstune</string>
+    <string name="report_on_github" translatable="false">GitHub</string>
     <string name="privacy_policy">Privacy policy</string>
     <!-- Each language opens its own translation of the website's privacy policy. -->
     <string name="privacy_policy_url">https://crosstune.4st.li/privacy/</string>
@@ -313,6 +314,11 @@
     <string name="lyrics_learn">Readings and translation</string>
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
+    <string name="lyrics_words_size">Words size</string>
+    <string name="report_problem">Report a problem</string>
+    <string name="report_problem_text">Wrong words, bad timing or anything else. Say what\'s wrong, and send it.</string>
+    <string name="report_by_email">Email</string>
+    <string name="send_feedback">Send feedback</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_translation">Translation</string>

@@ -186,7 +186,7 @@ internal class PracticeCards(
 
     /** [song]'s link on YouTube Music when that's the app to ask, or may be; null when it isn't, or isn't there. */
     private suspend fun youTubeMusicLink(song: MusicMetadata, app: String?): String? =
-        if (app == null || app == MusicService.YOUTUBE_MUSIC.packageName) matcher.find(MusicService.YOUTUBE_MUSIC, song) else null
+        if (app == null || MusicService.ofPackage(app) == MusicService.YOUTUBE_MUSIC) matcher.find(MusicService.YOUTUBE_MUSIC, song) else null
 
     /** How [line] sounds, unless another card's shown by now. */
     private fun setSound(line: SavedLine, sound: LineSound) {

@@ -293,6 +293,11 @@
     <string name="lyrics_learn">Чтение и перевод</string>
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_reading_size">Размер чтения</string>
+    <string name="lyrics_words_size">Размер текста</string>
+    <string name="report_problem">Сообщить о проблеме</string>
+    <string name="report_problem_text">Неверный текст, плохая синхронизация или что-то ещё. Опишите проблему и отправьте.</string>
+    <string name="report_by_email">Почта</string>
+    <string name="send_feedback">Отправить отзыв</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>

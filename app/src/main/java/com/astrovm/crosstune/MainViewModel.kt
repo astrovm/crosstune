@@ -148,6 +148,7 @@ internal class MainViewModel(
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
                 untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
                 readingScale = preferences.getFloat(KEY_READING_SCALE, READING_SCALE).coerceIn(READING_SCALE, MAX_READING_SCALE),
+                wordsScale = preferences.getFloat(KEY_WORDS_SCALE, 1f).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN,
                 romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false)
             ),
@@ -1258,14 +1259,15 @@ internal class MainViewModel(
 
     /**
      * A song heard along the way joins Recent, as one Crosstune listened for does: by its Apple Music
-     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none.
+     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none,
+     * or only with the one its app shows, which is kept for a while only.
      */
     private fun remember(heard: Heard.Song) {
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
-        // Named by an app that gave no cover, it's found by its name, so Recent and its words show one.
-        if (heard.metadata.artworkUrl != null) return
+        // Named by an app that gave no cover on the web, it's found by its name, so Recent and its words show one.
+        if (heard.metadata.artworkUrl?.startsWith("https://") == true) return
         viewModelScope.launch {
             val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
             val shown = uiState.lyricsFor?.takeIf { it == heard.metadata }
@@ -2158,6 +2160,12 @@ internal class MainViewModel(
         uiState = uiState.copy(learning = uiState.learning.copy(readingScale = scale))
     }
 
+    /** Kept only once let go, [save], rather than at every step of the slider. */
+    fun setWordsScale(scale: Float, save: Boolean) {
+        if (save) preferences.edit { putFloat(KEY_WORDS_SCALE, scale) }
+        uiState = uiState.copy(learning = uiState.learning.copy(wordsScale = scale))
+    }
+
     fun setRomanized(on: Boolean) {
         preferences.edit { putBoolean(KEY_ROMANIZED, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(romanized = on))
@@ -2651,6 +2659,7 @@ internal class MainViewModel(
         private const val KEY_TRANSLATE_INTO = "translate_into"
         private const val KEY_UNTRANSLATED = "untranslated_languages"
         private const val KEY_READING_SCALE = "reading_scale"
+        private const val KEY_WORDS_SCALE = "words_scale"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"

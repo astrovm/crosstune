@@ -293,6 +293,11 @@
     <string name="lyrics_learn">Okunuş ve çeviri</string>
     <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
     <string name="lyrics_reading_size">Okunuş boyutu</string>
+    <string name="lyrics_words_size">Söz boyutu</string>
+    <string name="report_problem">Sorun bildir</string>
+    <string name="report_problem_text">Yanlış sözler, kötü zamanlama ya da başka bir şey. Sorunu yazın ve gönderin.</string>
+    <string name="report_by_email">E-posta</string>
+    <string name="send_feedback">Geri bildirim gönder</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>

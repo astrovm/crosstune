@@ -34,6 +34,15 @@
         <package android:name="com.amazon.mp3" />
         <package android:name="com.audiomack" />
         <package android:name="com.qobuz.music" />
+        <!-- YouTube and YouTube Music patched by ReVanced, ReVanced Extended, Morphe and Vanced, as MusicService.kt lists them. -->
+        <package android:name="app.revanced.android.youtube" />
+        <package android:name="app.rvx.android.youtube" />
+        <package android:name="app.morphe.android.youtube" />
+        <package android:name="com.vanced.android.youtube" />
+        <package android:name="app.revanced.android.apps.youtube.music" />
+        <package android:name="app.rvx.android.apps.youtube.music" />
+        <package android:name="app.morphe.android.apps.youtube.music" />
+        <package android:name="com.vanced.android.apps.youtube.music" />
         <!-- Apps that name a song playing nearby (SongRecognizers). -->
         <package android:name="com.shazam.android" />
         <package android:name="com.google.android.googlequicksearchbox" />

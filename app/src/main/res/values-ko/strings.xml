@@ -293,6 +293,11 @@
     <string name="lyrics_learn">읽기와 번역</string>
     <string name="lyrics_readings">단어 위에 읽기</string>
     <string name="lyrics_reading_size">읽기 크기</string>
+    <string name="lyrics_words_size">가사 크기</string>
+    <string name="report_problem">문제 신고</string>
+    <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
+    <string name="report_by_email">이메일</string>
+    <string name="send_feedback">의견 보내기</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>

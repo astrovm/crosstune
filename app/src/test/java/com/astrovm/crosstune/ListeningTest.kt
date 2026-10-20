@@ -51,6 +51,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -908,6 +909,17 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals("https://cdn/third.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
         assertTrue(fake.requestedUrls.drop(asked).none { "deezer" in it && "Third" in it })
+        // One with only the cover its app shows, kept for a while only, gets one that lasts once it's found.
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && "Fourth" in request.url.queryParameter("q").orEmpty()) {
+                FakeSpotify.html(request, """{"data":[{"title":"Fourth","artist":{"name":"Band"},"album":{"cover_big":"https://cdn/fourth.jpg"}}]}""")
+            } else {
+                lyrics(request)
+            }
+        }
+        val shown = File(app.cacheDir, "$ARTWORK_DIR/playing-fourth.jpg").toURI().toString()
+        hearing.next.trySend(Heard.Song(MusicMetadata("Fourth", "Band", artworkUrl = shown), null, 0, SystemClock.elapsedRealtime()))
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.artworkUrl == "https://cdn/fourth.jpg" }
     }
 
     @Test
@@ -2410,6 +2422,34 @@ class ListeningTest {
             composeRule.waitForIdle()
             shown("yozora")
         }
+    }
+
+    @Test
+    fun aProblemWithTheWordsIsReportedWithTheSongAndHowTheyFollowedIt() {
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        learnMenu()
+        click(string(R.string.report_problem))
+        click(string(R.string.report_by_email))
+        val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
+        assertTrue(email, email.contains("subject=Lyrics of Demo by "))
+        assertTrue(email, email.contains("Song: Demo\n") && email.contains("Lyrics: timed\n"))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsCanBeMadeBiggerOrSmallerAndStaySo() {
+        // Kept bigger than they go, from a build that let them, they're as big as they go now.
+        prefs().edit().putFloat("words_scale", 5f).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertEquals(MAX_WORDS_SCALE, controllerModel().uiState.learning.wordsScale)
+        val big = composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top }
+        learnMenu()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
+        assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
     }
 
     @Test

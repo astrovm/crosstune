@@ -293,6 +293,11 @@
     <string name="lyrics_learn">उच्चारण और अनुवाद</string>
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
     <string name="lyrics_reading_size">उच्चारण का आकार</string>
+    <string name="lyrics_words_size">बोलों का आकार</string>
+    <string name="report_problem">समस्या की रिपोर्ट करें</string>
+    <string name="report_problem_text">गलत बोल, गलत टाइमिंग या कुछ और। बताएं क्या गलत है और भेजें।</string>
+    <string name="report_by_email">ईमेल</string>
+    <string name="send_feedback">प्रतिक्रिया भेजें</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>

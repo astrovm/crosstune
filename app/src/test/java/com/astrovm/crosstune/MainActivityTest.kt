@@ -2440,6 +2440,22 @@ class MainActivityTest {
     }
 
     @Test
+    fun feedbackIsSentOnGitHubOrByEmailWithTheAppsVersion() {
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.send_feedback)).performScrollTo().performClick()
+        click(string(R.string.report_on_github))
+        val issue = nextStartedActivity()!!.data!!
+        assertEquals("https://github.com/astrovm/crosstune/issues/new", issue.toString().substringBefore("?"))
+        assertTrue(issue.getQueryParameter("body")!!.contains("Crosstune 2."))
+        assertTextAbsent(string(R.string.report_problem_text))
+        composeRule.onNodeWithText(string(R.string.send_feedback)).performScrollTo().performClick()
+        click(string(R.string.report_by_email))
+        val email = nextStartedActivity()!!.dataString!!
+        assertTrue(email, email.startsWith("mailto:crosstune@4st.li?subject=Crosstune&body="))
+    }
+
+    @Test
     fun privacyPolicyOpensPublicPage() {
         launch()
         click(string(R.string.settings_button))

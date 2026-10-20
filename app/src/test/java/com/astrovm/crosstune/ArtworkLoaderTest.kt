@@ -57,6 +57,23 @@ class ArtworkLoaderTest {
     }
 
     @Test
+    fun aCoverKeptAsAFileLoadsOnlyFromWhereCoversAreKept() = runBlocking {
+        val dir = createTempDirectory().toFile()
+        val covers = File(dir, ARTWORK_DIR).apply { mkdirs() }
+        val kept = File(covers, "playing-1.jpg").apply { writeBytes(FakeSpotify.png()) }
+        val elsewhere = File(dir, "other.jpg").apply { writeBytes(FakeSpotify.png()) }
+        val loader = ArtworkLoader(fake.client(), Dispatchers.Unconfined, covers)
+        assertEquals(4, loader.load(kept.toURI().toString())!!.width)
+        // Not even through a way around.
+        assertNull(loader.load(elsewhere.toURI().toString()))
+        assertNull(loader.load("file:${covers.path}/../other.jpg"))
+        assertNull(loader.load(File(covers, "gone.jpg").toURI().toString()))
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+        dir.deleteRecursively()
+        Unit
+    }
+
+    @Test
     fun coversKeptOnDiskLoadWithoutTheNetworkAfterARestart() = runBlocking {
         val dir = createTempDirectory("artwork").toFile()
         fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png()) }
