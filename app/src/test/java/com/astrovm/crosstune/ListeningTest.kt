@@ -381,6 +381,10 @@ class ListeningTest {
         assertTrue(barShown())
         click(string(R.string.lyrics_play))
         assertEquals(listOf(false, true), phone.plays)
+        // Returning while it's still paused keeps the song, but checks that its app still has it.
+        controller!!.pause().stop().restart().resume()
+        waitForDescription(string(R.string.lyrics_play))
+        assertTrue(barShown())
         // A tap on the song opens its player, and closing that brings the bar back.
         click("Iris")
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
@@ -390,6 +394,10 @@ class ListeningTest {
         // The app letting it go takes the bar away.
         phone.playing.value = null
         waitUntil(TIMEOUT_MS) { !barShown() }
+        // An old offer mustn't come back after its app has let the song go.
+        controller!!.pause().stop().restart().resume()
+        composeRule.waitForIdle()
+        assertFalse(barShown())
     }
 
     @Test

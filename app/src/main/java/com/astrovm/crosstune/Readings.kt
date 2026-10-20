@@ -355,12 +355,14 @@ internal object Readings {
     }
 
     /** Android's own letters-to-Latin, made once, the first time it's needed. */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private val latinizer: Transliterator by lazy { Transliterator.getInstance("Any-Latin; Latin-ASCII") }
+    private var latinizer: Transliterator? = null
 
     /** [text] in plain Latin letters, as Cyrillic, Greek, Arabic, Hebrew, Indic and Thai are said. Words are only ever in these from Android 10 on, see displayScriptOf. */
     @SuppressLint("NewApi")
-    private fun latin(text: String): String = synchronized(this) { latinizer.transliterate(text).trim() }
+    private fun latin(text: String): String = synchronized(this) {
+        val letters = latinizer ?: Transliterator.getInstance("Any-Latin; Latin-ASCII").also { latinizer = it }
+        letters.transliterate(text).trim()
+    }
 
     private fun latinized(line: String): LineReading = latin(line).let { LineReading(listOf(Ruby(line)), it, it) }
 

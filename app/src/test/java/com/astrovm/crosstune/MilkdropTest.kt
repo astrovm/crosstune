@@ -349,6 +349,18 @@ class MilkdropTest {
         override fun close() = Unit
     }
 
+    @Test
+    fun evenTheShortestIntervalTimesHeavyVisualsBeforeChangingThem() {
+        val slow = mutableListOf<String>()
+        val renderer = timed(
+            TimedMilkdrop(mapOf("a" to 60L, "b" to 60L, "c" to 60L)),
+            VisualsSettings(changeMs = VisualsSettings.CHANGE_EVERY.first()), onTooSlow = { slow += it }
+        )
+        renderer.created()
+        repeat(400) { renderer.frame() }
+        assertEquals(setOf("a", "b", "c"), slow.toSet())
+    }
+
     /** Told of each preset found [onTooSlow], and of each [onFastEnough]. */
     private fun timed(milkdrop: Milkdrop, settings: VisualsSettings = VisualsSettings(), onTooSlow: (String) -> Unit = {}, onDrop: (String) -> Unit = {}, onFastEnough: (String) -> Unit = {}) =
         MilkdropRenderer(
