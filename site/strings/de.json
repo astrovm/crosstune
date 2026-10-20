@@ -2,14 +2,14 @@
   "lang": "de",
   "og_locale": "de_DE",
   "name": "Deutsch",
-  "title": "Crosstune: Öffne jeden Musik-Link in deiner Lieblings-App",
-  "description": "Tippe auf einen Musik-Link von einem beliebigen Dienst, und derselbe Song öffnet sich in der App, in der du hörst. Kostenlos und Open Source für Android.",
-  "tagline": "Öffne jeden Musik-Link in deiner Lieblings-App.",
+  "title": "Crosstune: der Begleiter für die Musik-App, die du schon nutzt",
+  "description": "Öffne Musik-Links in der App, in der du hörst, erkenne den Song, der in der Nähe läuft, und folge seinem Songtext und seinen Akkorden. Kostenlos und Open Source für Android.",
+  "tagline": "Der Begleiter für die Musik-App, die du schon nutzt.",
   "github_label": "Crosstune auf GitHub",
   "theme_to_dark": "Zum dunklen Modus wechseln",
   "theme_to_light": "Zum hellen Modus wechseln",
-  "h1": "Öffne jeden Musik-Link in <em>deiner</em> Lieblings-App.",
-  "lede": "Du hast einen Link von einem Dienst, hörst aber auf einem anderen? Tippe darauf, und derselbe Song öffnet sich dort, wo du hörst.",
+  "h1": "Der Begleiter für die Musik-App, die <em>du</em> schon nutzt.",
+  "lede": "Öffne einen Link von jedem Dienst in der App, in der du hörst, erkenne den Song, der in der Nähe läuft, und folge seinem Songtext und seinen Akkorden.",
   "download": "Für Android herunterladen",
   "note": "Kostenlos, Open Source und werbefrei.",
   "alt_home": "Ein Link, bereit für YouTube Music, dann die Songs einer Playlist",
@@ -41,7 +41,7 @@
     ],
     [
       "Songtexte im Takt",
-      "Sie folgen deiner Musik-App oder hören mit, Song für Song."
+      "Songtext und Akkorde folgen deiner Musik-App oder hören mit, Song für Song."
     ],
     [
       "MilkDrop-Visuals",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten. Wenn du gespeicherte Zeilen übst, bittet Crosstune deine Musik-App außerdem, den Song jeder Zeile an genau dieser Stelle abzuspielen."
+      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten. Wenn du gespeicherte Zeilen übst, bittet Crosstune deine Musik-App außerdem, den Song jeder Zeile an genau dieser Stelle abzuspielen. Der Player von Crosstune nutzt denselben Zugriff, um den Song anzuzeigen und ihn in deiner Musik-App zu pausieren, zu überspringen oder zu verschieben."
     ],
     [
       "p",

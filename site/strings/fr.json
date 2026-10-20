@@ -2,14 +2,14 @@
   "lang": "fr",
   "og_locale": "fr_FR",
   "name": "Français",
-  "title": "Crosstune : ouvrez n'importe quel lien musical dans votre application préférée",
-  "description": "Appuyez sur un lien musical de n'importe quel service et le même morceau s'ouvre dans l'application où vous écoutez. Gratuite et open source pour Android.",
-  "tagline": "Ouvrez n'importe quel lien musical dans votre application préférée.",
+  "title": "Crosstune : le compagnon de l'appli de musique que vous utilisez déjà",
+  "description": "Ouvrez des liens musicaux dans l'appli où vous écoutez, reconnaissez la chanson qui joue près de vous, et suivez ses paroles et ses accords. Gratuit et open source pour Android.",
+  "tagline": "Le compagnon de l'appli de musique que vous utilisez déjà.",
   "github_label": "Crosstune sur GitHub",
   "theme_to_dark": "Passer en mode sombre",
   "theme_to_light": "Passer en mode clair",
-  "h1": "Ouvrez n'importe quel lien musical dans <em>votre</em> application préférée.",
-  "lede": "Vous avez reçu un lien d'un service mais vous écoutez sur un autre ? Appuyez dessus et le même morceau s'ouvre là où vous écoutez.",
+  "h1": "Le compagnon de l'appli de musique que <em>vous</em> utilisez déjà.",
+  "lede": "Ouvrez un lien de n'importe quel service dans l'appli où vous écoutez, reconnaissez la chanson qui joue près de vous, et suivez ses paroles et ses accords.",
   "download": "Télécharger pour Android",
   "note": "Gratuite, open source et sans publicité.",
   "alt_home": "Un lien prêt à s'ouvrir dans YouTube Music, puis les titres d'une playlist",
@@ -41,7 +41,7 @@
     ],
     [
       "Paroles synchronisées",
-      "Elles suivent votre appli de musique, ou écoutent avec vous, chanson après chanson."
+      "Paroles et accords suivent votre appli de musique, ou écoutent avec vous, chanson après chanson."
     ],
     [
       "Visuels MilkDrop",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne."
+      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne. Le lecteur de Crosstune utilise ce même accès pour afficher la chanson, et la mettre en pause, la passer ou la déplacer dans votre app de musique."
     ],
     [
       "p",

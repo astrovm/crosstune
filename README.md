@@ -27,16 +27,19 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 
 - **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify.
 - **Choose where.** One app per service, ask every time, or add any app or site with a search URL like `https://example.com/search?q={query}`.
+- **Not on your app?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
+- **Recent.** Search your recent songs, and swipe one away to remove it.
 - **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek.
-- **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Lyrics in time.** The words follow your music app, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
+- **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
+- **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin and romaji under each line, translations, and the meaning of any word.
 - **Practice with the music.** Save lines and they come back as cards that play the line in your music app. Rate each one: **Again**, **Hard**, **Good** or **Easy**.
-- **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line, and find songs by describing them.
+- **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
+- **Your colors.** Light or dark, your wallpaper's colors, and pure black for OLED screens.
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
 - **No tracking.** Drops tracking bits like `?si=` from links.
 - **16 languages.** Follows your phone, or pick one in Settings.

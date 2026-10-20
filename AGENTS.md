@@ -19,9 +19,15 @@ Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `a
 The most common defect here is a change that works where you tested it and is missing elsewhere. Before calling it done, check:
 
 - **Strings.** Every user-visible string goes in all 16 locales: `values` plus `de es fr hi in it ja ko nl pl pt ru tr zh-rCN zh-rTW`. `TranslationsTest` fails otherwise. Spanish uses Argentine voseo. Escape apostrophes as `\'`.
-- **Docs.** README's feature list and `site/` describe what the app does. Keep them matching.
-- **Entry points.** A song can start from a link, the widget, a tile, a shortcut or the share sheet. Fixing one isn't fixing the feature.
-- **Reverse states.** If you added a way in, add the way out.
+- **Docs.** README's feature list, `site/strings/` and the store text in `fastlane/` describe what the app does. Keep them matching, in every language.
+
+## Design
+
+- Only the text the user needs. Icons, color and state before words.
+- Show what's happening, not what isn't. Errors show when they happen, never "No errors".
+- The site keeps its six cards. Fold new things into an existing one.
+- Check a new screen's every state on a phone: loading, empty, error, the largest font, and a long language like German.
+- Touch targets of at least 48dp, and a content description on every icon.
 
 ## How it works
 

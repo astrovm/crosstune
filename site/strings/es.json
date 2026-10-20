@@ -2,14 +2,14 @@
   "lang": "es-AR",
   "og_locale": "es_AR",
   "name": "Español",
-  "title": "Crosstune: abrí cualquier link de música en tu app favorita",
-  "description": "Tocá un link de música de cualquier servicio y la misma canción se abre en la app donde escuchás. Gratis y de código abierto para Android.",
-  "tagline": "Abrí cualquier link de música en tu app favorita.",
+  "title": "Crosstune: el compañero de la app de música que ya usás",
+  "description": "Abrí links de música en la app donde escuchás, reconocé la canción que suena cerca y seguí su letra y sus acordes. Gratis y de código abierto para Android.",
+  "tagline": "El compañero de la app de música que ya usás.",
   "github_label": "Crosstune en GitHub",
   "theme_to_dark": "Cambiar a modo oscuro",
   "theme_to_light": "Cambiar a modo claro",
-  "h1": "Abrí cualquier link de música en <em>tu</em> app favorita.",
-  "lede": "¿Te pasaron un link de un servicio pero escuchás en otro? Tocalo y la misma canción se abre donde escuchás.",
+  "h1": "El compañero de la app de música que <em>vos</em> ya usás.",
+  "lede": "Abrí un link de cualquier servicio en la app donde escuchás, reconocé la canción que suena cerca y seguí su letra y sus acordes.",
   "download": "Descargar para Android",
   "note": "Gratis, de código abierto y sin publicidad.",
   "alt_home": "Un enlace listo para abrir en YouTube Music y luego las canciones de una playlist",
@@ -41,7 +41,7 @@
     ],
     [
       "Letras a tiempo",
-      "Siguen a tu app de música, o escuchan con vos, canción tras canción."
+      "La letra y los acordes siguen a tu app de música, o escuchan con vos, canción tras canción."
     ],
     [
       "Visuales MilkDrop",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si hacés que la letra siga la canción que suena en tu app de música, Android te pide permitir el acceso a notificaciones de Crosstune. Crosstune lo usa solo para ver qué canción dicen tus apps de música que están reproduciendo y en qué parte van, así la letra la sigue y una línea que tocás puede llevar la canción ahí. Nunca lee tus notificaciones, y nada de esto sale de tu teléfono. Podés desactivarlo en los ajustes de Android cuando quieras. Cuando practicás líneas guardadas, Crosstune también le pide a tu app de música que reproduzca la canción de cada línea, en esa línea."
+      "Si hacés que la letra siga la canción que suena en tu app de música, Android te pide permitir el acceso a notificaciones de Crosstune. Crosstune lo usa solo para ver qué canción dicen tus apps de música que están reproduciendo y en qué parte van, así la letra la sigue y una línea que tocás puede llevar la canción ahí. Nunca lee tus notificaciones, y nada de esto sale de tu teléfono. Podés desactivarlo en los ajustes de Android cuando quieras. Cuando practicás líneas guardadas, Crosstune también le pide a tu app de música que reproduzca la canción de cada línea, en esa línea. El reproductor de Crosstune usa ese mismo acceso para mostrar la canción y pausarla, saltarla o moverla en tu app de música."
     ],
     [
       "p",

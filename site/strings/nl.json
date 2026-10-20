@@ -2,14 +2,14 @@
   "lang": "nl",
   "og_locale": "nl_NL",
   "name": "Nederlands",
-  "title": "Crosstune: open elke muzieklink in je favoriete app",
-  "description": "Tik op een muzieklink van welke service dan ook en hetzelfde nummer opent in de app waarin je luistert. Gratis en open source voor Android.",
-  "tagline": "Open elke muzieklink in je favoriete app.",
+  "title": "Crosstune: de metgezel van de muziekapp die je al gebruikt",
+  "description": "Open muzieklinks in de app waarin je luistert, herken het nummer dat in de buurt speelt en volg de songtekst en akkoorden. Gratis en open source voor Android.",
+  "tagline": "De metgezel van de muziekapp die je al gebruikt.",
   "github_label": "Crosstune op GitHub",
   "theme_to_dark": "Overschakelen naar donkere modus",
   "theme_to_light": "Overschakelen naar lichte modus",
-  "h1": "Open elke muzieklink in <em>je</em> favoriete app.",
-  "lede": "Een link van de ene service gekregen, maar luister je op een andere? Tik erop en hetzelfde nummer opent waar je luistert.",
+  "h1": "De metgezel van de muziekapp die <em>jij</em> al gebruikt.",
+  "lede": "Open een link van elke dienst in de app waarin je luistert, herken het nummer dat in de buurt speelt en volg de songtekst en akkoorden.",
   "download": "Downloaden voor Android",
   "note": "Gratis, open source en zonder advertenties.",
   "alt_home": "Een link klaar om te openen in YouTube Music, daarna de nummers van een playlist",
@@ -41,7 +41,7 @@
     ],
     [
       "Songteksten op tijd",
-      "Ze volgen je muziekapp, of luisteren mee, nummer na nummer."
+      "Songtekst en akkoorden volgen je muziekapp, of luisteren mee, nummer na nummer."
     ],
     [
       "MilkDrop-visuals",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Als je de songtekst het nummer laat volgen dat in je muziek-app speelt, vraagt Android je om Crosstune toegang tot meldingen te geven. Crosstune gebruikt die alleen om te zien welk nummer je muziek-apps zeggen af te spelen en hoe ver ze zijn, zodat de tekst meeloopt en een regel waarop je tikt het nummer daarheen kan laten springen. Het leest nooit je meldingen, en niets hiervan verlaat je telefoon. Je kunt dit altijd uitzetten in de instellingen van Android. Als je bewaarde regels oefent, vraagt Crosstune je muziek-app ook om het nummer van elke regel af te spelen, vanaf die regel."
+      "Als je de songtekst het nummer laat volgen dat in je muziek-app speelt, vraagt Android je om Crosstune toegang tot meldingen te geven. Crosstune gebruikt die alleen om te zien welk nummer je muziek-apps zeggen af te spelen en hoe ver ze zijn, zodat de tekst meeloopt en een regel waarop je tikt het nummer daarheen kan laten springen. Het leest nooit je meldingen, en niets hiervan verlaat je telefoon. Je kunt dit altijd uitzetten in de instellingen van Android. Als je bewaarde regels oefent, vraagt Crosstune je muziek-app ook om het nummer van elke regel af te spelen, vanaf die regel. De speler van Crosstune gebruikt dezelfde toegang om het nummer te tonen en het in je muziek-app te pauzeren, over te slaan of te verplaatsen."
     ],
     [
       "p",

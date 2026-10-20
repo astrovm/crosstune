@@ -2,14 +2,14 @@
   "lang": "id",
   "og_locale": "id_ID",
   "name": "Bahasa Indonesia",
-  "title": "Crosstune: buka link musik apa pun di aplikasi favoritmu",
-  "description": "Ketuk link musik dari layanan apa pun, dan lagu yang sama terbuka di aplikasi yang kamu pakai untuk mendengarkan. Gratis dan open source untuk Android.",
-  "tagline": "Buka link musik apa pun di aplikasi favoritmu.",
+  "title": "Crosstune: pendamping aplikasi musik yang sudah kamu pakai",
+  "description": "Buka tautan musik di aplikasi tempat kamu mendengarkan, kenali lagu yang sedang terdengar di sekitar, dan ikuti lirik serta chord-nya. Gratis dan open source untuk Android.",
+  "tagline": "Pendamping aplikasi musik yang sudah kamu pakai.",
   "github_label": "Crosstune di GitHub",
   "theme_to_dark": "Beralih ke mode gelap",
   "theme_to_light": "Beralih ke mode terang",
-  "h1": "Buka link musik apa pun di aplikasi <em>favoritmu</em>.",
-  "lede": "Dapat link dari satu layanan, tapi kamu dengar di layanan lain? Ketuk linknya, dan lagu yang sama terbuka di tempat kamu mendengarkan.",
+  "h1": "Pendamping aplikasi musik yang sudah <em>kamu</em> pakai.",
+  "lede": "Buka tautan dari layanan mana pun di aplikasi tempat kamu mendengarkan, kenali lagu yang sedang terdengar di sekitar, dan ikuti lirik serta chord-nya.",
   "download": "Download untuk Android",
   "note": "Gratis, open source, dan tanpa iklan.",
   "alt_home": "Tautan siap dibuka di YouTube Music, lalu lagu-lagu dalam playlist",
@@ -41,7 +41,7 @@
     ],
     [
       "Lirik sesuai lagu",
-      "Mengikuti aplikasi musikmu, atau ikut mendengarkan, lagu demi lagu."
+      "Lirik dan chord mengikuti aplikasi musikmu, atau ikut mendengarkan, lagu demi lagu."
     ],
     [
       "Visual MilkDrop",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android. Saat kamu melatih baris yang disimpan, Crosstune juga meminta aplikasi musikmu memutar lagu dari setiap baris, tepat di baris itu."
+      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android. Saat kamu melatih baris yang disimpan, Crosstune juga meminta aplikasi musikmu memutar lagu dari setiap baris, tepat di baris itu. Pemutar Crosstune memakai akses yang sama untuk menampilkan lagu dan menjeda, melewati, atau menggesernya di aplikasi musikmu."
     ],
     [
       "p",

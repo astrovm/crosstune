@@ -2,14 +2,14 @@
   "lang": "tr",
   "og_locale": "tr_TR",
   "name": "Türkçe",
-  "title": "Crosstune: her müzik bağlantısını favori uygulamanızda açın",
-  "description": "Herhangi bir servisten gelen müzik bağlantısına dokunun, aynı şarkı dinlediğiniz uygulamada açılsın. Android için ücretsiz ve açık kaynak.",
-  "tagline": "Her müzik bağlantısını favori uygulamanızda açın.",
+  "title": "Crosstune: zaten kullandığın müzik uygulamasının yol arkadaşı",
+  "description": "Müzik bağlantılarını dinlediğin uygulamada aç, yakında çalan şarkıyı tanı, sözlerini ve akorlarını takip et. Android için ücretsiz ve açık kaynak.",
+  "tagline": "Zaten kullandığın müzik uygulamasının yol arkadaşı.",
   "github_label": "GitHub'da Crosstune",
   "theme_to_dark": "Koyu moda geç",
   "theme_to_light": "Açık moda geç",
-  "h1": "Her müzik bağlantısını <em>favori</em> uygulamanızda açın.",
-  "lede": "Bir servisten bağlantı geldi ama siz başka birinde mi dinliyorsunuz? Dokunun, aynı şarkı dinlediğiniz yerde açılsın.",
+  "h1": "<em>Senin</em> zaten kullandığın müzik uygulamasının yol arkadaşı.",
+  "lede": "Herhangi bir servisin bağlantısını dinlediğin uygulamada aç, yakında çalan şarkıyı tanı, sözlerini ve akorlarını takip et.",
   "download": "Android için indir",
   "note": "Ücretsiz, açık kaynak ve reklamsız.",
   "alt_home": "YouTube Music'te açılmaya hazır bir bağlantı, ardından bir çalma listesinin şarkıları",
@@ -41,7 +41,7 @@
     ],
     [
       "Zamanında sözler",
-      "Müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı."
+      "Sözler ve akorlar müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı."
     ],
     [
       "MilkDrop görselleri",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını o satırdan çalmasını da ister."
+      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını o satırdan çalmasını da ister. Crosstune'un oynatıcısı aynı erişimi şarkıyı göstermek ve müzik uygulamanda duraklatmak, atlamak ya da ilerletmek için kullanır."
     ],
     [
       "p",
