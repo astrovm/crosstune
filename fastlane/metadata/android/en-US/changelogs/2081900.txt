@@ -1,1 +1,2 @@
 Visuals that draw with images, like fire, clouds or moss, show them now, so they no longer draw blank.
+50 new visuals in Settings → Visuals, and 4 gone.
