@@ -61,6 +61,23 @@ class AppWakerTest {
     }
 
     @Test
+    fun cancellingAnOlderWakeLeavesTheNewerOneAlone() {
+        val first = scope.launch { waker.wake(listOf(PACKAGE)) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val old = Browser.latest!!
+        val second = scope.launch { waker.wake(listOf(PACKAGE)) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val next = Browser.latest!!
+        assertTrue(old.disconnected)
+        first.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(next.disconnected)
+        second.cancel()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(next.disconnected)
+    }
+
+    @Test
     fun aTimeoutOrRefusalDisconnectsTheApp() {
         var result: Any? = "waiting"
         val job = scope.launch { result = waker.wake(listOf(PACKAGE)) }

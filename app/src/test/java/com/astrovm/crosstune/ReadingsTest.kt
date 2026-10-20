@@ -59,6 +59,12 @@ class ReadingsTest {
 
     @Test
     @Config(sdk = [28])
+    fun beforeAndroid10OtherScriptsHaveNoLatinReading() {
+        assertNull(Readings.displayScriptOf(listOf("Привет, мир")))
+    }
+
+    @Test
+    @Config(sdk = [28])
     fun beforeAndroid10ChineseHasNoReadings() {
         assertNull(Readings.scriptOf(listOf("我爱你")))
         assertEquals(Script.JAPANESE, Readings.scriptOf(listOf("ありがとう")))

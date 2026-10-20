@@ -35,16 +35,16 @@ internal class MediaBrowserWaker(private val context: Context) : AppWaker {
             context.packageManager.queryIntentServices(Intent(MediaBrowserService.SERVICE_INTERFACE).setPackage(packageName), 0).firstOrNull()?.serviceInfo
         } ?: return@withContext null
         letGo()
+        var browser: MediaBrowser? = null
         var keep = false
         try {
             withTimeoutOrNull(WAKE_MS) {
                 suspendCancellableCoroutine { asked ->
-                    var browser: MediaBrowser? = null
                     val connected = object : MediaBrowser.ConnectionCallback() {
                         override fun onConnected() {
                             if (asked.isActive) asked.resume(browser?.let { MediaController(context, it.sessionToken) })
                         }
-    
+
                         // Only callers it knows, e.g. Android Auto, some apps let in.
                         override fun onConnectionFailed() {
                             if (asked.isActive) asked.resume(null)
@@ -63,7 +63,7 @@ internal class MediaBrowserWaker(private val context: Context) : AppWaker {
             }
         } finally {
             // A cancelled request may never get an answer, so it must release the binding too.
-            if (!keep) letGo()
+            if (!keep && woken === browser) letGo()
         }
     }
 
