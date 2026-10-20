@@ -1632,6 +1632,10 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertFalse(prefs().getBoolean("visuals_skip_heavy", true))
         assertEquals(60_000L, prefs().getLong("visuals_change_ms", 0))
+        // And darker.
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.waitForIdle()
+        assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
     }
 
     @Test
