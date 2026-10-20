@@ -1,7 +1,7 @@
 Visuals that draw with images, like fire or moss, show them now. 50 new ones, 4 gone.
 Hold the visuals button to set how long each shows.
 Make the lyrics bigger or smaller, and report wrong words or timing, from their menu.
-Play a song from its card and stay in Crosstune.
+Play a song and stay in Crosstune. What's playing sits in a bar on home.
 Covers show for songs only YouTube Music has.
 Patched YouTube and YouTube Music, like ReVanced, work too.
 Flashcards can ask in kana or Latin letters.

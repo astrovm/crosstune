@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_label">音樂連結</string>
     <string name="spotify_link_placeholder">貼上音樂連結或歌名</string>
     <string name="resolve_button">轉換連結</string>
+    <string name="open_button">開啟</string>
     <string name="search_button">搜尋</string>
     <string name="paste_button">貼上</string>
     <string name="recognize_button">辨識歌曲</string>
@@ -202,7 +202,6 @@
     <string name="open_settings_button">開啟設定</string>
     <string name="open_app_button">開啟 %1$s</string>
     <string name="lyrics_button">歌詞</string>
-    <string name="playing_now">正在播放</string>
     <string name="lyrics_loading">正在查詢歌詞…</string>
     <string name="lyrics_none">沒有找到這首歌的歌詞。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞同步</string>

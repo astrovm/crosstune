@@ -136,8 +136,8 @@ internal data class UiState(
     val dismissedNotices: Set<String> = emptySet(),
     /** A newer Crosstune to update to, for a copy installed from a file. */
     val update: Update? = null,
-    /** The song a music app on the phone plays as Crosstune comes into sight, one tap from showing. */
-    val playingNow: MusicMetadata? = null,
+    /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
+    val playingNow: NowPlaying? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
     val setupComplete: Boolean = true,
@@ -300,6 +300,9 @@ internal data class ChatGptState(
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
  * Music; [following] it once the app plays it, and [played] since.
  */
+/** A song a music app plays on the phone, with where it is and what the app lets be done, when it says. */
+internal data class NowPlaying(val song: MusicMetadata, val following: Following? = null)
+
 internal data class PlayerState(
     val song: MusicMetadata,
     val app: String?,

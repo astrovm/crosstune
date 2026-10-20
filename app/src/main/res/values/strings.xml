@@ -4,9 +4,9 @@
     <string name="publisher_id" translatable="false">astrovm</string>
     <string name="publisher_name" translatable="false">astrovm</string>
 
-    <string name="spotify_link_label">Music link</string>
     <string name="spotify_link_placeholder">Paste a music link or a song name</string>
     <string name="resolve_button">Convert link</string>
+    <string name="open_button">Open</string>
     <string name="search_button">Search</string>
     <string name="paste_button">Paste</string>
     <string name="recognize_button">Recognize a song</string>
@@ -139,7 +139,6 @@
     <string name="play_in_background">Play in %1$s and stay here</string>
     <string name="songs_shown">First %1$d of %2$d</string>
     <string name="lyrics_button">Lyrics</string>
-    <string name="playing_now">Playing now</string>
     <string name="lyrics_loading">Getting lyrics…</string>
     <string name="lyrics_none">No lyrics found for this song.</string>
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>

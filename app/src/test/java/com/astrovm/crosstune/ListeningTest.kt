@@ -67,6 +67,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
@@ -180,6 +181,8 @@ class ListeningTest {
     private fun waitUntil(timeoutMs: Long, condition: () -> Boolean) =
         composeRule.waitUntil(timeoutMs) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
 
+    private fun barShown() = composeRule.onAllNodesWithTag(NOW_PLAYING_TAG).fetchSemanticsNodes().isNotEmpty()
+
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
     private fun waitForText(text: String) = waitUntil(TIMEOUT_MS) { shown(text) }
@@ -211,21 +214,27 @@ class ListeningTest {
     @Test
     fun aSongPlayingAsTheAppOpensIsOfferedWithItsWordsAlreadyFetched() {
         val playing = MusicMetadata("Demo", "Band")
-        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime()) } }
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime())
+            this.playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = MusicService.YOUTUBE_MUSIC.packageName)
+        }
+        MainActivity.playbackFactory = { phone }
         fake.handler = { request -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""") }
         launch()
-        waitForText(string(R.string.playing_now))
-        assertTrue(shown("Band"))
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown("Band \u00b7 Music"))
         // Fetched before they're asked for, so asking shows them with no wait.
         val kept = java.io.File(app.cacheDir, "lyrics.json")
         waitUntil(TIMEOUT_MS) { kept.exists() && "Stars" in kept.readText() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitForDescription(string(R.string.lyrics_button))
         click(string(R.string.lyrics_button))
         waitForText("Night sky\nStars")
         // Shown from what was kept: the sites the words come from were each asked once.
         assertEquals(1, fake.requestedUrls.count { it.startsWith("https://music.163.com/") })
         // Named by the app, nothing was listened to.
         assertEquals(0, microphone.opened)
-        assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
     }
 
     @Test
@@ -233,10 +242,11 @@ class ListeningTest {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
         launch()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         click("Iris")
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        assertFalse(shown(string(R.string.playing_now)))
+        // The song's player opens, so the bar has nothing left to offer.
+        waitUntil(TIMEOUT_MS) { !barShown() }
+        assertFalse(barShown())
         assertEquals(0, microphone.opened)
     }
 
@@ -245,14 +255,14 @@ class ListeningTest {
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         launch()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         val first = Heard.Song(MusicMetadata("First Test Song", "First Test Artist"), null, 1000, SystemClock.elapsedRealtime())
         composeRule.runOnIdle { phone.onThePhone = first }
         waitForText("First Test Song")
-        assertTrue(shown(string(R.string.playing_now)))
+        assertTrue(barShown())
         composeRule.runOnIdle { phone.onThePhone = null }
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         val next = first.copy(metadata = MusicMetadata("Next Test Song", "Next Test Artist"))
         composeRule.runOnIdle { phone.onThePhone = next }
         waitForText("Next Test Song")
@@ -265,15 +275,57 @@ class ListeningTest {
         val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
         phone.onThePhone = null
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(next.metadata, model.uiState.playingNow)
+        assertEquals(next.metadata, model.uiState.playingNow?.song)
         controller!!.resume()
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         composeRule.runOnIdle { phone.onThePhone = first }
         waitForText("First Test Song")
         click("First Test Song")
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(first.metadata, HistoryStore(prefs()).load().first().metadata)
+        // The song's player opens, so the bar has nothing left to offer.
+        waitUntil(TIMEOUT_MS) { !barShown() }
+    }
+
+    @Test
+    fun theBarForTheSongPlayingPausesSkipsAndOpensItsPlayerAndStaysWhilePaused() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        phone.onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime())
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // Before its app says where it is, it's the song and its artist.
+        assertTrue(shown("The Goo Goo Dolls"))
+        val now = SystemClock.elapsedRealtime()
+        phone.playing.value = Following(
+            PlaybackClock(60_000, now, playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic,
+            canSkipNext = true, durationMs = 200_000
+        )
+        waitForText("The Goo Goo Dolls \u00b7 YouTube Music")
+        // Its buttons are the app's.
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
+        click(string(R.string.lyrics_next_song))
+        assertEquals(listOf(true), phone.skips)
+        // The app can't go on to another song.
+        phone.playing.value = Following(PlaybackClock(60_000, now, playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_next_song)) and !isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Paused, the app stops saying it plays it, but still has it: the bar stays, to play it again.
+        phone.playing.value = Following(PlaybackClock(60_000, now, playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
+        phone.onThePhone = null
+        waitForDescription(string(R.string.lyrics_play))
+        assertTrue(barShown())
+        click(string(R.string.lyrics_play))
+        assertEquals(listOf(false, true), phone.plays)
+        // A tap on the song opens its player, and closing that brings the bar back.
+        click("Iris")
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
+        assertFalse(barShown())
+        click(string(R.string.dismiss_button))
+        assertTrue(barShown())
+        // The app letting it go takes the bar away.
+        phone.playing.value = null
+        waitUntil(TIMEOUT_MS) { !barShown() }
     }
 
     @Test
@@ -283,22 +335,22 @@ class ListeningTest {
         shazamAnswers(NO_MATCH)
         allowMicrophone()
         launch()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         // Typing a song in, it gives way.
         composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Other Song")
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         composeRule.onAllNodes(hasSetTextAction())[0].performTextClearance()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         // Stopped meanwhile, Crosstune listens itself, and what it heard is shown alone.
         phone.onThePhone = null
         recognize()
         waitForText(string(R.string.listening_text))
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         microphone.play(1.0)
         microphone.end()
         waitForText(string(R.string.error_no_match))
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
     }
 
     @Test
@@ -307,20 +359,20 @@ class ListeningTest {
         HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 42_000, SystemClock.elapsedRealtime()) } }
         launch()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         // Found by its name, the song leaves the box empty, yet still closes.
         click("A Song")
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
-        assertTrue(shown(string(R.string.playing_now)))
+        assertTrue(barShown())
         composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Other Song")
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         composeRule.onAllNodes(hasSetTextAction())[0].performTextClearance()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         click(string(R.string.clear_button))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(RESULT_TAG).assertDoesNotExist()
-        assertTrue(shown(string(R.string.playing_now)))
+        assertTrue(barShown())
     }
 
     @Test
@@ -329,12 +381,12 @@ class ListeningTest {
         val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }
         MainActivity.playbackFactory = { phone }
         launch()
-        waitForText(string(R.string.playing_now))
+        waitUntil(TIMEOUT_MS) { barShown() }
         // Access taken away while away, what was offered goes with it.
         phone.access = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.playing_now)))
+        assertFalse(barShown())
         assertFalse(shown("Iris"))
     }
 

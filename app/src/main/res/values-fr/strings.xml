@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_label">Lien musical</string>
     <string name="spotify_link_placeholder">Collez un lien musical ou un titre de chanson</string>
     <string name="resolve_button">Convertir le lien</string>
+    <string name="open_button">Ouvrir</string>
     <string name="search_button">Rechercher</string>
     <string name="paste_button">Coller</string>
     <string name="recognize_button">Reconnaître un titre</string>
@@ -202,7 +202,6 @@
     <string name="open_settings_button">Ouvrir les paramètres</string>
     <string name="open_app_button">Ouvrir %1$s</string>
     <string name="lyrics_button">Paroles</string>
-    <string name="playing_now">En cours de lecture</string>
     <string name="lyrics_loading">Recherche des paroles…</string>
     <string name="lyrics_none">Aucune parole trouvée pour ce titre.</string>
     <string name="lyrics_sync_service">Synchronisation des paroles de Crosstune</string>

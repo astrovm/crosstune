@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_label">Müzik bağlantısı</string>
     <string name="spotify_link_placeholder">Bir müzik bağlantısı veya şarkı adı yapıştırın</string>
     <string name="resolve_button">Bağlantıyı dönüştür</string>
+    <string name="open_button">Aç</string>
     <string name="search_button">Ara</string>
     <string name="paste_button">Yapıştır</string>
     <string name="recognize_button">Şarkıyı tanı</string>
@@ -202,7 +202,6 @@
     <string name="open_settings_button">Ayarları aç</string>
     <string name="open_app_button">%1$s uygulamasını aç</string>
     <string name="lyrics_button">Sözler</string>
-    <string name="playing_now">Şimdi çalıyor</string>
     <string name="lyrics_loading">Sözler aranıyor…</string>
     <string name="lyrics_none">Bu şarkı için söz bulunamadı.</string>
     <string name="lyrics_sync_service">Crosstune şarkı sözü senkronizasyonu</string>

@@ -292,7 +292,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             AnimatedVisibility(visible = syncing) {
                 SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = BAR_SPACE)) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
                     if (shown == LyricsShown.LOADING) {
@@ -591,7 +591,7 @@ internal enum class SongTab(@StringRes val label: Int) {
 
 /**
  * The words fade out at the top and bottom, rather than being cut off mid-line under the song or
- * the bar. At the bottom they're gone by the time they reach the bar, so they never clash with it.
+ * where they end above the bar.
  */
 private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
     drawContent()
@@ -603,8 +603,11 @@ private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrateg
 /** How far down the darker shade behind the song reaches, below the phone's bar: just past the song. */
 private val HEADER_SHADE = 72.dp
 
-/** From just over the bar, 16dp up from the bottom and about 56dp tall, down to the bottom. */
-private val BAR_FADE = 88.dp
+/** The last words fade out over this much, at the bottom of where they end. */
+private val BAR_FADE = 32.dp
+
+/** The bar's height and the 16dp under it, plus a gap: where the words end, so the bar never covers them. */
+private val BAR_SPACE = 80.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
@@ -623,8 +626,8 @@ private const val SKIP_OUT_MS = 180
 /** How long a song swiped away waits for the next one before it comes back. */
 private const val SKIP_WAIT_MS = 1_500L
 
-/** Room under the words, so the last of them can be scrolled clear of the bar. */
-private val BAR_ROOM = 112.dp
+/** Room under the words, so the last of them can be scrolled clear of their edge. */
+private val BAR_ROOM = 24.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
 private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN))
@@ -1210,7 +1213,7 @@ private fun TimedLyrics(
     }
     LazyColumn(
         state = list,
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 240.dp),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxSize().fadedEdges()
     ) {

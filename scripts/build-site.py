@@ -158,7 +158,7 @@ def main():
             "language_script": script(strings, code, ""),
         }))
         body = "\n".join(
-            f"<{tag}>{content}</{tag}>".replace("{email}", '<a href="mailto:~@4st.li">~@4st.li</a>')
+            f"<{tag}>{content}</{tag}>".replace("{email}", '<a href="mailto:crosstune@4st.li">crosstune@4st.li</a>')
             for tag, content in s["privacy_body"]
         )
         (out / "privacy").mkdir(exist_ok=True)
