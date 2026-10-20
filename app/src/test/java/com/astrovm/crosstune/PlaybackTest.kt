@@ -627,6 +627,16 @@ class PlaybackTest {
     }
 
     @Test
+    fun theAppPlayingItSaysHowLongTheSongIsWhenItKnows() {
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", duration = 200_000))
+        assertEquals(200_000L, followed().last()!!.durationMs)
+        // One that says nothing of it, or nothing sensible, has none.
+        shadowOf(sessions).addController(player("com.soundcloud.android", "SoundCloud", "Other Song", "Band", duration = 0))
+        assertNull(followed(MusicMetadata("Other Song", "Band")).last()!!.durationMs)
+    }
+
+    @Test
     fun theAppPlayingItSaysWhetherItCanGoOnToTheNextSongOrBack() {
         allow()
         val skips = PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS

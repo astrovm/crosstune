@@ -147,6 +147,11 @@ internal data class ScreenActions(
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
     val onPlayResult: () -> Unit = {},
+    val onClosePlayer: () -> Unit = {},
+    val onPlayerPlayPause: () -> Unit = {},
+    val onPlayerSkip: (next: Boolean) -> Unit = {},
+    val onPlayerSeek: (Long) -> Unit = {},
+    val onPlayerLyrics: () -> Unit = {},
     val onOpenWith: (Destination) -> Unit = {},
     val onOpenOriginal: () -> Unit = {},
     val onDismissPicker: () -> Unit = {},
@@ -370,6 +375,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         // Over the words, practice shows in their place, so they're as they were after.
         state.practice != null && state.lyricsFor == null -> Screen.PRACTICE
         state.lyricsFor != null -> Screen.LYRICS
+        // Under the words it opens, as the song they're of.
+        state.player != null -> Screen.PLAYER
         showPracticeList -> Screen.PRACTICE_LIST
         else -> Screen.MAIN
     }
@@ -378,7 +385,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
-            if (initialState == Screen.LYRICS || targetState == Screen.LYRICS) rise(up = targetState.depth > initialState.depth)
+            if (initialState in RISING || targetState in RISING) rise(up = targetState.depth > initialState.depth)
             else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
         },
         label = "screen"
@@ -399,6 +406,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             ListeningScreen(actions)
         } else if (shown == Screen.LYRICS) {
             LyricsScreen(state, actions)
+        } else if (shown == Screen.PLAYER) {
+            PlayerScreen(state, actions)
         } else if (shown == Screen.PRACTICE) {
             PracticeScreen(state, actions)
         } else if (shown == Screen.PRACTICE_LIST) {
@@ -414,8 +423,11 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 private enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), LYRICS(1), SETTINGS(1), PRACTICE_LIST(1), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), LYRICS(2), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
 }
+
+/** Screens that rise over the one under them, and sink back into it. */
+private val RISING = setOf(Screen.LYRICS, Screen.PLAYER)
 
 private const val GUIDE_ALLOW = "allow"
 private const val GUIDE_APPS = "apps"

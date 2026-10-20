@@ -213,6 +213,10 @@
     <string name="lyrics_pause">一時停止</string>
     <string name="lyrics_next_song">次の曲</string>
     <string name="lyrics_previous_song">前の曲</string>
+    <string name="player_playing_in">%1$s で再生中</string>
+    <string name="player_waiting">%1$s を待っています</string>
+    <string name="player_follow_allow">音楽アプリで再生中の曲を Crosstune で表示・操作できるようにします。</string>
+    <string name="player_position">%1$s / %2$s</string>
     <string name="lyrics_jump">ここへ移動</string>
     <string name="lyrics_sync">タイミングを直す</string>
     <string name="lyrics_sync_hint">今聞こえている行をタップ</string>

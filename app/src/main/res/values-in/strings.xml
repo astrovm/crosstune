@@ -212,6 +212,10 @@
     <string name="lyrics_pause">Jeda</string>
     <string name="lyrics_next_song">Lagu berikutnya</string>
     <string name="lyrics_previous_song">Lagu sebelumnya</string>
+    <string name="player_playing_in">Diputar di %1$s</string>
+    <string name="player_waiting">Menunggu %1$s</string>
+    <string name="player_follow_allow">Izinkan Crosstune melihat dan mengontrol lagu yang diputar di aplikasi musikmu.</string>
+    <string name="player_position">%1$s dari %2$s</string>
     <string name="lyrics_jump">Lompat ke sini</string>
     <string name="lyrics_sync">Perbaiki waktu</string>
     <string name="lyrics_sync_hint">Ketuk baris yang kamu dengar sekarang</string>

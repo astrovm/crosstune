@@ -694,6 +694,12 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertTrue(shown("Demo one"))
         assertFalse(shown("Demo (Remix) one"))
+        // Paused there, it's still the song shown.
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(3_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true) }
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertTrue(shown("Demo one"))
+        assertFalse(shown("Demo (Remix) one"))
     }
 
     @Test

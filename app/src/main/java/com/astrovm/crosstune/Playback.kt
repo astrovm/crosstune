@@ -48,7 +48,9 @@ internal data class Following(
     val appPackage: String? = null,
     val video: Boolean = false,
     val canSkipNext: Boolean = false,
-    val canSkipPrevious: Boolean = false
+    val canSkipPrevious: Boolean = false,
+    /** How long what it plays is, when it says; for a video, the video. */
+    val durationMs: Long? = null
 )
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
@@ -319,7 +321,8 @@ internal class MediaSessionPlayback(
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
-            canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L
+            canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
+            durationMs = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 }
         )
     }
 

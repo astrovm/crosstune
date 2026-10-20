@@ -212,6 +212,10 @@
     <string name="lyrics_pause">Pausar</string>
     <string name="lyrics_next_song">Próxima música</string>
     <string name="lyrics_previous_song">Música anterior</string>
+    <string name="player_playing_in">Tocando no %1$s</string>
+    <string name="player_waiting">Aguardando o %1$s</string>
+    <string name="player_follow_allow">Deixe o Crosstune ver e controlar a música que toca no seu app de música.</string>
+    <string name="player_position">%1$s de %2$s</string>
     <string name="lyrics_jump">Ir para aqui</string>
     <string name="lyrics_sync">Ajustar o tempo</string>
     <string name="lyrics_sync_hint">Toque na linha que você ouve agora</string>

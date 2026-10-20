@@ -103,6 +103,8 @@ internal data class UiState(
     val savedLines: List<SavedLine> = emptyList(),
     /** Saved lines being practised, while they are. */
     val practice: Practice? = null,
+    /** The song the player shows, playing in its music app; null while it's closed. */
+    val player: PlayerState? = null,
     /** What practice cards show, on either side. */
     val cards: CardOptions = CardOptions(),
     /** The ChatGPT account whose plan the AI features run on. */
@@ -294,6 +296,18 @@ internal data class ChatGptState(
  * means once [turned]. With none left, the session's done; with none at all, none was due: all are
  * caught up.
  */
+/**
+ * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
+ * Music; [following] it once the app plays it, and [played] since.
+ */
+internal data class PlayerState(
+    val song: MusicMetadata,
+    val app: String?,
+    val link: String? = null,
+    val following: Following? = null,
+    val played: Boolean = false
+)
+
 internal data class Practice(
     val queue: List<SavedLine> = emptyList(),
     /** How many cards the session has, and how many are done, for how far along it is. */

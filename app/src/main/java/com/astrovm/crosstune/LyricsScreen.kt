@@ -1418,7 +1418,7 @@ private fun LyricLineText(
 
 /** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable
-private fun rememberPosition(following: Following?): Long? {
+internal fun rememberPosition(following: Following?): Long? {
     if (following == null) return null
     fun now() = following.clock.positionAt(SystemClock.elapsedRealtime())
     val position by produceState(now(), following) {

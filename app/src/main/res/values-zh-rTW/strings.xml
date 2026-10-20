@@ -212,6 +212,10 @@
     <string name="lyrics_pause">暫停</string>
     <string name="lyrics_next_song">下一首</string>
     <string name="lyrics_previous_song">上一首</string>
+    <string name="player_playing_in">正在 %1$s 中播放</string>
+    <string name="player_waiting">正在等待 %1$s</string>
+    <string name="player_follow_allow">允許 Crosstune 查看並控制音樂應用程式中正在播放的歌曲。</string>
+    <string name="player_position">%1$s / %2$s</string>
     <string name="lyrics_jump">跳到這裡</string>
     <string name="lyrics_sync">校準時間</string>
     <string name="lyrics_sync_hint">輕觸你現在聽到的那一行</string>
