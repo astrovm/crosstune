@@ -3121,11 +3121,17 @@ class MainActivityTest {
         composeRule.mainClock.advanceTimeBy(2_000)
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodes(hasText("1:40")).fetchSemanticsNodes().isEmpty())
-        // Paused, it plays again.
+        // Said to have moved, it's where the app says, here paused, and then it plays again.
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(150_000f) }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText("2:30")).assertExists()
         phone.playing.value = Following(PlaybackClock(100_000, now, playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
         waitForDescription(string(R.string.lyrics_play))
+        composeRule.onNode(hasText("1:40")).assertExists()
+        assertTrue(composeRule.onAllNodes(hasText("2:30")).fetchSemanticsNodes().isEmpty())
         click(string(R.string.lyrics_play))
         assertEquals(listOf(false, true), phone.plays)
+        assertEquals(listOf(100_000L, 150_000L), phone.seeks)
 
         // Its words open over it, and close back to it.
         click(string(R.string.lyrics_button))
