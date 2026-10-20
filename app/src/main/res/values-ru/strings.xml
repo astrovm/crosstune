@@ -314,6 +314,7 @@
     <string name="song_search_chatgpt">Найдено ChatGPT</string>
     <string name="saved_practice">Практика</string>
     <string name="practice_show">Показать ответ</string>
+    <string name="practice_card_options">Настройки карточек</string>
     <string name="practice_again">Ещё раз</string>
     <string name="practice_hard">Трудно</string>
     <string name="practice_good">Хорошо</string>

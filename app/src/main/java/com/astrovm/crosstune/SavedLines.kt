@@ -41,6 +41,16 @@ internal data class SavedLine(
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
 
+    /** It in Latin letters, as typed when [typed] and it's spelled otherwise, or as said; null when it has none. */
+    fun latin(typed: Boolean): String? = (if (typed) this.typed ?: romanized else romanized)?.takeIf { it.isNotBlank() }
+
+    /** It as [shown], when it can be: its kana, for Japanese, or its Latin letters; otherwise as written. */
+    fun shownAs(shown: WordsAs, typed: Boolean): String = when (shown) {
+        WordsAs.KANA -> reading?.takeIf { it.any(Readings::isKana) }
+        WordsAs.LATIN -> latin(typed)
+        WordsAs.WRITTEN -> null
+    } ?: text
+
     /** Whether it can be practised: it has a reading or a meaning to recall, or a sound to recall it by. */
     val practisable get() = translation != null || reading != null || timed
 
@@ -68,6 +78,38 @@ internal data class SavedLine(
         val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty(), typed ?: romanized.orEmpty())), fixes).first()
         if (read.parts == parts) return this
         return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true, typed = read.typed.takeIf { it.isNotBlank() && it != read.romanized })
+    }
+}
+
+/**
+ * What practice cards show: the front as written, in kana or in Latin letters, [front]; on the back,
+ * the [readings] over the words, the words in [latin] letters, and their [translation].
+ */
+internal data class CardOptions(
+    val front: WordsAs = WordsAs.WRITTEN,
+    val readings: Boolean = true,
+    val latin: Boolean = true,
+    val translation: Boolean = true
+) {
+    fun save(preferences: SharedPreferences) = preferences.edit {
+        putString(KEY_FRONT, front.name)
+        putBoolean(KEY_READINGS, readings)
+        putBoolean(KEY_LATIN, latin)
+        putBoolean(KEY_TRANSLATION, translation)
+    }
+
+    companion object {
+        fun load(preferences: SharedPreferences) = CardOptions(
+            front = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_FRONT, null) } ?: WordsAs.WRITTEN,
+            readings = preferences.getBoolean(KEY_READINGS, true),
+            latin = preferences.getBoolean(KEY_LATIN, true),
+            translation = preferences.getBoolean(KEY_TRANSLATION, true)
+        )
+
+        private const val KEY_FRONT = "card_front"
+        private const val KEY_READINGS = "card_readings"
+        private const val KEY_LATIN = "card_latin"
+        private const val KEY_TRANSLATION = "card_translation"
     }
 }
 

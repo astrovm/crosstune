@@ -101,6 +101,8 @@ internal data class UiState(
     val savedLines: List<SavedLine> = emptyList(),
     /** Saved lines being practised, while they are. */
     val practice: Practice? = null,
+    /** What practice cards show, on either side. */
+    val cards: CardOptions = CardOptions(),
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */
@@ -305,9 +307,6 @@ internal data class Practice(
     val before: Before? = null
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
-
-    /** All done: there were cards, and none are left. */
-    val finished: Boolean get() = total > 0 && queue.isEmpty()
 }
 
 /** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */

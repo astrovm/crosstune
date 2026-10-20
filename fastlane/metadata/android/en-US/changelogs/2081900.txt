@@ -3,4 +3,5 @@ Hold the visuals button to set how long each one shows.
 Make the lyrics bigger or smaller, and report wrong words or timing, from their menu.
 Covers show for songs only YouTube Music has.
 Patched YouTube and YouTube Music, like ReVanced or Morphe, work too.
+Flashcards can ask in kana or Latin letters, and show only what you pick.
 Less used settings moved to Settings → Advanced.

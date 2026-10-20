@@ -335,6 +335,7 @@
     <string name="song_search_chatgpt">Found by ChatGPT</string>
     <string name="saved_practice">Practice</string>
     <string name="practice_show">Show answer</string>
+    <string name="practice_card_options">Card options</string>
     <string name="practice_again">Again</string>
     <string name="practice_hard">Hard</string>
     <string name="practice_good">Good</string>

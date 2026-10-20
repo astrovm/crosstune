@@ -314,6 +314,7 @@
     <string name="song_search_chatgpt">Ditemukan oleh ChatGPT</string>
     <string name="saved_practice">Latihan</string>
     <string name="practice_show">Lihat jawaban</string>
+    <string name="practice_card_options">Opsi kartu</string>
     <string name="practice_again">Lagi</string>
     <string name="practice_hard">Sulit</string>
     <string name="practice_good">Baik</string>
