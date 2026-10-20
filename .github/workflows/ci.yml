@@ -16,15 +16,38 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  # A pull request that only changes the site, docs, store listing or their scripts skips the app's jobs.
+  changes:
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
     steps:
-      # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
+          printf '%s\n' "$files"
+          # Any file outside these makes it the app's change.
+          if grep -vE '^(README\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  site:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # projectM, which draws the MilkDrop visuals, is built from source.
-          submodules: recursive
 
       - name: Check Play Store changelog
         run: |
@@ -45,6 +68,78 @@ jobs:
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
 
+  # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
+  test:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
+      # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
+      - name: Test
+        run: ./gradlew :app:testDebugUnitTest :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/kover/
+          retention-days: 14
+          if-no-files-found: warn
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --build-cache --configuration-cache
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          retention-days: 14
+          if-no-files-found: warn
+
+  # The debug and minified release APKs, with projectM built for each.
+  build:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # projectM, which draws the MilkDrop visuals, is built from source.
+          submodules: recursive
+
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -63,11 +158,8 @@ jobs:
           evict-old-files: job
           update-package-index: true
 
-      # Same task as locally: unit tests with the 100% line coverage gate, lint, debug and release APKs.
-      # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
-      # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
-      - name: Test, lint and build
-        run: ./gradlew :app:ci --build-cache
+      - name: Build
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache
         env:
           # CMake reads these to put ccache in front of the NDK's compilers.
           CMAKE_C_COMPILER_LAUNCHER: ccache
@@ -79,29 +171,22 @@ jobs:
       - name: Check the native library doesn't depend on where it's built
         run: python3 scripts/release/check_native_paths.py
 
-      - name: Upload test, coverage and lint reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: reports
-          path: |
-            app/build/reports/tests/
-            app/build/reports/kover/
-            app/build/reports/lint-results-debug.html
-          retention-days: 14
-          if-no-files-found: warn
-
   required-ci:
     name: CI / Required
     # Always report a result, including when a prerequisite failed or was skipped.
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
+      - changes
+      - site
       - test
+      - lint
+      - build
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions: {}
     steps:
+      # The app's jobs are skipped, not failed, when only the site or docs changed.
       - name: Require every PR validation job to pass
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
-        run: jq --exit-status 'length > 0 and all(. == "success")' <<< "$RESULTS"
+        run: jq --exit-status 'length > 0 and all(. == "success" or . == "skipped")' <<< "$RESULTS"
