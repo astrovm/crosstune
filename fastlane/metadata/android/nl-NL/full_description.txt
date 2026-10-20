@@ -15,7 +15,7 @@ Iemand stuurt je een link van de ene muziekdienst, maar jij luistert op een ande
 <li>Kan een link niet worden gelezen? Open hem in de app waar hij vandaan komt, kopieer de zoektekst of deel een zoeklink.</li>
 <li>Vind een nummer door de naam te typen in plaats van een link, en lees de tekst van elk nummer dat je opent.</li>
 <li>Teksten in de maat: ze volgen je muziekapp of luisteren mee, zweven boven andere apps en lopen met MilkDrop-visuals erachter.</li>
-<li>Leer de woorden met kana, pinyin en romaji, en vertalingen voor de talen die je nog niet leest.</li>
+<li>Leer de woorden met kana, pinyin, romaji en elk ander schrift in Latijnse letters, en vertalingen voor de talen die je nog niet leest.</li>
 <li>Log in met je betaalde ChatGPT-abonnement om hele nummers te vertalen, regels uit te leggen, woorden te vinden die het leren waard zijn en nummers te zoeken door ze te beschrijven.</li>
 <li>Material You-kleuren op Android 12 en hoger.</li>
 </ul>

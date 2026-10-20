@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">Classiques</string>
     <string name="visuals_only">Visuels seuls</string>
     <string name="visuals_options">Options des visuels</string>
-    <string name="visuals_more">Plus d\'options des visuels</string>
     <string name="visuals_show_words">Afficher les paroles</string>
     <string name="setting_theme">Thème</string>
     <string name="theme_light">Clair</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">Lecture au-dessus des mots</string>
     <string name="lyrics_reading_size">Taille de la lecture</string>
     <string name="lyrics_words_size">Taille des paroles</string>
+    <string name="lyrics_show_as">Afficher en</string>
+    <string name="lyrics_also_show">Afficher aussi</string>
     <string name="report_problem">Signaler un problème</string>
     <string name="report_problem_text">Paroles fausses, mauvais timing ou autre chose. Dites ce qui ne va pas, puis envoyez.</string>
     <string name="report_by_email">E-mail</string>

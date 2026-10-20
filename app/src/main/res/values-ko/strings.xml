@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">클래식</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
-    <string name="visuals_more">비주얼 옵션 더보기</string>
     <string name="visuals_show_words">가사 보기</string>
     <string name="setting_theme">테마</string>
     <string name="theme_light">라이트</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">단어 위에 읽기</string>
     <string name="lyrics_reading_size">읽기 크기</string>
     <string name="lyrics_words_size">가사 크기</string>
+    <string name="lyrics_show_as">표시 방식</string>
+    <string name="lyrics_also_show">함께 표시</string>
     <string name="report_problem">문제 신고</string>
     <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
     <string name="report_by_email">이메일</string>

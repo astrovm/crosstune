@@ -6,8 +6,13 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import com.atilika.kuromoji.ipadic.Tokenizer
 
-/** The writing systems whose words read differently from how they look, and so have readings shown. */
-internal enum class Script { JAPANESE, CHINESE, KOREAN }
+/**
+ * The writing systems that aren't Latin, so their words can be shown in Latin letters. Each has
+ * the [glyph] that stands for it in the words menu, a letter of its own.
+ */
+internal enum class Script(val glyph: String) {
+    JAPANESE("日"), CHINESE("中"), KOREAN("한"), CYRILLIC("Я"), GREEK("Ω"), ARABIC("ع"), HEBREW("א"), INDIC("अ"), THAI("ก")
+}
 
 /** A piece of a line, with how it's read when that isn't plain from it, e.g. kanji with their kana. */
 internal data class Ruby(val text: String, val reading: String? = null)
@@ -38,7 +43,7 @@ internal fun bothRomaji(said: String?, typed: String?, typedFirst: Boolean): Lis
 /** A reading put right: on line [line], from 0, [kanji] reads [reading], in hiragana. */
 internal data class ReadingFix(val line: Int, val kanji: String, val reading: String)
 
-/** Readings of lyrics in Japanese, Chinese and Korean, all worked out on the phone. */
+/** Readings of lyrics in Japanese, Chinese and Korean, and Latin letters for other scripts, all worked out on the phone. */
 internal object Readings {
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
@@ -52,6 +57,27 @@ internal object Readings {
         }
     }
 
+    /** The script [lines] show in, which also has any other script most of the letters are in, as Android 10 on can write those in Latin letters. */
+    fun displayScriptOf(lines: List<String>): Script? = scriptOf(lines) ?: mostlyIn(lines.joinToString("")).takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q }
+
+    /** The other script most of [text]'s letters are in, so a Russian word in an English song doesn't make it Russian. */
+    private fun mostlyIn(text: String): Script? {
+        val letters = text.filter(Char::isLetter)
+        val (script, count) = letters.groupingBy(::scriptOfLetter).eachCount().filterKeys { it != null }.maxByOrNull { it.value } ?: return null
+        return script.takeIf { count * 2 > letters.length }
+    }
+
+    private fun scriptOfLetter(c: Char): Script? = when (Character.UnicodeScript.of(c.code)) {
+        Character.UnicodeScript.CYRILLIC -> Script.CYRILLIC
+        Character.UnicodeScript.GREEK -> Script.GREEK
+        Character.UnicodeScript.ARABIC -> Script.ARABIC
+        Character.UnicodeScript.HEBREW -> Script.HEBREW
+        Character.UnicodeScript.THAI -> Script.THAI
+        Character.UnicodeScript.DEVANAGARI, Character.UnicodeScript.BENGALI, Character.UnicodeScript.GURMUKHI, Character.UnicodeScript.GUJARATI,
+        Character.UnicodeScript.TAMIL, Character.UnicodeScript.TELUGU, Character.UnicodeScript.KANNADA, Character.UnicodeScript.MALAYALAM -> Script.INDIC
+        else -> null
+    }
+
     /** How each of [lines] reads, in [script]. Japanese takes a moment the first time, to load its dictionary. */
     // Words are only ever Chinese from Android 10 on, see scriptOf.
     @SuppressLint("NewApi")
@@ -59,6 +85,7 @@ internal object Readings {
         Script.JAPANESE -> lines.map(::japanese)
         Script.CHINESE -> lines.map(::chinese)
         Script.KOREAN -> lines.map(::korean)
+        else -> lines.map(::latinized)
     }.zip(lines) { reading, line ->
         // A line already in Latin letters, as an English one in a Korean song, isn't written out again.
         if (letters(reading.romanized) == letters(line)) reading.copy(romanized = "", typed = "") else reading
@@ -268,7 +295,8 @@ internal object Readings {
             when (script) {
                 Script.CHINESE -> chinese(text).let { Word(text, it.reading, null) }
                 Script.KOREAN -> Word(text, null, romaja(text))
-                else -> Word(text)
+                null -> Word(text)
+                else -> Word(text, null, latin(text))
             }
         }
     }
@@ -325,6 +353,18 @@ internal object Readings {
         val romanized = pinyin().transliterate(line).trim()
         LineReading(joined(parts), romanized, romanized)
     }
+
+    /** Android's own letters-to-Latin, made once, the first time it's needed. */
+    private var latinizer: Transliterator? = null
+
+    /** [text] in plain Latin letters, as Cyrillic, Greek, Arabic, Hebrew, Indic and Thai are said. Words are only ever in these from Android 10 on, see displayScriptOf. */
+    @SuppressLint("NewApi")
+    private fun latin(text: String): String = synchronized(this) {
+        val letters = latinizer ?: Transliterator.getInstance("Any-Latin; Latin-ASCII").also { latinizer = it }
+        letters.transliterate(text).trim()
+    }
+
+    private fun latinized(line: String): LineReading = latin(line).let { LineReading(listOf(Ruby(line)), it, it) }
 
     private fun korean(line: String): LineReading {
         val romanized = romaja(line)

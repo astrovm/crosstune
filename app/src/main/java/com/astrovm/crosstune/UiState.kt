@@ -374,7 +374,7 @@ internal data class Learning(
     val readingScale: Float = READING_SCALE,
     /** How big the words are, beside how they start. */
     val wordsScale: Float = 1f,
-    /** The script the words are in, when it reads differently from how it looks. */
+    /** The script the words are in, when it isn't Latin. */
     val script: Script? = null,
     /** How each line reads, once worked out. */
     val lines: List<LineReading> = emptyList(),

@@ -178,7 +178,7 @@ class ChordsScreenTest {
         })
         composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), actions) } }
         composeRule.onNode(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithContentDescription(string(R.string.lyrics_learn)).performClick()
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_study)).performClick()
         composeRule.onNodeWithText(string(R.string.lyrics_chords)).performClick()
         assertEquals(listOf("G", "C"), chordsOver(lines[0].text))
         assertEquals(listOf("F"), chordsOver(lines[2].text))

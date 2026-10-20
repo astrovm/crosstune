@@ -190,7 +190,6 @@
     <string name="visual_kind_classics">Classics</string>
     <string name="visuals_only">Only visuals</string>
     <string name="visuals_options">Visuals options</string>
-    <string name="visuals_more">More visuals options</string>
     <string name="visuals_show_words">Show the words</string>
     <string name="setting_theme">Theme</string>
     <string name="theme_light">Light</string>
@@ -319,6 +318,8 @@
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
     <string name="lyrics_words_size">Words size</string>
+    <string name="lyrics_show_as">Show as</string>
+    <string name="lyrics_also_show">Also show</string>
     <string name="report_problem">Report a problem</string>
     <string name="report_problem_text">Wrong words, bad timing or anything else. Say what\'s wrong, and send it.</string>
     <string name="report_by_email">Email</string>

@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">Klassiker</string>
     <string name="visuals_only">Nur Visuals</string>
     <string name="visuals_options">Visuals-Optionen</string>
-    <string name="visuals_more">Weitere Visuals-Optionen</string>
     <string name="visuals_show_words">Text anzeigen</string>
     <string name="setting_theme">Design</string>
     <string name="theme_light">Hell</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">Lesung über den Wörtern</string>
     <string name="lyrics_reading_size">Größe der Lesung</string>
     <string name="lyrics_words_size">Textgröße</string>
+    <string name="lyrics_show_as">Anzeigen als</string>
+    <string name="lyrics_also_show">Auch anzeigen</string>
     <string name="report_problem">Problem melden</string>
     <string name="report_problem_text">Falscher Text, schlechtes Timing oder etwas anderes. Beschreibe, was nicht stimmt, und sende es.</string>
     <string name="report_by_email">E-Mail</string>

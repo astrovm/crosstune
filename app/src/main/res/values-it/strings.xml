@@ -253,7 +253,6 @@
     <string name="visual_kind_classics">Classici</string>
     <string name="visuals_only">Solo effetti visivi</string>
     <string name="visuals_options">Opzioni effetti visivi</string>
-    <string name="visuals_more">Altre opzioni effetti visivi</string>
     <string name="visuals_show_words">Mostra il testo</string>
     <string name="setting_theme">Tema</string>
     <string name="theme_light">Chiaro</string>
@@ -299,6 +298,8 @@
     <string name="lyrics_readings">Lettura sopra le parole</string>
     <string name="lyrics_reading_size">Dimensione della lettura</string>
     <string name="lyrics_words_size">Dimensione del testo</string>
+    <string name="lyrics_show_as">Mostra come</string>
+    <string name="lyrics_also_show">Mostra anche</string>
     <string name="report_problem">Segnala un problema</string>
     <string name="report_problem_text">Testo sbagliato, tempi sballati o altro. Scrivi cosa non va e invialo.</string>
     <string name="report_by_email">Email</string>

@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">Классика</string>
     <string name="visuals_only">Только визуализация</string>
     <string name="visuals_options">Параметры визуализации</string>
-    <string name="visuals_more">Другие параметры визуализации</string>
     <string name="visuals_show_words">Показать текст</string>
     <string name="setting_theme">Тема</string>
     <string name="theme_light">Светлая</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_reading_size">Размер чтения</string>
     <string name="lyrics_words_size">Размер текста</string>
+    <string name="lyrics_show_as">Показывать как</string>
+    <string name="lyrics_also_show">Показывать ещё</string>
     <string name="report_problem">Сообщить о проблеме</string>
     <string name="report_problem_text">Неверный текст, плохая синхронизация или что-то ещё. Опишите проблему и отправьте.</string>
     <string name="report_by_email">Почта</string>

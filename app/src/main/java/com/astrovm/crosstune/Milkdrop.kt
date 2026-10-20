@@ -433,12 +433,14 @@ internal class MilkdropRenderer(
         val at = now()
         val since = at - shownAt
         val took = at - drawnAt
+        // Even the shortest interval is assessed before changing the preset resets its sample.
+        val timeTo = minOf(TIME_TO_MS, settings.changeMs)
         // A frame that took this long was paused, out of sight, rather than slow.
-        if (since in TIME_FROM_MS..TIME_TO_MS && took < PAUSED_MS) {
+        if (since in TIME_FROM_MS..timeTo && took < PAUSED_MS) {
             timedMs += took
             timedFrames++
         }
-        if (timed || since < TIME_TO_MS) return
+        if (timed || since < timeTo) return
         timed = true
         val preset = current ?: return
         if (timedFrames < TIMED_FRAMES) return

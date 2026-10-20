@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">经典</string>
     <string name="visuals_only">仅视觉效果</string>
     <string name="visuals_options">视觉效果选项</string>
-    <string name="visuals_more">更多视觉效果选项</string>
     <string name="visuals_show_words">显示歌词</string>
     <string name="setting_theme">主题</string>
     <string name="theme_light">浅色</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">在文字上方显示读音</string>
     <string name="lyrics_reading_size">读音大小</string>
     <string name="lyrics_words_size">歌词大小</string>
+    <string name="lyrics_show_as">显示方式</string>
+    <string name="lyrics_also_show">同时显示</string>
     <string name="report_problem">报告问题</string>
     <string name="report_problem_text">歌词错误、时间不准或其他问题。写下问题后发送。</string>
     <string name="report_by_email">电子邮件</string>

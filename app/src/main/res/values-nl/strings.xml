@@ -252,7 +252,6 @@
     <string name="visual_kind_classics">Klassiekers</string>
     <string name="visuals_only">Alleen visuals</string>
     <string name="visuals_options">Visuals-opties</string>
-    <string name="visuals_more">Meer visuals-opties</string>
     <string name="visuals_show_words">Songtekst tonen</string>
     <string name="setting_theme">Thema</string>
     <string name="theme_light">Licht</string>
@@ -298,6 +297,8 @@
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
     <string name="lyrics_reading_size">Grootte van de uitspraak</string>
     <string name="lyrics_words_size">Tekstgrootte</string>
+    <string name="lyrics_show_as">Toon als</string>
+    <string name="lyrics_also_show">Toon ook</string>
     <string name="report_problem">Probleem melden</string>
     <string name="report_problem_text">Verkeerde tekst, slechte timing of iets anders. Zeg wat er mis is en stuur het.</string>
     <string name="report_by_email">E-mail</string>
