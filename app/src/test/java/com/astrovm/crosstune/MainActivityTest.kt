@@ -44,6 +44,7 @@ import android.view.textclassifier.TextClassifier
 import android.text.SpannableString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -3247,6 +3248,29 @@ class MainActivityTest {
         tapItem(string(R.string.picker_title))
         waitForText(string(R.string.picker_title))
         assertTrue(composeRule.onAllNodes(hasContentDescription(playingIn)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun thePlayersTimesAreNotCutOffAtTheLargestFont() {
+        RuntimeEnvironment.setFontScale(2f)
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
+        phone.playing.value = Following(PlaybackClock(30_000, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
+        waitForText("3:20")
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNode(hasText("3:20")).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+        assertFalse(layouts.single().didOverflowHeight)
     }
 
     @Test

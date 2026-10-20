@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -117,7 +117,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                         )
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(64.dp)) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 64.dp)) {
                             when {
                                 !state.canFollowApps -> PlayerFollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW)
                                 following != null -> PlayerProgress(following, actions.onPlayerSeek)
