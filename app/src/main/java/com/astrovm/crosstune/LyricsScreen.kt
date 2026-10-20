@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.draw.drawWithCache
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -235,12 +236,20 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         delay(BAR_BACK_MS)
         barShown = true
     }
+    val layers = LocalLayerSwipe.current
     val scrolling = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
-                return Offset.Zero
+                // Pulled back up, the words stay put until the pull is undone.
+                return if (layers.swiping && available.y < 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
             }
+
+            // Pulled down past the first line, the words follow the finger back to what's under them.
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (source == NestedScrollSource.UserInput && available.y > 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
+
+            override suspend fun onPreFling(available: Velocity): Velocity = Velocity(0f, layers.flung(available.y))
         }
     }
     WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
@@ -249,6 +258,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrolling)
+            // Where there's no list to pull down, e.g. while the words are found, a swipe down does the same.
+            .swipeLayers()
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier

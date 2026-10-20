@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.swipeDown
 
 import androidx.compose.ui.test.hasClickAction
@@ -248,6 +249,69 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { !barShown() }
         assertFalse(barShown())
         assertEquals(0, microphone.opened)
+    }
+
+    @Test
+    fun theBarSwipesUpToThePlayerAndStaysWithTheSongsCardUnderIt() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        // A swipe the way a finger goes, well past the bar.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        // Its player opens, with the song's card made under it for its link tools.
+        waitForDescription(string(R.string.more_button))
+        assertFalse(barShown())
+        click(string(R.string.dismiss_button))
+        // The card shows the song that plays, and the bar stays, a swipe from its player.
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(barShown())
+        assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aShortSwipeUpFromTheBarGoesBackAndLeavesTheBarBe() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -80f))
+            up()
+        }
+        // The player opened as the finger began, and is put away again as it lets go early.
+        waitUntil(TIMEOUT_MS) { barShown() && composeRule.onAllNodesWithContentDescription(string(R.string.more_button)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun aSwipeUpFromTheBarTakenAwayHalfwayGoesBackToo() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -80f))
+            cancel()
+        }
+        waitUntil(TIMEOUT_MS) { barShown() && composeRule.onAllNodesWithContentDescription(string(R.string.more_button)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun theWordsPulledDownALittleAndLetGoStay() {
+        wordsOf(null, "Night sky\\nStars")
+        waitUntil(TIMEOUT_MS) { shown("Night sky\nStars") }
+        composeRule.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 150f))
+            // Back up, the pull is undone before the words scroll.
+            moveBy(Offset(0f, -100f))
+            moveBy(Offset(0f, -100f))
+            up()
+        }
+        composeRule.waitForIdle()
+        assertTrue(shown("Night sky\nStars"))
     }
 
     @Test
@@ -2198,6 +2262,15 @@ class ListeningTest {
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { openAi.asked.last().getString("model") == "gpt-6.1-sol" }
+    }
+
+    @Test
+    fun pullingTheWordsDownFromTheirFirstLineClosesThem() {
+        wordsOf(null, "Night sky\\nStars")
+        waitUntil(TIMEOUT_MS) { shown("Night sky\nStars") }
+        // From the top of the list, a swipe down has nowhere to scroll, and goes on to close them.
+        composeRule.onRoot().performTouchInput { swipeDown() }
+        waitUntil(TIMEOUT_MS) { !shown("Night sky\nStars") }
     }
 
     @Test

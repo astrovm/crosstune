@@ -374,6 +374,8 @@ class MainActivity : ComponentActivity() {
                         onOpen = { viewModel.openResult() },
                         onPlayResult = viewModel::playResult,
                         onClosePlayer = viewModel::closePlayer,
+                        onPlayerOpenApp = viewModel::openPlayerApp,
+                        onPlayerOpenWith = viewModel::playerOpenWith,
                         onPlayerPlayPause = viewModel::playerPlayPause,
                         onPlayerSkip = viewModel::playerSkip,
                         onPlayerSeek = viewModel::playerSeek,
@@ -774,7 +776,7 @@ class MainActivity : ComponentActivity() {
     private fun show(effect: Effect.Show) {
         val launch = packageManager.getLaunchIntentForPackage(effect.packageName)
         when {
-            launch == null || !tryStartActivity(launch) -> viewModel.showError(AppError.NO_APP_TO_OPEN)
+            launch == null || !tryStartActivity(launch) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
             effect.finishAfterOpen -> finish()
         }
     }
