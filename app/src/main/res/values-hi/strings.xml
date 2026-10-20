@@ -234,7 +234,6 @@
     <string name="visual_heavy">इस फ़ोन के लिए बहुत भारी</string>
     <string name="visual_show">इसे दिखाएँ</string>
     <string name="visual_see">देखें</string>
-    <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">नर्तक</string>
     <string name="visual_kind_fractals">फ्रैक्टल</string>

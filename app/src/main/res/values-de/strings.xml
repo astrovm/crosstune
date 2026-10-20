@@ -234,7 +234,6 @@
     <string name="visual_heavy">Zu schwer für dieses Handy</string>
     <string name="visual_show">Diese zeigen</string>
     <string name="visual_see">Ansehen</string>
-    <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Tänzer</string>
     <string name="visual_kind_fractals">Fraktale</string>

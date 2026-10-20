@@ -234,7 +234,6 @@
     <string name="visual_heavy">이 폰에는 너무 무거움</string>
     <string name="visual_show">이것 표시</string>
     <string name="visual_see">보기</string>
-    <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">댄서</string>
     <string name="visual_kind_fractals">프랙털</string>
