@@ -236,6 +236,7 @@
     <string name="visual_see">Görüntüle</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Dansçılar</string>
+    <string name="visual_kind_drawing">Çizimler</string>
     <string name="visual_kind_fractals">Fraktallar</string>
     <string name="visual_kind_geometric">Geometrik</string>
     <string name="visual_kind_hypnotic">Hipnotik</string>

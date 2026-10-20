@@ -818,6 +818,7 @@ internal fun VisualsPager(
 /** What a kind of visual is called, by its key in assets/milkdrop-kinds.txt. */
 private fun kindName(kind: String) = when (kind) {
     "dancers" -> R.string.visual_kind_dancers
+    "drawing" -> R.string.visual_kind_drawing
     "fractals" -> R.string.visual_kind_fractals
     "geometric" -> R.string.visual_kind_geometric
     "hypnotic" -> R.string.visual_kind_hypnotic

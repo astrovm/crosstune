@@ -236,6 +236,7 @@
     <string name="visual_see">Verlo</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Bailarines</string>
+    <string name="visual_kind_drawing">Dibujos</string>
     <string name="visual_kind_fractals">Fractales</string>
     <string name="visual_kind_geometric">Geométricos</string>
     <string name="visual_kind_hypnotic">Hipnóticos</string>
