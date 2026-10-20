@@ -285,6 +285,20 @@ class ListeningTest {
     }
 
     @Test
+    fun aSwipeUpFromTheBarTakenAwayHalfwayGoesBackToo() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -80f))
+            cancel()
+        }
+        waitUntil(TIMEOUT_MS) { barShown() && composeRule.onAllNodesWithContentDescription(string(R.string.more_button)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun theWordsPulledDownALittleAndLetGoStay() {
         wordsOf(null, "Night sky\\nStars")
         waitUntil(TIMEOUT_MS) { shown("Night sky\nStars") }
