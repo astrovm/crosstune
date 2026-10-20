@@ -321,6 +321,19 @@ private fun SettingsList(
                 )
             }
             GroupDivider()
+            var reporting by rememberSaveable { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { reporting = true }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.send_feedback), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
+            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
+            GroupDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1169,7 +1182,7 @@ private fun LanguageRow(onSelect: (String?) -> Unit) {
 
 /** The installed version, e.g. "1.2.1", or "1.2.1-dev.5" for a build made after a release. */
 @Composable
-private fun appVersion(): String {
+internal fun appVersion(): String {
     val context = LocalContext.current
     return remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
 }

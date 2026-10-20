@@ -295,6 +295,10 @@
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_words_size">歌詞のサイズ</string>
+    <string name="report_problem">問題を報告</string>
+    <string name="report_problem_text">歌詞の間違い、タイミングのずれなど。問題を書いて送信してください。</string>
+    <string name="report_by_email">メール</string>
+    <string name="send_feedback">フィードバックを送信</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>

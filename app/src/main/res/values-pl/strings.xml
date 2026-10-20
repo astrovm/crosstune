@@ -294,6 +294,10 @@
     <string name="lyrics_readings">Czytanie nad słowami</string>
     <string name="lyrics_reading_size">Rozmiar czytania</string>
     <string name="lyrics_words_size">Rozmiar tekstu</string>
+    <string name="report_problem">Zgłoś problem</string>
+    <string name="report_problem_text">Zły tekst, złe tempo lub coś innego. Opisz, co jest nie tak, i wyślij.</string>
+    <string name="report_by_email">E-mail</string>
+    <string name="send_feedback">Wyślij opinię</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_translation">Tłumaczenie</string>

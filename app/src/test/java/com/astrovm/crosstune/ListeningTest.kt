@@ -51,6 +51,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -2421,6 +2422,18 @@ class ListeningTest {
             composeRule.waitForIdle()
             shown("yozora")
         }
+    }
+
+    @Test
+    fun aProblemWithTheWordsIsReportedWithTheSongAndHowTheyFollowedIt() {
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        learnMenu()
+        click(string(R.string.report_problem))
+        click(string(R.string.report_by_email))
+        val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
+        assertTrue(email, email.contains("subject=Lyrics of Demo by "))
+        assertTrue(email, email.contains("Song: Demo\n") && email.contains("Lyrics: timed\n"))
     }
 
     @Test

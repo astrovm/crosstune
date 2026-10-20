@@ -566,7 +566,14 @@ private fun LyricsActions(
         // The menus open from the bar rather than from their button, so they line up with it and
         // keep off the screen's edge.
         val close = { menu = null }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, close)
+        var reporting by rememberSaveable { mutableStateOf(false) }
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, onReport = { reporting = true }, onClose = close)
+        if (reporting) {
+            ReportDialog(
+                Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
+                onDismiss = { reporting = false }
+            )
+        }
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions.onPractiseSong, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
         VisualsMoreMenu(menu == BarMenu.VISUALS_MORE, state.visualsSettings, actions, close)
@@ -628,7 +635,7 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, actions: ScreenActions, onClose: () -> Unit) {
+private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, actions: ScreenActions, onReport: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
         // How big the words are, for any song.
         SizeSlider(R.string.lyrics_words_size, R.drawable.ic_text_increase, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
@@ -656,6 +663,16 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
         HorizontalDivider()
         LearnItem(R.string.lyrics_chords, chords.on, actions.onChordsChange)
+        HorizontalDivider()
+        // Wrong words, or out of time, said where they can be put right.
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.report_problem)) },
+            leadingIcon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
+            onClick = {
+                onClose()
+                onReport()
+            }
+        )
     }
 }
 

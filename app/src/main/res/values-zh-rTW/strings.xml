@@ -294,6 +294,10 @@
     <string name="lyrics_readings">在文字上方顯示讀音</string>
     <string name="lyrics_reading_size">讀音大小</string>
     <string name="lyrics_words_size">歌詞大小</string>
+    <string name="report_problem">回報問題</string>
+    <string name="report_problem_text">歌詞錯誤、時間不準或其他問題。寫下問題後送出。</string>
+    <string name="report_by_email">電子郵件</string>
+    <string name="send_feedback">傳送意見回饋</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_translation">翻譯</string>

@@ -294,6 +294,10 @@
     <string name="lyrics_readings">Lecture au-dessus des mots</string>
     <string name="lyrics_reading_size">Taille de la lecture</string>
     <string name="lyrics_words_size">Taille des paroles</string>
+    <string name="report_problem">Signaler un problème</string>
+    <string name="report_problem_text">Paroles fausses, mauvais timing ou autre chose. Dites ce qui ne va pas, puis envoyez.</string>
+    <string name="report_by_email">E-mail</string>
+    <string name="send_feedback">Envoyer un commentaire</string>
     <string name="lyrics_romanized">En lettres latines</string>
     <string name="lyrics_romaji_typed">Rōmaji tel qu’on le tape</string>
     <string name="lyrics_translation">Traduction</string>
