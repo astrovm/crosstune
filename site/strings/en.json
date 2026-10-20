@@ -2,14 +2,14 @@
   "lang": "en",
   "og_locale": "en_US",
   "name": "English",
-  "title": "Crosstune: open any music link in your favorite app",
-  "description": "Tap a music link from any service and the same song opens in the app you listen in. Free and open source for Android.",
-  "tagline": "Open any music link in your favorite app.",
+  "title": "Crosstune: Open any link. Name any song. Follow every word.",
+  "description": "Open music links in the app you listen on, name the song playing nearby, and follow its lyrics and chords. Free and open source for Android.",
+  "tagline": "Open any link. Name any song. Follow every word.",
   "github_label": "Crosstune on GitHub",
   "theme_to_dark": "Switch to dark mode",
   "theme_to_light": "Switch to light mode",
-  "h1": "Open any music link in <em>your</em> favorite app.",
-  "lede": "Got a link from one service but listen on another? Tap it and the same song opens where you listen.",
+  "h1": "Open any link. Name any song. <em>Follow every word.</em>",
+  "lede": "Open a link from any service in the app you listen on, name the song playing nearby, and follow its lyrics and chords.",
   "download": "Download for Android",
   "note": "Free, open source and ad-free.",
   "alt_home": "A link opened in YouTube Music, then a playlist's songs",
@@ -41,7 +41,7 @@
     ],
     [
       "Lyrics in time",
-      "They follow your music app, or listen along, song after song."
+      "Lyrics and chords follow your music app, or listen along, song after song."
     ],
     [
       "MilkDrop visuals",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "If you let lyrics follow the song playing in your music app, Android asks you to allow Crosstune's notification access. Crosstune uses it only to see which song your music apps say they're playing and how far into it they are, so the lyrics can follow along and a line you tap can move the song there. It never reads your notifications, and none of this leaves your phone. You can turn it off in Android's settings at any time. When you practice saved lines, Crosstune also asks your music app to play the song each line is from, at that line."
+      "If you let lyrics follow the song playing in your music app, Android asks you to allow Crosstune's notification access. Crosstune uses it only to see which song your music apps say they're playing and how far into it they are, so the lyrics can follow along and a line you tap can move the song there. It never reads your notifications, and none of this leaves your phone. You can turn it off in Android's settings at any time. When you practice saved lines, Crosstune also asks your music app to play the song each line is from, at that line. Crosstune's player uses the same access to show the song and to pause, skip or move it, in your music app."
     ],
     [
       "p",

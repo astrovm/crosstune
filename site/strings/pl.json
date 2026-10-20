@@ -2,14 +2,14 @@
   "lang": "pl",
   "og_locale": "pl_PL",
   "name": "Polski",
-  "title": "Crosstune: otwieraj dowolny link muzyczny w ulubionej aplikacji",
-  "description": "Kliknij link muzyczny z dowolnego serwisu, a ten sam utwór otworzy się w aplikacji, w której słuchasz. Darmowa i open source na Androida.",
-  "tagline": "Otwieraj dowolny link muzyczny w ulubionej aplikacji.",
+  "title": "Crosstune: Otwórz każdy link. Rozpoznaj każdy utwór. Śledź każde słowo.",
+  "description": "Otwieraj linki muzyczne w aplikacji, w której słuchasz, rozpoznawaj utwór grający w pobliżu i śledź jego tekst oraz akordy. Darmowa aplikacja open source na Androida.",
+  "tagline": "Otwórz każdy link. Rozpoznaj każdy utwór. Śledź każde słowo.",
   "github_label": "Crosstune w serwisie GitHub",
   "theme_to_dark": "Włącz tryb ciemny",
   "theme_to_light": "Włącz tryb jasny",
-  "h1": "Otwieraj dowolny link muzyczny w <em>ulubionej</em> aplikacji.",
-  "lede": "Masz link z jednego serwisu, a słuchasz w innym? Kliknij go, a ten sam utwór otworzy się tam, gdzie słuchasz.",
+  "h1": "Otwórz każdy link. Rozpoznaj każdy utwór. <em>Śledź każde słowo.</em>",
+  "lede": "Otwórz link z dowolnej usługi w aplikacji, w której słuchasz, rozpoznaj utwór grający w pobliżu i śledź jego tekst oraz akordy.",
   "download": "Pobierz na Androida",
   "note": "Darmowa, open source i bez reklam.",
   "alt_home": "Link gotowy do otwarcia w YouTube Music, a potem utwory z playlisty",
@@ -41,7 +41,7 @@
     ],
     [
       "Tekst w rytm",
-      "Podąża za twoją aplikacją muzyczną albo słucha razem z tobą, utwór po utworze."
+      "Tekst i akordy podążają za twoją aplikacją muzyczną albo słuchają razem z tobą, utwór po utworze."
     ],
     [
       "Wizualizacje MilkDrop",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza."
+      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza. Odtwarzacz Crosstune używa tego samego dostępu, by pokazać utwór oraz go zatrzymać, pominąć lub przewinąć w Twojej aplikacji muzycznej."
     ],
     [
       "p",
