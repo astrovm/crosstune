@@ -203,6 +203,15 @@ python3 scripts/milkdrop-render/render.py song.mp3 visuals.mp4 --start 60 --seco
 
 Run it without `--preset` to list the presets. It builds projectM from `third_party/projectm` into `build/milkdrop-render/` the first time, with a clock that moves one frame per frame, so slow renders still keep time with the song. It needs ffmpeg, CMake, Ninja, and the EGL and OpenGL headers.
 
+To see how fast each visual draws on a phone, turn on the debug mode, then open the visuals. Each one draws as fast as it can for 1.5 s, and the log says its frames a second, by preset key, then all of them, slowest first:
+
+```bash
+adb shell setprop debug.crosstune.visuals_bench 1
+adb logcat -s CrosstuneVisuals
+```
+
+A visual slower than 40 frames a second on a phone is skipped there from then on, as it makes the words over it stutter.
+
 When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
 
 </details>

@@ -297,8 +297,11 @@ class MilkdropTest {
         assertTrue(milkdrop.calls.last { it.startsWith("show") }.endsWith("smoothly"))
     }
 
-    /** projectM drawing each preset in [drawMs] of the clock, and the same as [FakeMilkdrop] otherwise. */
-    private inner class TimedMilkdrop(private val drawMs: Map<String, Long>) : Milkdrop {
+    /**
+     * projectM asking for each preset's frame in [drawMs] of the clock, and the phone drawing it in
+     * [finishMs] more; the same as [FakeMilkdrop] otherwise.
+     */
+    private inner class TimedMilkdrop(private val drawMs: Map<String, Long>, private val finishMs: Map<String, Long> = emptyMap()) : Milkdrop {
         val shows = mutableListOf<String>()
         private var showing = ""
 
@@ -312,6 +315,9 @@ class MilkdropTest {
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() {
             clock += drawMs.getValue(showing)
+        }
+        override fun finish() {
+            clock += finishMs[showing] ?: 0
         }
         override fun close() = Unit
     }
@@ -342,6 +348,21 @@ class MilkdropTest {
         next.skipTo(2)
         next.frame()
         assertEquals(listOf(order[1], order[2], order[1]), again.shows)
+    }
+
+    @Test
+    fun aPresetIsTimedTillThePhoneHasDrawnItAndSlowerThan40ASecondIsTooSlow() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        // Asked for in 5 ms, but drawn in 21 more: 26 ms a frame, too slow, though it fits in 30 a second.
+        val slow = TimedMilkdrop(mapOf("a" to 5L, "b" to 5L, "c" to 5L), mapOf(order[0] to 21L))
+        val kept = mutableListOf<String>()
+        timed(slow, onTooSlow = { kept += it }).apply { created(); repeat(200) { frame() } }
+        assertEquals(listOf(MilkdropRenderer.presetKey(order[0])), kept)
+        // 25 ms a frame is fast enough.
+        val fast = TimedMilkdrop(mapOf("a" to 5L, "b" to 5L, "c" to 5L), mapOf(order[0] to 20L))
+        timed(fast, onTooSlow = { kept += it }).apply { created(); repeat(200) { frame() } }
+        assertEquals(1, kept.size)
+        assertEquals(listOf(order[0]), fast.shows)
     }
 
     @Test

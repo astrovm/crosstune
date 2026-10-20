@@ -202,6 +202,8 @@ internal class MilkdropRenderer(
         }
         listen()
         milkdrop.draw()
+        // Waited for, so a frame's time is how long the phone took to draw it, not just to be asked to.
+        milkdrop.finish()
     }
 
     private fun listen() {
@@ -329,8 +331,11 @@ internal class MilkdropRenderer(
         const val BENCH_MS = 1_500L
         private const val BENCH_FROM_MS = 500L
 
-        /** Slower than this a frame, on average, about 25 a second, and it stutters. */
-        const val SLOW_FRAME_MS = 40L
+        /**
+         * Slower than this a frame, on average, under 40 a second, and it keeps the phone so busy
+         * that it and the words over it stutter, even drawn at 30 a second.
+         */
+        const val SLOW_FRAME_MS = 25L
         private const val PAUSED_MS = 1_000L
     }
 }
