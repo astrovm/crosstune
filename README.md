@@ -1,8 +1,8 @@
 # Crosstune
 
-**Open any music link in your favorite app, then learn the song.**
+**The companion for the music app you already use.**
 
-Got a link from one music service but listen on another? Tap it and the same song opens where you listen. Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify: any mix works.
+Open a link from any service in the app you listen on, name the song playing nearby, and follow its lyrics and chords. Learn the words, and practice them with the music.
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Dreams Come True by S.E.S. resolved from Apple Music, ready to open in YouTube Music" width="200">
@@ -27,12 +27,13 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 
 ## Features
 
-- **Tap and go.** Links open right away, at the exact song, album or artist when the app supports it.
+- **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify.
 - **Choose where.** One app per service, ask every time, or add any app or site with a search URL like `https://example.com/search?q={query}`.
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
 - **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek.
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
 - **Lyrics in time.** The words follow your music app, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
+- **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin and romaji under each line, translations, and the meaning of any word.
