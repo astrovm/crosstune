@@ -14,7 +14,11 @@ import okhttp3.Request
 import okhttp3.coroutines.executeAsync
 import java.io.File
 import java.io.IOException
+import java.net.URI
 import java.security.MessageDigest
+
+/** Where covers are kept, in the app's cache. */
+internal const val ARTWORK_DIR = "artwork"
 
 /**
  * Downloads cover art with the app's HTTP client and keeps the last few in memory, and, given a
@@ -33,9 +37,18 @@ internal class ArtworkLoader(
 
     suspend fun load(url: String): ImageBitmap? {
         cache[url]?.let { return it }
+        // A cover a music app showed, kept here as a file; none other is read.
+        if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.asImageBitmap()?.also { cache.put(url, it) }
         val file = cacheDir?.let { File(it, fileName(url)) }
         val bitmap = file?.let { withContext(ioDispatcher) { readCached(it) } } ?: download(url, file) ?: return null
         return bitmap.asImageBitmap().also { cache.put(url, it) }
+    }
+
+    /** The file [url] names, when it's one kept with the covers. */
+    private fun kept(url: String): File? {
+        val dir = cacheDir?.canonicalFile ?: return null
+        val file = runCatching { File(URI(url)).canonicalFile }.getOrNull() ?: return null
+        return file.takeIf { it.parentFile == dir }
     }
 
     private suspend fun download(url: String, file: File?): Bitmap? {

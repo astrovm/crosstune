@@ -132,7 +132,7 @@ class CrosstuneWidget : GlanceAppWidget() {
         /** Recent, newest first, with the covers the app already saved, or downloads them, a few at once. */
         suspend fun widgetSongs(context: Context): List<WidgetSong> = coroutineScope {
             val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
-            val artwork = ArtworkLoader(client, cacheDir = File(context.cacheDir, "artwork"))
+            val artwork = ArtworkLoader(client, cacheDir = File(context.cacheDir, ARTWORK_DIR))
             val downloads = Semaphore(COVERS_AT_ONCE)
             HistoryStore(preferences).load().map { entry -> async {
                 val details = listOf(

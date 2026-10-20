@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -24,6 +25,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import java.io.File
+import java.util.UUID
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -273,10 +276,27 @@ internal class MediaSessionPlayback(
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") }
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         val clock = following(controller)?.takeIf { !it.video }?.clock
         return Heard.Song(named.copy(artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+    }
+
+    /**
+     * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
+     * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
+     */
+    private fun ownCover(metadata: MediaMetadata, song: MusicMetadata): String? {
+        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
+        if (!file.isFile) {
+            val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
+            val saved = runCatching {
+                file.parentFile?.mkdirs()
+                file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) }
+            }.getOrDefault(false)
+            if (!saved) return null
+        }
+        return file.toURI().toString()
     }
 
     private fun following(controller: MediaController): Following? {
@@ -337,6 +357,11 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L
+
+/** Where an app puts the cover it shows, the song's own before its album's. */
+private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+private const val COVER_QUALITY = 90
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

@@ -908,6 +908,17 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals("https://cdn/third.jpg", HistoryStore(prefs()).load().first().metadata.artworkUrl)
         assertTrue(fake.requestedUrls.drop(asked).none { "deezer" in it && "Third" in it })
+        // One with only the cover its app shows, kept for a while only, gets one that lasts once it's found.
+        fake.handler = { request ->
+            if (request.url.host == "api.deezer.com" && "Fourth" in request.url.queryParameter("q").orEmpty()) {
+                FakeSpotify.html(request, """{"data":[{"title":"Fourth","artist":{"name":"Band"},"album":{"cover_big":"https://cdn/fourth.jpg"}}]}""")
+            } else {
+                lyrics(request)
+            }
+        }
+        val shown = File(app.cacheDir, "$ARTWORK_DIR/playing-fourth.jpg").toURI().toString()
+        hearing.next.trySend(Heard.Song(MusicMetadata("Fourth", "Band", artworkUrl = shown), null, 0, SystemClock.elapsedRealtime()))
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.artworkUrl == "https://cdn/fourth.jpg" }
     }
 
     @Test

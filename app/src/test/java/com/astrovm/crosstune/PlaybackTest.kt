@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.AudioManager
 import android.media.AudioAttributes
 import android.media.MediaMetadata
@@ -20,6 +22,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.io.File
+import java.net.URI
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,6 +36,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.PlaybackInfoBuilder
@@ -553,6 +559,26 @@ class PlaybackTest {
             player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours", art = mapOf(MediaMetadata.METADATA_KEY_ART_URI to "content://com.spotify/cover", MediaMetadata.METADATA_KEY_ALBUM_ART_URI to cover))
         )
         assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun itsCoverIsTheOneItsAppShowsWhenThatsAllItGives() {
+        allow()
+        sounding()
+        val controller = player("com.google.android.apps.youtube.music", "YouTube Music", "Moon Song", "Some Singer", album = "Best Of")
+        val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
+        shadowOf(sessions).addController(controller)
+        val cover = playback.nowPlaying()?.metadata?.artworkUrl!!
+        // Kept with the covers, the same each time it's asked for.
+        assertEquals(File(app.cacheDir, ARTWORK_DIR).canonicalFile, File(URI(cover)).canonicalFile.parentFile)
+        assertEquals(cover, playback.nowPlaying()?.metadata?.artworkUrl)
+        val loaded = runBlocking { ArtworkLoader(FakeSpotify().client(), Dispatchers.Unconfined, File(app.cacheDir, ARTWORK_DIR)).load(cover) }
+        assertEquals(8, loaded?.width)
+        // With none at all, there's none.
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Other Song", "Some Singer", album = "Best Of", at = PLAYED_AT + 1))
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
     }
 
     @Test

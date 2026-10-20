@@ -1258,14 +1258,15 @@ internal class MainViewModel(
 
     /**
      * A song heard along the way joins Recent, as one Crosstune listened for does: by its Apple Music
-     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none.
+     * link when Shazam knows it, or else by its name, its cover found by its name when it came with none,
+     * or only with the one its app shows, which is kept for a while only.
      */
     private fun remember(heard: Heard.Song) {
         val link = heard.appleMusicId?.let { (MusicLinks.parse("https://www.shazam.com/song/$it") as? LinkInput.Link)?.link }
             ?: MusicLinks.recognizedSong(heard.metadata).let { MusicLink(null, ItemType.TRACK, it.url, it.url) }
         uiState = uiState.copy(history = historyStore.add(HistoryEntry(link, heard.metadata)))
-        // Named by an app that gave no cover, it's found by its name, so Recent and its words show one.
-        if (heard.metadata.artworkUrl != null) return
+        // Named by an app that gave no cover on the web, it's found by its name, so Recent and its words show one.
+        if (heard.metadata.artworkUrl?.startsWith("https://") == true) return
         viewModelScope.launch {
             val cover = withContext(systemDispatcher) { matcher.cover(heard.metadata, COVER_TIMEOUT_MS) } ?: return@launch
             val shown = uiState.lyricsFor?.takeIf { it == heard.metadata }

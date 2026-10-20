@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
                     playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
-                    ArtworkLoader(client, cacheDir = File(cacheDir, "artwork")),
+                    ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR)),
                     PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
                     systemDispatcher,
                     listenAlongPauseMs,
