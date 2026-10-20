@@ -475,6 +475,8 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     )
                     if (skips.isNotEmpty()) customActions = skips
                 }
+                // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
+                .clickable(onClickLabel = about, onClick = onAbout)
                 .pointerInput(rtl) {
                     // Toward the start of the line, as reading goes, is on to the next song.
                     fun next(offset: Float) = (offset < 0f) != rtl
@@ -510,7 +512,6 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     translationX = swiped.value
                     alpha = 1f - (abs(swiped.value) / size.width).coerceIn(0f, 1f)
                 }
-                .clickable(onClickLabel = about, onClick = onAbout)
         ) { shown ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                 CoverArt(shown.artworkUrl, actions.loadArtwork, size = 48.dp, modifier = Modifier.padding(start = 4.dp))

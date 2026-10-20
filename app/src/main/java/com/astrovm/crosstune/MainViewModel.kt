@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -709,6 +710,7 @@ internal class MainViewModel(
      * song an app paused stays offered, with its app's buttons, as long as the app has it.
      */
     suspend fun watchPlayingNow() {
+        val previous = uiState.playingNow?.song
         heardNow = null
         followedNow = null
         val source = playback?.takeIf { it.hasAccess() }
@@ -732,6 +734,8 @@ internal class MainViewModel(
             launch {
                 source.nowPlayingUpdates()
                     .mapNotNull { it?.metadata }
+                    // Paused apps don't announce a playing song; ask the last one's app whether it still has it.
+                    .onStart { previous?.let { emit(it) } }
                     .distinctUntilChanged()
                     .collectLatest { song ->
                         source.follow(song).collect { following ->

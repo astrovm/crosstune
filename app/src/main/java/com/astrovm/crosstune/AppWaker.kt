@@ -35,28 +35,35 @@ internal class MediaBrowserWaker(private val context: Context) : AppWaker {
             context.packageManager.queryIntentServices(Intent(MediaBrowserService.SERVICE_INTERFACE).setPackage(packageName), 0).firstOrNull()?.serviceInfo
         } ?: return@withContext null
         letGo()
-        withTimeoutOrNull(WAKE_MS) {
-            suspendCancellableCoroutine { asked ->
-                var browser: MediaBrowser? = null
-                val connected = object : MediaBrowser.ConnectionCallback() {
-                    override fun onConnected() {
-                        if (asked.isActive) asked.resume(browser?.let { MediaController(context, it.sessionToken) })
+        var keep = false
+        try {
+            withTimeoutOrNull(WAKE_MS) {
+                suspendCancellableCoroutine { asked ->
+                    var browser: MediaBrowser? = null
+                    val connected = object : MediaBrowser.ConnectionCallback() {
+                        override fun onConnected() {
+                            if (asked.isActive) asked.resume(browser?.let { MediaController(context, it.sessionToken) })
+                        }
+    
+                        // Only callers it knows, e.g. Android Auto, some apps let in.
+                        override fun onConnectionFailed() {
+                            if (asked.isActive) asked.resume(null)
+                        }
                     }
-
-                    // Only callers it knows, e.g. Android Auto, some apps let in.
-                    override fun onConnectionFailed() {
-                        if (asked.isActive) asked.resume(null)
+                    // Asked as Android asks to resume what played last, which more apps let in.
+                    val recent = Bundle().apply { putBoolean(MediaBrowserService.BrowserRoot.EXTRA_RECENT, true) }
+                    browser = MediaBrowser(context, ComponentName(service.packageName, service.name), connected, recent).also {
+                        woken = it
+                        it.connect()
                     }
                 }
-                // Asked as Android asks to resume what played last, which more apps let in.
-                val recent = Bundle().apply { putBoolean(MediaBrowserService.BrowserRoot.EXTRA_RECENT, true) }
-                browser = MediaBrowser(context, ComponentName(service.packageName, service.name), connected, recent).also {
-                    woken = it
-                    it.connect()
-                }
+            }.also { controller ->
+                keep = controller != null
+                if (keep) handler.postDelayed(::letGo, KEEP_MS)
             }
-        }.also { controller ->
-            if (controller == null) letGo() else handler.postDelayed(::letGo, KEEP_MS)
+        } finally {
+            // A cancelled request may never get an answer, so it must release the binding too.
+            if (!keep) letGo()
         }
     }
 
