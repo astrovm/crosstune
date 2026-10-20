@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
 import android.view.TextureView
+import java.io.File
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -47,12 +48,12 @@ internal interface Milkdrop {
 }
 
 /** projectM, the MilkDrop that runs on phones, built from source into the app. */
-internal class NativeMilkdrop : Milkdrop {
+internal class NativeMilkdrop(private val context: Context) : Milkdrop {
     private var instance = 0L
 
     override fun open(width: Int, height: Int): Boolean {
         if (!loaded) return false
-        instance = nativeCreate(width, height)
+        instance = nativeCreate(width, height, milkdropTextures(context)?.path)
         return instance != 0L
     }
 
@@ -67,7 +68,7 @@ internal class NativeMilkdrop : Milkdrop {
         instance = 0L
     }
 
-    private external fun nativeCreate(width: Int, height: Int): Long
+    private external fun nativeCreate(width: Int, height: Int, textures: String?): Long
     private external fun nativeResize(instance: Long, width: Int, height: Int)
     private external fun nativeLoad(instance: Long, preset: String, smooth: Boolean): Boolean
     private external fun nativeHear(instance: Long, samples: ByteArray, count: Int)
@@ -149,10 +150,33 @@ internal fun milkdropKinds(assets: AssetManager): List<Pair<String, List<String>
     return kinds
 }
 
+/**
+ * The images presets draw with, from assets/milkdrop-textures, copied out where projectM can read
+ * them, again each time the app is installed or updated; null when they can't be.
+ */
+@Synchronized
+internal fun milkdropTextures(context: Context): File? = runCatching {
+    val dir = File(context.noBackupFilesDir, TEXTURES)
+    val stamp = File(dir, ".installed")
+    val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+    if (!stamp.exists() || stamp.readText() != installed) {
+        dir.deleteRecursively()
+        dir.mkdirs()
+        context.assets.list(TEXTURES).orEmpty().forEach { name ->
+            context.assets.open("$TEXTURES/$name").use { input -> File(dir, name).outputStream().use { input.copyTo(it) } }
+        }
+        // Last, so a copy cut short is made again.
+        stamp.writeText(installed)
+    }
+    dir
+}.getOrNull()
+
 private const val PRESETS = "milkdrop"
 private const val KINDS = "milkdrop-kinds.txt"
 /** Drawn by scripts/milkdrop-render/thumbs.py. */
 private const val THUMBS = "milkdrop-thumbs"
+/** Picked by scripts/milkdrop-render/textures.py. */
+private const val TEXTURES = "milkdrop-textures"
 
 /**
  * How the visuals are picked, by preset name: those turned [off]; those this phone draws too
@@ -660,7 +684,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
         factory = { context ->
             val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
             val renderer = MilkdropRenderer(
-                MainActivity.milkdropFactory(), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
+                MainActivity.milkdropFactory(context), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
                 settings = play.settings, skips = play.skips, drops = play.drops,
                 text = { milkdropPreset(context.assets, it) },
                 onTooSlow = store::heavy,

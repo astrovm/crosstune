@@ -11,7 +11,7 @@ void failed(const char*, const char*, void* didFail) { *static_cast<bool*>(didFa
 
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeCreate(JNIEnv*, jobject, jint width, jint height) {
+JNIEXPORT jlong JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeCreate(JNIEnv* env, jobject, jint width, jint height, jstring textures) {
     projectm_handle instance = projectm_create();
     if (instance == nullptr) return 0;
     projectm_set_window_size(instance, width, height);
@@ -22,6 +22,14 @@ JNIEXPORT jlong JNICALL Java_com_astrovm_crosstune_NativeMilkdrop_nativeCreate(J
     projectm_set_preset_locked(instance, true);
     projectm_set_hard_cut_enabled(instance, false);
     projectm_set_soft_cut_duration(instance, 3.0);
+    // Where the images presets draw with were copied to; without them, those presets draw them blank.
+    if (textures != nullptr) {
+        const char* path = env->GetStringUTFChars(textures, nullptr);
+        if (path != nullptr) {
+            projectm_set_texture_search_paths(instance, &path, 1);
+            env->ReleaseStringUTFChars(textures, path);
+        }
+    }
     return reinterpret_cast<jlong>(instance);
 }
 

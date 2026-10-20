@@ -85,6 +85,8 @@ int main(int argc, char** argv)
     projectm_set_preset_locked(projectm, true);
     projectm_set_hard_cut_enabled(projectm, false);
     projectm_set_soft_cut_duration(projectm, 3.0);
+    // The app's textures, from $TEXTURES, which render.py sets.
+    if (const char* textures = getenv("TEXTURES")) projectm_set_texture_search_paths(projectm, &textures, 1);
     // projectM seeds rand() from the time; the presets' rand() goes the same way each run.
     srand(1);
 

@@ -22,6 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 HERE = Path(__file__).resolve().parent
 PRESETS = ROOT / "app/src/main/assets/milkdrop"
+# The images presets draw with, which the renderer finds through $TEXTURES, as the app does in its own copy.
+os.environ.setdefault("TEXTURES", str(ROOT / "app/src/main/assets/milkdrop-textures"))
 BUILD = ROOT / "build/milkdrop-render"
 FPS = 30  # as the app draws them: presets fade by so much a frame, so more frames would look otherwise
 PREROLL = 90  # frames drawn before the start, so the first preset is already moving
