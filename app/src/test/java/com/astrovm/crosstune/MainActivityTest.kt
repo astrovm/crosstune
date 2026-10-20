@@ -3126,7 +3126,10 @@ class MainActivityTest {
         composeRule.waitForIdle()
         composeRule.onNode(hasText("2:30")).assertExists()
         phone.playing.value = Following(PlaybackClock(100_000, now, playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic, durationMs = 200_000)
+        // Paused, the app names the song its own way, which is still the song.
+        phone.onThePhone = Heard.Song(MusicMetadata("抱かれに来た女 - Dakare Ni Kita Onna", "Kingo Hamada"), null)
         waitForDescription(string(R.string.lyrics_play))
+        composeRule.onNode(hasText("Dakare Ni Kita Onna")).assertExists()
         composeRule.onNode(hasText("1:40")).assertExists()
         assertTrue(composeRule.onAllNodes(hasText("2:30")).fetchSemanticsNodes().isEmpty())
         click(string(R.string.lyrics_play))

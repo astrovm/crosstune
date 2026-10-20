@@ -1033,8 +1033,8 @@ internal class MainViewModel(
     private var playerJob: Job? = null
 
     /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays. */
-    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null) {
-        uiState = uiState.copy(player = PlayerState(song, app, link), canFollowApps = playback?.hasAccess() == true)
+    private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false) {
+        uiState = uiState.copy(player = PlayerState(song, app, link, played = played), canFollowApps = playback?.hasAccess() == true)
         followPlayer()
     }
 
@@ -1051,8 +1051,9 @@ internal class MainViewModel(
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).collect { (following, playing) ->
                 val player = uiState.player ?: return@collect
                 val played = player.played || following?.clock?.playing == true
-                val next = playing?.takeIf { played && following?.clock?.playing != true && uiState.practice == null && !sameSong(it.metadata, song) }
-                if (next != null) return@collect openPlayer(next.metadata, player.following?.appPackage ?: player.app)
+                // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
+                val next = playing?.takeIf { played && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
+                if (next != null) return@collect openPlayer(next.metadata, player.following?.appPackage ?: player.app, played = true)
                 uiState = uiState.copy(player = player.copy(following = following, played = played))
             }
         }
@@ -1482,8 +1483,8 @@ internal class MainViewModel(
                 if (uiState.practice != null) return@collect
                 val skips = (app?.canSkipNext == true) to (app?.canSkipPrevious == true)
                 if (skips != (uiState.canSkipNext to uiState.canSkipPrevious)) uiState = uiState.copy(canSkipNext = skips.first, canSkipPrevious = skips.second)
-                // An app still playing the song shown, by another name, e.g. "Song - Remastered", plays no other.
-                val next = playing?.takeIf { shownPlayed && app?.clock?.playing != true && !sameSong(it.metadata, song) } ?: return@collect
+                // An app still on the song shown, by another name, e.g. "Song - Remastered", or paused there, plays no other.
+                val next = playing?.takeIf { shownPlayed && app == null && !sameSong(it.metadata, song) } ?: return@collect
                 remember(next)
                 showLyricsFor(next.metadata, playing = true)
             }
