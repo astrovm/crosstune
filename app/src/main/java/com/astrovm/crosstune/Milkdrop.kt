@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.AssetManager
 import android.media.audiofx.Visualizer
+import android.graphics.BitmapFactory
 import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -11,9 +12,16 @@ import android.opengl.EGLExt
 import android.opengl.GLES20
 import android.os.SystemClock
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
 import android.view.TextureView
@@ -115,7 +123,6 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
     }
 }
 
-/** The presets that come with the app, in assets/milkdrop. */
 /** The presets that come with the app, in assets/milkdrop, by name: their file's, without .milk. */
 internal fun milkdropPresets(assets: AssetManager): List<String> =
     assets.list(PRESETS).orEmpty().filter { it.endsWith(".milk") }.sorted().map { it.removeSuffix(".milk") }
@@ -124,7 +131,28 @@ internal fun milkdropPresets(assets: AssetManager): List<String> =
 internal fun milkdropPreset(assets: AssetManager, name: String): String =
     assets.open("$PRESETS/$name.milk").bufferedReader().use { it.readText() }
 
+/** A still of preset [name], for picking it in Settings; null when it has none. */
+internal fun milkdropThumb(assets: AssetManager, name: String): ImageBitmap? =
+    runCatching { assets.open("$THUMBS/$name.webp").use { BitmapFactory.decodeStream(it).asImageBitmap() } }.getOrNull()
+
+/**
+ * The kinds of visual, in order, each with its presets, from assets/milkdrop-kinds.txt: the folders of
+ * projectM's Cream of the Crop pack, which most come from, then the classics.
+ */
+internal fun milkdropKinds(assets: AssetManager): List<Pair<String, List<String>>> {
+    val kinds = mutableListOf<Pair<String, MutableList<String>>>()
+    assets.open(KINDS).bufferedReader().useLines { lines ->
+        lines.filter { it.isNotBlank() && !it.startsWith("#") }.forEach { line ->
+            if (line.startsWith("[")) kinds += line.trim('[', ']') to mutableListOf() else kinds.last().second += line
+        }
+    }
+    return kinds
+}
+
 private const val PRESETS = "milkdrop"
+private const val KINDS = "milkdrop-kinds.txt"
+/** Drawn by scripts/milkdrop-render/thumbs.py. */
+private const val THUMBS = "milkdrop-thumbs"
 
 /**
  * How the visuals are picked, by preset name: those turned [off]; those this phone draws too
@@ -218,7 +246,9 @@ internal class MilkdropRenderer(
      * as "name: fps", then all of them, slowest first, before it goes on as usual.
      */
     bench: Boolean = false,
-    private val report: (String) -> Unit = {}
+    private val report: (String) -> Unit = {},
+    /** Told each second how many frames a second the phone could draw the one showing at, from the GL thread. */
+    private val onFps: (Int) -> Unit = {}
 ) {
     private var benching = bench
     private var benchFrames = 0
@@ -245,6 +275,9 @@ internal class MilkdropRenderer(
     private var timedMs = 0L
     private var timedFrames = 0
     private var timed = false
+    private var fpsFrom = 0L
+    private var fpsMs = 0L
+    private var fpsFrames = 0
 
     /** Its GL context is ready. */
     fun created() {
@@ -271,6 +304,7 @@ internal class MilkdropRenderer(
         if (!open) return
         if (benching) return benchFrame()
         timeLastFrame()
+        countFps()
         val wait = drawnAt + FRAME_MS - now()
         if (wait > 0) sleep(wait)
         drawnAt = now()
@@ -330,6 +364,21 @@ internal class MilkdropRenderer(
      * How long the last frame took to draw, from the end of its wait to now, timed once the preset
      * has blended in, as two draw at once till then. Too slow, the preset's passed over at once.
      */
+    /** The last frame's time without its wait, so what's told is what the phone could draw, not the cap. */
+    private fun countFps() {
+        val at = now()
+        val took = at - drawnAt
+        if (took < PAUSED_MS) {
+            fpsMs += took
+            fpsFrames++
+        }
+        if (at - fpsFrom < FPS_EVERY_MS) return
+        if (fpsFrames > 0) onFps((fpsFrames * 1000 / fpsMs.coerceAtLeast(1)).toInt())
+        fpsFrom = at
+        fpsMs = 0
+        fpsFrames = 0
+    }
+
     private fun timeLastFrame() {
         val at = now()
         val since = at - shownAt
@@ -435,6 +484,10 @@ internal class MilkdropRenderer(
          * that it and the words over it stutter, even drawn at 30 a second.
          */
         const val SLOW_FRAME_MS = 25L
+
+        /** Under this, a preset is drawn too slowly to keep, as [SLOW_FRAME_MS] a frame is. */
+        const val SLOW_FPS = (1000 / SLOW_FRAME_MS).toInt()
+        private const val FPS_EVERY_MS = 1_000L
         private const val PAUSED_MS = 1_000L
     }
 }
@@ -579,9 +632,16 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
 
 /**
  * What the visuals are asked to do: move on each time [skips] goes up, pass over the one showing
- * from then on each time [drops] does, and pick as [settings] say.
+ * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
+ * [onFps] is told each second, on the main thread, how many frames a second the phone could draw it at.
  */
-internal data class VisualsPlay(val skips: Int = 0, val drops: Int = 0, val settings: VisualsSettings = VisualsSettings())
+internal data class VisualsPlay(
+    val skips: Int = 0,
+    val drops: Int = 0,
+    val settings: VisualsSettings = VisualsSettings(),
+    val only: String? = null,
+    val onFps: (Int) -> Unit = {}
+)
 
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
 internal val LocalVisuals = staticCompositionLocalOf<@Composable (play: VisualsPlay, modifier: Modifier) -> Unit> {
@@ -594,18 +654,21 @@ internal val LocalVisuals = staticCompositionLocalOf<@Composable (play: VisualsP
  */
 @Composable
 internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
+    val onFps by rememberUpdatedState(play.onFps)
+    val main = remember { Handler(Looper.getMainLooper()) }
     AndroidView(
         factory = { context ->
             val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
             val renderer = MilkdropRenderer(
-                MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
+                MainActivity.milkdropFactory(), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
                 settings = play.settings, skips = play.skips, drops = play.drops,
                 text = { milkdropPreset(context.assets, it) },
                 onTooSlow = store::heavy,
                 onDrop = { store.turn(it, on = false) },
                 // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
                 bench = systemProperty("debug.crosstune.visuals_bench") == "1",
-                report = { Log.i("CrosstuneVisuals", it) }
+                report = { Log.i("CrosstuneVisuals", it) },
+                onFps = { fps -> main.post { onFps(fps) } }
             )
             MilkdropView(context, renderer)
         },

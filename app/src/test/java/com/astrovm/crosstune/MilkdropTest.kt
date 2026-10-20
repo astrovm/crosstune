@@ -330,6 +330,19 @@ class MilkdropTest {
         MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, settings = settings, onTooSlow = onTooSlow, onDrop = onDrop)
 
     @Test
+    fun eachSecondItTellsHowManyFramesASecondThePhoneCouldDraw() {
+        val told = mutableListOf<Int>()
+        val renderer = MilkdropRenderer(
+            TimedMilkdrop(mapOf("a" to 8L), finishMs = mapOf("a" to 2L)), { listOf("a") }, { null }, Random(1),
+            now = { clock }, sleep = { clock += it }, onFps = { told += it }
+        )
+        renderer.created()
+        // A frame drawn in 10 ms waits out the rest of its 33: 100 a second could be drawn, not the 30 that are.
+        repeat(100) { renderer.frame() }
+        assertEquals(listOf(100, 100), told.drop(1).take(2))
+    }
+
+    @Test
     fun aPresetTooSlowToDrawIsPassedOverAndKeptSo() {
         val order = listOf("a", "b", "c").shuffled(Random(1))
         val milkdrop = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))

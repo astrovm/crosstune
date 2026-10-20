@@ -1618,13 +1618,14 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithText(string(R.string.visual_heavy)).fetchSemanticsNodes().size == 1)
         // Off by hand, and the heavy one on anyway.
-        composeRule.onNodeWithText(first).performScrollTo().performClick()
-        composeRule.onNodeWithText(names[1]).performScrollTo().performClick()
+        composeRule.onNode(hasContentDescription(first) and isToggleable()).performScrollTo().performClick()
+        composeRule.onNode(hasContentDescription(names[1]) and isToggleable()).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals(setOf(first), prefs().getStringSet("visuals_off", null))
         assertEquals(setOf(names[1]), prefs().getStringSet("visuals_keep", null))
         click(string(R.string.back_button))
-        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo()
+        // Back in Settings where it was, not at the top.
+        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).assertIsDisplayed()
         // Heavy ones shown, and each for a minute.
         composeRule.onNodeWithText(string(R.string.setting_skip_heavy_visuals)).performScrollTo().performClick()
         composeRule.onNodeWithText(string(R.string.setting_visuals_change)).performScrollTo().performClick()

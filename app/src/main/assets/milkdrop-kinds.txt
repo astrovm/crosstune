@@ -1,0 +1,62 @@
+# Each visual's kind, as [key] then its presets. The kinds are the folders of projectM's Cream of the Crop pack,
+# which most come from; those from its Milkdrop Original and En D packs are classics.
+[dancers]
+Eo.S. - glowsticks v2 04 music minimal
+LuxXx - Dancing (Or Mating) Blobs III nz+
+NeW Adam Master Mashup FX 2 Geiss - Reaction Diffusion 34 + Swelling Spiral + Liquid Fire + Geiss an67
+ORB - Stahl - 3 Jelly worms
+fiShbRaiN + geiss + goody + stahlregen + others - a demon dreaming it was a butterfly
+suksma - cradle rock, bam!
+[fractals]
+Bdrv Aderrasi - Inhuman Emotion bw5
+Flexi - self similarity - i love flexi a lot (apple IIe crt whores) nz
+Halfbreak - Colors Relief
+Phat_Aderrasi - Chromatic Abyss (the other side)_remix
+va ultramix - 247 --- Isosceles edit
+[geometric]
+EVET - Spincycle
+EoS - magnetosphere 05
+EoS - multisphere 01 B_Phat_Ra_mix nexus intelligence
+[hypnotic]
+EVET - flexi + geiss - tokamak fractal 2
+GreatWho + Flexi - Lasershow bipolar stranger RGB grind
+flexi + bdrv - ultramix05 alien complex mix not roaring at all
+flexi - grind my glitch up [315]
+stahlregen + flexi + goody + martin + others - frosted mosaik [moebius'ed]
+[particles]
+$$$ Royal - Mashup (142)
+EoS - pointfield 09 the gases beyond - mash0000 - trilateral k torch heat
+SUF5C3~1
+skipper skipper kiss me hard - thank god for martin nitorami - tgfmn
+[liquid]
+LuxXx - Dead CellWerx i
+Stahlregen  flexi + Geiss + shifter - Swirlz
+all death angel watch rubyfoaqingtwosdade
+beta106i - Airhandler (Last Breath - Eden)
+suksma - log smell 5
+[sparkle]
+Infused by Flexi with AdamFX 2 Stahlregen & Aderrasi + EoS + Geiss + Unchained + Zylot - Slowflowers F7
+LuxXx - Be Afraid
+Royal - Mashup (255) --- Isosceles edit
+Serge + martin - crystal palace star003
+i am now an expert at ameteur meditation
+[supernova]
+$$$ Royal - Mashup (176)
+EvilJim - #26 I see Light!
+suksma - piloting the abyssal ion sled
+[waveforms]
+Flexi - a script kiddies flash the shader geek mix 5
+Fumbling_Foo & Flexi, Martin, Orb - Star Forge v10
+Geiss - Cauldron - Tendrils
+MegalomaGreg - Ambitions [Flexi's mix 25 slip antithesis] [remix 11 color strike] --- Isosceles edit
+The NG + MindJourney - Lake of Dreams (The Monster Inside)
+mosaic octopus 7
+[classics]
+En D - 2001
+En D - Acid warp 2
+Flexi + Geiss - Bipolar vs. Reaction Diffusion mix
+Geiss - Inkblot
+ORB - Acid Cycle [ En D's Sweet taste of diffusion and black magik
+Rozzor & Unchained - Crescat Scientia, Vita Excolatur
+Unchained - Demonology
+yin - 250 - Artificial poles of the continuum_Phat's_Orbit_mix
