@@ -733,13 +733,13 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = actions.onPlayingNowPlayPause) {
+                IconButton(onClick = actions.onPlayingNowPlayPause, modifier = Modifier.size(52.dp)) {
                     AppIcon(
                         if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                         contentDescription = stringResource(if (playing) R.string.lyrics_pause else R.string.lyrics_play)
                     )
                 }
-                IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false) {
+                IconButton(onClick = actions.onPlayingNowSkip, enabled = following?.canSkipNext != false, modifier = Modifier.size(52.dp)) {
                     AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
                 }
             }
