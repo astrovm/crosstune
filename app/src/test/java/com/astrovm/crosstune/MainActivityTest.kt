@@ -3081,6 +3081,46 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongAlreadyInItsAppIsNotStartedAgainOnPlay() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val tapPlay = {
+            waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            click(play)
+        }
+        val inTheApp = { playing: Boolean ->
+            phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = playing), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        }
+
+        // Playing there already, it keeps on, and its player follows it.
+        inTheApp(true)
+        tapPlay()
+        waitForText(string(R.string.player_playing_in, "YouTube Music"))
+        assertTrue(phone.songsAsked.isEmpty())
+        assertTrue(phone.plays.isEmpty())
+
+        // Paused there, it plays again from where it was.
+        click(string(R.string.dismiss_button))
+        inTheApp(false)
+        tapPlay()
+        waitUntil { phone.plays == listOf(true) }
+        assertTrue(phone.songsAsked.isEmpty())
+
+        // Not in that app, it's asked for, as before.
+        click(string(R.string.dismiss_button))
+        phone.playing.value = null
+        tapPlay()
+        waitUntil { phone.songsAsked.size == 1 }
+    }
+
+    @Test
     fun aPlayedSongShowsInCrosstunesPlayerWhichPlaysPausesSkipsAndSeeksIt() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }

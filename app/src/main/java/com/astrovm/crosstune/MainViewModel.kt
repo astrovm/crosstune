@@ -1011,6 +1011,12 @@ internal class MainViewModel(
                 val source = playback
                 val app = destination.packageName
                 openPlayer(song, app, link)
+                // Already in that app, playing or paused, it carries on from where it is, not from the start.
+                val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage) }
+                if (there != null) {
+                    if (!there.clock.playing) source.playPause(song, true)
+                    return@launch
+                }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
                 // Seen to play it, or with no way to see, that's that; an app may say yes and not play it.
