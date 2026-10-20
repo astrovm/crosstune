@@ -247,7 +247,7 @@ jobs:
           gh release create "$TAG" "Crosstune-$TAG.apk" "${args[@]}"
 
   # Sends the signed App Bundle and its release notes to Google Play. Skipped until the
-  # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in the README.
+  # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md.
   play:
     needs: [sign, publish]
     runs-on: ubuntu-26.04

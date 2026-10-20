@@ -1,6 +1,6 @@
 # Crosstune
 
-**Open any music link in your favorite app.**
+**Open any music link in your favorite app, then learn the song.**
 
 Got a link from one music service but listen on another? Tap it and the same song opens where you listen. Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify: any mix works.
 
@@ -12,57 +12,34 @@ Got a link from one music service but listen on another? Tap it and the same son
 
 ## ⬇️ Install
 
-- Get the APK from [Releases](https://github.com/astrovm/crosstune/releases).
-- Or add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium) for automatic updates.
-
-### Get it on Google Play
-
-Crosstune is in testing on Google Play. It can take a few minutes to show up.
-
-1. Join the [Crosstune testers](https://groups.google.com/g/crosstune-testers) group with your Google Play account.
-2. Open the [testing page](https://play.google.com/apps/testing/com.astrovm.crosstune) and tap **Become a tester**.
-3. Install Crosstune from [Google Play](https://play.google.com/store/apps/details?id=com.astrovm.crosstune).
-
 Needs Android 8.0 or newer.
+
+- Get the APK from [Releases](https://github.com/astrovm/crosstune/releases), or add `https://github.com/astrovm/crosstune` to [Obtainium](https://github.com/ImranR98/Obtainium) for updates.
+- Or on Google Play, which is in testing: join the [testers group](https://groups.google.com/g/crosstune-testers), tap **Become a tester** on the [testing page](https://play.google.com/apps/testing/com.astrovm.crosstune), then install from [Google Play](https://play.google.com/store/apps/details?id=com.astrovm.crosstune).
 
 ## 🚀 Set up
 
-The app walks you through it:
+Pasting or sharing a link to Crosstune works with no setup. To open links you tap in other apps, the app walks you through it:
 
-1. Pick the app you listen in. If it's your only music app, Crosstune picks it for you.
-2. Tap **Fix** on each thing left in the list. Each one checks itself off when you come back:
-   - **Turn off links in** an app like Spotify or YouTube: choose **In your browser**, or turn off **Open supported links**.
-   - **Allow links in Crosstune**: tap **Add link**, tick all the links, tap **Add**.
-   - **Let lyrics follow your music**: turn on Crosstune's access.
-3. Using [Shizuku](https://shizuku.rikka.app) on Android 12 or newer? Tap **Set everything up** instead, and it's done in one tap.
-4. Something breaks later, like an app taking the links back? With Shizuku, its **Fix** or **Allow** button on the main screen fixes it in one tap too.
-
-Crosstune opens links from every service it reads. Turn any off in **Settings**.
-
-Pasting or sharing a link to Crosstune works without any setup.
+1. Pick the app you listen in.
+2. Tap **Fix** on each thing left in the list. Each one checks itself off when you come back.
+3. With [Shizuku](https://shizuku.rikka.app) on Android 12 or newer, tap **Set everything up** instead. It's one tap, and its **Fix** and **Allow** buttons repair things later too.
 
 ## Features
 
-- **Tap and go.** Tapped and shared links open right away. Pasted links show the song and cover first.
-- **Exact match.** Opens the song itself instead of a search, where the app supports it.
-- **Play and stay.** Tap **Play** on a song to hear it in your music app while you stay in Crosstune. Apps that can't be asked from the background open for a moment, and Crosstune comes right back. Crosstune's player shows the cover, where the song is, and buttons to pause, skip and jump, with its lyrics a tap away.
-- **One app per service.** For example, YouTube links to YouTube Music and the rest to Apple Music.
-- **Ask every time.** Pick the app each time you open a link.
-- **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.
-- **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
-- **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back. Make the words bigger or smaller, and report wrong words or timing, from the lyrics' menu. Works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe too.
-- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, never show that one again, darken them, or show only the visuals. Hold them to set how long each one shows, from a few seconds to staying on one. See each one, sorted by kind, and pick which ones show in **Settings** → **Visuals**. Ones your phone draws too slowly twice are skipped, unless you turn that off, and come back once they run smoothly, for example seen alone in **Settings** → **Visuals**.
-- **Floating lyrics.** Float them over any app. Drag them anywhere, pinch the text, and tap them for play, settings and close. Drop them on the ✕ at the bottom to close them.
-- **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, with romaji as it's sung or as you'd type it, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
-- **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means, and say how well you knew it: **Again**, **Hard**, **Good** or **Easy**. Ask them as written, in kana or in Latin letters, and pick what their back shows. Learn a whole song in one tap.
-- **ChatGPT, if you have it.** Sign in with your paid ChatGPT plan to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
-- **Not on your app?** Crosstune says so and opens the song where it's from, or searches anyway, as you choose in **Settings**.
-- **Your colors.** Light or dark, your wallpaper's color or one of a few, and pure black for OLED screens.
-- **Shortcuts.** One-tap paste, home screen widgets with your Recent songs or one tap to name a song or show its lyrics, Quick Settings tiles, and a long-press shortcut on the app icon.
-- **Recent.** Search it, and swipe a song away to remove it.
-- **No tracking.** Drops tracking bits like `?si=` from links. You can turn it off in **Settings** → **Advanced**.
-- **Feedback.** **Settings** → **Send feedback** opens a GitHub issue or an email, already filled in.
+- **Tap and go.** Links open right away, at the exact song, album or artist when the app supports it.
+- **Choose where.** One app per service, ask every time, or add any app or site with a search URL like `https://example.com/search?q={query}`.
+- **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
+- **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek.
+- **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
+- **Lyrics in time.** The words follow your music app, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
+- **Floating lyrics.** Float them over any app.
+- **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
+- **Learn the words.** Kana, pinyin and romaji under each line, translations, and the meaning of any word.
+- **Practice with the music.** Save lines and they come back as cards that play the line in your music app. Rate each one: **Again**, **Hard**, **Good** or **Easy**.
+- **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line, and find songs by describing them.
+- **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
+- **No tracking.** Drops tracking bits like `?si=` from links.
 - **16 languages.** Follows your phone, or pick one in Settings.
 
 ## Supported links
@@ -81,32 +58,24 @@ Pasting or sharing a link to Crosstune works without any setup.
 | Amazon Music | Can't read its links | Search |
 | Qobuz | Can't read its links | Songs, albums |
 
-Songs shared from Pixel **Now Playing** are also supported, in every language it shares in, and so are **Shazam** links and songs shared from Google's search, which open by their title.
-
-Songs can open in any of these. "Search" means Crosstune opens a search for the title and artist.
+Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist.
 
 ## 🛠️ Troubleshooting
 
 **Links still open in another app.**
-Turn the service on in Crosstune's **Settings → Open links from**. Then in Android, go to **Settings → Apps → Crosstune → Open by default → Add link** and turn on its links.
-
-**A link opened in its own app.**
-It isn't a song, album, artist or playlist (a SoundCloud feed, for example), so Crosstune passes it on.
+Turn the service on in **Settings** → **Open links from**. Then in Android, go to **Settings** → **Apps** → **Crosstune** → **Open by default** → **Add link** and turn on its links.
 
 **I got a search, not the song.**
-Check that **Open the exact match** is on. If it is, Crosstune found no confident match. It says the song isn't there and offers to open it where it's from, or to search anyway; pick which one happens on its own in **Settings → When a song isn't found**.
+Crosstune found no confident match. Choose what happens then in **Settings** → **When a song isn't found**.
 
 ## Privacy
 
-- No account, analytics or ads.
-- History stays on your device.
-- Crosstune only asks the service a link comes from for its title, artist and cover.
-- With exact match on, the title and artist also go to the search of the app it opens in ([Apple](https://performance-partners.apple.com/search-api), [Deezer](https://developers.deezer.com/api), or the YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack and Qobuz website search).
-- Lyrics are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music and [Letras](https://www.letras.com), and chords on [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net) and [U-FRET](https://www.ufret.jp). Translations go to [Google Translate](https://translate.google.com), or to [MyMemory](https://mymemory.translated.net) when Google Translate can't translate them, and English words to [Wiktionary](https://en.wiktionary.org). Readings, and which language a song is in, are worked out on your phone.
-- Signed in with ChatGPT, the AI features send OpenAI the song's title, artist and lyrics, and what you ask or type. Your sign-in stays on your phone and only goes to OpenAI.
-- Naming a song uses the microphone only while listening. Only a fingerprint of the sound goes to Shazam, never the audio.
-- MilkDrop visuals read what your phone plays through Android, which asks for the microphone permission for it. Nothing is recorded or sent anywhere.
-- **Set everything up**, and the one-tap **Fix** and **Allow** buttons after it, use Shizuku only to change Android's link and lyrics settings for Crosstune.
+- No account, analytics or ads. History stays on your device.
+- A link's service is asked only for its title, artist and cover. With exact match on, the title and artist also go to the search of the app it opens in.
+- Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org).
+- Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
+- Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. The visuals use it to move to your music, and record and send nothing.
+- Shizuku is used only to change Android's link and lyrics settings for Crosstune.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 
@@ -121,109 +90,15 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 
 </details>
 
-<details>
-<summary><b>Building from source</b></summary>
+## Building
 
-Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` in a clone: the MilkDrop visuals build [projectM](https://github.com/projectM-visualizer/projectm) (LGPL 2.1) from `third_party/projectm`. Its presets in `app/src/main/assets/milkdrop/` come from projectM's [Cream of the Crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop), [Milkdrop Original](https://github.com/projectM-visualizer/presets-milkdrop-original) and [En D](https://github.com/projectM-visualizer/presets-en-d) packs, by their authors in each file name. The images some of them draw with, in `app/src/main/assets/milkdrop-textures/`, come from projectM's [Milkdrop Texture Pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack). Gradle downloads the pinned NDK and CMake if they're missing.
-
-You need the Android SDK and JDK 17 or newer. When building from the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
+Clone with `git clone --recurse-submodules`, and use the Android SDK and JDK 17 or newer.
 
 ```bash
-./gradlew :app:assembleDebug   # APK in app/build/outputs/apk/debug/
-./gradlew :app:assembleDev     # "Crosstune Dev", installs next to the released app
-./gradlew :app:ci              # the same checks CI runs
+./gradlew :app:assembleDev   # "Crosstune Dev", installs next to the released app
+./gradlew :app:ci            # the checks CI runs
 ```
 
-`:app:ci` runs the Robolectric tests with a 100% line coverage gate, lint, and the debug and minified release builds. Reports go to `app/build/reports/`. CI runs the tests, lint and builds as parallel jobs, and skips them for pull requests that only change the site, docs or store listing.
-
-The app ships a [baseline profile](https://developer.android.com/topic/performance/baselineprofiles/overview) in `app/src/main/generated/baselineProfiles/`, so Android compiles the code used on startup and on the main screen ahead of time, also for installs from F-Droid or GitHub. Builds use the committed profile and never need a device. After big changes to the screens, regenerate it on an English emulator or phone with Android 9 or newer and commit the result:
-
-It runs on every connected device, so with more than one, pick one with `ANDROID_SERIAL` (see `adb devices`):
-
-```bash
-ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateBaselineProfile
-# Optional: compare cold starts without compilation and with the profile.
-./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.astrovm.crosstune.baselineprofile.StartupBenchmark
-```
-
-The version is set explicitly in `app/build.gradle.kts`: `versionName` is `X.Y.Z`, and `versionCode` is `X*1000000 + Y*10000 + Z*100`. Builds use these values even without Git history or tags. F-Droid's update checker reads the same metadata.
-
-### Releasing
-
-1. Update `versionName` and `versionCode` in `app/build.gradle.kts`, and add the changelog under `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`. Commit and merge these changes before releasing. CI and the Release workflow require a nonempty English changelog for the current version before building. Run `python3 scripts/release/check_changelog.py` to check it locally.
-2. Push a tag with `git tag vX.Y.Z && git push origin vX.Y.Z`, or run **Actions → Release → Run workflow**.
-3. The [Release workflow](.github/workflows/release.yml) runs the CI checks, verifies that the APK's version matches the tag, then signs and publishes `Crosstune-vX.Y.Z.apk`.
-4. It then sends the signed App Bundle and the English changelog to Google Play's production track, once `PLAY_SERVICE_ACCOUNT_JSON` is set. Without it, download `Crosstune-vX.Y.Z.aab` from the workflow run's **Crosstune-vX.Y.Z-play** artifact and upload it in Play Console. It's signed with the same key, which Play uses as the upload key. Set the `PLAY_TRACK` repository variable to, say, `internal` to send releases to another track. Store listing text and screenshots are still updated by hand in Play Console.
-
-It needs these repository secrets:
-
-| Secret | Value |
-| --- | --- |
-| `RELEASE_KEYSTORE_BASE64` | Output of `base64 -w0 release.keystore` |
-| `RELEASE_KEYSTORE_PASSWORD` | Keystore password |
-| `RELEASE_KEY_ALIAS` | Key alias |
-| `RELEASE_KEY_PASSWORD` | Key password |
-| `PLAY_SERVICE_ACCOUNT_JSON` | Optional. JSON key of a Google Cloud service account with release access to the app in Play Console |
-
-> Back up the keystore and never replace it. Android only installs an update if it's signed with the same key.
-
-The release APK is reproducible: F-Droid builds the same tag, copies this APK's signature onto its build and ships this APK when they match, so GitHub and F-Droid installs update each other. Google Play installs join them only if Play App Signing uses this same key. To check a release locally, build the tag from a fresh clone and run `apksigcopier compare Crosstune-vX.Y.Z.apk --unsigned app/build/outputs/apk/release/app-release-unsigned.apk`.
-
-Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/android).
-
-The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
-
-#### Screenshots and clips
-
-The store's screenshots and the site's clips, in every language, come from [`scripts/shots/shots.py`](scripts/shots/shots.py), with no phone or emulator:
-
-```bash
-python3 scripts/shots/shots.py          # every language, both themes
-python3 scripts/shots/shots.py ja ko    # only these
-python3 scripts/shots/shots.py --theme light  # only the light set
-```
-
-It draws the app's real screens with Robolectric on a clock that moves one frame at a time, so every run gives the same pictures, and copies both themes’ clips into `docs/img/`. Dark store screenshots go into `fastlane/metadata/android/`; the matching light alternatives are kept in `screenshots/light/<store locale>/`. The site selects clips and stills for its current theme, including system theme changes and reduced motion. The MilkDrop visuals behind the lyrics are drawn ahead with `render.py`, below, from a made-up beat. The scenes live in [`Shots.kt`](app/src/test/java/com/astrovm/crosstune/shots/Shots.kt).
-
-#### Recording the app
-
-Screen recordings for promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. Start the emulator with `-gpu host -cores 6 -memory 4096`, then:
-
-```bash
-scripts/record/emulator.sh setup es-AR 01:46   # dark, clean status bar, clock and language
-scripts/record/record.sh playlist.mp4 sh -c 'adb shell input tap 400 1005; sleep 7'
-scripts/record/emulator.sh restore
-```
-
-`record.sh` records with [scrcpy](https://github.com/Genymobile/scrcpy) while Android's animations run at half speed, and plays the take back at double speed, so each of its 60 frames a second is a real one. Drive it at half speed too: double the waits and swipe durations.
-
-[`scripts/milkdrop-render/render.py`](scripts/milkdrop-render/render.py) draws the MilkDrop visuals for any song into a 60 fps video, with the app's projectM, presets and settings:
-
-```bash
-python3 scripts/milkdrop-render/render.py song.mp3 visuals.mp4 --start 60 --seconds 8 --preset 17
-```
-
-Run it without `--preset` to list the presets. It builds projectM from `third_party/projectm` into `build/milkdrop-render/` the first time, with a clock that moves one frame per frame, so slow renders still keep time with the song. It needs ffmpeg, CMake, Ninja, and the EGL and OpenGL headers.
-
-Added or removed a preset? [`textures.py`](scripts/milkdrop-render/textures.py) copies the images the presets draw with from a checkout of the texture pack, and names those it lacks. Then [`thumbs.py`](scripts/milkdrop-render/thumbs.py) redraws the stills **Settings** → **Visuals** shows for them, into `app/src/main/assets/milkdrop-thumbs/`. Also list each new one under its kind in [`milkdrop-kinds.txt`](app/src/main/assets/milkdrop-kinds.txt): the folder it's in in projectM's Cream of the Crop pack, or `classics`.
-
-```bash
-git clone https://github.com/projectM-visualizer/presets-milkdrop-texture-pack ../texture-pack
-python3 scripts/milkdrop-render/textures.py ../texture-pack/textures
-python3 scripts/milkdrop-render/thumbs.py
-```
-
-To see how fast each visual draws on a phone, turn on the debug mode, then open the visuals. Each one draws as fast as it can for 1.5 s, and the log says its frames a second, by preset name, then all of them, slowest first:
-
-```bash
-adb shell setprop debug.crosstune.visuals_bench 1
-adb logcat -s CrosstuneVisuals
-```
-
-A visual slower than 40 frames a second on a phone is skipped there from then on, as it makes the words over it stutter.
-
-When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
-
-</details>
+More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
