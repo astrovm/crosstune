@@ -656,13 +656,15 @@ private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
 }
 
 /**
- * Every visual, each with a still and switched on or off; those too heavy for this phone say so,
+ * Every visual by kind, each with a still and switched on or off; those too heavy for this phone say so,
  * and can be switched on anyway. The last one on stays on. Tapped, they play one at a time, to swipe through.
  */
 @Composable
 private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
-    val names = presetNames()
+    val assets = LocalContext.current.assets
+    val kinds = remember(assets) { milkdropKinds(assets) }
+    val names = kinds.flatMap { it.second }
     val on = names.count(settings::shows)
     var seeing by rememberSaveable { mutableStateOf<Int?>(null) }
     // Kept out here, so the list is where it was on coming back from one.
@@ -670,7 +672,7 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
     val canTurnOff = { name: String -> !(settings.shows(name) && on == 1) }
     val playing = seeing
     if (playing != null) {
-        VisualsPager(names, playing, settings, canTurnOff, actions, onBack = { seeing = null })
+        VisualsPager(kinds, playing, settings, canTurnOff, actions, onBack = { seeing = null })
         return
     }
     Page(
@@ -682,10 +684,16 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
         },
         scrollState = scroll
     ) {
-        Group(modifier = Modifier.padding(top = 8.dp)) {
-            names.forEachIndexed { index, name ->
-                if (index > 0) GroupDivider()
-                VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = index })
+        kinds.forEach { (kind, inKind) ->
+            SectionHeader(
+                stringResource(kindName(kind)),
+                description = stringResource(R.string.visuals_list_summary, inKind.count(settings::shows), inKind.size)
+            )
+            Group {
+                inKind.forEachIndexed { index, name ->
+                    if (index > 0) GroupDivider()
+                    VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = names.indexOf(name) })
+                }
             }
         }
     }
@@ -706,7 +714,8 @@ private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boole
     ) {
         CoverArt(name, load = { withContext(Dispatchers.IO) { milkdropThumb(assets, it) } }, size = 56.dp)
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = name, style = MaterialTheme.typography.bodyLarge)
+            // Some names run long: two lines keep the list quick to scan.
+            Text(text = name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (name in settings.heavy) HeavyNote()
         }
         Switch(
@@ -734,7 +743,7 @@ private fun HeavyNote() = Text(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun VisualsPager(
-    names: List<String>,
+    kinds: List<Pair<String, List<String>>>,
     start: Int,
     settings: VisualsSettings,
     canTurnOff: (String) -> Boolean,
@@ -742,8 +751,10 @@ internal fun VisualsPager(
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
+    val names = remember(kinds) { kinds.flatMap { it.second } }
     val pager = rememberPagerState(initialPage = start) { names.size }
     val name = names[pager.currentPage]
+    val kind = kinds.first { name in it.second }.first
     // Drawn even when off or too heavy, and kept on it, so it can be judged before it's picked.
     val alone = VisualsSettings(skipHeavy = false, changeMs = VisualsSettings.NEVER)
     var fps by remember { mutableStateOf<Int?>(null) }
@@ -752,7 +763,12 @@ internal fun VisualsPager(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text(name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Column {
+                        Text(name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(kindName(kind)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
@@ -797,6 +813,21 @@ internal fun VisualsPager(
             }
         }
     }
+}
+
+/** What a kind of visual is called, by its key in assets/milkdrop-kinds.txt. */
+private fun kindName(kind: String) = when (kind) {
+    "dancers" -> R.string.visual_kind_dancers
+    "drawing" -> R.string.visual_kind_drawing
+    "fractals" -> R.string.visual_kind_fractals
+    "geometric" -> R.string.visual_kind_geometric
+    "hypnotic" -> R.string.visual_kind_hypnotic
+    "particles" -> R.string.visual_kind_particles
+    "liquid" -> R.string.visual_kind_liquid
+    "sparkle" -> R.string.visual_kind_sparkle
+    "supernova" -> R.string.visual_kind_supernova
+    "waveforms" -> R.string.visual_kind_waveforms
+    else -> R.string.visual_kind_classics
 }
 
 /** A visual's still, filling [modifier], once loaded. */

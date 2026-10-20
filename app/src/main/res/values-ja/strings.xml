@@ -237,6 +237,17 @@
     <string name="visual_see">見る</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">ダンサー</string>
+    <string name="visual_kind_drawing">ドローイング</string>
+    <string name="visual_kind_fractals">フラクタル</string>
+    <string name="visual_kind_geometric">幾何学</string>
+    <string name="visual_kind_hypnotic">催眠</string>
+    <string name="visual_kind_particles">パーティクル</string>
+    <string name="visual_kind_liquid">リキッド</string>
+    <string name="visual_kind_sparkle">きらめき</string>
+    <string name="visual_kind_supernova">超新星</string>
+    <string name="visual_kind_waveforms">波形</string>
+    <string name="visual_kind_classics">クラシック</string>
     <string name="visuals_only">ビジュアルのみ</string>
     <string name="visuals_options">ビジュアルのオプション</string>
     <string name="visuals_show_words">歌詞を表示</string>

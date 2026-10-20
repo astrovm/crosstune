@@ -236,6 +236,17 @@
     <string name="visual_see">Bekijken</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">Dansers</string>
+    <string name="visual_kind_drawing">Tekeningen</string>
+    <string name="visual_kind_fractals">Fractals</string>
+    <string name="visual_kind_geometric">Geometrisch</string>
+    <string name="visual_kind_hypnotic">Hypnotisch</string>
+    <string name="visual_kind_particles">Deeltjes</string>
+    <string name="visual_kind_liquid">Vloeibaar</string>
+    <string name="visual_kind_sparkle">Glinstering</string>
+    <string name="visual_kind_supernova">Supernova</string>
+    <string name="visual_kind_waveforms">Golfvormen</string>
+    <string name="visual_kind_classics">Klassiekers</string>
     <string name="visuals_only">Alleen visuals</string>
     <string name="visuals_options">Visuals-opties</string>
     <string name="visuals_show_words">Songtekst tonen</string>

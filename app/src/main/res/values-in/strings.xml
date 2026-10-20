@@ -236,6 +236,17 @@
     <string name="visual_see">Lihat</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">Penari</string>
+    <string name="visual_kind_drawing">Gambar</string>
+    <string name="visual_kind_fractals">Fraktal</string>
+    <string name="visual_kind_geometric">Geometris</string>
+    <string name="visual_kind_hypnotic">Hipnotis</string>
+    <string name="visual_kind_particles">Partikel</string>
+    <string name="visual_kind_liquid">Cair</string>
+    <string name="visual_kind_sparkle">Kilau</string>
+    <string name="visual_kind_supernova">Supernova</string>
+    <string name="visual_kind_waveforms">Gelombang</string>
+    <string name="visual_kind_classics">Klasik</string>
     <string name="visuals_only">Visual saja</string>
     <string name="visuals_options">Opsi visual</string>
     <string name="visuals_show_words">Tampilkan lirik</string>

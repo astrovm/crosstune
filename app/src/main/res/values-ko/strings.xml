@@ -236,6 +236,17 @@
     <string name="visual_see">보기</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">댄서</string>
+    <string name="visual_kind_drawing">드로잉</string>
+    <string name="visual_kind_fractals">프랙털</string>
+    <string name="visual_kind_geometric">기하학</string>
+    <string name="visual_kind_hypnotic">최면</string>
+    <string name="visual_kind_particles">입자</string>
+    <string name="visual_kind_liquid">액체</string>
+    <string name="visual_kind_sparkle">반짝임</string>
+    <string name="visual_kind_supernova">초신성</string>
+    <string name="visual_kind_waveforms">파형</string>
+    <string name="visual_kind_classics">클래식</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
     <string name="visuals_show_words">가사 보기</string>

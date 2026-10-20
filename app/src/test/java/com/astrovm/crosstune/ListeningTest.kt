@@ -1297,6 +1297,9 @@ class ListeningTest {
     fun eachVisualHasAStillAndPlaysOneAtATimeOnceTapped() {
         val names = milkdropPresets(app.assets)
         names.forEach { assertNotNull(it, milkdropThumb(app.assets, it)) }
+        // Each of a kind, once; listed and swiped through kind by kind.
+        val inOrder = milkdropKinds(app.assets).flatMap { it.second }
+        assertEquals(names, inOrder.sorted())
         val heavy = names[40]
         prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).commit()
         launch()
@@ -1306,7 +1309,7 @@ class ListeningTest {
         // Tapped, the heavy one plays though it's off, on its own to swipe from, and is switched on from there.
         composeRule.onNodeWithText(heavy).performScrollTo().performClick()
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
-        assertTrue(shown(string(R.string.visuals_position, 41, names.size)))
+        assertTrue(shown(string(R.string.visuals_position, inOrder.indexOf(heavy) + 1, names.size)))
         assertTrue(shown(string(R.string.visual_heavy)))
         click(string(R.string.visual_show))
         assertEquals(setOf(heavy), prefs().getStringSet("visuals_keep", null))

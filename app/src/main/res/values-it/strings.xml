@@ -237,6 +237,17 @@
     <string name="visual_see">Guarda</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">Danzatori</string>
+    <string name="visual_kind_drawing">Disegni</string>
+    <string name="visual_kind_fractals">Frattali</string>
+    <string name="visual_kind_geometric">Geometrici</string>
+    <string name="visual_kind_hypnotic">Ipnotici</string>
+    <string name="visual_kind_particles">Particelle</string>
+    <string name="visual_kind_liquid">Liquidi</string>
+    <string name="visual_kind_sparkle">Scintillii</string>
+    <string name="visual_kind_supernova">Supernova</string>
+    <string name="visual_kind_waveforms">Onde</string>
+    <string name="visual_kind_classics">Classici</string>
     <string name="visuals_only">Solo effetti visivi</string>
     <string name="visuals_options">Opzioni effetti visivi</string>
     <string name="visuals_show_words">Mostra il testo</string>

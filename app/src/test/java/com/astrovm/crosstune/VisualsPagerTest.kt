@@ -28,7 +28,7 @@ class VisualsPagerTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private val names = listOf("Alpha", "Beta", "Gamma")
+    private val kinds = listOf("fractals" to listOf("Alpha", "Beta"), "classics" to listOf("Gamma"))
     private val played = mutableListOf<String>()
     private val turned = mutableListOf<Pair<String, Boolean>>()
 
@@ -44,7 +44,7 @@ class VisualsPagerTest {
                         play.onFps(fps)
                     }
                 }) {
-                    VisualsPager(names, start = 1, settings, canTurnOff = { true }, ScreenActions(onVisualOnChange = { name, on -> turned += name to on }), onBack = {})
+                    VisualsPager(kinds, start = 1, settings, canTurnOff = { true }, ScreenActions(onVisualOnChange = { name, on -> turned += name to on }), onBack = {})
                 }
             }
         }
@@ -57,9 +57,11 @@ class VisualsPagerTest {
         assertTrue(composeRule.onAllNodes(hasText("Beta")).fetchSemanticsNodes().isNotEmpty())
         composeRule.onNodeWithText(string(R.string.visuals_position, 2, 3)).assertExists()
         composeRule.onNodeWithText(string(R.string.visual_fps, 62)).assertExists()
+        composeRule.onNodeWithText(string(R.string.visual_kind_fractals)).assertExists()
         composeRule.onRoot().performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
         composeRule.onNodeWithText(string(R.string.visuals_position, 3, 3)).assertExists()
+        composeRule.onNodeWithText(string(R.string.visual_kind_classics)).assertExists()
         assertEquals(listOf("Beta", "Gamma"), played)
         composeRule.onNode(isToggleable()).performClick()
         assertEquals(listOf("Gamma" to false), turned)

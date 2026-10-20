@@ -135,7 +135,22 @@ internal fun milkdropPreset(assets: AssetManager, name: String): String =
 internal fun milkdropThumb(assets: AssetManager, name: String): ImageBitmap? =
     runCatching { assets.open("$THUMBS/$name.webp").use { BitmapFactory.decodeStream(it).asImageBitmap() } }.getOrNull()
 
+/**
+ * The kinds of visual, in order, each with its presets, from assets/milkdrop-kinds.txt: the folders of
+ * projectM's Cream of the Crop pack, which most come from, then the classics.
+ */
+internal fun milkdropKinds(assets: AssetManager): List<Pair<String, List<String>>> {
+    val kinds = mutableListOf<Pair<String, MutableList<String>>>()
+    assets.open(KINDS).bufferedReader().useLines { lines ->
+        lines.filter { it.isNotBlank() && !it.startsWith("#") }.forEach { line ->
+            if (line.startsWith("[")) kinds += line.trim('[', ']') to mutableListOf() else kinds.last().second += line
+        }
+    }
+    return kinds
+}
+
 private const val PRESETS = "milkdrop"
+private const val KINDS = "milkdrop-kinds.txt"
 /** Drawn by scripts/milkdrop-render/thumbs.py. */
 private const val THUMBS = "milkdrop-thumbs"
 

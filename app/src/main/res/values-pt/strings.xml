@@ -236,6 +236,17 @@
     <string name="visual_see">Ver</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">Dançarinos</string>
+    <string name="visual_kind_drawing">Desenhos</string>
+    <string name="visual_kind_fractals">Fractais</string>
+    <string name="visual_kind_geometric">Geométricos</string>
+    <string name="visual_kind_hypnotic">Hipnóticos</string>
+    <string name="visual_kind_particles">Partículas</string>
+    <string name="visual_kind_liquid">Líquidos</string>
+    <string name="visual_kind_sparkle">Brilhos</string>
+    <string name="visual_kind_supernova">Supernova</string>
+    <string name="visual_kind_waveforms">Ondas</string>
+    <string name="visual_kind_classics">Clássicos</string>
     <string name="visuals_only">Só visuais</string>
     <string name="visuals_options">Opções de visuais</string>
     <string name="visuals_show_words">Mostrar a letra</string>

@@ -236,6 +236,17 @@
     <string name="visual_see">Verlo</string>
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
+    <string name="visual_kind_dancers">Bailarines</string>
+    <string name="visual_kind_drawing">Dibujos</string>
+    <string name="visual_kind_fractals">Fractales</string>
+    <string name="visual_kind_geometric">Geométricos</string>
+    <string name="visual_kind_hypnotic">Hipnóticos</string>
+    <string name="visual_kind_particles">Partículas</string>
+    <string name="visual_kind_liquid">Líquidos</string>
+    <string name="visual_kind_sparkle">Destellos</string>
+    <string name="visual_kind_supernova">Supernova</string>
+    <string name="visual_kind_waveforms">Ondas</string>
+    <string name="visual_kind_classics">Clásicos</string>
     <string name="visuals_only">Solo visuales</string>
     <string name="visuals_options">Opciones de visuales</string>
     <string name="visuals_show_words">Mostrar la letra</string>
