@@ -28,7 +28,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
@@ -55,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,6 +68,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -634,34 +639,102 @@ private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
 }
 
 /**
- * Every visual, each switched on or off; those too heavy for this phone say so, and can be
- * switched on anyway. The last one on stays on.
+ * Every visual, each with a still and switched on or off; those too heavy for this phone say so,
+ * and can be switched on anyway. The last one on stays on. Tapped, one plays on its own page.
  */
 @Composable
 private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val names = presetNames()
     val on = names.count(settings::shows)
+    var seeing by rememberSaveable { mutableStateOf<String?>(null) }
+    // Kept out here, so the list is where it was on coming back from one.
+    val scroll = rememberScrollState()
+    val canTurnOff = { name: String -> !(settings.shows(name) && on == 1) }
+    val playing = seeing
+    if (playing != null) {
+        key(playing) { VisualPage(playing, settings, canTurnOff(playing), actions, onBack = { seeing = null }) }
+        return
+    }
     Page(
         title = stringResource(R.string.setting_visuals_list),
         navigationIcon = {
             IconButton(onClick = onBack) {
                 AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
             }
-        }
+        },
+        scrollState = scroll
     ) {
         Group(modifier = Modifier.padding(top = 8.dp)) {
             names.forEachIndexed { index, name ->
                 if (index > 0) GroupDivider()
-                val shows = settings.shows(name)
-                SettingSwitch(
-                    label = name,
-                    description = if (name in settings.heavy) stringResource(R.string.visual_heavy) else null,
-                    checked = shows,
-                    onCheckedChange = { actions.onVisualOnChange(name, it) },
-                    enabled = !(shows && on == 1)
-                )
+                VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = name })
             }
+        }
+    }
+}
+
+/** A visual's still, name and switch; tapped anywhere but the switch, it plays. */
+@Composable
+private fun VisualRow(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onSee: () -> Unit) {
+    val assets = LocalContext.current.assets
+    val shows = settings.shows(name)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = stringResource(R.string.visual_see), onClick = onSee)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CoverArt(name, load = { withContext(Dispatchers.IO) { milkdropThumb(assets, it) } }, size = 56.dp)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = name, style = MaterialTheme.typography.bodyLarge)
+            if (name in settings.heavy) HeavyNote()
+        }
+        Switch(
+            checked = shows,
+            onCheckedChange = { actions.onVisualOnChange(name, it) },
+            enabled = canTurnOff,
+            modifier = Modifier.semantics { contentDescription = name }
+        )
+    }
+}
+
+@Composable
+private fun HeavyNote() = Text(
+    text = stringResource(R.string.visual_heavy),
+    style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = Modifier.padding(top = 2.dp)
+)
+
+/** One visual playing on its own, as it would behind the words, with its switch under it. */
+@Composable
+private fun VisualPage(name: String, settings: VisualsSettings, canTurnOff: Boolean, actions: ScreenActions, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val shows = settings.shows(name)
+    Page(
+        title = name,
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        }
+    ) {
+        // Drawn even when off or too heavy, and kept on it, so it can be judged before it's picked.
+        LocalVisuals.current(
+            VisualsPlay(settings = VisualsSettings(skipHeavy = false, changeMs = VisualsSettings.NEVER), only = name),
+            Modifier.padding(top = 8.dp).fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large)
+        )
+        Group(modifier = Modifier.padding(top = 16.dp)) {
+            SettingSwitch(
+                label = stringResource(R.string.visual_show),
+                description = if (name in settings.heavy) stringResource(R.string.visual_heavy) else null,
+                checked = shows,
+                onCheckedChange = { actions.onVisualOnChange(name, it) },
+                enabled = canTurnOff
+            )
         }
     }
 }

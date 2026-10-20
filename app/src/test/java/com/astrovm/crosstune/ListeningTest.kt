@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -30,6 +31,7 @@ import androidx.lifecycle.ViewModelProvider
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import android.os.Looper
 import android.Manifest
 import org.robolectric.shadows.ShadowSettings
@@ -1289,6 +1291,29 @@ class ListeningTest {
             .performTouchInput { swipeUp() }
         waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
         waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
+    }
+
+    @Test
+    fun eachVisualHasAStillAndPlaysOnItsOwnOnceTapped() {
+        val names = milkdropPresets(app.assets)
+        names.forEach { assertNotNull(it, milkdropThumb(app.assets, it)) }
+        val heavy = names[40]
+        prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).commit()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo().performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(ARTWORK_TAG, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // Tapped, the heavy one plays though it's off, and is switched on from there.
+        composeRule.onNodeWithText(heavy).performScrollTo().performClick()
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        assertTrue(shown(string(R.string.visual_heavy)))
+        click(string(R.string.visual_show))
+        assertEquals(setOf(heavy), prefs().getStringSet("visuals_keep", null))
+        // Back in the list, where it was.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(visualsShown().isEmpty())
+        composeRule.onNodeWithText(heavy).assertIsDisplayed()
     }
 
     @Test

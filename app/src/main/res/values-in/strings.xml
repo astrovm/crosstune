@@ -232,6 +232,8 @@
     <string name="setting_visuals_list">Visual mana</string>
     <string name="visuals_list_summary">%1$d dari %2$d aktif</string>
     <string name="visual_heavy">Terlalu berat untuk ponsel ini</string>
+    <string name="visual_show">Tampilkan ini</string>
+    <string name="visual_see">Lihat</string>
     <string name="visuals_only">Visual saja</string>
     <string name="visuals_options">Opsi visual</string>
     <string name="visuals_show_words">Tampilkan lirik</string>

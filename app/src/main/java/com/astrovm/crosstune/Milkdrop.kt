@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.AssetManager
 import android.media.audiofx.Visualizer
+import android.graphics.BitmapFactory
 import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -14,6 +15,8 @@ import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
 import android.view.TextureView
@@ -115,7 +118,6 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
     }
 }
 
-/** The presets that come with the app, in assets/milkdrop. */
 /** The presets that come with the app, in assets/milkdrop, by name: their file's, without .milk. */
 internal fun milkdropPresets(assets: AssetManager): List<String> =
     assets.list(PRESETS).orEmpty().filter { it.endsWith(".milk") }.sorted().map { it.removeSuffix(".milk") }
@@ -124,7 +126,13 @@ internal fun milkdropPresets(assets: AssetManager): List<String> =
 internal fun milkdropPreset(assets: AssetManager, name: String): String =
     assets.open("$PRESETS/$name.milk").bufferedReader().use { it.readText() }
 
+/** A still of preset [name], for picking it in Settings; null when it has none. */
+internal fun milkdropThumb(assets: AssetManager, name: String): ImageBitmap? =
+    runCatching { assets.open("$THUMBS/$name.webp").use { BitmapFactory.decodeStream(it).asImageBitmap() } }.getOrNull()
+
 private const val PRESETS = "milkdrop"
+/** Drawn by scripts/milkdrop-render/thumbs.py. */
+private const val THUMBS = "milkdrop-thumbs"
 
 /**
  * How the visuals are picked, by preset name: those turned [off]; those this phone draws too
@@ -579,9 +587,9 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
 
 /**
  * What the visuals are asked to do: move on each time [skips] goes up, pass over the one showing
- * from then on each time [drops] does, and pick as [settings] say.
+ * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
  */
-internal data class VisualsPlay(val skips: Int = 0, val drops: Int = 0, val settings: VisualsSettings = VisualsSettings())
+internal data class VisualsPlay(val skips: Int = 0, val drops: Int = 0, val settings: VisualsSettings = VisualsSettings(), val only: String? = null)
 
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
 internal val LocalVisuals = staticCompositionLocalOf<@Composable (play: VisualsPlay, modifier: Modifier) -> Unit> {
@@ -598,7 +606,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
         factory = { context ->
             val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
             val renderer = MilkdropRenderer(
-                MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
+                MainActivity.milkdropFactory(), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
                 settings = play.settings, skips = play.skips, drops = play.drops,
                 text = { milkdropPreset(context.assets, it) },
                 onTooSlow = store::heavy,

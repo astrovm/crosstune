@@ -232,6 +232,8 @@
     <string name="setting_visuals_list">Quels visuels</string>
     <string name="visuals_list_summary">%1$d sur %2$d activés</string>
     <string name="visual_heavy">Trop lourd pour ce téléphone</string>
+    <string name="visual_show">Afficher celui-ci</string>
+    <string name="visual_see">Voir</string>
     <string name="visuals_only">Visuels seuls</string>
     <string name="visuals_options">Options des visuels</string>
     <string name="visuals_show_words">Afficher les paroles</string>

@@ -1618,8 +1618,8 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithText(string(R.string.visual_heavy)).fetchSemanticsNodes().size == 1)
         // Off by hand, and the heavy one on anyway.
-        composeRule.onNodeWithText(first).performScrollTo().performClick()
-        composeRule.onNodeWithText(names[1]).performScrollTo().performClick()
+        composeRule.onNode(hasContentDescription(first) and isToggleable()).performScrollTo().performClick()
+        composeRule.onNode(hasContentDescription(names[1]) and isToggleable()).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals(setOf(first), prefs().getStringSet("visuals_off", null))
         assertEquals(setOf(names[1]), prefs().getStringSet("visuals_keep", null))
