@@ -224,6 +224,15 @@
     <string name="visuals_hide">Nascondi effetti visivi</string>
     <string name="visuals_next">Effetto successivo</string>
     <string name="visuals_shade">Oscuramento degli effetti visivi</string>
+    <string name="visuals_drop">Non mostrare più questo</string>
+    <string name="settings_visuals_title">Visual</string>
+    <string name="setting_skip_heavy_visuals">Salta i visual pesanti</string>
+    <string name="setting_skip_heavy_visuals_description">Quelli troppo lenti per questo telefono, che fanno scattare il testo sopra</string>
+    <string name="setting_visuals_change">Cambia ogni</string>
+    <string name="visuals_change_never">Mai</string>
+    <string name="setting_visuals_list">Quali visual</string>
+    <string name="visuals_list_summary">%1$d di %2$d attivi</string>
+    <string name="visual_heavy">Troppo pesante per questo telefono</string>
     <string name="visuals_only">Solo effetti visivi</string>
     <string name="visuals_options">Opzioni effetti visivi</string>
     <string name="visuals_show_words">Mostra il testo</string>
@@ -271,6 +280,7 @@
     <string name="lyrics_readings">Lettura sopra le parole</string>
     <string name="lyrics_reading_size">Dimensione della lettura</string>
     <string name="lyrics_romanized">In lettere latine</string>
+    <string name="lyrics_romaji_typed">Romaji come si digita</string>
     <string name="lyrics_translation">Traduzione</string>
     <string name="lyrics_translation_failed">Impossibile tradurre ora.</string>
     <string name="lyrics_chords">Accordi</string>
@@ -286,7 +296,9 @@
     <string name="saved_practice">Esercitati</string>
     <string name="practice_show">Mostra risposta</string>
     <string name="practice_again">Di nuovo</string>
+    <string name="practice_hard">Difficile</string>
     <string name="practice_good">Bene</string>
+    <string name="practice_easy">Facile</string>
     <string name="practice_caught_up">Tutto in pari</string>
     <string name="lyrics_ask_line">Chiedi su questa riga</string>
     <string name="lyrics_ask_send">Invia</string>

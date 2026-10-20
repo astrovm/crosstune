@@ -223,6 +223,15 @@
     <string name="visuals_hide">비주얼 숨기기</string>
     <string name="visuals_next">다음 비주얼</string>
     <string name="visuals_shade">비주얼 어둡기</string>
+    <string name="visuals_drop">이것은 표시 안 함</string>
+    <string name="settings_visuals_title">비주얼</string>
+    <string name="setting_skip_heavy_visuals">무거운 비주얼 건너뛰기</string>
+    <string name="setting_skip_heavy_visuals_description">이 폰에서 너무 느려 위의 가사가 끊기는 것</string>
+    <string name="setting_visuals_change">바꾸는 간격</string>
+    <string name="visuals_change_never">안 함</string>
+    <string name="setting_visuals_list">표시할 비주얼</string>
+    <string name="visuals_list_summary">%2$d개 중 %1$d개 켜짐</string>
+    <string name="visual_heavy">이 폰에는 너무 무거움</string>
     <string name="visuals_only">비주얼만 보기</string>
     <string name="visuals_options">비주얼 옵션</string>
     <string name="visuals_show_words">가사 보기</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">단어 위에 읽기</string>
     <string name="lyrics_reading_size">읽기 크기</string>
     <string name="lyrics_romanized">라틴 문자로</string>
+    <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
     <string name="lyrics_chords">코드</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">연습</string>
     <string name="practice_show">정답 보기</string>
     <string name="practice_again">다시</string>
+    <string name="practice_hard">어려움</string>
     <string name="practice_good">좋음</string>
+    <string name="practice_easy">쉬움</string>
     <string name="practice_caught_up">모두 완료</string>
     <string name="lyrics_ask_line">이 줄에 대해 질문</string>
     <string name="lyrics_ask_send">보내기</string>

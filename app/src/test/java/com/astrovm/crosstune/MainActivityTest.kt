@@ -1607,6 +1607,38 @@ class MainActivityTest {
     }
 
     @Test
+    fun visualsCanBeTurnedOffOneByOneAndPickedInSettings() {
+        val names = milkdropPresets(app.assets)
+        val first = names.first()
+        prefs().edit().putStringSet("visuals_heavy", setOf(names[1])).commit()
+        launch()
+        click(string(R.string.settings_button))
+        // The one too heavy for this phone is off already.
+        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText(string(R.string.visual_heavy)).fetchSemanticsNodes().size == 1)
+        // Off by hand, and the heavy one on anyway.
+        composeRule.onNodeWithText(first).performScrollTo().performClick()
+        composeRule.onNodeWithText(names[1]).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(setOf(first), prefs().getStringSet("visuals_off", null))
+        assertEquals(setOf(names[1]), prefs().getStringSet("visuals_keep", null))
+        click(string(R.string.back_button))
+        composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo()
+        // Heavy ones shown, and each for a minute.
+        composeRule.onNodeWithText(string(R.string.setting_skip_heavy_visuals)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.setting_visuals_change)).performScrollTo().performClick()
+        composeRule.onNodeWithText("1 min").performClick()
+        composeRule.waitForIdle()
+        assertFalse(prefs().getBoolean("visuals_skip_heavy", true))
+        assertEquals(60_000L, prefs().getLong("visuals_change_ms", 0))
+        // And darker.
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.waitForIdle()
+        assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
+    }
+
+    @Test
     @Config(sdk = [29])
     fun beforeAndroid11ShareSheetTargetsAreNotKeptLongLived() {
         prefs().edit().putString("default_target", "DEEZER").commit()

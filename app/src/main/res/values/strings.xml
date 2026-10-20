@@ -160,6 +160,15 @@
     <string name="visuals_hide">Hide visuals</string>
     <string name="visuals_next">Next visual</string>
     <string name="visuals_shade">Darkness over the visuals</string>
+    <string name="visuals_drop">Don\'t show this one</string>
+    <string name="settings_visuals_title">Visuals</string>
+    <string name="setting_skip_heavy_visuals">Skip heavy visuals</string>
+    <string name="setting_skip_heavy_visuals_description">Ones too slow for this phone, which make the words over them stutter</string>
+    <string name="setting_visuals_change">Change every</string>
+    <string name="visuals_change_never">Never</string>
+    <string name="setting_visuals_list">Which visuals</string>
+    <string name="visuals_list_summary">%1$d of %2$d on</string>
+    <string name="visual_heavy">Too heavy for this phone</string>
     <string name="visuals_only">Only visuals</string>
     <string name="visuals_options">Visuals options</string>
     <string name="visuals_show_words">Show the words</string>
@@ -289,6 +298,7 @@
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
     <string name="lyrics_romanized">In Latin letters</string>
+    <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
     <string name="lyrics_chords">Chords</string>
@@ -304,7 +314,9 @@
     <string name="saved_practice">Practice</string>
     <string name="practice_show">Show answer</string>
     <string name="practice_again">Again</string>
+    <string name="practice_hard">Hard</string>
     <string name="practice_good">Good</string>
+    <string name="practice_easy">Easy</string>
     <string name="practice_caught_up">All caught up</string>
     <string name="lyrics_ask_line">Ask about this line</string>
     <string name="lyrics_ask_send">Send</string>

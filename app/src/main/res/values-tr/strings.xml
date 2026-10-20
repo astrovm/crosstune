@@ -223,6 +223,15 @@
     <string name="visuals_hide">Görselleri gizle</string>
     <string name="visuals_next">Sonraki görsel</string>
     <string name="visuals_shade">Görsellerin kararması</string>
+    <string name="visuals_drop">Bunu bir daha gösterme</string>
+    <string name="settings_visuals_title">Görseller</string>
+    <string name="setting_skip_heavy_visuals">Ağır görselleri atla</string>
+    <string name="setting_skip_heavy_visuals_description">Bu telefon için fazla yavaş olanlar, üstlerindeki sözleri takılttırır</string>
+    <string name="setting_visuals_change">Değiştirme sıklığı</string>
+    <string name="visuals_change_never">Asla</string>
+    <string name="setting_visuals_list">Hangi görseller</string>
+    <string name="visuals_list_summary">%2$d görselden %1$d açık</string>
+    <string name="visual_heavy">Bu telefon için fazla ağır</string>
     <string name="visuals_only">Yalnızca görseller</string>
     <string name="visuals_options">Görsel seçenekleri</string>
     <string name="visuals_show_words">Sözleri göster</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
     <string name="lyrics_reading_size">Okunuş boyutu</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
+    <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
     <string name="lyrics_chords">Akorlar</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">Pratik yap</string>
     <string name="practice_show">Cevabı göster</string>
     <string name="practice_again">Tekrar</string>
+    <string name="practice_hard">Zor</string>
     <string name="practice_good">İyi</string>
+    <string name="practice_easy">Kolay</string>
     <string name="practice_caught_up">Hepsi tamam</string>
     <string name="lyrics_ask_line">Bu satır hakkında sor</string>
     <string name="lyrics_ask_send">Gönder</string>

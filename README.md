@@ -51,10 +51,10 @@ Pasting or sharing a link to Crosstune works without any setup.
 - **Playlists and albums.** See their songs and open any one in your app. Copy or share the list, or play it all in YouTube Music or YouTube.
 - **Name that song.** Tap the button next to **Paste** and Crosstune listens for up to 12 seconds, names the song playing nearby, and shows it like a pasted link. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
 - **Lyrics in time.** Tap **Lyrics** and the words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Swipe the song at the top to skip to the next one or go back.
-- **MilkDrop visuals.** 76 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, darken them, or show only the visuals.
+- **MilkDrop visuals.** 64 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Tap the sparkles to hide them, skip to the next one, never show that one again, darken them, or show only the visuals. Pick which ones show, and how often they change, in **Settings** → **Visuals**. Ones too heavy for your phone are skipped.
 - **Floating lyrics.** Float them over any app. Drag them anywhere, pinch the text, and tap them for play, settings and close. Drop them on the ✕ at the bottom to close them.
-- **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
-- **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means. Learn a whole song in one tap.
+- **Learn the words.** Kana, pinyin and romaji under each line, as big as you like, with romaji as it's sung or as you'd type it, and translations for the languages you don't already read. Tap a word for its meaning, repeat a line in your music app, or save it for later.
+- **Practice with the music.** Saved lines come back as cards that play the line in your music app. Read it, then turn it to see how it reads and what it means, and say how well you knew it: **Again**, **Hard**, **Good** or **Easy**. Learn a whole song in one tap.
 - **ChatGPT, if you have it.** Sign in with your paid ChatGPT plan to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
 - **Not on your app?** Crosstune says so and opens the song where it's from, or searches anyway, as you choose in **Settings**.
 - **Your colors.** Light or dark, your wallpaper's color or one of a few, and pure black for OLED screens.
@@ -202,6 +202,15 @@ python3 scripts/milkdrop-render/render.py song.mp3 visuals.mp4 --start 60 --seco
 ```
 
 Run it without `--preset` to list the presets. It builds projectM from `third_party/projectm` into `build/milkdrop-render/` the first time, with a clock that moves one frame per frame, so slow renders still keep time with the song. It needs ffmpeg, CMake, Ninja, and the EGL and OpenGL headers.
+
+To see how fast each visual draws on a phone, turn on the debug mode, then open the visuals. Each one draws as fast as it can for 1.5 s, and the log says its frames a second, by preset key, then all of them, slowest first:
+
+```bash
+adb shell setprop debug.crosstune.visuals_bench 1
+adb logcat -s CrosstuneVisuals
+```
+
+A visual slower than 40 frames a second on a phone is skipped there from then on, as it makes the words over it stutter.
 
 When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
 

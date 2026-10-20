@@ -107,6 +107,38 @@ class ReadingsTest {
     }
 
     @Test
+    fun romajiCanBeSpelledAsAKeyboardTypesIt() {
+        fun read(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
+        // Long vowels as the kana write them, and を as wo; the particles は and へ still wa and e.
+        assertEquals("sensei", read("先生").typed)
+        assertEquals("toukyou wo", read("東京を").typed)
+        assertEquals("tookyoo o", read("東京を").romanized)
+        assertEquals("kimi wa umi e", read("君は海へ").typed)
+        assertEquals("koinu no you ni", read("仔犬のように").typed)
+        assertEquals("toukyou wo", read("東京を").latin(typed = true))
+        assertEquals("tookyoo o", read("東京を").latin(typed = false))
+        val word = Readings.words("先生", Script.JAPANESE).single()
+        assertEquals("sensee", word.romanized)
+        assertEquals("sensei", word.typed)
+        // A line already in Latin letters has neither.
+        assertEquals("", read("Just summer night").typed)
+        // Chinese and Korean are spelled one way.
+        val korean = Readings.of(listOf("사랑해"), Script.KOREAN).single()
+        assertEquals(korean.romanized, korean.typed)
+        assertEquals("saranghae", Readings.words("사랑해", Script.KOREAN).single().typed)
+    }
+
+    @Test
+    fun bothRomajiShowThePickedOneFirstAndTheOtherWhereItDiffers() {
+        assertEquals(listOf("sensee", "sensei"), bothRomaji("sensee", "sensei", typedFirst = false))
+        assertEquals(listOf("sensei", "sensee"), bothRomaji("sensee", "sensei", typedFirst = true))
+        assertEquals(listOf("kimi wa"), bothRomaji("kimi wa", "kimi wa", typedFirst = true))
+        // Kept before they were typed too, a line has only the one.
+        assertEquals(listOf("sensee"), bothRomaji("sensee", null, typedFirst = true))
+        assertEquals(emptyList<String>(), bothRomaji(null, "", typedFirst = false))
+    }
+
+    @Test
     fun numbersOfPeopleReadAsOneWord() {
         val (line) = Readings.of(listOf("二人で一人"), Script.JAPANESE)
         assertEquals(listOf(Ruby("二人", "ふたり"), Ruby("で"), Ruby("一人", "ひとり")), line.parts)
@@ -190,6 +222,7 @@ class ReadingsTest {
         assertEquals("きみ", fixed[0].parts.first { it.text == "君" }.reading)
         assertEquals(true, fixed[0].reading.contains("きみ") && !fixed[0].reading.contains("くん"))
         assertEquals(true, fixed[0].romanized.contains("kimi wa"))
+        assertEquals(true, fixed[0].typed.contains("kimi wa") && !fixed[0].typed.contains("kun"))
         assertEquals("ぎ", fixed[1].parts.first { it.text == "着" }.reading)
         // ごし for 越 is only 越's ご, with the し written after it: nothing to put right.
         assertEquals(read[2], fixed[2])
@@ -202,6 +235,11 @@ class ReadingsTest {
         // Romaji drawn out as it's said is put right drawn out too.
         val said = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と")), "せいと", "seeto"))
         assertEquals("shooto", Readings.corrected(said, listOf(ReadingFix(0, "生", "しょう")))[0].romanized)
+        // Typed, it's put right as the kana spell it, only where those kanji are.
+        val typed = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と"), Ruby("せい")), "せいとせい", "seeto see", "seito sei"))
+        val fixedTyped = Readings.corrected(typed, listOf(ReadingFix(0, "生", "しょう")))[0]
+        assertEquals("shouto sei", fixedTyped.typed)
+        assertEquals("shooto see", fixedTyped.romanized)
     }
 
     @Test

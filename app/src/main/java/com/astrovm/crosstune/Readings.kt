@@ -14,15 +14,26 @@ internal data class Ruby(val text: String, val reading: String? = null)
 
 /**
  * How a line reads: in [parts], each piece with its reading over it; [reading] the whole line as
- * read, in kana or pinyin; and [romanized], in Latin letters.
+ * read, in kana or pinyin; and [romanized], in Latin letters, as it's said. Japanese has them
+ * [typed] too, as a keyboard spells them: sensei, not sensee, and を as wo.
  */
-internal data class LineReading(val parts: List<Ruby>, val reading: String, val romanized: String)
+internal data class LineReading(val parts: List<Ruby>, val reading: String, val romanized: String, val typed: String = romanized) {
+    /** Its Latin letters as it's said, or as it's [typed]. */
+    fun latin(typed: Boolean) = if (typed) this.typed else romanized
+}
 
 /**
  * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
- * for its meaning, e.g. 分かる for 分かった.
+ * for its meaning, e.g. 分かる for 分かった; its Latin letters as it's said, and as it's [typed].
  */
-internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text)
+internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text, val typed: String? = romanized)
+
+/**
+ * Romaji as it's [said] and as it's [typed], the one picked, typed when [typedFirst], first; the
+ * other only where it's spelled otherwise, sensee and sensei, but wa once.
+ */
+internal fun bothRomaji(said: String?, typed: String?, typedFirst: Boolean): List<String> =
+    (if (typedFirst) listOf(typed, said) else listOf(said, typed)).filterNotNull().filter(String::isNotBlank).distinct()
 
 /** A reading put right: on line [line], from 0, [kanji] reads [reading], in hiragana. */
 internal data class ReadingFix(val line: Int, val kanji: String, val reading: String)
@@ -50,7 +61,7 @@ internal object Readings {
         Script.KOREAN -> lines.map(::korean)
     }.zip(lines) { reading, line ->
         // A line already in Latin letters, as an English one in a Korean song, isn't written out again.
-        if (letters(reading.romanized) == letters(line)) reading.copy(romanized = "") else reading
+        if (letters(reading.romanized) == letters(line)) reading.copy(romanized = "", typed = "") else reading
     }
 
     private fun letters(text: String) = text.filter(Char::isLetterOrDigit).lowercase()
@@ -60,7 +71,12 @@ internal object Readings {
     private fun japanese(line: String): LineReading {
         val pieces = together(pieces(line))
         val parts = pieces.flatMap { if (it.surface.any(::isHan) && it.kana != it.surface) furigana(it.surface, it.kana) else listOf(Ruby(it.surface)) }
-        return LineReading(joined(parts), pieces.joinToString("") { it.kana }, romajiWords(pieces).joinToString(" ") { romaji(it) })
+        return LineReading(
+            joined(parts),
+            pieces.joinToString("") { it.kana },
+            romajiWords(pieces) { it.said }.joinToString(" ") { romaji(it) },
+            romajiWords(pieces) { it.typed }.joinToString(" ") { romaji(it, typed = true) }
+        )
     }
 
     // Kanji in their old forms, as 燈 for 灯, read as the new ones the dictionary knows, and stay as written.
@@ -131,7 +147,12 @@ internal object Readings {
      */
     private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface, val spoken: String? = null) {
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
-        val said get() = if (kind == "助詞") when (surface) { "は" -> "わ"; "へ" -> "え"; else -> kana } else spoken ?: kana
+        val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
+
+        /** How it's typed, for romaji as a keyboard spells it: sensei; the particles still wa and e, as romaji writes them. */
+        val typed get() = if (kind == "助詞") particle ?: kana else kana
+
+        private val particle get() = when (surface) { "は" -> "わ"; "へ" -> "え"; else -> null }
     }
 
     /**
@@ -173,12 +194,17 @@ internal object Readings {
             val times = Regex(Regex.escape(old)).findAll(fixed.reading).map { it.range.first }.toList()
             val nth = inReading.map(times::indexOf).filter { it >= 0 }.toSet()
             var seen = -1
+            var typedSeen = -1
             LineReading(
                 fixed.parts.mapIndexed { at, part -> if (at in fixing) part.copy(reading = wanted) else part },
                 inReading.sortedDescending().fold(fixed.reading) { line, at -> line.replaceRange(at, at + old.length, wanted) },
                 // Romaji is as it's said, so the reading may be there drawn out, sensee for sensei.
                 fixed.romanized.replace(Regex("""\b(${Regex.escape(drawnOut(romaji(old)))}|${Regex.escape(romaji(old))})""")) {
                     if (++seen !in nth) it.value else if (it.value == romaji(old)) romaji(wanted) else drawnOut(romaji(wanted))
+                },
+                // Typed, it's as the dictionary spells it.
+                fixed.typed.replace(Regex("""\b${Regex.escape(romaji(old, typed = true))}""")) {
+                    if (++typedSeen in nth) romaji(wanted, typed = true) else it.value
                 }
             )
         }
@@ -192,7 +218,7 @@ internal object Readings {
      * 分かった is wakatta rather than waka ta, while particles stand alone. Brackets and marks sit
      * against what they're beside.
      */
-    private fun romajiWords(pieces: List<Piece>): List<String> = grouped(pieces).map { word -> word.joinToString("") { it.said } }
+    private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> = grouped(pieces).map { word -> word.joinToString("", transform = kana) }
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
@@ -235,7 +261,8 @@ internal object Readings {
             val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
             // Kana reads as written; the reading's only worth showing for kanji.
             val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
-            Word(text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base)
+            val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
+            Word(text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true))
         }
         else -> segments(line).map { text ->
             when (script) {
@@ -322,8 +349,11 @@ internal object Readings {
     /** Katakana as hiragana, which is how furigana are written. */
     fun hiragana(katakana: String): String = katakana.map { if (it in 'ァ'..'ヶ') it - 0x60 else it }.joinToString("")
 
-    /** Kana in Latin letters, the Hepburn way: しゃ is sha, っ doubles what follows, ー lengthens the vowel before. */
-    fun romaji(kana: String): String {
+    /**
+     * Kana in Latin letters, the Hepburn way: しゃ is sha, っ doubles what follows, ー lengthens the
+     * vowel before; を is o, as it's said, or wo, as it's [typed].
+     */
+    fun romaji(kana: String, typed: Boolean = false): String {
         val hira = hiragana(kana)
         val out = StringBuilder()
         var double = false
@@ -331,7 +361,7 @@ internal object Readings {
         var i = 0
         while (i < hira.length) {
             val two = if (i + 1 < hira.length) hira.substring(i, i + 2) else null
-            val syllable = two?.let(YOUON::get)?.also { i += 2 } ?: KANA[hira[i]]?.also { i++ }
+            val syllable = two?.let(YOUON::get)?.also { i += 2 } ?: (if (typed && hira[i] == 'を') "wo" else KANA[hira[i]])?.also { i++ }
             if (syllable == null) {
                 when (val c = hira[i]) {
                     'っ' -> double = true

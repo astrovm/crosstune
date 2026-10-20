@@ -360,7 +360,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            LocalVisuals.current(state.visualsSkips, Modifier.fillMaxSize())
+            LocalVisuals.current(state.visualsPlay, Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
@@ -595,7 +595,7 @@ private val HEADER_SHADE = 72.dp
 private val BAR_FADE = 88.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
-private const val MAX_VISUALS_SHADE = 0.9f
+internal const val MAX_VISUALS_SHADE = 0.9f
 
 /** How long after the words stop being scrolled the bar comes back. */
 private const val BAR_BACK_MS = 1_200L
@@ -639,6 +639,10 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
             if (learning.readings) ReadingSize(learning.readingScale, actions)
         }
         if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+        // Romaji shown, it can be spelled as typed rather than as said.
+        if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
+            LearnItem(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
+        }
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
         HorizontalDivider()
         LearnItem(R.string.lyrics_chords, chords.on, actions.onChordsChange)
@@ -1013,7 +1017,10 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
     }
 }
 
-/** What can be done with the visuals while they're on: how dark the ground over them is, the next, them alone, or off. */
+/**
+ * What can be done with the visuals while they're on: how dark the ground over them is, the next,
+ * never this one again, them alone, or off.
+ */
 @Composable
 private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
@@ -1040,6 +1047,14 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
             onClick = {
                 onClose()
                 actions.onNextVisual()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_drop)) },
+            leadingIcon = { AppIcon(R.drawable.ic_visibility_off, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onDropVisual()
             }
         )
         DropdownMenuItem(
@@ -1203,12 +1218,17 @@ internal class LineHelp(
     /** What shows instead of the line: its kana, or its Latin letters. */
     val instead: String? = null,
     /** How big [readings] are beside the words they're over. */
-    val readingScale: Float = READING_SCALE
-)
+    val readingScale: Float = READING_SCALE,
+    /** Whether romaji is spelled as typed rather than as said. */
+    val romajiTyped: Boolean = false
+) {
+    /** The line in Latin letters, spelled as picked. */
+    val latin get() = reading?.latin(romajiTyped)
+}
 
 internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale)
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale, romajiTyped)
 }
 
 
@@ -1328,7 +1348,7 @@ private fun LyricLineText(
         }
         val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
         // Shown in them already, they'd say it twice.
-        if (help?.romanized == true) reading?.romanized?.takeIf { it.isNotBlank() && it != instead }?.let {
+        if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
@@ -1660,13 +1680,13 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             } else {
                 TappableLine(text.ifBlank { "♪" }, words, state.word?.word) { actions.onLookUpWord(it, index) }
             }
-            reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            reading?.latin(learning.romajiTyped)?.takeIf { it.isNotBlank() && it != reading.reading }?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             learning.translations.getOrNull(index)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             val signedIn = state.chatGpt.email != null
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) {
                     val examples = learning.examples?.takeIf { it.word == meaning.word && it.index == index }?.asking
-                    WordCard(meaning, examples, canFindExamples = signedIn) { actions.onFindExamples(index) }
+                    WordCard(meaning, examples, canFindExamples = signedIn, romajiTyped = learning.romajiTyped) { actions.onFindExamples(index) }
                 }
             }
             val explanation = learning.explanation?.takeIf { it.index == index }
@@ -1781,14 +1801,15 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
  * the same way, once asked for.
  */
 @Composable
-internal fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, onFindExamples: () -> Unit) {
+internal fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, romajiTyped: Boolean = false, onFindExamples: () -> Unit) {
     val word = meaning.word
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // What doesn't fit goes on the next line, rather than squeezed a letter a line.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
-                listOfNotNull(word.reading, word.romanized?.takeIf { it != word.reading }).forEach {
+                // Romaji as said and as typed, where they're spelled otherwise: sensee and sensei.
+                (listOfNotNull(word.reading) + bothRomaji(word.romanized, word.typed, romajiTyped)).distinct().forEach {
                     Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                 }
             }

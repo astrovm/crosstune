@@ -223,6 +223,15 @@
     <string name="visuals_hide">Ocultar visuales</string>
     <string name="visuals_next">Siguiente visual</string>
     <string name="visuals_shade">Oscuridad sobre los visuales</string>
+    <string name="visuals_drop">No mostrar este</string>
+    <string name="settings_visuals_title">Visuales</string>
+    <string name="setting_skip_heavy_visuals">Saltar visuales pesados</string>
+    <string name="setting_skip_heavy_visuals_description">Los muy lentos para este teléfono, que hacen trabar la letra encima</string>
+    <string name="setting_visuals_change">Cambiar cada</string>
+    <string name="visuals_change_never">Nunca</string>
+    <string name="setting_visuals_list">Qué visuales</string>
+    <string name="visuals_list_summary">%1$d de %2$d activados</string>
+    <string name="visual_heavy">Muy pesado para este teléfono</string>
     <string name="visuals_only">Solo visuales</string>
     <string name="visuals_options">Opciones de visuales</string>
     <string name="visuals_show_words">Mostrar la letra</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">Lectura sobre las palabras</string>
     <string name="lyrics_reading_size">Tamaño de la lectura</string>
     <string name="lyrics_romanized">En letras latinas</string>
+    <string name="lyrics_romaji_typed">Romaji como se teclea</string>
     <string name="lyrics_translation">Traducción</string>
     <string name="lyrics_translation_failed">No se pudo traducir ahora.</string>
     <string name="lyrics_chords">Acordes</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">Practicar</string>
     <string name="practice_show">Ver respuesta</string>
     <string name="practice_again">Otra vez</string>
+    <string name="practice_hard">Difícil</string>
     <string name="practice_good">Bien</string>
+    <string name="practice_easy">Fácil</string>
     <string name="practice_caught_up">Todo al día</string>
     <string name="lyrics_ask_line">Preguntá sobre esta línea</string>
     <string name="lyrics_ask_send">Enviar</string>

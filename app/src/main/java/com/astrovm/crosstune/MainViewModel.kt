@@ -135,6 +135,7 @@ internal class MainViewModel(
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
+            visualsSettings = VisualsStore(preferences).load(),
             canFollowApps = playback?.hasAccess() == true,
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
@@ -147,7 +148,8 @@ internal class MainViewModel(
                 into = preferences.getString(KEY_TRANSLATE_INTO, null)?.let(AppLanguage::translationTag),
                 untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
                 readingScale = preferences.getFloat(KEY_READING_SCALE, READING_SCALE).coerceIn(READING_SCALE, MAX_READING_SCALE),
-                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN,
+                romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false)
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -178,8 +180,16 @@ internal class MainViewModel(
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.copy(canSetUpInOneTap = oneTap.available()) }
 
+    private val visualsStore = VisualsStore(preferences)
+
+    /** Visuals settings changed, here or by the visuals themselves, e.g. one found too slow, show at once. */
+    private val visualsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key in VisualsStore.KEYS) uiState = uiState.copy(visualsSettings = visualsStore.load())
+    }.also(preferences::registerOnSharedPreferenceChangeListener)
+
     override fun onCleared() {
         stopWatchingOneTap?.invoke()
+        preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
     }
 
     /**
@@ -1469,6 +1479,18 @@ internal class MainViewModel(
         uiState = uiState.copy(visualsSkips = uiState.visualsSkips + 1)
     }
 
+    /** Never shows the visual showing again, and moves on. */
+    fun dropVisual() {
+        uiState = uiState.copy(visualsDrops = uiState.visualsDrops + 1)
+    }
+
+    /** Visual [name] on or off, as Settings lists them. */
+    fun setVisualOn(name: String, on: Boolean) = visualsStore.turn(name, on)
+
+    fun setSkipHeavyVisuals(on: Boolean) = visualsStore.skipHeavy(on)
+
+    fun setVisualsChangeEvery(ms: Long) = visualsStore.changeEvery(ms)
+
     fun setVisuals(on: Boolean) {
         preferences.edit { putBoolean(KEY_VISUALS, on) }
         uiState = uiState.copy(visuals = on)
@@ -1653,7 +1675,8 @@ internal class MainViewModel(
             song.title,
             song.artist,
             learning.explanation?.takeIf { it.index == index && it.done }?.text,
-            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
+            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } },
+            typed = reading?.typed?.takeIf { it.isNotBlank() && it != reading.romanized }
         ).timedAt(index)
     }
 
@@ -1708,7 +1731,7 @@ internal class MainViewModel(
             if (saved.line != null) return@mapNotNull (saved to saved.copy(line = now)).takeIf { saved.text in now }
             if (!taken.add(now)) return@mapNotNull null
             val read = savedLineAt(index) ?: return@mapNotNull null
-            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, translation = read.translation ?: saved.translation)
+            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, typed = read.typed, translation = read.translation ?: saved.translation)
             saved to if (times != null) moved.timedAt(index) else moved
         }
         if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
@@ -2145,6 +2168,12 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
         learn()
+    }
+
+    /** Spells romaji as typed, sensei, or as said, sensee, from now on. */
+    fun setRomajiTyped(on: Boolean) {
+        preferences.edit { putBoolean(KEY_ROMAJI_TYPED, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(romajiTyped = on))
     }
 
     /** Shows the words as written, or only in kana or Latin letters, from now on. */
@@ -2605,6 +2634,7 @@ internal class MainViewModel(
         private const val KEY_READINGS = "lyrics_readings"
         private const val KEY_CHORDS = "lyrics_chords"
         private const val KEY_ROMANIZED = "lyrics_romanized"
+        private const val KEY_ROMAJI_TYPED = "lyrics_romaji_typed"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_WORDS_AS = "lyrics_words_as"

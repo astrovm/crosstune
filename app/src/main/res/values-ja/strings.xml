@@ -224,6 +224,15 @@
     <string name="visuals_hide">ビジュアルを非表示</string>
     <string name="visuals_next">次のビジュアル</string>
     <string name="visuals_shade">ビジュアルの暗さ</string>
+    <string name="visuals_drop">これを表示しない</string>
+    <string name="settings_visuals_title">ビジュアル</string>
+    <string name="setting_skip_heavy_visuals">重いビジュアルをスキップ</string>
+    <string name="setting_skip_heavy_visuals_description">この端末では遅すぎて、上の歌詞がカクつくもの</string>
+    <string name="setting_visuals_change">切り替え間隔</string>
+    <string name="visuals_change_never">しない</string>
+    <string name="setting_visuals_list">表示するビジュアル</string>
+    <string name="visuals_list_summary">%2$d 個中 %1$d 個オン</string>
+    <string name="visual_heavy">この端末には重すぎます</string>
     <string name="visuals_only">ビジュアルのみ</string>
     <string name="visuals_options">ビジュアルのオプション</string>
     <string name="visuals_show_words">歌詞を表示</string>
@@ -271,6 +280,7 @@
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_romanized">ローマ字</string>
+    <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
     <string name="lyrics_chords">コード</string>
@@ -286,7 +296,9 @@
     <string name="saved_practice">練習</string>
     <string name="practice_show">答えを見る</string>
     <string name="practice_again">もう一度</string>
+    <string name="practice_hard">難しい</string>
     <string name="practice_good">正解</string>
+    <string name="practice_easy">簡単</string>
     <string name="practice_caught_up">すべて完了</string>
     <string name="lyrics_ask_line">この行について質問</string>
     <string name="lyrics_ask_send">送信</string>

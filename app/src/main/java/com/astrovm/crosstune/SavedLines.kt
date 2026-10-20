@@ -34,7 +34,9 @@ internal data class SavedLine(
     /** The line in pieces, each with how it reads over it when that isn't plain from it, e.g. kanji with their kana. */
     val ruby: List<Ruby>? = null,
     /** Its reading put right by hand, which stays when the song's are read again. */
-    val readByHand: Boolean = false
+    val readByHand: Boolean = false,
+    /** Its romaji as a keyboard spells it, when that's not as [romanized] says it. */
+    val typed: String? = null
 ) {
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
@@ -59,13 +61,13 @@ internal data class SavedLine(
         val parts = ruby
         if (parts == null) {
             val word = readings.firstOrNull()?.trim()?.let(Readings::hiragana)?.takeIf { it.isNotEmpty() && it.all(Readings::isKana) && line != null } ?: return this
-            return copy(reading = word, romanized = Readings.romaji(word), readByHand = true)
+            return copy(reading = word, romanized = Readings.romaji(word), readByHand = true, typed = Readings.romaji(word, typed = true).takeIf { it != Readings.romaji(word) })
         }
         val shown = readable
         val fixes = shown.indices.mapNotNull { index -> readings.getOrNull(index)?.trim()?.takeIf { it != shown[index].reading }?.let { ReadingFix(0, shown[index].text, it) } }
-        val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty())), fixes).first()
+        val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty(), typed ?: romanized.orEmpty())), fixes).first()
         if (read.parts == parts) return this
-        return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true)
+        return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true, typed = read.typed.takeIf { it.isNotBlank() && it != read.romanized })
     }
 }
 
@@ -80,7 +82,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.optInt("box"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line"), json.ruby(), json.optBoolean("byHand")
+                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed")
             )
         })
     }
@@ -100,7 +102,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                 line.readByHand -> line.copy(text = text, line = sungIn, ruby = line.ruby?.let { parts ->
                     parts.mapIndexed { index, part -> part.copy(text = if (index == parts.lastIndex) Readings.asJapanWrites(part.text) else Readings.inJapansKanji(part.text)) }
                 })
-                else -> line.copy(text = text, line = sungIn, reading = null, romanized = null, ruby = null)
+                else -> line.copy(text = text, line = sungIn, reading = null, romanized = null, ruby = null, typed = null)
             }
         }
     }
@@ -143,12 +145,12 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     /** Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand. */
     fun reread(lines: List<SavedLine>): List<SavedLine> = save(
         load().map { kept ->
-            lines.firstOrNull { it.isSame(kept) }?.takeIf { !kept.readByHand }?.let { kept.copy(reading = it.reading, romanized = it.romanized, ruby = it.ruby) } ?: kept
+            lines.firstOrNull { it.isSame(kept) }?.takeIf { !kept.readByHand }?.let { kept.copy(reading = it.reading, romanized = it.romanized, ruby = it.ruby, typed = it.typed) } ?: kept
         }
     )
 
     /** Keeps [line] read as it is now, put right by hand. */
-    fun readAs(line: SavedLine): List<SavedLine> = update(line) { it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true) }
+    fun readAs(line: SavedLine): List<SavedLine> = update(line) { it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true, typed = line.typed) }
 
     /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> =
@@ -156,12 +158,13 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     /**
      * [line] practised at [now], as [grade] says: known, it comes back after longer each time, 1, 3,
-     * 7, 16, 35, 75 then 150 days, and known easily, a step further; missed, in ten minutes, from the
-     * start again.
+     * 7, 16, 35, 75 then 150 days, and known easily, a step further; known with trouble, after as long
+     * as last time, a step no further; missed, in ten minutes, from the start again.
      */
     fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) {
         when (grade) {
             Grade.AGAIN -> it.copy(box = 0, due = now + waitFor(it, grade))
+            Grade.HARD -> it.copy(due = now + waitFor(it, grade))
             Grade.GOOD -> it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
             Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
         }
@@ -178,7 +181,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("translation", line.translation).put("title", line.title).put("artist", line.artist)
                     .put("explanation", line.explanation).put("box", line.box).put("due", line.due)
                     .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
-                    .put("artwork", line.artworkUrl).put("line", line.line)
+                    .put("artwork", line.artworkUrl).put("line", line.line).put("typed", line.typed)
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
                     .apply { if (line.readByHand) put("byHand", true) }
             )
@@ -207,6 +210,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         /** How long [line] waits before it's practised again, answered as [grade]. */
         fun waitFor(line: SavedLine, grade: Grade): Long = when (grade) {
             Grade.AGAIN -> AGAIN_MS
+            Grade.HARD -> PRACTICE_DAYS[(minOf(line.box, PRACTICE_DAYS.size) - 1).coerceAtLeast(0)] * DAY_MS
             Grade.GOOD -> PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.lastIndex)] * DAY_MS
             Grade.EASY -> PRACTICE_DAYS[minOf(line.box + 1, PRACTICE_DAYS.lastIndex)] * DAY_MS
         }
@@ -259,5 +263,5 @@ private const val MUCH_THE_SAME = 0.7
 /** How many days a line known waits before it's practised again, the more times it's known in a row. */
 private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L, 75L, 150L)
 
-/** How a card was answered, once turned: missed, known, or known without a thought. */
-internal enum class Grade { AGAIN, GOOD, EASY }
+/** How a card was answered, once turned, as Anki has it: missed, known with trouble, known, or known without a thought. */
+internal enum class Grade { AGAIN, HARD, GOOD, EASY }

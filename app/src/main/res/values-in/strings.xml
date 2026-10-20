@@ -223,6 +223,15 @@
     <string name="visuals_hide">Sembunyikan visual</string>
     <string name="visuals_next">Visual berikutnya</string>
     <string name="visuals_shade">Gelap di atas visual</string>
+    <string name="visuals_drop">Jangan tampilkan ini</string>
+    <string name="settings_visuals_title">Visual</string>
+    <string name="setting_skip_heavy_visuals">Lewati visual berat</string>
+    <string name="setting_skip_heavy_visuals_description">Yang terlalu lambat untuk ponsel ini, yang membuat lirik di atasnya tersendat</string>
+    <string name="setting_visuals_change">Ganti setiap</string>
+    <string name="visuals_change_never">Tidak pernah</string>
+    <string name="setting_visuals_list">Visual mana</string>
+    <string name="visuals_list_summary">%1$d dari %2$d aktif</string>
+    <string name="visual_heavy">Terlalu berat untuk ponsel ini</string>
     <string name="visuals_only">Visual saja</string>
     <string name="visuals_options">Opsi visual</string>
     <string name="visuals_show_words">Tampilkan lirik</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">Bacaan di atas kata</string>
     <string name="lyrics_reading_size">Ukuran bacaan</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
+    <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_translation">Terjemahan</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
     <string name="lyrics_chords">Kord</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">Latihan</string>
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_again">Lagi</string>
+    <string name="practice_hard">Sulit</string>
     <string name="practice_good">Baik</string>
+    <string name="practice_easy">Mudah</string>
     <string name="practice_caught_up">Semua sudah</string>
     <string name="lyrics_ask_line">Tanya tentang baris ini</string>
     <string name="lyrics_ask_send">Kirim</string>

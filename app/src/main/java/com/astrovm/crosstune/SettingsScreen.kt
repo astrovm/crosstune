@@ -1,6 +1,11 @@
 package com.astrovm.crosstune
 
 import android.os.Build
+import android.icu.util.Measure
+import android.icu.util.MeasureUnit
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeOut
@@ -82,13 +87,16 @@ internal fun SettingsScreen(
 ) {
     val sources = sourceSettings(state, actions)
     // A source's page slides in over the list, and back out the other way.
+    // The visuals' list too.
     AnimatedContent(
-        targetState = sources.firstOrNull { it.key == openSource }?.key,
+        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || sources.any { it.key == key } },
         transitionSpec = { slide(forward = targetState != null) },
         label = "source"
     ) { key ->
         val item = sources.firstOrNull { it.key == key }
-        if (item != null) {
+        if (key == VISUALS_PAGE) {
+            VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
+        } else if (item != null) {
             SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(null) })
         } else {
             SettingsList(state, actions, sources, onBack, onOpenSource)
@@ -268,6 +276,28 @@ private fun SettingsList(
             }
         }
         if (state.chatGpt.welcome) ChatGptWelcome(onDismiss = actions.onDismissChatGptWelcome)
+
+        // Which visuals move behind the words, how long each shows, and how dark they are.
+        SectionHeader(stringResource(R.string.settings_visuals_title))
+        Group {
+            VisualsListRow(state.visualsSettings, onOpen = { onOpenSource(VISUALS_PAGE) })
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_skip_heavy_visuals),
+                description = stringResource(R.string.setting_skip_heavy_visuals_description),
+                checked = state.visualsSettings.skipHeavy,
+                onCheckedChange = actions.onSkipHeavyVisualsChange
+            )
+            GroupDivider()
+            ChoiceRow(
+                label = stringResource(R.string.setting_visuals_change),
+                choices = VisualsSettings.CHANGE_EVERY.map { it to changeEveryText(it) },
+                selected = state.visualsSettings.changeMs,
+                onSelect = actions.onVisualsChangeEveryChange
+            )
+            GroupDivider()
+            VisualsShadeRow(state.visualsShade, actions)
+        }
 
         SectionHeader(stringResource(R.string.settings_appearance_title))
         Group {
@@ -547,6 +577,95 @@ private fun RecognizerRow(actions: ScreenActions) {
 }
 
 /** What happens when the app a song goes to doesn't have it: ask, open it where it's from, or search anyway. */
+/** The page listing the visuals. */
+private const val VISUALS_PAGE = "visuals"
+
+/** How many of the visuals are on, opening the list of them. */
+@Composable
+private fun VisualsListRow(settings: VisualsSettings, onOpen: () -> Unit) {
+    val names = presetNames()
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            stringResource(R.string.visuals_list_summary, names.count(settings::shows), names.size),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/** The visuals that come with the app, by name. */
+@Composable
+private fun presetNames(): List<String> {
+    val assets = LocalContext.current.assets
+    return remember(assets) { milkdropPresets(assets) }
+}
+
+/** How long each visual shows, short, as the phone's language writes it: "15 sec", "1 min", or never. */
+@Composable
+private fun changeEveryText(ms: Long): String {
+    if (ms == VisualsSettings.NEVER) return stringResource(R.string.visuals_change_never)
+    val format = android.icu.text.MeasureFormat.getInstance(LocalConfiguration.current.locales[0], android.icu.text.MeasureFormat.FormatWidth.SHORT)
+    return if (ms < 60_000) format.format(Measure(ms / 1000, MeasureUnit.SECOND)) else format.format(Measure(ms / 60_000, MeasureUnit.MINUTE))
+}
+
+/** How dark the ground over the visuals is, as the visuals' own menu sets it. */
+@Composable
+private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
+    val darken = stringResource(R.string.visuals_shade)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)) {
+        AppIcon(R.drawable.ic_shade, contentDescription = null)
+        // Where it was let go is kept, even before the screen has caught up with it.
+        var latest by remember { mutableFloatStateOf(shade) }
+        Slider(
+            value = shade,
+            onValueChange = {
+                latest = it
+                actions.onVisualsShadeChange(it, false)
+            },
+            onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
+            valueRange = 0f..MAX_VISUALS_SHADE,
+            modifier = Modifier.padding(start = 16.dp).heightIn(min = 48.dp).semantics { contentDescription = darken }
+        )
+    }
+}
+
+/**
+ * Every visual, each switched on or off; those too heavy for this phone say so, and can be
+ * switched on anyway. The last one on stays on.
+ */
+@Composable
+private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val names = presetNames()
+    val on = names.count(settings::shows)
+    Page(
+        title = stringResource(R.string.setting_visuals_list),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        }
+    ) {
+        Group(modifier = Modifier.padding(top = 8.dp)) {
+            names.forEachIndexed { index, name ->
+                if (index > 0) GroupDivider()
+                val shows = settings.shows(name)
+                SettingSwitch(
+                    label = name,
+                    description = if (name in settings.heavy) stringResource(R.string.visual_heavy) else null,
+                    checked = shows,
+                    onCheckedChange = { actions.onVisualOnChange(name, it) },
+                    enabled = !(shows && on == 1)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun NotFoundRow(action: NotFoundAction, onSelect: (NotFoundAction) -> Unit) = ChoiceRow(
     stringResource(R.string.setting_not_found),

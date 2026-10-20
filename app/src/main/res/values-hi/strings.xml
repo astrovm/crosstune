@@ -223,6 +223,15 @@
     <string name="visuals_hide">विज़ुअल छिपाएँ</string>
     <string name="visuals_next">अगला विज़ुअल</string>
     <string name="visuals_shade">विज़ुअल पर अंधेरा</string>
+    <string name="visuals_drop">इसे फिर न दिखाएँ</string>
+    <string name="settings_visuals_title">विज़ुअल</string>
+    <string name="setting_skip_heavy_visuals">भारी विज़ुअल छोड़ें</string>
+    <string name="setting_skip_heavy_visuals_description">इस फ़ोन के लिए बहुत धीमे, जिनसे ऊपर के बोल अटकते हैं</string>
+    <string name="setting_visuals_change">हर इतने में बदलें</string>
+    <string name="visuals_change_never">कभी नहीं</string>
+    <string name="setting_visuals_list">कौन से विज़ुअल</string>
+    <string name="visuals_list_summary">%2$d में से %1$d चालू</string>
+    <string name="visual_heavy">इस फ़ोन के लिए बहुत भारी</string>
     <string name="visuals_only">सिर्फ़ विज़ुअल</string>
     <string name="visuals_options">विज़ुअल विकल्प</string>
     <string name="visuals_show_words">बोल दिखाएँ</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
     <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
+    <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">अभ्यास</string>
     <string name="practice_show">जवाब देखें</string>
     <string name="practice_again">फिर से</string>
+    <string name="practice_hard">कठिन</string>
     <string name="practice_good">ठीक</string>
+    <string name="practice_easy">आसान</string>
     <string name="practice_caught_up">सब हो गया</string>
     <string name="lyrics_ask_line">इस पंक्ति के बारे में पूछें</string>
     <string name="lyrics_ask_send">भेजें</string>

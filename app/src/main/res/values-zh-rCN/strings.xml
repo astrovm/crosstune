@@ -223,6 +223,15 @@
     <string name="visuals_hide">隐藏视觉效果</string>
     <string name="visuals_next">下一个视觉效果</string>
     <string name="visuals_shade">视觉效果暗度</string>
+    <string name="visuals_drop">不再显示这个</string>
+    <string name="settings_visuals_title">视觉效果</string>
+    <string name="setting_skip_heavy_visuals">跳过繁重的视觉效果</string>
+    <string name="setting_skip_heavy_visuals_description">在这部手机上太慢、会让上面的歌词卡顿的</string>
+    <string name="setting_visuals_change">切换间隔</string>
+    <string name="visuals_change_never">从不</string>
+    <string name="setting_visuals_list">显示哪些视觉效果</string>
+    <string name="visuals_list_summary">已开启 %1$d / %2$d</string>
+    <string name="visual_heavy">对这部手机太繁重</string>
     <string name="visuals_only">仅视觉效果</string>
     <string name="visuals_options">视觉效果选项</string>
     <string name="visuals_show_words">显示歌词</string>
@@ -270,6 +279,7 @@
     <string name="lyrics_readings">在文字上方显示读音</string>
     <string name="lyrics_reading_size">读音大小</string>
     <string name="lyrics_romanized">拉丁字母</string>
+    <string name="lyrics_romaji_typed">按输入法拼写罗马字</string>
     <string name="lyrics_translation">翻译</string>
     <string name="lyrics_translation_failed">暂时无法翻译。</string>
     <string name="lyrics_chords">和弦</string>
@@ -285,7 +295,9 @@
     <string name="saved_practice">练习</string>
     <string name="practice_show">查看答案</string>
     <string name="practice_again">再来</string>
+    <string name="practice_hard">困难</string>
     <string name="practice_good">良好</string>
+    <string name="practice_easy">简单</string>
     <string name="practice_caught_up">全部完成</string>
     <string name="lyrics_ask_line">就这一行提问</string>
     <string name="lyrics_ask_send">发送</string>

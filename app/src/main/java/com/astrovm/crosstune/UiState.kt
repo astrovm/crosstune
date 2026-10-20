@@ -89,6 +89,10 @@ internal data class UiState(
     val visualsShade: Float = DEFAULT_VISUALS_SHADE,
     /** How many times the next visual was asked for, so each ask moves on once. */
     val visualsSkips: Int = 0,
+    /** How many times the visual showing was asked not to show again, so each ask drops one. */
+    val visualsDrops: Int = 0,
+    /** Which visuals show, and for how long. */
+    val visualsSettings: VisualsSettings = VisualsSettings(),
     /** What helps read the words in another language, and what's been worked out for them. */
     val learning: Learning = Learning(),
     /** A song's chords over its words, while switched on. */
@@ -367,6 +371,8 @@ internal data class Learning(
     val questions: List<LineQuestion> = emptyList(),
     /** How the words show: as written, or in kana or Latin letters for a script that reads otherwise. */
     val wordsAs: WordsAs = WordsAs.WRITTEN,
+    /** Whether Japanese in Latin letters is spelled as typed, sensei, rather than as said, sensee. */
+    val romajiTyped: Boolean = false,
     /** Set when the words were found in romaji, and ChatGPT wrote them in Japanese. */
     val fromRomaji: Boolean = false,
     /** The words most worth learning from the song, as ChatGPT finds them. */
@@ -381,8 +387,11 @@ internal data class Learning(
     val examples: WordExamples? = null
 ) {
     /** Only what's switched on, ready to work out for new words. */
-    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, script, wordsAs = wordsAs)
+    fun fresh(script: Script? = null) = Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, script, wordsAs = wordsAs, romajiTyped = romajiTyped)
 }
+
+/** What the visuals are asked to do, as the screen has it. */
+internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops, visualsSettings)
 
 /** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
 internal enum class WordsAs { WRITTEN, KANA, LATIN }
@@ -394,7 +403,7 @@ internal enum class WordsAs { WRITTEN, KANA, LATIN }
 internal fun Learning.insteadOf(index: Int): String? {
     val reading = lines.getOrNull(index) ?: return null
     if (showsAs == WordsAs.KANA) return reading.reading
-    if (showsAs == WordsAs.LATIN) return reading.romanized.takeIf { it.isNotBlank() }
+    if (showsAs == WordsAs.LATIN) return reading.latin(romajiTyped).takeIf { it.isNotBlank() }
     return null
 }
 

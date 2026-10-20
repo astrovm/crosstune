@@ -1278,6 +1278,11 @@ class ListeningTest {
         click(string(R.string.visuals_next))
         assertFalse(shown(string(R.string.visuals_next)))
         assertTrue(visualsShown().isNotEmpty())
+        // Never this one again, with the menu closing.
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_drop))
+        assertFalse(shown(string(R.string.visuals_drop)))
+        assertEquals(1, controllerModel().uiState.visualsDrops)
 
         // Scrolling the words, the bar makes way, and comes back once they rest.
         composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))
@@ -1327,6 +1332,7 @@ class ListeningTest {
         override fun show(preset: String, smooth: Boolean) = false
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
+        override fun finish() = Unit
         override fun close() = Unit
     }
 
@@ -2571,6 +2577,26 @@ class ListeningTest {
         assertFalse(shown("[食べる]"))
         assertFalse(prefs().getBoolean("lyrics_readings", true))
         assertFalse(prefs().getBoolean("lyrics_translation", true))
+    }
+
+    @Test
+    fun japaneseRomajiCanBeSpelledAsTyped() {
+        wordsOf("[00:00.00] 東京を\\n[00:30.00] 食べる", "東京を\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        // Only with romaji shown.
+        assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        click(string(R.string.lyrics_romanized))
+        waitUntil(TIMEOUT_MS) { shown("tookyoo o") }
+        click(string(R.string.lyrics_romaji_typed))
+        waitUntil(TIMEOUT_MS) { shown("toukyou wo") }
+        assertFalse(shown("tookyoo o"))
+        assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
+        // Only in romaji, too.
+        click(string(R.string.lyrics_only_latin))
+        waitUntil(TIMEOUT_MS) { !shown("東京を") }
+        assertTrue(shown("toukyou wo"))
+        assertTrue(shown(string(R.string.lyrics_romaji_typed)))
     }
 
     @Test
