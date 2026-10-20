@@ -236,6 +236,7 @@
     <string name="visual_see">Ver</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Dançarinos</string>
+    <string name="visual_kind_drawing">Desenhos</string>
     <string name="visual_kind_fractals">Fractais</string>
     <string name="visual_kind_geometric">Geométricos</string>
     <string name="visual_kind_hypnotic">Hipnóticos</string>

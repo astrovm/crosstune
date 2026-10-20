@@ -69,7 +69,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 17 października 2026",
+  "updated": "Ostatnia aktualizacja: 20 października 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst lub akordy utworu, aplikacja wysyła tytuł i wykonawcę do serwisów, które nie wymagają konta ani klucza: LRCLIB, YouTube Music, NetEase Cloud Music i Letras po tekst, Ultimate Guitar, LaCuerda i U-FRET po akordy oraz do wyszukiwarki utworów Apple, aby znaleźć oryginalną nazwę utworu. Gdy włączysz tłumaczenie w tekście, aplikacja wysyła jego wiersze do MyMemory, usługi tłumaczeń bez konta, chyba że przetłumaczy je ChatGPT, jak opisano niżej. Android rozpoznaje na telefonie język utworu, a teksty w języku, którego nie chcesz tłumaczyć, nie są wysyłane. Czytania, takie jak kana nad kanji, powstają na telefonie i nie są nigdzie wysyłane. Słowo, które dotkniesz, by poznać jego znaczenie, jest wysyłane tak samo. Jeśli aplikacja jest po angielsku, angielskie słowo jest wyszukiwane w słowniku Wiktionary. Zapisane wiersze zostają na telefonie."
+      "Gdy wpiszesz nazwę utworu zamiast linku, Crosstune wysyła tę nazwę do publicznych wyszukiwarek piosenek Deezer i Apple i pokazuje znalezione utwory, dzięki czemu możesz otworzyć wybrany utwór bez linku. Gdy prosisz o tekst lub akordy utworu, aplikacja wysyła tytuł i wykonawcę do serwisów, które nie wymagają konta ani klucza: LRCLIB, YouTube Music, NetEase Cloud Music i Letras po tekst, Ultimate Guitar, LaCuerda i U-FRET po akordy oraz do wyszukiwarki utworów Apple, aby znaleźć oryginalną nazwę utworu. Gdy włączysz tłumaczenie w tekście, aplikacja wysyła jego wiersze do Google Translate lub, gdy Google Translate nie może ich przetłumaczyć, do MyMemory, usług tłumaczeń bez konta, chyba że przetłumaczy je ChatGPT, jak opisano niżej. Android rozpoznaje na telefonie język utworu, a teksty w języku, którego nie chcesz tłumaczyć, nie są wysyłane. Czytania, takie jak kana nad kanji, powstają na telefonie i nie są nigdzie wysyłane. Słowo, które dotkniesz, by poznać jego znaczenie, jest wysyłane tak samo. Jeśli aplikacja jest po angielsku, angielskie słowo jest wyszukiwane w słowniku Wiktionary. Zapisane wiersze zostają na telefonie."
     ],
     [
       "p",

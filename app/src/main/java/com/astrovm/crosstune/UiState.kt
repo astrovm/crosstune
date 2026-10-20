@@ -346,7 +346,7 @@ internal data class Learning(
     val readings: Boolean = false,
     val romanized: Boolean = false,
     val translation: Boolean = false,
-    /** Signed in, whether ChatGPT translates, rather than MyMemory. */
+    /** Signed in, whether ChatGPT translates, rather than Google Translate. */
     val chatGptTranslation: Boolean = true,
     /** The language picked to translate into, as Settings lists it; null for the app's own. */
     val into: String? = null,

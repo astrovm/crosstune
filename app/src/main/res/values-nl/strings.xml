@@ -236,6 +236,7 @@
     <string name="visual_see">Bekijken</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Dansers</string>
+    <string name="visual_kind_drawing">Tekeningen</string>
     <string name="visual_kind_fractals">Fractals</string>
     <string name="visual_kind_geometric">Geometrisch</string>
     <string name="visual_kind_hypnotic">Hypnotisch</string>

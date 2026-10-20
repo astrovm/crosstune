@@ -236,6 +236,7 @@
     <string name="visual_see">देखें</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">नर्तक</string>
+    <string name="visual_kind_drawing">चित्रकारी</string>
     <string name="visual_kind_fractals">फ्रैक्टल</string>
     <string name="visual_kind_geometric">ज्यामितीय</string>
     <string name="visual_kind_hypnotic">सम्मोहक</string>

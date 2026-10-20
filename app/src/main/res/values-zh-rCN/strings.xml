@@ -236,6 +236,7 @@
     <string name="visual_see">查看</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">舞者</string>
+    <string name="visual_kind_drawing">绘画</string>
     <string name="visual_kind_fractals">分形</string>
     <string name="visual_kind_geometric">几何</string>
     <string name="visual_kind_hypnotic">催眠</string>

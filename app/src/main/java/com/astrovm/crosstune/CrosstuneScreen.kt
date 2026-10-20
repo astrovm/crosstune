@@ -266,7 +266,7 @@ internal data class ScreenActions(
     val onDismissWord: () -> Unit = {},
     val onRepeatLine: (Int) -> Unit = {},
     val onStopRepeating: () -> Unit = {},
-    /** ChatGPT translates, signed in, or else MyMemory. */
+    /** ChatGPT translates, signed in, or else Google Translate. */
     val onChatGptTranslationChange: (Boolean) -> Unit = {},
     /** Asks ChatGPT this model, by its slug, from now on. */
     val onChatGptModelChange: (String) -> Unit = {},

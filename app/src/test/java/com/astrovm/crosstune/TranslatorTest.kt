@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -15,9 +16,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.net.URLDecoder
 import java.util.Locale
 
-/** Runs under Robolectric for the real org.json and HTML decoding. */
+/**
+ * Runs under Robolectric for the real org.json and HTML decoding. Google Translate turns these away
+ * unless a test says otherwise, so MyMemory translates them.
+ */
 @RunWith(RobolectricTestRunner::class)
 class TranslatorTest {
 
@@ -27,14 +32,34 @@ class TranslatorTest {
     private val fake = FakeSpotify()
     private lateinit var cacheFile: File
 
+    /** Google Translate; turned away, as when asked too much, unless a test says otherwise, so MyMemory translates. */
+    private var google: (Request) -> Response = { request -> FakeSpotify.html(request, "<html>Sorry...</html>", code = 429) }
+
+    /** MyMemory, and Wiktionary. */
+    private var others: (Request) -> Response = { request -> FakeSpotify.html(request, "") }
+
     private fun translator(): Translator {
         if (!::cacheFile.isInitialized) cacheFile = File(folder.root, "translations.json")
+        fake.handler = { request -> if (request.url.host == GOOGLE_HOST) google(request) else others(request) }
         return Translator(fake.client(), LookupCache(cacheFile, Dispatchers.Unconfined), Dispatchers.Unconfined)
     }
 
+    /** Google, translating each line it's asked into [row]. */
+    private fun googleTranslates(row: (String) -> String = { "<$it>" }) {
+        google = { request -> FakeSpotify.html(request, JSONArray(asked(request).map { JSONArray().put(row(it)).put("en") }).toString()) }
+    }
+
+    /** The lines [request] asked Google, each its own "q". */
+    private fun asked(request: Request): List<String> =
+        FakeSpotify.bodyOf(request).split("&").map { URLDecoder.decode(it.removePrefix("q="), "UTF-8") }
+
+    /** What was asked of Google, and of MyMemory. */
+    private fun googleAsked() = fake.requestedUrls.filter { GOOGLE_HOST in it }
+    private fun myMemoryAsked() = fake.requestedUrls.filter { "api.mymemory.translated.net" in it }
+
     /** MyMemory, translating each row of what it's asked by [rows]. */
     private fun myMemory(status: Int = 200, quotaFinished: Boolean = false, rows: (String) -> String = { "[$it]" }) {
-        fake.handler = { request: Request ->
+        others = { request: Request ->
             val text = request.url.queryParameter("q").orEmpty()
             val translated = text.split("\n").joinToString("\n") { rows(it) }
             val body = JSONObject()
@@ -48,18 +73,55 @@ class TranslatorTest {
     private fun translate(lines: List<String>) = runBlocking { translator().translate(lines, "es") }
 
     @Test
+    fun googleTranslatesASongsLinesAtOnceAndEachIsKept() {
+        googleTranslates { if (it == "Hola") "Hola" else "<$it>" }
+        val lines = listOf("Night sky", "", "♪", "Hola", "Stars", "Night sky")
+        // A line already in the language isn't repeated under itself.
+        assertEquals(listOf("<Night sky>", null, null, null, "<Stars>", "<Night sky>"), translate(lines))
+        // Asked once, each line once and apart, into the app's language, with the line's left for Google to tell.
+        val url = Request.Builder().url(googleAsked().single()).build().url
+        assertEquals(listOf("dict-chrome-ex", "auto", "es"), listOf("client", "sl", "tl").map(url::queryParameter))
+        assertEquals("q=Night+sky&q=Hola&q=Stars", fake.requestBodies.single())
+        assertEquals(emptyList<String>(), myMemoryAsked())
+        // Kept: asked again, even by a new translator reading the saved file, nothing is sent.
+        assertEquals(listOf("<Stars>"), translate(listOf("Stars")))
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun whatGoogleCantTranslateMyMemoryDoes() {
+        // A song longer than Google is asked at once, turned away after the first lines.
+        val lines = (1..Translator.GOOGLE_LINES + 2).map { "Line $it" }
+        googleTranslates()
+        val translated = google
+        google = { request -> if (googleAsked().size == 1) translated(request) else FakeSpotify.html(request, "<html>Sorry...</html>", code = 429) }
+        myMemory()
+        assertEquals(lines.take(Translator.GOOGLE_LINES).map { "<$it>" } + lines.drop(Translator.GOOGLE_LINES).map { "[$it]" }, translate(lines))
+        assertEquals(listOf("Line 101\nLine 102"), myMemoryAsked().map { Request.Builder().url(it).build().url.queryParameter("q") })
+        // Rows other than the lines asked, or a page instead of them, are no translation either.
+        google = { request -> FakeSpotify.html(request, """[["all at once","en"]]""") }
+        assertEquals(listOf("[One]", "[Two]"), translate(listOf("One", "Two")))
+        google = { request -> FakeSpotify.html(request, "<html>not json</html>") }
+        assertEquals(listOf("[Three]"), translate(listOf("Three")))
+        // Google's are kept apart from MyMemory's: back again, it's asked for those MyMemory did.
+        googleTranslates()
+        assertEquals(listOf("<Line 1>", "<Line 101>", "<One>"), translate(listOf("Line 1", "Line 101", "One")))
+        assertEquals("q=Line+101&q=One", fake.requestBodies.last())
+    }
+
+    @Test
     fun linesAreTranslatedTogetherAndEachOnceKept() {
         myMemory()
         val lines = listOf("Night sky", "", "♪", "Stars", "Night sky")
         assertEquals(listOf("[Night sky]", null, null, "[Stars]", "[Night sky]"), translate(lines))
         // Asked once, each line once, with the app's language and the line's left for MyMemory to tell.
-        val asked = fake.requestedUrls.single()
+        val asked = myMemoryAsked().single()
         assertEquals("Night sky\nStars", Request.Builder().url(asked).build().url.queryParameter("q"))
         assertEquals("Autodetect|es", Request.Builder().url(asked).build().url.queryParameter("langpair"))
 
         // Kept: asked again, even by a new translator reading the saved file, nothing is sent.
         assertEquals(listOf("[Stars]"), translate(listOf("Stars")))
-        assertEquals(1, fake.requestedUrls.size)
+        assertEquals(1, myMemoryAsked().size)
     }
 
     @Test
@@ -71,7 +133,7 @@ class TranslatorTest {
     @Test
     fun wordsAlreadyInTheLanguageMyMemoryRefusesComeBackAsTheyWere() {
         // Asked for English into English, MyMemory says so as a 403 instead of answering.
-        fake.handler = { request ->
+        others = { request ->
             FakeSpotify.html(request, """{"responseData":{"translatedText":"PLEASE SELECT TWO DISTINCT LANGUAGES"},"responseDetails":"PLEASE SELECT TWO DISTINCT LANGUAGES","responseStatus":"403"}""")
         }
         assertEquals(listOf(null, null), runBlocking { translator().translate(listOf("Me and Michael", "So you think"), "en") })
@@ -79,7 +141,7 @@ class TranslatorTest {
 
     @Test
     fun aWordInTheAppsLanguageIsLookedUpInWiktionary() {
-        fake.handler = { request ->
+        others = { request ->
             when (request.url.encodedPathSegments.last()) {
                 "we're" -> FakeSpotify.html(
                     request,
@@ -116,8 +178,8 @@ class TranslatorTest {
         myMemory()
         val lines = (1..40).map { "Line number $it of the song" }
         assertEquals(lines.map { "[$it]" }, translate(lines))
-        assertEquals(3, fake.requestedUrls.size)
-        fake.requestedUrls.forEach { assert(Request.Builder().url(it).build().url.queryParameter("q")!!.toByteArray().size <= Translator.MYMEMORY_BYTES) }
+        assertEquals(3, myMemoryAsked().size)
+        myMemoryAsked().forEach { assert(Request.Builder().url(it).build().url.queryParameter("q")!!.toByteArray().size <= Translator.MYMEMORY_BYTES) }
     }
 
     @Test
@@ -125,7 +187,7 @@ class TranslatorTest {
         val lines = (1..40).map { "Line number $it of the song" }
         // The day's translations run out after the first batch.
         var asked = 0
-        fake.handler = { request: Request ->
+        others = { request: Request ->
             asked++
             val text = request.url.queryParameter("q").orEmpty()
             val body = if (asked == 1) {
@@ -141,20 +203,20 @@ class TranslatorTest {
         myMemory()
         fake.requestedUrls.clear()
         assertEquals(lines.map { "[$it]" }, translate(lines))
-        assertEquals(2, fake.requestedUrls.size)
-        assertTrue(fake.requestedUrls.none { "Line%20number%201%20" in it })
+        assertEquals(2, myMemoryAsked().size)
+        assertTrue(myMemoryAsked().none { "Line%20number%201%20" in it })
     }
 
     @Test
     fun aBatchThatComesBackWithOtherRowsIsAskedLineByLine() {
         // Two lines read back as one.
-        fake.handler = { request: Request ->
+        others = { request: Request ->
             val text = request.url.queryParameter("q").orEmpty()
             val translated = if ("\n" in text) "all at once" else "[$text]"
             FakeSpotify.html(request, JSONObject().put("responseData", JSONObject().put("translatedText", translated)).put("responseStatus", 200).toString())
         }
         assertEquals(listOf("[One]", "[Two]"), translate(listOf("One", "Two")))
-        assertEquals(3, fake.requestedUrls.size)
+        assertEquals(3, myMemoryAsked().size)
     }
 
     @Test
@@ -169,15 +231,15 @@ class TranslatorTest {
         assertNull(translate(listOf("Stars")))
         myMemory(quotaFinished = true)
         assertNull(translate(listOf("Stars")))
-        fake.handler = { throw IOException("offline") }
+        others = { throw IOException("offline") }
         assertNull(translate(listOf("Stars")))
-        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        others = { request -> FakeSpotify.html(request, "busy", code = 503) }
         assertNull(translate(listOf("Stars")))
-        fake.handler = { request -> FakeSpotify.html(request, "<html>not json</html>") }
+        others = { request -> FakeSpotify.html(request, "<html>not json</html>") }
         assertNull(translate(listOf("Stars")))
         // A batch that falls apart, then fails line by line, fails too.
         var calls = 0
-        fake.handler = { request ->
+        others = { request ->
             calls++
             val body = if (calls == 1) JSONObject().put("responseData", JSONObject().put("translatedText", "one row")).put("responseStatus", 200) else JSONObject().put("responseStatus", 403)
             FakeSpotify.html(request, body.toString())
@@ -215,3 +277,5 @@ class TranslatorTest {
         assertEquals("zh-CN", Translator.languageOf(Locale.forLanguageTag("zh-SG")))
     }
 }
+
+private const val GOOGLE_HOST = "clients5.google.com"

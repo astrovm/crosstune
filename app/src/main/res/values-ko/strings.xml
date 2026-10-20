@@ -236,6 +236,7 @@
     <string name="visual_see">보기</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">댄서</string>
+    <string name="visual_kind_drawing">드로잉</string>
     <string name="visual_kind_fractals">프랙털</string>
     <string name="visual_kind_geometric">기하학</string>
     <string name="visual_kind_hypnotic">최면</string>

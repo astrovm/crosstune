@@ -1958,22 +1958,32 @@ class ListeningTest {
         floating.get()
     }
 
-    /** MyMemory translating each row of what it's asked into "[row]", or answering [code]. */
+    /** Google Translate translating each line it's asked into "[line]", or answering [code]. */
     private fun translation(request: okhttp3.Request, code: Int = 200): okhttp3.Response {
+        return FakeSpotify.html(request, googleRows(request) { "[$it]" }, code = code)
+    }
+
+    /** Google Translate's answer to [request]: each line it asked as [row], and the language it was in. */
+    private fun googleRows(request: okhttp3.Request, row: (String) -> String): String =
+        org.json.JSONArray(FakeSpotify.bodyOf(request).split("&").map { org.json.JSONArray().put(row(java.net.URLDecoder.decode(it.removePrefix("q="), "UTF-8"))).put("en") }).toString()
+
+    /** MyMemory, where Google Translate can't: answering [code], with each row of what it's asked as "[row]". */
+    private fun myMemoryTranslation(request: okhttp3.Request, code: Int = 200): okhttp3.Response {
         val rows = request.url.queryParameter("q").orEmpty().split("\n").joinToString("\\n") { "[$it]" }
         return FakeSpotify.html(request, """{"responseData":{"translatedText":"$rows"},"responseStatus":200}""", code = code)
     }
 
     /**
-     * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; MyMemory answers
-     * [translations], and [openAi] for ChatGPT when signed in.
+     * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; Google Translate,
+     * and MyMemory where it can't, answer [translations], and [openAi] for ChatGPT when signed in.
      */
     private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null, sites: (okhttp3.Request) -> okhttp3.Response? = { null }) {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
             openAi?.answer(request) ?: sites(request) ?: when (request.url.host) {
-                "api.mymemory.translated.net" -> translation(request, translations)
+                GOOGLE_TRANSLATE_HOST -> translation(request, translations)
+                "api.mymemory.translated.net" -> myMemoryTranslation(request, translations)
                 else -> {
                     val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
                     FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"$plain"$timed}]""")
@@ -2036,10 +2046,10 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        // The whole song at once, and MyMemory isn't asked.
+        // The whole song at once, and Google Translate isn't asked, nor MyMemory.
         waitUntil(TIMEOUT_MS) { shown("«Stars»") }
         assertTrue(shown("«Night sky»"))
-        assertFalse(fake.requestedUrls.any { "mymemory" in it })
+        assertFalse(fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it || "mymemory" in it })
 
         // A line opens to study; ChatGPT explains it as it writes, and keeps it with the line once saved.
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
@@ -2060,7 +2070,7 @@ class ListeningTest {
     }
 
     @Test
-    fun signedInTranslationsComeFromChatGptOrMyMemoryAsPicked() {
+    fun signedInTranslationsComeFromChatGptOrGoogleTranslateAsPicked() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
@@ -2070,10 +2080,10 @@ class ListeningTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_translation_server)).performScrollTo()
         click(string(R.string.setting_translation_server))
-        click("MyMemory")
+        click("Google Translate")
         assertFalse(prefs().getBoolean("translation_chatgpt", true))
-        assertTrue(shown("MyMemory"))
-        // The words are translated again, by MyMemory now.
+        assertTrue(shown("Google Translate"))
+        // The words are translated again, by Google Translate now.
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
@@ -2341,7 +2351,7 @@ class ListeningTest {
         val explained = openAi.reply
         openAi.reply = { 429 to "" }
         wordsOf(null, "Night sky\\nStars", openAi = openAi)
-        // ChatGPT can't translate with the plan used up, so MyMemory does, as before.
+        // ChatGPT can't translate with the plan used up, so Google Translate does, as before.
         waitForText("[Stars]")
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[1].performClick()
         click(string(R.string.lyrics_save_line))
@@ -2648,10 +2658,8 @@ class ListeningTest {
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
         fake.handler = { request ->
             when {
-                request.url.host == "api.mymemory.translated.net" -> FakeSpotify.html(
-                    request,
-                    """{"responseData":{"translatedText":"PLEASE SELECT TWO DISTINCT LANGUAGES"},"responseDetails":"PLEASE SELECT TWO DISTINCT LANGUAGES","responseStatus":"403"}"""
-                )
+                // Already in English, each line, or word, comes back as it was.
+                request.url.host == GOOGLE_TRANSLATE_HOST -> FakeSpotify.html(request, googleRows(request) { it })
                 request.url.encodedPath.endsWith("/night") -> FakeSpotify.html(request, """{"en":[{"definitions":[{"definition":"The time between sunset and sunrise."}]}]}""")
                 else -> FakeSpotify.html(request, "{}", code = 404)
             }
@@ -2660,7 +2668,7 @@ class ListeningTest {
         learnMenu()
         click(string(R.string.lyrics_translation))
         // Not an error, and nothing worth saying: there's just nothing to translate them into.
-        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://api.mymemory.translated.net/") } }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it } }
         composeRule.waitForIdle()
         assertFalse(described(string(R.string.lyrics_translation_failed)))
 
@@ -2680,7 +2688,7 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_translation", true).putString("translate_into", "pt-BR").commit()
         wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
-        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cpt-BR" in it })
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it && "tl=pt-BR" in it })
     }
 
     @Test
@@ -2692,7 +2700,7 @@ class ListeningTest {
         waitForText("Stars")
         composeRule.waitForIdle()
         assertFalse(shown("[Stars]"))
-        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { "api.mymemory.translated.net" in it })
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { GOOGLE_TRANSLATE_HOST in it || "api.mymemory.translated.net" in it })
         // One in a language not picked is.
         language = "es"
         controllerModel().setUntranslated(setOf("en"))
@@ -2714,7 +2722,7 @@ class ListeningTest {
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
             when (request.url.host) {
-                "api.mymemory.translated.net" -> translation(request, 200)
+                GOOGLE_TRANSLATE_HOST -> translation(request, 200)
                 else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars"}]""")
             }
         }
@@ -2726,8 +2734,8 @@ class ListeningTest {
         waitForText("Demo")
         click(string(R.string.lyrics_button))
         waitForText("Night sky")
-        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { "api.mymemory.translated.net" in it } }
-        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { "langpair=Autodetect%7Cja" in it })
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it } }
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it && "tl=ja" in it })
     }
 
     @Test
@@ -3056,3 +3064,5 @@ class ListeningTest {
         assertFalse(shown("夜に君は"))
     }
 }
+
+private const val GOOGLE_TRANSLATE_HOST = "clients5.google.com"

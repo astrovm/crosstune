@@ -4,6 +4,7 @@ import androidx.core.text.HtmlCompat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,9 +19,9 @@ import java.io.IOException
 import java.util.Locale
 
 /**
- * Lyrics, line by line, in another language, from MyMemory, which asks for no account but only
- * translates so much a day. Each line is kept once translated, so a chorus, or a song read again,
- * costs nothing more.
+ * Lyrics, line by line, in another language, from Google Translate, or from MyMemory where it
+ * can't. Neither asks for an account; MyMemory only translates so much a day. Each line is kept
+ * once translated, so a chorus, or a song read again, costs nothing more.
  */
 
 internal class Translator(
@@ -35,14 +36,31 @@ internal class Translator(
      */
     suspend fun translate(lines: List<String>, target: String): List<String?>? {
         val words = lines.filter(::worthTranslating).distinct()
-        val key = { line: String -> "|$target|$line" }
-        val known = words.associateWith { cache.get(key(it)) }
-        val missing = words.filter { known[it] == null }
-        // Each batch translated is kept as it comes, so one failing later, e.g. out of the day's
-        // translations, doesn't lose those, and asking again only asks for the rest.
         val found = mutableMapOf<String, String>()
-        val done = try {
-            missing.isEmpty() || myMemory(missing, target) { line, translation ->
+        // Google's, kept or asked now; for the lines it can't do, e.g. offline or turned away, MyMemory's.
+        val done = translated(words, found, { "$GOOGLE|$target|$it" }) { missing, onFound -> google(missing, target, onFound) } ||
+            translated(words, found, { "|$target|$it" }) { missing, onFound -> myMemory(missing, target, onFound) }
+        cache.save()
+        if (!done) return null
+        // A line already in [target] comes back as it was, and is no use under itself.
+        return lines.map { line -> found[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
+    }
+
+    /**
+     * Into [found], each of [words] not there yet, as kept under [key] or else from [service].
+     * Each batch translated is kept as it comes, so one failing later doesn't lose those, and
+     * asking again only asks for the rest. Whether they all were.
+     */
+    private suspend fun translated(
+        words: List<String>,
+        found: MutableMap<String, String>,
+        key: (String) -> String,
+        service: suspend (List<String>, suspend (String, String) -> Unit) -> Boolean
+    ): Boolean {
+        words.filter { it !in found }.forEach { line -> cache.get(key(line))?.let { found[line] = it } }
+        val missing = words.filter { it !in found }
+        return try {
+            missing.isEmpty() || service(missing) { line, translation ->
                 found[line] = translation
                 cache.put(key(line), translation)
             }
@@ -51,14 +69,30 @@ internal class Translator(
         } catch (_: JSONException) {
             false
         }
-        cache.save()
-        if (!done) return null
-        val all = known.filterValues { it != null }.mapValues { it.value!! } + found
-        // A line already in [target] comes back as it was, and is no use under itself.
-        return lines.map { line -> all[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
     }
 
     private fun worthTranslating(line: String) = line.any(Char::isLetter)
+
+    /**
+     * Google Translate, as Chrome's dictionary asks it, with no account: up to [GOOGLE_LINES] lines
+     * at once, each its own row back. Rows other than the lines asked, e.g. turned away with a
+     * page instead, leave the rest to MyMemory. [onFound] hears each line translated.
+     */
+    private suspend fun google(lines: List<String>, target: String, onFound: suspend (String, String) -> Unit): Boolean {
+        val url = GOOGLE_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("client", "dict-chrome-ex")
+            .addQueryParameter("sl", "auto")
+            .addQueryParameter("tl", target)
+            .build()
+        for (batch in lines.chunked(GOOGLE_LINES)) {
+            val form = FormBody.Builder().apply { batch.forEach { add("q", it) } }.build()
+            // Each row is the line in [target], then the language it was in.
+            val rows = JSONArray(call(Request.Builder().url(url).post(form).build()))
+            if (rows.length() != batch.size) return false
+            batch.forEachIndexed { i, line -> onFound(line, rows.getJSONArray(i).getString(0).trim()) }
+        }
+        return true
+    }
 
     /**
      * MyMemory takes up to [MYMEMORY_BYTES] at a time and keeps lines apart, so lines go in batches,
@@ -130,12 +164,17 @@ internal class Translator(
     }
 
     companion object {
+        const val GOOGLE_URL = "https://clients5.google.com/translate_a/t"
         const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
         const val WIKTIONARY_URL = "https://en.wiktionary.org/api/rest_v1/page/definition"
         /** What MyMemory says, as a 403, for words already in the language asked for. */
         private const val SAME_LANGUAGE = "DISTINCT LANGUAGES"
         /** Wikimedia asks to be told who's calling. */
         private const val USER_AGENT = "Crosstune (https://github.com/astrovm/crosstune)"
+        /** Lines asked of Google at once: a whole song, most of the time. */
+        const val GOOGLE_LINES = 100
+        /** Where Google's translations are kept, apart from MyMemory's. */
+        private const val GOOGLE = "google"
         /** MyMemory's limit on what's sent at once is 500 bytes; a little under, to be safe. */
         const val MYMEMORY_BYTES = 450
 

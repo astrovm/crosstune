@@ -236,6 +236,7 @@
     <string name="visual_see">Посмотреть</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Танцоры</string>
+    <string name="visual_kind_drawing">Рисунки</string>
     <string name="visual_kind_fractals">Фракталы</string>
     <string name="visual_kind_geometric">Геометрия</string>
     <string name="visual_kind_hypnotic">Гипноз</string>

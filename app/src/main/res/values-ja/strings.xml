@@ -237,6 +237,7 @@
     <string name="visual_see">見る</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">ダンサー</string>
+    <string name="visual_kind_drawing">ドローイング</string>
     <string name="visual_kind_fractals">フラクタル</string>
     <string name="visual_kind_geometric">幾何学</string>
     <string name="visual_kind_hypnotic">催眠</string>

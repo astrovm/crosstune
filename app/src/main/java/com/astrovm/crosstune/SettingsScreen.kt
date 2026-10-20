@@ -264,7 +264,7 @@ private fun SettingsList(
             GroupDivider()
             UntranslatedRow(state.learning.untranslated, actions.onUntranslatedChange)
             GroupDivider()
-            // Signed in with ChatGPT, it or MyMemory; without, MyMemory is all there is.
+            // Signed in with ChatGPT, it or Google Translate; without, Google Translate is all there is.
             if (state.chatGpt.email != null) {
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
                 GroupDivider()
@@ -459,14 +459,14 @@ private fun FrontendSiteRow(web: Destination.Alternative, onChange: (String) -> 
     }
 }
 
-/** Where lyrics are translated, signed in with ChatGPT: by ChatGPT, or by MyMemory. */
+/** Where lyrics are translated, signed in with ChatGPT: by ChatGPT, or by Google Translate. */
 @Composable
 private fun TranslationSourceRow(chatGpt: Boolean, onSelect: (Boolean) -> Unit) = ChoiceRow(
     label = stringResource(R.string.setting_translation_server),
-    choices = listOf(true to CHATGPT, false to MYMEMORY),
+    choices = listOf(true to CHATGPT, false to GOOGLE_TRANSLATE),
     selected = chatGpt,
     onSelect = onSelect,
-    icon = { if (it) R.drawable.ic_translator_chatgpt else R.drawable.ic_translator_mymemory }
+    icon = { if (it) R.drawable.ic_translator_chatgpt else R.drawable.ic_translator_google }
 )
 
 /** A language's flag, or a globe for the app's or the phone's own. */
@@ -547,7 +547,7 @@ private fun ChatGptWelcome(onDismiss: () -> Unit) {
 }
 
 /** The translation service used when no server is set; a name, so never translated. */
-private const val MYMEMORY = "MyMemory"
+private const val GOOGLE_TRANSLATE = "Google Translate"
 private const val CHATGPT = "ChatGPT"
 
 /** Marks where the heart icon goes in [R.string.made_with_love]. */
@@ -818,6 +818,7 @@ internal fun VisualsPager(
 /** What a kind of visual is called, by its key in assets/milkdrop-kinds.txt. */
 private fun kindName(kind: String) = when (kind) {
     "dancers" -> R.string.visual_kind_dancers
+    "drawing" -> R.string.visual_kind_drawing
     "fractals" -> R.string.visual_kind_fractals
     "geometric" -> R.string.visual_kind_geometric
     "hypnotic" -> R.string.visual_kind_hypnotic

@@ -237,6 +237,7 @@
     <string name="visual_see">Guarda</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Danzatori</string>
+    <string name="visual_kind_drawing">Disegni</string>
     <string name="visual_kind_fractals">Frattali</string>
     <string name="visual_kind_geometric">Geometrici</string>
     <string name="visual_kind_hypnotic">Ipnotici</string>

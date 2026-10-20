@@ -69,7 +69,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 17. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 20. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Wenn du statt eines Links den Namen eines Songs eintippst, sendet Crosstune den Namen an die öffentlichen Song-Suchen von Deezer und Apple und zeigt die gefundenen Songs, damit du den gesuchten Song ohne seinen Link öffnen kannst. Wenn du den Songtext oder die Akkorde anfragst, sendet die App Titel und Künstler an Dienste, die kein Konto und keinen Schlüssel benötigen: LRCLIB, YouTube Music, NetEase Cloud Music und Letras für Songtexte, Ultimate Guitar, LaCuerda und U-FRET für Akkorde sowie Apples Songsuche, um den Originaltitel des Songs zu finden. Wenn du im Songtext die Übersetzung einschaltest, sendet die App seine Zeilen an MyMemory, einen Übersetzungsdienst ohne Konto, außer ChatGPT übersetzt sie, wie unten beschrieben. Android erkennt die Sprache eines Songs auf deinem Handy, und Songtexte in einer Sprache, die du nicht übersetzen lassen willst, werden nicht gesendet. Lesungen, etwa Kana über Kanji, werden auf deinem Handy berechnet und nirgendwohin gesendet. Ein Wort, das du für seine Bedeutung antippst, wird genauso gesendet. Ist die App auf Englisch, wird ein englisches Wort stattdessen im Wörterbuch von Wiktionary nachgeschlagen. Gespeicherte Zeilen bleiben auf deinem Handy."
+      "Wenn du statt eines Links den Namen eines Songs eintippst, sendet Crosstune den Namen an die öffentlichen Song-Suchen von Deezer und Apple und zeigt die gefundenen Songs, damit du den gesuchten Song ohne seinen Link öffnen kannst. Wenn du den Songtext oder die Akkorde anfragst, sendet die App Titel und Künstler an Dienste, die kein Konto und keinen Schlüssel benötigen: LRCLIB, YouTube Music, NetEase Cloud Music und Letras für Songtexte, Ultimate Guitar, LaCuerda und U-FRET für Akkorde sowie Apples Songsuche, um den Originaltitel des Songs zu finden. Wenn du im Songtext die Übersetzung einschaltest, sendet die App seine Zeilen an Google Translate oder, wenn Google Translate sie nicht übersetzen kann, an MyMemory, Übersetzungsdienste ohne Konto, außer ChatGPT übersetzt sie, wie unten beschrieben. Android erkennt die Sprache eines Songs auf deinem Handy, und Songtexte in einer Sprache, die du nicht übersetzen lassen willst, werden nicht gesendet. Lesungen, etwa Kana über Kanji, werden auf deinem Handy berechnet und nirgendwohin gesendet. Ein Wort, das du für seine Bedeutung antippst, wird genauso gesendet. Ist die App auf Englisch, wird ein englisches Wort stattdessen im Wörterbuch von Wiktionary nachgeschlagen. Gespeicherte Zeilen bleiben auf deinem Handy."
     ],
     [
       "p",
