@@ -1,3 +1,3 @@
 Romaji can be spelled as you'd type it, sensei not sensee: tick Romaji as typed in the lyrics menu. Tapped words and practice cards show both.
 Practice cards have Hard and Easy too, as in Anki.
-Visuals too heavy for your phone are skipped, so the words over them stop stuttering. Drop any with Don't show this one, or see and pick them, and how often they change, in Settings → Visuals. 57 new ones, and 21 almost black or slow ones are gone.
+Visuals too heavy for your phone are skipped, so the words over them stop stuttering. Drop any with Don't show this one, or see and pick them, and how often they change, in Settings → Visuals. 56 new ones, and 21 almost black or slow ones are gone.
