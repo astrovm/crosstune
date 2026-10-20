@@ -120,6 +120,7 @@
     <string name="play_part_in">Слушать с %1$d по %2$d в %3$s</string>
     <string name="part_range">С %1$d по %2$d</string>
     <string name="play_first_button">Включить первый трек</string>
+    <string name="play_in_background">Включить в %1$s и остаться здесь</string>
     <string name="songs_shown">Первые %1$d из %2$d</string>
     <string name="clear_history_button">Очистить историю</string>
     <string name="tile_label">Открыть скопированную ссылку</string>

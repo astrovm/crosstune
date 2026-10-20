@@ -146,6 +146,7 @@ internal data class ScreenActions(
     val onClear: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onOpen: () -> Unit = {},
+    val onPlayResult: () -> Unit = {},
     val onOpenWith: (Destination) -> Unit = {},
     val onOpenOriginal: () -> Unit = {},
     val onDismissPicker: () -> Unit = {},
@@ -1330,6 +1331,19 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             // the list to another service, rather than a search for its name. The songs listed
             // right below say what's copied, so the label is short; screen readers hear it all.
             val songs = result.tracks.isNotEmpty()
+            // A song its app has, or may, can be asked to play, staying here; while it's asked, once is enough.
+            if (result.type == ItemType.TRACK && destination is Destination.Service && destination.service in state.installed && !state.resultMissing) {
+                SecondaryAction(
+                    R.drawable.ic_play,
+                    stringResource(R.string.lyrics_play),
+                    actions.onPlayResult,
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    enabled = !state.playingResult && !state.isMatching,
+                    description = stringResource(R.string.play_in_background, destination.label())
+                )
+            }
             SecondaryAction(
                 R.drawable.ic_content_copy,
                 stringResource(if (songs) R.string.copy_button else R.string.copy_link_button),

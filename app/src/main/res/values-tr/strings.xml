@@ -120,6 +120,7 @@
     <string name="play_part_in">%1$d ile %2$d arasını %3$s ile çal</string>
     <string name="part_range">%1$d ile %2$d arası</string>
     <string name="play_first_button">İlk şarkıyı çal</string>
+    <string name="play_in_background">%1$s uygulamasında çal ve burada kal</string>
     <string name="songs_shown">%2$d şarkının ilk %1$d tanesi</string>
     <string name="clear_history_button">Geçmişi temizle</string>
     <string name="tile_label">Kopyalanan müzik bağlantısını aç</string>

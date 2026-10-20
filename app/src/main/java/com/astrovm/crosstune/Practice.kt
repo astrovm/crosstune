@@ -171,9 +171,9 @@ internal class PracticeCards(
                 // Kept from no app in particular, a song YouTube Music has is asked of YouTube Music,
                 // not of whatever played last, e.g. a video, which wouldn't play it.
                 val asking = app ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
-                // YouTube Music not running has nothing to ask in the background, so it's opened on
-                // the song, as it is with no app to ask at all, and left again once it has it.
-                val asked = (link == null || asking == null || source.runs(asking)) && source.playSong(song, asking, link)
+                // An app that can't be woken in the background is opened on the song, as it is with no
+                // app to ask at all, and left again once it has it.
+                val asked = source.playSong(song, asking, link)
                 opened = !asked && link != null && source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link)
                 (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { ready() } != null
             }

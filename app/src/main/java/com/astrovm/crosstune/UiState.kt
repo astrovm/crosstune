@@ -7,6 +7,8 @@ internal data class UiState(
     val linkText: String = "",
     val isLoading: Boolean = false,
     val isMatching: Boolean = false,
+    /** While the result's app is asked to play it in the background. */
+    val playingResult: Boolean = false,
     /** Set while the microphone is listening for a song playing nearby. */
     val listening: Boolean = false,
     val result: MusicMetadata? = null,

@@ -22,7 +22,7 @@ internal class FakePlayback : PlaybackSource {
     val linksAsked = mutableListOf<String?>()
     /** Whether there's an app to ask for a song. */
     var canPlaySongs = true
-    /** The apps running, with songs to be asked for; any, when null. */
+    /** The apps that can be asked for songs in the background, running or woken; any, when null. */
     var running: Set<String>? = null
     /** Each app opened on a song's link, and the link. */
     val opened = mutableListOf<Pair<String, String>>()
@@ -51,14 +51,13 @@ internal class FakePlayback : PlaybackSource {
         plays += play
     }
 
-    override fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
-        if (!canPlaySongs) return false
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
+        // An app that can't be, with a link only it has, leaves no other to ask.
+        if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
         songsAsked += song to app
         linksAsked += link
         return true
     }
-
-    override fun runs(app: String) = running?.contains(app) ?: true
 
     override fun openSong(app: String, link: String): Boolean {
         opened += app to link

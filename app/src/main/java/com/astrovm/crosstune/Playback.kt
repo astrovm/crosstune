@@ -69,13 +69,11 @@ internal interface PlaybackSource {
     fun skip(song: MusicMetadata, next: Boolean)
 
     /**
-     * Has [app], or else the music app that last played, find [song] by its name and play it, in the
-     * background, or YouTube Music play its [link] there when it's known; false with no app to ask.
+     * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
+     * [link] there when it's known. Not running, [app] is woken in the background to; with no [link],
+     * the music app that last played is asked when [app] can't be. False with no app to ask.
      */
-    fun playSong(song: MusicMetadata, app: String?, link: String? = null): Boolean
-
-    /** Whether [app] is running, with a song to be asked for in the background. */
-    fun runs(app: String): Boolean
+    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null): Boolean
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
@@ -107,7 +105,8 @@ internal interface PlaybackSource {
  */
 internal class MediaSessionPlayback(
     private val context: Context,
-    private val now: () -> Long = SystemClock::elapsedRealtime
+    private val now: () -> Long = SystemClock::elapsedRealtime,
+    private val waker: AppWaker = MediaBrowserWaker(context)
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -185,11 +184,19 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean = runCatching {
-        // Without the user's say-so Android shows none, and says so by throwing.
-        val apps = sessions.getActiveSessions(listener).filter { it.packageName != context.packageName }
-        val asked = apps.firstOrNull { sameApp(app, it.packageName) } ?: apps.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L } ?: return false
-        // Asked the way a voice assistant asks, which music apps answer without coming to the front.
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
+        // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
+        val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
+        // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
+        val asked = apps.firstOrNull { sameApp(app, it.packageName) }
+            ?: app?.let { waker.wake(MusicService.ofPackage(it)?.packageNames ?: listOf(it)) }
+            ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            ?: return false
+        return runCatching { ask(asked, song, link) }.isSuccess
+    }
+
+    // Asked the way a voice assistant asks, which music apps answer without coming to the front.
+    private fun ask(asked: MediaController, song: MusicMetadata, link: String?) {
         val wanted = Bundle().apply {
             putString(MediaStore.EXTRA_MEDIA_FOCUS, MediaStore.Audio.Media.ENTRY_CONTENT_TYPE)
             putString(MediaStore.EXTRA_MEDIA_TITLE, song.title)
@@ -198,11 +205,7 @@ internal class MediaSessionPlayback(
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
         if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
         else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
-        true
-    }.getOrDefault(false)
-
-    // Without the user's say-so Android shows none, and says so by throwing.
-    override fun runs(app: String): Boolean = runCatching { sessions.getActiveSessions(listener).any { sameApp(app, it.packageName) } }.getOrDefault(false)
+    }
 
     // The app may be installed as a build patched from it, under a name of its own.
     override fun openSong(app: String, link: String): Boolean = (MusicService.ofPackage(app)?.packageNames ?: listOf(app)).any { packageName ->

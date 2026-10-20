@@ -120,6 +120,7 @@
     <string name="play_part_in">Tocar da %1$d à %2$d em %3$s</string>
     <string name="part_range">Da %1$d à %2$d</string>
     <string name="play_first_button">Tocar a primeira</string>
+    <string name="play_in_background">Tocar no %1$s e continuar aqui</string>
     <string name="songs_shown">Primeiras %1$d de %2$d</string>
     <string name="clear_history_button">Limpar histórico</string>
     <string name="tile_label">Abrir link de música copiado</string>

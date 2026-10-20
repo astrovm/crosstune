@@ -120,6 +120,7 @@
     <string name="play_part_in">%1$d bis %2$d in %3$s abspielen</string>
     <string name="part_range">%1$d bis %2$d</string>
     <string name="play_first_button">Ersten Song abspielen</string>
+    <string name="play_in_background">In %1$s abspielen und hierbleiben</string>
     <string name="songs_shown">Erste %1$d von %2$d</string>
     <string name="clear_history_button">Verlauf löschen</string>
     <string name="tile_label">Kopierten Musik-Link öffnen</string>

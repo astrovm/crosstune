@@ -120,6 +120,7 @@
     <string name="play_part_in">Putar %1$d sampai %2$d di %3$s</string>
     <string name="part_range">%1$d sampai %2$d</string>
     <string name="play_first_button">Putar lagu pertama</string>
+    <string name="play_in_background">Putar di %1$s dan tetap di sini</string>
     <string name="songs_shown">%1$d pertama dari %2$d</string>
     <string name="clear_history_button">Hapus riwayat</string>
     <string name="tile_label">Buka link musik yang disalin</string>
