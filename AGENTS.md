@@ -35,13 +35,11 @@ Playback follows and controls other music apps through Android's media sessions 
 - Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
-- Try the `dev` build on a real phone for anything that touches playback, links or the UI.
 
 ## Pull requests
 
-- Open PRs stack on each other with `gh stack`.
-- UI changes need before/after screenshots, uploaded to the PR screenshots gist. Never commit them.
-- Releasing: bump `versionName` and `versionCode` in `app/build.gradle.kts` and add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`. The release APK must stay reproducible.
+- UI changes need before/after screenshots in the PR description. Never commit them.
+- One problem per PR.
 
 ## Taste
 
