@@ -53,9 +53,12 @@ internal object Readings {
             text.any(::isKana) -> Script.JAPANESE
             text.any(::isHangul) -> Script.KOREAN
             text.any(::isHan) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Script.CHINESE
-            else -> mostlyIn(text)
+            else -> null
         }
     }
+
+    /** The script [lines] show in, which also has any other script most of the letters are in, as Android 10 on can write those in Latin letters. */
+    fun displayScriptOf(lines: List<String>): Script? = scriptOf(lines) ?: mostlyIn(lines.joinToString("")).takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q }
 
     /** The other script most of [text]'s letters are in, so a Russian word in an English song doesn't make it Russian. */
     private fun mostlyIn(text: String): Script? {
@@ -351,11 +354,13 @@ internal object Readings {
         LineReading(joined(parts), romanized, romanized)
     }
 
-    /** Android's own letters-to-Latin, made once, the first time it's needed; null where this Android has none. */
-    private val latinizer: Transliterator? by lazy { runCatching { Transliterator.getInstance("Any-Latin; Latin-ASCII") }.getOrNull() }
+    /** Android's own letters-to-Latin, made once, the first time it's needed. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private val latinizer: Transliterator by lazy { Transliterator.getInstance("Any-Latin; Latin-ASCII") }
 
-    /** [text] in plain Latin letters, as Cyrillic, Greek, Arabic, Hebrew, Indic and Thai are said; as it is where Android can't. */
-    private fun latin(text: String): String = synchronized(this) { latinizer?.transliterate(text)?.trim() ?: text }
+    /** [text] in plain Latin letters, as Cyrillic, Greek, Arabic, Hebrew, Indic and Thai are said. Words are only ever in these from Android 10 on, see displayScriptOf. */
+    @SuppressLint("NewApi")
+    private fun latin(text: String): String = synchronized(this) { latinizer.transliterate(text).trim() }
 
     private fun latinized(line: String): LineReading = latin(line).let { LineReading(listOf(Ruby(line)), it, it) }
 

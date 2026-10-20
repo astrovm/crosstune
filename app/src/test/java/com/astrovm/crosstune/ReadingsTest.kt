@@ -23,14 +23,14 @@ class ReadingsTest {
 
     @Test
     fun otherScriptsAreToldApartWhenMostOfTheLettersAreInThem() {
-        assertEquals(Script.CYRILLIC, Readings.scriptOf(listOf("Привет, мир", "baby")))
-        assertEquals(Script.GREEK, Readings.scriptOf(listOf("Αγάπη μου")))
-        assertEquals(Script.ARABIC, Readings.scriptOf(listOf("أحبك")))
-        assertEquals(Script.HEBREW, Readings.scriptOf(listOf("שלום")))
-        assertEquals(Script.INDIC, Readings.scriptOf(listOf("मेरा दिल")))
-        assertEquals(Script.THAI, Readings.scriptOf(listOf("รักเธอ")))
+        assertEquals(Script.CYRILLIC, Readings.displayScriptOf(listOf("Привет, мир", "baby")))
+        assertEquals(Script.GREEK, Readings.displayScriptOf(listOf("Αγάπη μου")))
+        assertEquals(Script.ARABIC, Readings.displayScriptOf(listOf("أحبك")))
+        assertEquals(Script.HEBREW, Readings.displayScriptOf(listOf("שלום")))
+        assertEquals(Script.INDIC, Readings.displayScriptOf(listOf("मेरा दिल")))
+        assertEquals(Script.THAI, Readings.displayScriptOf(listOf("รักเธอ")))
         // A Russian word in an English song doesn't make the song Russian.
-        assertNull(Readings.scriptOf(listOf("I love you my dear", "спасибо")))
+        assertNull(Readings.displayScriptOf(listOf("I love you my dear", "спасибо")))
         assertEquals(listOf("日", "中", "한", "Я", "Ω", "ع", "א", "अ", "ก"), Script.entries.map { it.glyph })
     }
 
