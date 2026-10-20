@@ -628,7 +628,7 @@ private fun VisualsShadeRow(shade: Float, actions: ScreenActions) {
             },
             onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
             valueRange = 0f..MAX_VISUALS_SHADE,
-            modifier = Modifier.padding(start = 16.dp).semantics { contentDescription = darken }
+            modifier = Modifier.padding(start = 16.dp).heightIn(min = 48.dp).semantics { contentDescription = darken }
         )
     }
 }
