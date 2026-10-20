@@ -1,4 +1,4 @@
-El compañero de la app de música que ya usás.
+Abrí cualquier link. Reconocé cualquier canción. Seguí cada palabra.
 
 Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. Tocá el link y la misma canción se abre en tu app favorita. De Spotify a YouTube Music, de Apple Music a Deezer, de TIDAL a Spotify: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
 

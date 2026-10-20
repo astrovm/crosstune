@@ -1,4 +1,4 @@
-Zaten kullandığın müzik uygulamasının yol arkadaşı.
+Her bağlantıyı aç. Her şarkıyı tanı. Her kelimeyi takip et.
 
 Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde dinliyorsunuz. Bağlantıya dokunun, aynı şarkı favori uygulamanızda açılsın. Spotify'dan YouTube Music'e, Apple Music'ten Deezer'a, TIDAL'dan Spotify'a: istediğiniz gibi eşleştirin. Şarkılar, albümler, sanatçılar ve çalma listeleriyle çalışır.
 
