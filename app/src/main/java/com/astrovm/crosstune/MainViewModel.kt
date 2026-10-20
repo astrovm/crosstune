@@ -140,6 +140,7 @@ internal class MainViewModel(
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             chords = ChordsState(on = preferences.getBoolean(KEY_CHORDS, false)),
+            cards = CardOptions.load(preferences),
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, true),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
@@ -2182,6 +2183,12 @@ internal class MainViewModel(
     fun setRomajiTyped(on: Boolean) {
         preferences.edit { putBoolean(KEY_ROMAJI_TYPED, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(romajiTyped = on))
+    }
+
+    /** What practice cards show, from now on. */
+    fun setCardOptions(cards: CardOptions) {
+        cards.save(preferences)
+        uiState = uiState.copy(cards = cards)
     }
 
     /** Shows the words as written, or only in kana or Latin letters, from now on. */

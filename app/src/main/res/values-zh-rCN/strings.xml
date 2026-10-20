@@ -314,6 +314,7 @@
     <string name="song_search_chatgpt">由 ChatGPT 找到</string>
     <string name="saved_practice">练习</string>
     <string name="practice_show">查看答案</string>
+    <string name="practice_card_options">卡片选项</string>
     <string name="practice_again">再来</string>
     <string name="practice_hard">困难</string>
     <string name="practice_good">良好</string>

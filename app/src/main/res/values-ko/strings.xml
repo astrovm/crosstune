@@ -314,6 +314,7 @@
     <string name="song_search_chatgpt">ChatGPT가 찾은 곡</string>
     <string name="saved_practice">연습</string>
     <string name="practice_show">정답 보기</string>
+    <string name="practice_card_options">카드 옵션</string>
     <string name="practice_again">다시</string>
     <string name="practice_hard">어려움</string>
     <string name="practice_good">좋음</string>

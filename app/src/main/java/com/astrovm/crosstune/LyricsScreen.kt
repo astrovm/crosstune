@@ -873,7 +873,7 @@ private fun WordsAsItem(@StringRes label: Int, wordsAs: WordsAs, learning: Learn
 
 /** One of what can help, ticked while it's on; the menu stays open, to switch on more. */
 @Composable
-private fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
     DropdownMenuItem(
         text = { Text(stringResource(label)) },
         trailingIcon = { Checkbox(checked = on, onCheckedChange = null) },

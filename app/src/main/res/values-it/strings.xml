@@ -315,6 +315,7 @@
     <string name="song_search_chatgpt">Trovata da ChatGPT</string>
     <string name="saved_practice">Esercitati</string>
     <string name="practice_show">Mostra risposta</string>
+    <string name="practice_card_options">Opzioni delle schede</string>
     <string name="practice_again">Di nuovo</string>
     <string name="practice_hard">Difficile</string>
     <string name="practice_good">Bene</string>

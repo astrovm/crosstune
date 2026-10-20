@@ -36,6 +36,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.annotation.StringRes
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -95,15 +100,19 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().widthIn(max = ContentMaxWidth).align(Alignment.TopCenter)) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
                     IconButton(onClick = actions.onStopPractice) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.floating_close)) }
-                    if (practice.total > 0 && !practice.finished) Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
+                    val line = practice.line
+                    if (practice.total > 0 && line != null) {
+                        Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
+                        CardMenu(line, state.cards, state.learning.romajiTyped, actions)
+                    }
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.learning.romajiTyped, actions)
+                    else Card(line, shown, state.cards, state.learning.romajiTyped, actions)
                 }
             }
         }
@@ -150,7 +159,7 @@ private fun CaughtUp() {
  * it means. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, romajiTyped: Boolean, actions: ScreenActions) {
+private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions) {
     val haptics = LocalHapticFeedback.current
     val answer = { grade: Grade ->
         haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
@@ -173,12 +182,12 @@ private fun Card(line: SavedLine, practice: Practice, romajiTyped: Boolean, acti
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions)
-                CardFront(line)
+                CardFront(line, line.shownAs(cards.front, romajiTyped))
                 // Heard, the line says how it reads, so it's part of the answer.
                 if (practice.turned) {
                     HorizontalDivider()
                     LineSound(line, practice.sound, actions.onReplayLine)
-                    CardBack(line, romajiTyped, actions.onReadCardAs)
+                    CardBack(line, cards, romajiTyped, actions.onReadCardAs)
                 }
             }
         }
@@ -199,45 +208,90 @@ private fun Card(line: SavedLine, practice: Practice, romajiTyped: Boolean, acti
     }
 }
 
-/** What's asked: the line as written, nothing over it; a word big, with the line it's sung in under it. */
+/**
+ * What's asked: the line [shown] as written, or in kana or Latin letters, nothing over it; a word big,
+ * with the line it's sung in under it.
+ */
 @Composable
-private fun CardFront(line: SavedLine) {
+private fun CardFront(line: SavedLine, shown: String) {
     val sungIn = line.line
     if (sungIn == null) {
-        Text(line.text, style = MaterialTheme.typography.headlineMedium.writing(line.text), fontWeight = FontWeight.Bold)
+        Text(shown, style = MaterialTheme.typography.headlineMedium.writing(shown), fontWeight = FontWeight.Bold)
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(line.text, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+            Text(shown, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
             Text(sungIn, style = MaterialTheme.typography.bodyLarge.writing(sungIn), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 /**
- * The answer: the words again with how they read over them, in Latin letters, as said and as
- * typed, and what they mean.
+ * The answer, as [cards] has it: the words as written, when the front showed them otherwise, with how
+ * they read over them; in Latin letters, spelled as picked; and what they mean.
  * A reading that isn't how it's sung can be put right, kanji by kanji.
  */
 @Composable
-private fun CardBack(line: SavedLine, romajiTyped: Boolean, onReadAs: (List<String>) -> Unit) {
+private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, onReadAs: (List<String>) -> Unit) {
     var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold).writing(line.text)
         val ruby = line.ruby ?: line.reading?.takeIf { line.line != null }?.let { listOf(Ruby(line.text, it)) }
+        // Asked otherwise, it's answered as written.
+        val written = line.shownAs(cards.front, romajiTyped) != line.text
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
-                if (ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
-                else line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
+                if (cards.readings && ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
+                else if (written) Text(line.text, style = style)
+                else if (cards.readings) line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
             }
-            if (line.readable.isNotEmpty() && !fixing) {
+            if (cards.readings && line.readable.isNotEmpty() && !fixing) {
                 IconButton(onClick = { fixing = true }) { AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.practice_fix_reading)) }
             }
         }
         if (fixing) ReadingFields(line, onSave = { readings -> fixing = false; onReadAs(readings) }, onCancel = { fixing = false })
-        // As said and as typed, where they're spelled otherwise.
-        bothRomaji(line.romanized, line.typed, romajiTyped).forEach { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        line.translation?.let { Text(it, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
+        // Only as picked, as said or as typed; not again when the front showed it so.
+        if (cards.latin && cards.front != WordsAs.LATIN) {
+            line.latin(romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        if (cards.translation) line.translation?.let { Text(it, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
     }
+}
+
+/**
+ * What the cards show, picked here: the front as written, only in kana, for Japanese, or only in
+ * Latin letters; on the back, the readings, the Latin letters, spelled as typed or as said, and the
+ * translation. The menu stays open, to pick more.
+ */
+@Composable
+private fun CardMenu(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions) {
+    var open by remember { mutableStateOf(false) }
+    val japanese = line.reading?.any(Readings::isKana) == true
+    Box {
+        IconButton(onClick = { open = true }) { AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.practice_card_options)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            FrontItem(R.string.lyrics_as_written, WordsAs.WRITTEN, cards, actions)
+            if (japanese || cards.front == WordsAs.KANA) FrontItem(R.string.lyrics_only_kana, WordsAs.KANA, cards, actions)
+            FrontItem(R.string.lyrics_only_latin, WordsAs.LATIN, cards, actions)
+            HorizontalDivider()
+            LearnItem(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
+            if (cards.front != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
+            // Romaji shown, it can be spelled as typed rather than as said.
+            if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) LearnItem(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
+            LearnItem(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
+        }
+    }
+}
+
+/** One way the front can show, picked while it does. */
+@Composable
+private fun FrontItem(@StringRes label: Int, front: WordsAs, cards: CardOptions, actions: ScreenActions) {
+    val picked = cards.front == front
+    DropdownMenuItem(
+        text = { Text(stringResource(label)) },
+        trailingIcon = { RadioButton(selected = picked, onClick = null) },
+        onClick = { actions.onCardOptionsChange(cards.copy(front = front)) },
+        modifier = Modifier.semantics { selected = picked }
+    )
 }
 
 /** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */

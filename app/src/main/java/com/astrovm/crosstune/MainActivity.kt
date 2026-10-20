@@ -383,6 +383,7 @@ class MainActivity : ComponentActivity() {
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
                         onRomajiTypedChange = viewModel::setRomajiTyped,
+                        onCardOptionsChange = viewModel::setCardOptions,
                         onTranslationChange = viewModel::setTranslation,
                         onChordsChange = viewModel::setChords,
                         onRetryTranslation = viewModel::retryTranslation,

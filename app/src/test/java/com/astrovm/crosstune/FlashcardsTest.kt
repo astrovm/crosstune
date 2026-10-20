@@ -326,6 +326,50 @@ class FlashcardsTest {
     }
 
     @Test
+    fun theCardsShowWhatsPickedForThemAndKeepItSo() {
+        saved(
+            """{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,""" +
+                """"ruby":[["東京","とうきょう"],["へ",null]]}""",
+            """{"text":"Moon","translation":"Luna","title":"Other","artist":"Band","box":1}"""
+        )
+        launch()
+        practiseAll(2)
+        waitUntil { practice().line?.text == "東京へ" }
+        click(string(R.string.practice_show))
+        // The romaji only as said, not as typed too.
+        assertTrue(readingShown("とうきょう") && shown("tōkyō e") && shown("To Tokyo"))
+        assertFalse(shown("toukyou he"))
+        click(string(R.string.practice_card_options))
+        click(string(R.string.lyrics_romaji_typed))
+        assertTrue(shown("toukyou he"))
+        assertFalse(shown("tōkyō e"))
+        // Asked in kana, it's answered as written, with no translation or readings when they're off.
+        click(string(R.string.lyrics_only_kana))
+        assertTrue(shown("とうきょうへ") && shown("東京へ"))
+        click(string(R.string.lyrics_translation))
+        click(string(R.string.lyrics_readings))
+        assertFalse(shown("To Tokyo") || readingShown("とうきょう") || described(string(R.string.practice_fix_reading)))
+        // Asked in Latin letters, they're not said again on the back, nor switched off there.
+        click(string(R.string.lyrics_only_latin))
+        composeRule.onAllNodes(hasText("toukyou he")).assertCountEquals(1)
+        assertTrue(shown("東京へ"))
+        assertFalse(shown(string(R.string.lyrics_romanized)))
+        assertEquals(CardOptions(front = WordsAs.LATIN, readings = false, translation = false), CardOptions.load(prefs()))
+        assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
+        // A line in no other script shows as written, with nothing to read in kana or spell otherwise.
+        click(string(R.string.practice_good))
+        waitUntil { practice().line?.text == "Moon" }
+        assertTrue(shown("Moon"))
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_romaji_typed)))
+        click(string(R.string.lyrics_as_written))
+        click(string(R.string.lyrics_translation))
+        click(string(R.string.practice_show))
+        assertTrue(shown("Luna"))
+        assertEquals(CardOptions(readings = false), CardOptions.load(prefs()))
+    }
+
+    @Test
     fun aSongTheAppLostIsAskedForAgainOnTheCardWhileItLoads() {
         saved(
             """{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""",
