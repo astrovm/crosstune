@@ -1125,16 +1125,6 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
     }
 }
 
-/** The visuals' menu held down: how long each shows, from swapping fast to staying on one, and whether heavy ones are skipped. */
-@Composable
-private fun VisualsMoreMenu(open: Boolean, settings: VisualsSettings, actions: ScreenActions, onClose: () -> Unit) {
-    DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        // In line with the menu's items.
-        VisualsChangeRow(settings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(280.dp), inset = 12.dp)
-        LearnItem(R.string.setting_skip_heavy_visuals, settings.skipHeavy, actions.onSkipHeavyVisualsChange)
-    }
-}
-
 /** Where the words go while they're on their way, or when there are none. */
 @Composable
 private fun LyricsMessage(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
