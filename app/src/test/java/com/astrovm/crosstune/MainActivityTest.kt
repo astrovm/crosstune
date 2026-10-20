@@ -3151,6 +3151,43 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongAlreadyInItsAppIsBroughtForwardNotStartedAgainOnOpen() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val open = string(R.string.open_in_youtube_music)
+        // The destination chip says the same in words; the button is the one described.
+        val button = hasContentDescription(open) and isEnabled()
+        val tapOpen = {
+            waitUntil { composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onNode(button).performClick()
+        }
+
+        // Not in the app, it's opened on the song.
+        tapOpen()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+
+        // Playing there, the app is only brought forward, which keeps the song going.
+        phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        tapOpen()
+        waitForText(string(R.string.error_no_app_to_open))
+
+        installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        tapOpen()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val shown = nextStartedActivity()!!
+        assertEquals(Intent.ACTION_MAIN, shown.action)
+        assertNull(shown.data)
+        assertEquals(youTubeMusic, shown.component?.packageName ?: shown.`package`)
+    }
+
+    @Test
     fun aPlayedSongShowsInCrosstunesPlayerWhichPlaysPausesSkipsAndSeeksIt() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }

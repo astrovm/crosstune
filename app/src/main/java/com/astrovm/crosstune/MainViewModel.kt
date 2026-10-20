@@ -45,6 +45,9 @@ internal sealed interface Effect {
      */
     data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean, val atMs: Long = SystemClock.elapsedRealtime()) : Effect
     data class Share(val url: String) : Effect
+
+    /** Brings [packageName] forward as it is, for a song it already plays, which opening it on the song would restart. */
+    data class Show(val packageName: String, val finishAfterOpen: Boolean) : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -1153,6 +1156,11 @@ internal class MainViewModel(
                 NotFoundAction.SEARCH -> Unit
             }
         }
+        // Already in that app, playing or paused, it's brought forward, not asked for again, which would restart it.
+        val there = uiState.result?.takeIf { tapped }?.let { song ->
+            playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage) }
+        }
+        if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
         effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
     }
 

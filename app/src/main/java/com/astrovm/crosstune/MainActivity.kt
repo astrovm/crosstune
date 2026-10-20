@@ -330,6 +330,7 @@ class MainActivity : ComponentActivity() {
                     when (effect) {
                         // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
                         is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
+                        is Effect.Show -> show(effect)
                         is Effect.Share -> {
                             startActivity(shareChooser(effect.url))
                             finish()
@@ -766,6 +767,14 @@ class MainActivity : ComponentActivity() {
             openOutsideCrosstune(uri)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
+            effect.finishAfterOpen -> finish()
+        }
+    }
+
+    private fun show(effect: Effect.Show) {
+        val launch = packageManager.getLaunchIntentForPackage(effect.packageName)
+        when {
+            launch == null || !tryStartActivity(launch) -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             effect.finishAfterOpen -> finish()
         }
     }
