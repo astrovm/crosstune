@@ -1428,14 +1428,14 @@ class ListeningTest {
     }
 
     @Test
-    fun theVisualsButtonHeldDownSetsHowLongEachShowsAndWhetherHeavyOnesAreSkipped() {
+    fun theVisualsMenuSetsHowLongEachShows() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
-        // Held down, it offers more than tapped does.
-        composeRule.onNode(hasContentDescription(string(R.string.visuals_options))).performTouchInput { longClick() }
-        composeRule.waitForIdle()
-        assertFalse(shown(string(R.string.visuals_next)))
+        click(string(R.string.visuals_options))
+        // Beside the visuals' other options, with no hidden long press.
+        assertTrue(shown(string(R.string.visuals_next)))
+        assertFalse(shown(string(R.string.setting_skip_heavy_visuals)))
         // Swapping every few seconds.
         composeRule.onNode(hasContentDescription(string(R.string.setting_visuals_change)))
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
@@ -1443,8 +1443,6 @@ class ListeningTest {
         assertEquals(5_000L, prefs().getLong("visuals_change_ms", 0))
         assertEquals(5_000L, controllerModel().uiState.visualsSettings.changeMs)
         assertTrue(shown("5 sec"))
-        click(string(R.string.setting_skip_heavy_visuals))
-        assertFalse(prefs().getBoolean("visuals_skip_heavy", true))
         assertTrue(visualsShown().isNotEmpty())
     }
 
@@ -2559,7 +2557,9 @@ class ListeningTest {
     fun aProblemWithTheWordsIsReportedWithTheSongAndHowTheyFollowedIt() {
         wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
         waitForText("Sky full of stars")
-        learnMenu()
+        // Signed out, the song's sheet holds only that, with none of what ChatGPT says.
+        aboutSong()
+        assertFalse(shown(string(R.string.song_tab_meaning)))
         click(string(R.string.report_problem))
         click(string(R.string.report_by_email))
         val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
@@ -2665,7 +2665,7 @@ class ListeningTest {
             }
         }
         // A site that won't answer shows nothing; switched off and on, it's asked again.
-        learnMenu()
+        studyMenu()
         click(string(R.string.lyrics_chords))
         assertTrue(prefs().getBoolean("lyrics_chords", false))
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://www.ultimate-guitar.com/search.php") } }
@@ -2713,7 +2713,7 @@ class ListeningTest {
                 else -> words(request)
             }
         }
-        learnMenu()
+        studyMenu()
         click(string(R.string.lyrics_chords))
         waitUntil(TIMEOUT_MS) { searches.get() == 1 }
         // Off mid-lookup and on again: looked up anew, and the one dropped doesn't take them away when it ends.
@@ -2942,12 +2942,10 @@ class ListeningTest {
         click(string(R.string.lyrics_translation_failed))
         waitUntil(TIMEOUT_MS) { shown("[Stars]") }
         assertFalse(described(string(R.string.lyrics_translation_failed)))
-        // English has no readings to offer, only a translation; signed out, there's nothing to say about
-        // the song, but it can still be learned.
-        assertFalse(described(string(R.string.lyrics_about_song)))
+        // English has no readings to offer, only a translation; it can still be learned.
         assertTrue(described(string(R.string.lyrics_study)))
         learnMenu()
-        assertFalse(shown(string(R.string.lyrics_as_written)))
+        assertFalse(described(string(R.string.lyrics_as_written)))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(shown(string(R.string.lyrics_romanized)))
     }
@@ -2960,7 +2958,7 @@ class ListeningTest {
         learnMenu()
         // Hangul reads as it's written, so there are only Latin letters, and no kana.
         assertFalse(shown(string(R.string.lyrics_readings)))
-        assertFalse(shown(string(R.string.lyrics_only_kana)))
+        assertFalse(described(string(R.string.lyrics_only_kana)))
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))

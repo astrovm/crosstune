@@ -253,7 +253,6 @@
     <string name="visual_kind_classics">クラシック</string>
     <string name="visuals_only">ビジュアルのみ</string>
     <string name="visuals_options">ビジュアルのオプション</string>
-    <string name="visuals_more">ビジュアルのその他のオプション</string>
     <string name="visuals_show_words">歌詞を表示</string>
     <string name="setting_theme">テーマ</string>
     <string name="theme_light">ライト</string>
@@ -299,6 +298,8 @@
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_words_size">歌詞のサイズ</string>
+    <string name="lyrics_show_as">表示形式</string>
+    <string name="lyrics_also_show">あわせて表示</string>
     <string name="report_problem">問題を報告</string>
     <string name="report_problem_text">歌詞の間違い、タイミングのずれなど。問題を書いて送信してください。</string>
     <string name="report_by_email">メール</string>

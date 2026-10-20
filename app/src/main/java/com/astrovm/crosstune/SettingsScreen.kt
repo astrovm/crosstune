@@ -613,7 +613,7 @@ private fun changeEveryText(ms: Long): String {
 
 /**
  * How long each visual shows, on a slider from swapping every few seconds to staying on one, with
- * what it's set to beside it. Also in the visuals' own menu, held down.
+ * what it's set to beside it. Also in the visuals' own menu.
  */
 @Composable
 internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp) {

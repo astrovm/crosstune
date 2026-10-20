@@ -54,7 +54,9 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withStyle
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
 import android.os.SystemClock
@@ -285,10 +287,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            // Signed in with ChatGPT, the song opens to what it's about.
+            // Signed in with ChatGPT, the song opens to what it's about; otherwise it holds only where to report a problem.
             LyricsHeader(
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious,
-                onAbout = { openTab(SongTab.MEANING) }.takeIf { state.chatGpt.email != null }
+                onAbout = { if (state.chatGpt.email != null) openTab(SongTab.MEANING) else songTab = SongTab.MEANING }
             )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
@@ -429,7 +431,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
  * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: (() -> Unit)? = null) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: () -> Unit) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
     var skippedNext by remember { mutableStateOf<Boolean?>(null) }
@@ -508,7 +510,7 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     translationX = swiped.value
                     alpha = 1f - (abs(swiped.value) / size.width).coerceIn(0f, 1f)
                 }
-                .then(onAbout?.let { Modifier.clickable(onClickLabel = about, onClick = it) } ?: Modifier)
+                .clickable(onClickLabel = about, onClick = onAbout)
         ) { shown ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                 CoverArt(shown.artworkUrl, actions.loadArtwork, size = 48.dp, modifier = Modifier.padding(start = 4.dp))
@@ -524,7 +526,7 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                 }
             }
         }
-        onAbout?.let { IconButton(onClick = it) { AppIcon(R.drawable.ic_info, contentDescription = about) } }
+        IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
     }
 }
 
@@ -558,11 +560,7 @@ private fun LyricsActions(
                 if (state.lyrics.isNotEmpty()) {
                     IconButton(onClick = { menu = BarMenu.STUDY }) { AppIcon(R.drawable.ic_school, contentDescription = stringResource(R.string.lyrics_study)) }
                 }
-                VisualsButton(
-                    state.visuals,
-                    onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) },
-                    onLongClick = { menu = BarMenu.VISUALS_MORE }
-                )
+                VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
                 if (state.lyricLines.isNotEmpty()) {
                     IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
@@ -577,21 +575,13 @@ private fun LyricsActions(
         // The menus open from the bar rather than from their button, so they line up with it and
         // keep off the screen's edge.
         val close = { menu = null }
-        var reporting by rememberSaveable { mutableStateOf(false) }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.chords, actions, onReport = { reporting = true }, onClose = close)
-        if (reporting) {
-            ReportDialog(
-                Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
-                onDismiss = { reporting = false }
-            )
-        }
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions.onPractiseSong, onChooseLines, close)
-        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state.visualsShade, actions, onOnlyVisuals, close)
-        VisualsMoreMenu(menu == BarMenu.VISUALS_MORE, state.visualsSettings, actions, close)
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions, close)
+        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
+        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
     }
 }
 
-private enum class BarMenu { LEARN, STUDY, VISUALS, VISUALS_MORE }
+private enum class BarMenu { LEARN, STUDY, VISUALS }
 
 /** What the sheet about the whole song shows: what it means, its words to know, or its artist. */
 internal enum class SongTab(@StringRes val label: Int) {
@@ -644,29 +634,28 @@ private val BAR_ROOM = 24.dp
 private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN))
 
 /**
- * What helps read the words in another language, switched on and off here: readings over them for
- * Japanese and Chinese, which Korean, read as written, doesn't need; Latin letters for all three;
- * and a translation, for any.
+ * How the words show, set here: how big they are, whether a script that reads otherwise shows as
+ * written, in kana or in Latin letters, and what else helps read them, which is readings over them
+ * for Japanese and Chinese, which Korean, read as written, doesn't need; Latin letters for all
+ * three; and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, actions: ScreenActions, onReport: () -> Unit, onClose: () -> Unit) {
+private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        // How big the words are, for any song.
-        SizeSlider(R.string.lyrics_words_size, R.drawable.ic_text_increase, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
-        HorizontalDivider()
+        MenuTitle(R.drawable.ic_translate, R.string.song_tab_words)
+        SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
         val script = learning.script
         // A script that reads otherwise can show as written, or only in kana for Japanese, or in Latin letters.
         if (script != null) {
-            WordsAsItem(R.string.lyrics_as_written, WordsAs.WRITTEN, learning, actions)
-            if (script == Script.JAPANESE) WordsAsItem(R.string.lyrics_only_kana, WordsAs.KANA, learning, actions)
-            WordsAsItem(R.string.lyrics_only_latin, WordsAs.LATIN, learning, actions)
-            HorizontalDivider()
+            MenuCaption(R.string.lyrics_show_as)
+            WordsAsPicker(script, learning, actions)
+            MenuCaption(R.string.lyrics_also_show)
         }
         // Readings sit over the words as written; Latin letters under them, unless they're what shows.
         if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
             LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
             if (learning.readings) {
-                SizeSlider(R.string.lyrics_reading_size, R.drawable.ic_format_size, learning.readingScale, READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+                SizeSlider(R.string.lyrics_reading_size, learning.readingScale, READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
             }
         }
         if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
@@ -675,30 +664,38 @@ private fun LearnMenu(open: Boolean, learning: Learning, chords: ChordsState, ac
             LearnItem(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
         }
         LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-        HorizontalDivider()
-        LearnItem(R.string.lyrics_chords, chords.on, actions.onChordsChange)
-        HorizontalDivider()
-        // Wrong words, or out of time, said where they can be put right.
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.report_problem)) },
-            leadingIcon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
-            onClick = {
-                onClose()
-                onReport()
-            }
-        )
     }
 }
 
+/** What a menu is about, at its top. */
+@Composable
+private fun MenuTitle(@DrawableRes icon: Int, @StringRes title: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
+        AppIcon(icon, contentDescription = null)
+        Text(stringResource(title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 12.dp))
+    }
+}
+
+/** A few words over what follows in a menu, small and quiet. */
+@Composable
+private fun MenuCaption(@StringRes text: Int) {
+    Text(
+        stringResource(text),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
+    )
+}
+
 /**
- * How big something is, slid within [range]: the words, from smaller to much bigger than they start,
- * or the readings, from as they start to nearly as big as the words.
+ * How big something is, slid within [range] from a small "A" to a big one: the words, from smaller
+ * to much bigger than they start, or the readings, from as they start to nearly as big as the words.
  */
 @Composable
-private fun SizeSlider(@StringRes label: Int, @DrawableRes icon: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
+private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
     val size = stringResource(label)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
-        AppIcon(icon, contentDescription = null)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp).width(260.dp)) {
+        Text("A", style = MaterialTheme.typography.bodySmall)
         // Where it was let go is kept, even before the menu has caught up with it.
         var latest by remember { mutableFloatStateOf(scale) }
         Slider(
@@ -709,18 +706,20 @@ private fun SizeSlider(@StringRes label: Int, @DrawableRes icon: Int, scale: Flo
             },
             onValueChangeFinished = { onChange(latest, true) },
             valueRange = range,
-            modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = size }
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = size }
         )
+        Text("A", style = MaterialTheme.typography.headlineSmall)
     }
 }
 
 /**
  * The song's lines, to choose which to learn, with how many are kept, once any are, and the song to
- * practise, with how many are due; with none kept, practising it chooses them first.
+ * practise, with how many are due; with none kept, practising it chooses them first. Then its chords.
  */
 @Composable
-private fun StudyMenu(open: Boolean, state: UiState, onPractise: () -> Unit, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
+private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        MenuTitle(R.drawable.ic_school, R.string.saved_practice)
         val song = state.lyricsFor
         val here = if (song == null) emptyList() else state.savedLines.filter { it.isOf(song) }
         if (here.isNotEmpty()) {
@@ -743,9 +742,12 @@ private fun StudyMenu(open: Boolean, state: UiState, onPractise: () -> Unit, onC
             trailingIcon = { if (due > 0) Text(stringResource(R.string.practice_due, due), color = MaterialTheme.colorScheme.primary) },
             onClick = {
                 onClose()
-                if (practisable.isEmpty()) onChooseLines(true) else onPractise()
+                if (practisable.isEmpty()) onChooseLines(true) else actions.onPractiseSong()
             }
         )
+        // Chords are learned like lines are, so they're switched on here.
+        HorizontalDivider()
+        LearnItem(R.string.lyrics_chords, state.chords.on, actions.onChordsChange)
     }
 }
 
@@ -867,22 +869,36 @@ private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, be
     }
 }
 
-/** One way the words can show, picked while they do; the menu stays open, to switch on more. */
+/**
+ * How the words show, picked from written (文), kana (あ, Japanese only) and Latin letters (Aa); the
+ * menu stays open, to switch on more.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WordsAsItem(@StringRes label: Int, wordsAs: WordsAs, learning: Learning, actions: ScreenActions) {
-    val picked = learning.showsAs == wordsAs
-    DropdownMenuItem(
-        text = { Text(stringResource(label)) },
-        // Found in romaji, the words as written are ChatGPT's.
-        leadingIcon = if (wordsAs == WordsAs.WRITTEN && learning.fromRomaji) {
-            { AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.size(18.dp)) }
-        } else {
-            null
-        },
-        trailingIcon = { RadioButton(selected = picked, onClick = null) },
-        onClick = { actions.onWordsAsChange(wordsAs) },
-        modifier = Modifier.semantics { selected = picked }
-    )
+private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenActions) {
+    val choices = buildList {
+        add(Triple(WordsAs.WRITTEN, "文", R.string.lyrics_as_written))
+        if (script == Script.JAPANESE) add(Triple(WordsAs.KANA, "あ", R.string.lyrics_only_kana))
+        add(Triple(WordsAs.LATIN, "Aa", R.string.lyrics_only_latin))
+    }
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).width(260.dp)) {
+        choices.forEachIndexed { index, (wordsAs, glyph, label) ->
+            val name = stringResource(label)
+            SegmentedButton(
+                selected = learning.showsAs == wordsAs,
+                onClick = { actions.onWordsAsChange(wordsAs) },
+                shape = SegmentedButtonDefaults.itemShape(index, choices.size),
+                icon = {},
+                modifier = Modifier.semantics { contentDescription = name }
+            ) {
+                Text(glyph)
+                // Found in romaji, the words as written are ChatGPT's.
+                if (wordsAs == WordsAs.WRITTEN && learning.fromRomaji) {
+                    AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.padding(start = 4.dp).size(14.dp))
+                }
+            }
+        }
+    }
 }
 
 /** One of what can help, ticked while it's on; the menu stays open, to switch on more. */
@@ -1044,54 +1060,39 @@ private fun LearnButton(translating: Boolean, onClick: () -> Unit) {
     }
 }
 
-/**
- * MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it offers them alone, or off.
- * Held down, it sets how long each shows, and whether heavy ones are skipped.
- */
+/** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it opens what can be done with them. */
 @Composable
-private fun VisualsButton(on: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) =
-    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick, onLongClick)
+private fun VisualsButton(on: Boolean, onClick: () -> Unit) =
+    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
 
-/** A button in the bar, lit while what it does is on, and held down for more when it has [onLongClick]. */
+/** A button in the bar, lit while what it does is on. */
 @Composable
-private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -> Unit) {
     val background by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, label = "button background")
     val tint by animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, label = "button tint")
-    val lit = @Composable {
+    IconButton(onClick = onClick, modifier = Modifier.semantics { selected = on }) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
             Icon(painterResource(icon), contentDescription = description, tint = tint, modifier = Modifier.size(22.dp))
         }
     }
-    if (onLongClick == null) {
-        IconButton(onClick = onClick, modifier = Modifier.semantics { selected = on }) { lit() }
-    } else {
-        // An IconButton can't be held down: the same size and ripple, with a long press.
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .combinedClickable(role = Role.Button, onLongClickLabel = stringResource(R.string.visuals_more), onLongClick = onLongClick, onClick = onClick)
-                .semantics { selected = on }
-        ) { lit() }
-    }
 }
 
 /**
- * What can be done with the visuals while they're on: how dark the ground over them is, the next,
- * never this one again, them alone, or off.
+ * What can be done with the visuals while they're on: how dark the ground over them is, how long
+ * each shows, from swapping fast to staying on one, the next, never this one again, them alone, or off.
  */
 @Composable
-private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
+private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        MenuTitle(R.drawable.ic_visuals, R.string.settings_visuals_title)
         // How dark the ground over them is, from none to nearly black.
         val darken = stringResource(R.string.visuals_shade)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
             AppIcon(R.drawable.ic_shade, contentDescription = null)
             // Where it was let go is kept, even before the menu has caught up with it.
-            var latest by remember { mutableFloatStateOf(shade) }
+            var latest by remember { mutableFloatStateOf(state.visualsShade) }
             Slider(
-                value = shade,
+                value = state.visualsShade,
                 onValueChange = {
                     latest = it
                     actions.onVisualsShadeChange(it, false)
@@ -1101,6 +1102,9 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
                 modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
             )
         }
+        // In line with the slider above.
+        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(260.dp), inset = 16.dp)
+        HorizontalDivider()
         DropdownMenuItem(
             text = { Text(stringResource(R.string.visuals_next)) },
             leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
@@ -1933,7 +1937,8 @@ private fun Examples(asking: Asking<List<Example>>) {
 /**
  * All about the song, as ChatGPT finds it, a [tab] at a time: what it means, with how hard its words
  * are and what it covers or samples, and questions about it; its words most worth learning; and its
- * artist. Songs like it are a tap away from any.
+ * artist. Songs like it are a tap away from any. Signed out of ChatGPT, it holds only where to
+ * report a problem with the song's words.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1944,17 +1949,32 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
             Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
-            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
-                SongTab.entries.forEach { shown ->
-                    Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })
+            // What ChatGPT says needs signing in with it; the way to report a problem doesn't.
+            if (state.chatGpt.email != null) {
+                PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
+                    SongTab.entries.forEach { shown ->
+                        Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })
+                    }
+                }
+                if (tab == SongTab.MEANING) SongMeaning(state, actions)
+                if (tab == SongTab.WORDS) WordsToKnow(state, actions)
+                if (tab == SongTab.ARTIST) AboutArtist(state, actions)
+                OutlinedButton(onClick = { state.lyricsFor?.let(actions.onSongsLike) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
                 }
             }
-            if (tab == SongTab.MEANING) SongMeaning(state, actions)
-            if (tab == SongTab.WORDS) WordsToKnow(state, actions)
-            if (tab == SongTab.ARTIST) AboutArtist(state, actions)
-            OutlinedButton(onClick = { state.lyricsFor?.let(actions.onSongsLike) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
+            // Wrong words, or out of time, said where they can be put right.
+            var reporting by rememberSaveable { mutableStateOf(false) }
+            TextButton(onClick = { reporting = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.report_problem), modifier = Modifier.padding(start = 8.dp))
+            }
+            if (reporting) {
+                ReportDialog(
+                    Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
+                    onDismiss = { reporting = false }
+                )
             }
         }
     }
