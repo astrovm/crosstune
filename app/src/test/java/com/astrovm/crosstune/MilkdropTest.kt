@@ -349,8 +349,12 @@ class MilkdropTest {
         override fun close() = Unit
     }
 
-    private fun timed(milkdrop: Milkdrop, settings: VisualsSettings = VisualsSettings(), onTooSlow: (String) -> Unit = {}, onDrop: (String) -> Unit = {}) =
-        MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, settings = settings, onTooSlow = onTooSlow, onDrop = onDrop)
+    /** Told of each preset found [onTooSlow], and of each [onFastEnough]. */
+    private fun timed(milkdrop: Milkdrop, settings: VisualsSettings = VisualsSettings(), onTooSlow: (String) -> Unit = {}, onDrop: (String) -> Unit = {}, onFastEnough: (String) -> Unit = {}) =
+        MilkdropRenderer(
+            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, settings = settings,
+            onTimed = { name, slow -> if (slow) onTooSlow(name) else onFastEnough(name) }, onDrop = onDrop
+        )
 
     @Test
     fun eachSecondItTellsHowManyFramesASecondThePhoneCouldDraw() {
@@ -366,15 +370,19 @@ class MilkdropTest {
     }
 
     @Test
-    fun aPresetTooSlowToDrawIsPassedOverAndKeptSo() {
+    fun aPresetTooSlowToDrawTwiceIsPassedOverAndKeptSo() {
         val order = listOf("a", "b", "c").shuffled(Random(1))
-        val milkdrop = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
         val kept = mutableListOf<String>()
-        val renderer = timed(milkdrop, onTooSlow = { kept += it })
-        renderer.created()
-        // Drawn at a frame each 60 ms, it's known slow once it's blended in, and cut straight from.
-        repeat(100) { renderer.frame() }
+        // Drawn at a frame each 60 ms, it's known slow once it's blended in; once could be the phone
+        // busy with something else, so it stays on.
+        val first = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        timed(first, onTooSlow = { kept += it }).apply { created(); repeat(100) { frame() } }
         assertEquals(listOf(order[0]), kept)
+        assertEquals(listOf(order[0]), first.shows)
+        // Slow again, it's cut straight from.
+        val milkdrop = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        timed(milkdrop, VisualsSettings(slowOnce = kept.toSet()), onTooSlow = { kept += it }).apply { created(); repeat(100) { frame() } }
+        assertEquals(listOf(order[0], order[0]), kept)
         assertEquals(listOf(order[0], order[1]), milkdrop.shows)
         // One fast enough stays on.
         assertEquals(order[1], milkdrop.shows.last())
@@ -478,7 +486,7 @@ class MilkdropTest {
     }
 
     @Test
-    fun aHeavyVisualTurnedOnAnywayOrWithHeavyOnesKeptShowsAndIsntTimed() {
+    fun aHeavyVisualTurnedOnAnywayOrWithHeavyOnesKeptStaysOn() {
         val order = listOf("a", "b", "c").shuffled(Random(1))
         val kept = mutableListOf<String>()
         // Too slow, and known so, but turned on anyway: shown first, and left on.
@@ -489,7 +497,36 @@ class MilkdropTest {
         val all = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
         timed(all, VisualsSettings(heavy = setOf(order[0]), skipHeavy = false), onTooSlow = { kept += it }).apply { created(); repeat(100) { frame() } }
         assertEquals(listOf(order[0]), all.shows)
-        assertEquals(emptyList<String>(), kept)
+        // Still timed, and still too slow.
+        assertEquals(listOf(order[0], order[0]), kept)
+        // Drawn fast enough now, as when seen alone in Settings, it's said so, to be heavy no more.
+        val fastNow = mutableListOf<String>()
+        val faster = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        timed(faster, VisualsSettings(heavy = setOf(order[0]), skipHeavy = false), onFastEnough = { fastNow += it }).apply { created(); repeat(200) { frame() } }
+        assertEquals(listOf(order[0]), fastNow)
+    }
+
+    @Test
+    fun aPresetSlowOnceThenFastIsntSlowOnceAnyMore() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        val drawn = mutableMapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L)
+        val milkdrop = TimedMilkdrop(drawn)
+        val kept = mutableListOf<String>()
+        val fast = mutableListOf<String>()
+        val renderer = timed(milkdrop, VisualsSettings(changeMs = 6_000), onTooSlow = { kept += it }, onFastEnough = { fast += it })
+        renderer.created()
+        // Each round, all three, till the first comes back.
+        val round = { val from = milkdrop.shows.size; while (milkdrop.shows.size < from + 3) renderer.frame() }
+        round()
+        assertEquals(listOf(order[0]), kept)
+        // Fast enough the next time, then slow again: that's once again, so it isn't passed over.
+        drawn[order[0]] = 10L
+        round()
+        drawn[order[0]] = 60L
+        round()
+        assertEquals(listOf(order[0], order[0]), kept)
+        assertTrue(order[0] in fast)
+        assertEquals(order[0], milkdrop.shows.last())
     }
 
     @Test
@@ -509,7 +546,12 @@ class MilkdropTest {
         val store = VisualsStore(ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("visuals-test", 0))
         assertEquals(VisualsSettings(), store.load())
         store.turn("a", on = false)
-        store.heavy("b")
+        // Slow once could be the phone busy; twice, it's heavy.
+        store.timed("b", slow = true)
+        assertEquals(VisualsSettings(off = setOf("a"), slowOnce = setOf("b")), store.load())
+        assertTrue(store.load().shows("b"))
+        store.timed("b", slow = true)
+        store.timed("b", slow = true)
         assertEquals(VisualsSettings(off = setOf("a"), heavy = setOf("b")), store.load())
         assertTrue(!store.load().shows("a") && !store.load().shows("b") && store.load().shows("c"))
         // A heavy one turned on is kept on; turned off again, it isn't.
@@ -521,6 +563,13 @@ class MilkdropTest {
         assertEquals(setOf("a", "b"), store.load().off)
         store.turn("a", on = true)
         assertEquals(setOf("b"), store.load().off)
+        // Drawn fast enough, it's heavy no more, nor kept on for being so.
+        store.turn("b", on = true)
+        store.timed("b", slow = false)
+        assertEquals(VisualsSettings(), store.load())
+        store.timed("c", slow = true)
+        store.timed("c", slow = false)
+        assertEquals(VisualsSettings(), store.load())
         // Heavy ones shown, and how long each shows; a length Settings doesn't offer is the usual.
         store.skipHeavy(false)
         store.changeEvery(60_000)
