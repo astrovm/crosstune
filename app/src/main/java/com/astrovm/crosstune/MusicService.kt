@@ -70,10 +70,31 @@ internal enum class MusicService(
 
     fun searchUrl(query: String): String = searchUrlBuilder(query)
 
+    /**
+     * The app's own package, then those of builds patched from it, e.g. ReVanced's, which open its
+     * links and play as it does: YouTube and YouTube Music by ReVanced, ReVanced Extended, Morphe and
+     * Vanced, under names of their own. Patched Spotify keeps Spotify's. Keep in sync with the
+     * manifest's queries.
+     */
+    val packageNames: List<String> get() = listOf(packageName) + when (this) {
+        YOUTUBE -> listOf("app.revanced.android.youtube", "app.rvx.android.youtube", "app.morphe.android.youtube", "com.vanced.android.youtube")
+        YOUTUBE_MUSIC -> listOf(
+            "app.revanced.android.apps.youtube.music", "app.rvx.android.apps.youtube.music", "app.morphe.android.apps.youtube.music",
+            "com.vanced.android.apps.youtube.music"
+        )
+        else -> emptyList()
+    }
+
     companion object {
         fun fromName(name: String?): MusicService? = entries.firstOrNull { it.name == name }
+
+        /** The service whose app, or a build patched from it, has [packageName]. */
+        fun ofPackage(packageName: String?): MusicService? = entries.firstOrNull { packageName in it.packageNames }
     }
 }
+
+/** Whether [one] and [other] are the same app, or one is a build patched from the other. */
+internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofPackage(one)?.packageNames?.contains(other) == true
 
 private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> String = { query ->
     baseUrl.toHttpUrl().newBuilder().addQueryParameter(parameter, query).build().toString()

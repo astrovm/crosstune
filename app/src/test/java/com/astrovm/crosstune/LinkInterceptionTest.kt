@@ -138,6 +138,10 @@ class LinkInterceptionTest {
         assertTrue(interception.installedServices().isEmpty())
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.aspiro.tidal" })
         assertEquals(setOf(MusicService.TIDAL), interception.installedServices())
+        // A build patched from an app, under a name of its own, is that app.
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "app.revanced.android.apps.youtube.music" })
+        assertEquals(setOf(MusicService.TIDAL, MusicService.YOUTUBE_MUSIC), interception.installedServices())
+        assertEquals("app.revanced.android.apps.youtube.music", interception.linkState().serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
     }
 
     private fun linkApp(service: MusicService) = LinkApp(service.packageName, app.getString(service.labelRes))

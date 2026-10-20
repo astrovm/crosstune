@@ -188,7 +188,7 @@ internal class MediaSessionPlayback(
     override fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean = runCatching {
         // Without the user's say-so Android shows none, and says so by throwing.
         val apps = sessions.getActiveSessions(listener).filter { it.packageName != context.packageName }
-        val asked = apps.firstOrNull { it.packageName == app } ?: apps.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L } ?: return false
+        val asked = apps.firstOrNull { sameApp(app, it.packageName) } ?: apps.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L } ?: return false
         // Asked the way a voice assistant asks, which music apps answer without coming to the front.
         val wanted = Bundle().apply {
             putString(MediaStore.EXTRA_MEDIA_FOCUS, MediaStore.Audio.Media.ENTRY_CONTENT_TYPE)
@@ -196,18 +196,21 @@ internal class MediaSessionPlayback(
             putString(MediaStore.EXTRA_MEDIA_ARTIST, song.artist)
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
-        if (link != null && asked.packageName == MusicService.YOUTUBE_MUSIC.packageName) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
+        if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
         else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
         true
     }.getOrDefault(false)
 
     // Without the user's say-so Android shows none, and says so by throwing.
-    override fun runs(app: String): Boolean = runCatching { sessions.getActiveSessions(listener).any { it.packageName == app } }.getOrDefault(false)
+    override fun runs(app: String): Boolean = runCatching { sessions.getActiveSessions(listener).any { sameApp(app, it.packageName) } }.getOrDefault(false)
 
-    override fun openSong(app: String, link: String): Boolean = runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(app).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        true
-    }.getOrDefault(false)
+    // The app may be installed as a build patched from it, under a name of its own.
+    override fun openSong(app: String, link: String): Boolean = (MusicService.ofPackage(app)?.packageNames ?: listOf(app)).any { packageName ->
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        }.getOrDefault(false)
+    }
 
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
     override fun comesBack() {
@@ -272,7 +275,7 @@ internal class MediaSessionPlayback(
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         val named = when {
             !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
-            controller.packageName == MusicService.YOUTUBE_MUSIC.packageName -> MetadataParsers.youtubeVideo(title, artist) ?: return null
+            MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
@@ -320,7 +323,7 @@ internal class MediaSessionPlayback(
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
     private fun MediaController.isVideo(): Boolean =
         metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
-            MusicService.entries.none { it != MusicService.YOUTUBE && it != MusicService.YOUTUBE_MUSIC && it.packageName == packageName }
+            MusicService.ofPackage(packageName).let { it == null || it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,

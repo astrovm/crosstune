@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.IntentFilter
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
@@ -513,10 +515,10 @@ class PlaybackTest {
     }
 
     @Test
-    fun youTubeMusicVideosAreReadAsTheSongTheyNameAndItsSongsStayWhole() {
+    fun youTubeMusicVideosAreReadAsTheSongTheyNameAndItsSongsStayWhole() = MusicService.YOUTUBE_MUSIC.packageNames.forEach { music ->
         allow()
         sounding()
-        val music = MusicService.YOUTUBE_MUSIC.packageName
+        // ReVanced's and the like, patched from it, too.
         // As YouTube Music names them: a video, its official one included, has no album; a song has its own.
         for ((playing, heard) in listOf(
             Triple("Queen - Bohemian Rhapsody (Lyrics)", "7clouds", null) to MusicMetadata("Bohemian Rhapsody", "Queen"),
@@ -532,6 +534,26 @@ class PlaybackTest {
             assertEquals(title, if (album == null) null else 42_000L, now?.offsetMs)
             assertEquals(title, album == null, followed(heard).last()?.video)
         }
+    }
+
+    @Test
+    fun aBuildPatchedFromAnAppIsAskedAndOpenedAsThatApp() {
+        val patched = "app.morphe.android.apps.youtube.music"
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        allow()
+        shadowOf(sessions).addController(player(patched, "YouTube Music", "Other", "Band"))
+        assertTrue(playback.runs(official))
+        assertTrue(playback.playSong(song, official, "https://music.youtube.com/watch?v=other000000"))
+        // Only the patched build installed, the song's opened there.
+        shadowOf(app).checkActivities(true)
+        val opens = ComponentName(patched, "$patched.UrlActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https") }
+        )
+        assertTrue(playback.openSong(official, "https://music.youtube.com/watch?v=other000000"))
+        assertEquals(patched, shadowOf(app).nextStartedActivity.`package`)
+        assertFalse(playback.openSong("com.example.gone", "https://music.youtube.com/watch?v=other000000"))
     }
 
     @Test

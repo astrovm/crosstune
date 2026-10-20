@@ -89,15 +89,18 @@ internal class LinkInterception(private val context: Context) {
         context.packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
     }
 
-    /** Services whose app is installed, so setup can suggest them first. */
-    fun installedServices(): Set<MusicService> = MusicService.entries.filter { service ->
+    /** Services whose app is installed, or a build patched from it, so setup can suggest them first. */
+    fun installedServices(): Set<MusicService> = MusicService.entries.filter { installedPackage(it) != null }.toSet()
+
+    /** The package [service]'s app is installed under: its own, or a patched build's. */
+    private fun installedPackage(service: MusicService): String? = service.packageNames.firstOrNull { packageName ->
         try {
-            context.packageManager.getPackageInfo(service.packageName, 0)
+            context.packageManager.getPackageInfo(packageName, 0)
             true
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
-    }.toSet()
+    }
 
     /**
      * Everything Android says about apps and links, read in one go. It takes many slow calls to
@@ -105,7 +108,7 @@ internal class LinkInterception(private val context: Context) {
      */
     fun linkState(): LinkState {
         val installed = installedServices()
-        val serviceApps = installed.associateWith { appFor(it.packageName) }
+        val serviceApps = installed.associateWith { appFor(installedPackage(it) ?: it.packageName) }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null, null)
         val own = ownState()
         val hosts = own?.hostToStateMap
