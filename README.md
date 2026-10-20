@@ -225,3 +225,5 @@ A visual slower than 40 frames a second on a phone is skipped there from then on
 When a still image comes right before a video in an edit, use a frame of that video instead: browsers, and tools built on them, draw video a little lighter than images, so the screen jumps in brightness.
 
 </details>
+
+Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
