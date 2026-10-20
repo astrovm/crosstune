@@ -237,7 +237,6 @@
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Bailarines</string>
-    <string name="visual_kind_drawing">Dibujos</string>
     <string name="visual_kind_fractals">Fractales</string>
     <string name="visual_kind_geometric">Geométricos</string>
     <string name="visual_kind_hypnotic">Hipnóticos</string>

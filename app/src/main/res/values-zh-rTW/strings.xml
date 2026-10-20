@@ -237,7 +237,6 @@
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">舞者</string>
-    <string name="visual_kind_drawing">繪畫</string>
     <string name="visual_kind_fractals">碎形</string>
     <string name="visual_kind_geometric">幾何</string>
     <string name="visual_kind_hypnotic">催眠</string>

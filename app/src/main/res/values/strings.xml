@@ -174,7 +174,6 @@
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Dancers</string>
-    <string name="visual_kind_drawing">Drawing</string>
     <string name="visual_kind_fractals">Fractals</string>
     <string name="visual_kind_geometric">Geometric</string>
     <string name="visual_kind_hypnotic">Hypnotic</string>

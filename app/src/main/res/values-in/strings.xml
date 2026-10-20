@@ -237,7 +237,6 @@
     <string name="visuals_position">%1$d / %2$d</string>
     <string name="visual_fps">%1$d fps</string>
     <string name="visual_kind_dancers">Penari</string>
-    <string name="visual_kind_drawing">Gambar</string>
     <string name="visual_kind_fractals">Fraktal</string>
     <string name="visual_kind_geometric">Geometris</string>
     <string name="visual_kind_hypnotic">Hipnotis</string>
