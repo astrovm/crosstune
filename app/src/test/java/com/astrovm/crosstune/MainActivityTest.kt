@@ -54,6 +54,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -3013,6 +3014,88 @@ class MainActivityTest {
         waitForDescription(string(R.string.retry_button))
         // Asked once more on the retry, since a busy service is worth asking again.
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.count { it.startsWith("https://lrclib.net") } >= 5)
+    }
+
+    @Test
+    fun aSongPlaysInItsAppWithoutLeavingCrosstuneOrOpensThereWhenItCant() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val play = string(R.string.play_in_background, "YouTube Music")
+        // With no app to play it in, there's nothing to play it with.
+        launch()
+        resolveTyped(link)
+        assertTrue(composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty())
+        controller!!.pause().stop().destroy()
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        launch()
+        resolveTyped(link)
+        val playing = { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = youTubeMusic) }
+        // Tapped once it's done with the last time, as a tap while it's asking does nothing.
+        val tapPlay = {
+            waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            click(play)
+        }
+
+        // Asked in the background, with its link there; once only, until it plays, and Crosstune stays.
+        tapPlay()
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to youTubeMusic, phone.songsAsked.single())
+        assertEquals(link, phone.linksAsked.single())
+        composeRule.onNode(hasContentDescription(play)).assertIsNotEnabled()
+        playing()
+        assertNull(nextStartedActivity())
+
+        // Asked, but never playing it, it's opened there, and left once it plays.
+        phone.playing.value = null
+        tapPlay()
+        assertEquals(2, phone.songsAsked.size)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(youTubeMusic to link, phone.opened.single())
+        assertEquals(0, phone.cameBack)
+        playing()
+        waitUntil { phone.cameBack == 1 }
+
+        // An app that can't be asked is opened right away.
+        phone.playing.value = null
+        phone.running = emptySet()
+        tapPlay()
+        waitUntil { phone.opened.size == 2 }
+        assertEquals(2, phone.songsAsked.size)
+        playing()
+        waitUntil { phone.cameBack == 2 }
+
+        // Unable to see it play, Crosstune opens it as Open does, and stays out of the way.
+        phone.access = false
+        tapPlay()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(link, nextStartedActivity()?.dataString)
+        assertEquals(2, phone.opened.size)
+        assertEquals(2, phone.cameBack)
+    }
+
+    @Test
+    fun youTubeMusicWithOnlyASearchForTheSongIsOpenedOnItRatherThanAsked() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.DEEZER.packageName, "Deezer"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
+        launch()
+        resolveTyped()
+        // YouTube Music plays only its own link, so a search there is opened instead.
+        click(string(R.string.play_in_background, "YouTube Music"))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()?.`package`)
+        assertTrue(phone.songsAsked.isEmpty() && phone.opened.isEmpty())
+        // Another app finds it asked by name.
+        chooseDefaultHere("Deezer")
+        click(string(R.string.play_in_background, "Deezer"))
+        assertEquals(MusicService.DEEZER.packageName, phone.songsAsked.single().second)
     }
 
     /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays. */

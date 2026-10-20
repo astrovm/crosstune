@@ -120,6 +120,7 @@
     <string name="play_part_in">Odtwórz od %1$d do %2$d w %3$s</string>
     <string name="part_range">Od %1$d do %2$d</string>
     <string name="play_first_button">Odtwórz pierwszy utwór</string>
+    <string name="play_in_background">Odtwórz w %1$s i zostań tutaj</string>
     <string name="songs_shown">Pierwsze %1$d z %2$d</string>
     <string name="clear_history_button">Wyczyść historię</string>
     <string name="tile_label">Otwórz skopiowany link muzyczny</string>

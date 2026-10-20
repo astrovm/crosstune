@@ -120,6 +120,7 @@
     <string name="play_part_in">在 %3$s 中播放第 %1$d 到 %2$d 首</string>
     <string name="part_range">第 %1$d 到 %2$d 首</string>
     <string name="play_first_button">播放第一首</string>
+    <string name="play_in_background">在 %1$s 中播放並留在這裡</string>
     <string name="songs_shown">共 %2$d 首，顯示前 %1$d 首</string>
     <string name="clear_history_button">清除歷史記錄</string>
     <string name="tile_label">開啟已複製的音樂連結</string>

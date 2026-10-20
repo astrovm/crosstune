@@ -447,7 +447,7 @@ class FlashcardsTest {
                 "playlistItemData":{"videoId":"other000000"}}}]}""")
             else FakeSpotify.html(request, "{}")
         }
-        // YouTube Music is stopped, and a video plays in YouTube, which wouldn't play the song if asked.
+        // YouTube Music can be asked, and a video plays in YouTube, which wouldn't play the song if asked.
         phone.running = setOf(youTubeMusic, "com.google.android.youtube")
         launch()
         practiseAll(1)
@@ -459,7 +459,7 @@ class FlashcardsTest {
     }
 
     @Test
-    fun youTubeMusicNotRunningIsOpenedOnTheSongAndLeftOnceItHasIt() {
+    fun youTubeMusicThatCantBeWokenIsOpenedOnTheSongAndLeftOnceItHasIt() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         saved(
             """{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""",
@@ -474,7 +474,7 @@ class FlashcardsTest {
                 "playlistItemData":{"videoId":"${title.lowercase().padEnd(11, '0')}"}}}]}""")
             else FakeSpotify.html(request, "{}")
         }
-        // Only another app runs, which isn't asked for a song kept from YouTube Music.
+        // YouTube Music doesn't let Crosstune wake it, and another app isn't asked for a song kept from it.
         phone.running = setOf("com.spotify.music")
         launch()
         practiseAll(2)

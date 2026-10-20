@@ -257,6 +257,10 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" android:host="piped.leptons.xyz" />
         </intent>
+        <!-- Music apps that can be woken in the background, as AppWaker.kt does, whichever played a song. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
     </queries>
 
     <application

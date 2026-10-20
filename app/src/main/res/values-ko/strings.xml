@@ -120,6 +120,7 @@
     <string name="play_part_in">%3$s에서 %1$d~%2$d번 재생</string>
     <string name="part_range">%1$d~%2$d번</string>
     <string name="play_first_button">첫 곡 재생</string>
+    <string name="play_in_background">%1$s에서 재생하고 여기 머무르기</string>
     <string name="songs_shown">%2$d곡 중 처음 %1$d곡</string>
     <string name="clear_history_button">기록 삭제</string>
     <string name="tile_label">복사한 음악 링크 열기</string>

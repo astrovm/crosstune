@@ -45,6 +45,7 @@ Pasting or sharing a link to Crosstune works without any setup.
 
 - **Tap and go.** Tapped and shared links open right away. Pasted links show the song and cover first.
 - **Exact match.** Opens the song itself instead of a search, where the app supports it.
+- **Play and stay.** Tap **Play** on a song to hear it in your music app while you stay in Crosstune. Apps that can't be asked from the background open for a moment, and Crosstune comes right back.
 - **One app per service.** For example, YouTube links to YouTube Music and the rest to Apple Music.
 - **Ask every time.** Pick the app each time you open a link.
 - **Any app or site.** Add your own with a search URL like `https://example.com/search?q={query}`.

@@ -1,7 +1,8 @@
-Visuals that draw with images, like fire or moss, show them now. 50 new ones, and 4 gone.
-Hold the visuals button to set how long each one shows.
+Visuals that draw with images, like fire or moss, show them now. 50 new ones, 4 gone.
+Hold the visuals button to set how long each shows.
 Make the lyrics bigger or smaller, and report wrong words or timing, from their menu.
+Play a song from its card and stay in Crosstune.
 Covers show for songs only YouTube Music has.
-Patched YouTube and YouTube Music, like ReVanced or Morphe, work too.
-Flashcards can ask in kana or Latin letters, and show only what you pick.
+Patched YouTube and YouTube Music, like ReVanced, work too.
+Flashcards can ask in kana or Latin letters.
 Less used settings moved to Settings → Advanced.

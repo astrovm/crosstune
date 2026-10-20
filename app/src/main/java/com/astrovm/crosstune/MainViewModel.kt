@@ -994,6 +994,38 @@ internal class MainViewModel(
         job = viewModelScope.launch { open(chosen, finishAfterOpen, tapped = true) }
     }
 
+    /**
+     * Has the song's app play it in the background, so Crosstune stays in front; opened there
+     * instead when it can't be asked, or, for YouTube Music, has only a search for it.
+     */
+    fun playResult() {
+        val destination = uiState.resultDestination as? Destination.Service ?: return
+        val song = uiState.result ?: return
+        job?.cancel()
+        job = viewModelScope.launch {
+            uiState = uiState.copy(playingResult = true)
+            try {
+                val link = prepareDestination(destination) ?: return@launch
+                // The link only a search when it was looked up and not found.
+                val exact = uiState.destinationUrls[destination]?.exact != false
+                val source = playback
+                val app = destination.packageName
+                // Asked by name, other apps find it; YouTube Music only plays its own link.
+                val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
+                // Seen to play it, or with no way to see, that's that; an app may say yes and not play it.
+                val sees = source?.hasAccess() == true
+                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null } } != null)) return@launch
+                // An app that can't be asked in the background is opened on the song, and, when
+                // Crosstune can see it play there, left again once it does, as practice does.
+                val back = source?.takeIf { exact && sees && it.openSong(app, link) } ?: return@launch open(destination, finishAfterOpen = false, tapped = true)
+                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null } }
+                back.comesBack()
+            } finally {
+                uiState = uiState.copy(playingResult = false)
+            }
+        }
+    }
+
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
         val url = prepareDestination(destination) ?: return

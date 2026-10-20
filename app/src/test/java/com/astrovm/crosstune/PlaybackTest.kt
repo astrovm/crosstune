@@ -50,7 +50,10 @@ class PlaybackTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val sessions = app.getSystemService(MediaSessionManager::class.java)
-    private val playback = MediaSessionPlayback(app, now = { NOW })
+    /** Each app woken to be asked for a song, as its packages, and the player it wakes as; none, when null. */
+    private val woken = mutableListOf<List<String>>()
+    private var wakes: MediaController? = null
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes })
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -542,8 +545,8 @@ class PlaybackTest {
         val official = MusicService.YOUTUBE_MUSIC.packageName
         allow()
         shadowOf(sessions).addController(player(patched, "YouTube Music", "Other", "Band"))
-        assertTrue(playback.runs(official))
-        assertTrue(playback.playSong(song, official, "https://music.youtube.com/watch?v=other000000"))
+        assertTrue(runBlocking { playback.playSong(song, official, "https://music.youtube.com/watch?v=other000000") })
+        assertTrue(woken.isEmpty())
         // Only the patched build installed, the song's opened there.
         shadowOf(app).checkActivities(true)
         val opens = ComponentName(patched, "$patched.UrlActivity")
@@ -657,7 +660,7 @@ class PlaybackTest {
     }
 
     @Test
-    fun aSongIsAskedForByNameFromTheAppItWasIn() {
+    fun aSongIsAskedForByNameFromTheAppItWasIn() = runBlocking {
         // Without access, or with no music app to ask, there's no one to ask.
         assertFalse(playback.playSong(song, "com.spotify.music"))
         allow()
@@ -678,14 +681,31 @@ class PlaybackTest {
     }
 
     @Test
-    fun anAppNotRunningIsOpenedOnTheSongAndCrosstuneComesBackOverIt() {
-        val youTubeMusic = "com.google.android.apps.youtube.music"
-        // Without access, nothing's known to run.
-        assertFalse(playback.runs(youTubeMusic))
+    fun anAppNotRunningIsWokenInTheBackgroundToBeAsked() = runBlocking {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        // Even without access, as itself or a build patched from it, whichever is installed.
+        wakes = player(youTubeMusic, "YouTube Music", "Other", "Band")
+        assertTrue(playback.playSong(song, youTubeMusic, link))
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, woken.single())
+        assertTrue(playback.playSong(song, "com.example.player"))
+        assertEquals(listOf("com.example.player"), woken.last())
+        // It can't be: with the song's link there, no other app is asked; without, the one that played last.
+        wakes = null
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
-        assertFalse(playback.runs(youTubeMusic))
-        assertTrue(playback.runs("com.spotify.music"))
+        assertFalse(playback.playSong(song, youTubeMusic, link))
+        assertTrue(playback.playSong(song, youTubeMusic))
+        // An app running isn't woken; with no app given, none is.
+        woken.clear()
+        assertTrue(playback.playSong(song, "com.spotify.music", link))
+        assertTrue(playback.playSong(song, null))
+        assertTrue(woken.isEmpty())
+    }
+
+    @Test
+    fun anAppNotRunningIsOpenedOnTheSongAndCrosstuneComesBackOverIt() {
+        val youTubeMusic = "com.google.android.apps.youtube.music"
         // Opened on the song's link, in that app.
         assertTrue(playback.openSong(youTubeMusic, "https://music.youtube.com/watch?v=other000000"))
         val opened = shadowOf(app).nextStartedActivity

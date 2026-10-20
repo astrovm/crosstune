@@ -371,6 +371,7 @@ class MainActivity : ComponentActivity() {
                         onClear = viewModel::clear,
                         onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
                         onOpen = { viewModel.openResult() },
+                        onPlayResult = viewModel::playResult,
                         onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },
                         onOpenOriginal = viewModel::openOriginal,
                         onDismissPicker = viewModel::dismissDestinationPicker,
