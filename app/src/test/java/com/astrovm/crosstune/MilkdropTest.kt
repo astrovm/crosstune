@@ -66,7 +66,7 @@ class MilkdropTest {
     private val sleeps = mutableListOf<Long>()
 
     private fun renderer(milkdrop: Milkdrop, tap: SoundTap? = FakeTap(), presets: List<String> = listOf("a", "b", "c")) =
-        MilkdropRenderer(milkdrop, { presets }, { tap }, Random(1), now = { clock }, sleep = { sleeps += it; clock += it }, presetMs = 10_000)
+        MilkdropRenderer(milkdrop, { presets }, { tap }, Random(1), now = { clock }, sleep = { sleeps += it; clock += it }, settings = VisualsSettings(changeMs = 10_000))
 
     @Test
     fun itStartsOnAPresetAtOnceAndMovesOnToEachInTurnBlendingIn() {
@@ -194,9 +194,12 @@ class MilkdropTest {
 
     @Test
     fun thePresetsThatComeWithTheAppAreAllMilkdropOnes() {
-        val presets = milkdropPresets(ApplicationProvider.getApplicationContext<Application>().assets)
+        val assets = ApplicationProvider.getApplicationContext<Application>().assets
+        val presets = milkdropPresets(assets)
         assertTrue(presets.size >= 20)
-        assertTrue(presets.all { "[preset00]" in it })
+        // By name, without .milk, each read as a .milk file.
+        assertTrue(presets.none { it.endsWith(".milk") })
+        assertTrue(presets.all { "[preset00]" in milkdropPreset(assets, it) })
     }
 
     @Test
@@ -285,7 +288,7 @@ class MilkdropTest {
     @Test
     fun nextMovesOnAtTheNextFrameOncePerAsk() {
         val milkdrop = FakeMilkdrop()
-        val renderer = MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = {}, presetMs = 10_000, skips = 2)
+        val renderer = MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = {}, settings = VisualsSettings(changeMs = 10_000), skips = 2)
         renderer.created()
         // Asks from before it started aren't made.
         renderer.frame()
@@ -322,8 +325,8 @@ class MilkdropTest {
         override fun close() = Unit
     }
 
-    private fun timed(milkdrop: Milkdrop, tooSlow: Set<String> = emptySet(), onTooSlow: (String) -> Unit = {}) =
-        MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, presetMs = 30_000, tooSlow = tooSlow, onTooSlow = onTooSlow)
+    private fun timed(milkdrop: Milkdrop, settings: VisualsSettings = VisualsSettings(), onTooSlow: (String) -> Unit = {}, onDrop: (String) -> Unit = {}) =
+        MilkdropRenderer(milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, settings = settings, onTooSlow = onTooSlow, onDrop = onDrop)
 
     @Test
     fun aPresetTooSlowToDrawIsPassedOverAndKeptSo() {
@@ -334,14 +337,14 @@ class MilkdropTest {
         renderer.created()
         // Drawn at a frame each 60 ms, it's known slow once it's blended in, and cut straight from.
         repeat(100) { renderer.frame() }
-        assertEquals(listOf(MilkdropRenderer.presetKey(order[0])), kept)
+        assertEquals(listOf(order[0]), kept)
         assertEquals(listOf(order[0], order[1]), milkdrop.shows)
         // One fast enough stays on.
         assertEquals(order[1], milkdrop.shows.last())
 
         // Next time, it's passed over from the start, and again when its turn comes.
         val again = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
-        val next = timed(again, tooSlow = kept.toSet())
+        val next = timed(again, VisualsSettings(heavy = kept.toSet()))
         next.created()
         next.skipTo(1)
         next.frame()
@@ -357,7 +360,7 @@ class MilkdropTest {
         val slow = TimedMilkdrop(mapOf("a" to 5L, "b" to 5L, "c" to 5L), mapOf(order[0] to 21L))
         val kept = mutableListOf<String>()
         timed(slow, onTooSlow = { kept += it }).apply { created(); repeat(200) { frame() } }
-        assertEquals(listOf(MilkdropRenderer.presetKey(order[0])), kept)
+        assertEquals(listOf(order[0]), kept)
         // 25 ms a frame is fast enough.
         val fast = TimedMilkdrop(mapOf("a" to 5L, "b" to 5L, "c" to 5L), mapOf(order[0] to 20L))
         timed(fast, onTooSlow = { kept += it }).apply { created(); repeat(200) { frame() } }
@@ -367,10 +370,10 @@ class MilkdropTest {
 
     @Test
     fun withEveryPresetTooSlowItStillShowsThemAndAPauseIsntSlowness() {
-        val slow = setOf("a", "b", "c").map(MilkdropRenderer::presetKey).toSet()
+        val slow = setOf("a", "b", "c")
         val milkdrop = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
         val kept = mutableListOf<String>()
-        val renderer = timed(milkdrop, tooSlow = slow)
+        val renderer = timed(milkdrop, VisualsSettings(heavy = slow))
         renderer.created()
         assertEquals(1, milkdrop.shows.size)
         // Out of sight a while, the frame after isn't timed as slow.
@@ -392,17 +395,100 @@ class MilkdropTest {
         val milkdrop = TimedMilkdrop(mapOf("a" to 20L, "b" to 50L, "c" to 10L))
         val reports = mutableListOf<String>()
         val renderer = MilkdropRenderer(
-            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, presetMs = 30_000,
-            tooSlow = setOf(MilkdropRenderer.presetKey("b")), bench = true, report = { reports += it }
+            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it },
+            settings = VisualsSettings(heavy = setOf("b")), bench = true, report = { reports += it }
         )
         renderer.created()
         repeat(400) { renderer.frame() }
         // No wait between frames: as many as each draws in its second timed, even one kept as too slow.
         val fps = mapOf("a" to 50, "b" to 20, "c" to 100)
-        assertEquals(order.map { "${MilkdropRenderer.presetKey(it)} ${fps.getValue(it)}" }, reports.take(3))
-        assertEquals("slowest first: " + listOf("b", "a", "c").joinToString { "${MilkdropRenderer.presetKey(it)} ${fps.getValue(it)}" }, reports[3])
+        assertEquals(order.map { "$it: ${fps.getValue(it)}" }, reports.take(3))
+        assertEquals("slowest first: " + listOf("b", "a", "c").joinToString { "$it: ${fps.getValue(it)}" }, reports[3])
         assertEquals(4, reports.size)
         // Then as usual: the one too slow is passed over.
         assertEquals(order + order.first { it != "b" }, milkdrop.shows.take(4))
+    }
+
+    @Test
+    fun visualsTurnedOffNeverShowAndSettingsChangeAsItDraws() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        val milkdrop = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        val renderer = timed(milkdrop, VisualsSettings(off = setOf(order[0]), changeMs = 15_000))
+        renderer.created()
+        assertEquals(listOf(order[1]), milkdrop.shows)
+        // Turned off meanwhile, the next is passed over too.
+        renderer.settings = VisualsSettings(off = setOf(order[0], order[2]), changeMs = 15_000)
+        repeat(1_000) { renderer.frame() }
+        assertEquals(setOf(order[1]), milkdrop.shows.toSet())
+    }
+
+    @Test
+    fun aVisualDroppedIsPassedOverAtOnceAndSaidSo() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        val milkdrop = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        val dropped = mutableListOf<String>()
+        val renderer = timed(milkdrop, VisualsSettings(changeMs = 15_000), onDrop = { dropped += it })
+        renderer.created()
+        renderer.frame()
+        renderer.dropTo(1)
+        renderer.frame()
+        assertEquals(listOf(order[0]), dropped)
+        assertEquals(listOf(order[0], order[1]), milkdrop.shows)
+        // It doesn't come back, though settings haven't caught up yet; nor is it dropped twice.
+        repeat(2_000) { renderer.frame() }
+        assertEquals(listOf(order[0]), dropped)
+        assertEquals(setOf(order[1], order[2]), milkdrop.shows.drop(1).toSet())
+    }
+
+    @Test
+    fun aHeavyVisualTurnedOnAnywayOrWithHeavyOnesKeptShowsAndIsntTimed() {
+        val order = listOf("a", "b", "c").shuffled(Random(1))
+        val kept = mutableListOf<String>()
+        // Too slow, and known so, but turned on anyway: shown first, and left on.
+        val anyway = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        timed(anyway, VisualsSettings(heavy = setOf(order[0]), keep = setOf(order[0])), onTooSlow = { kept += it }).apply { created(); repeat(100) { frame() } }
+        assertEquals(listOf(order[0]), anyway.shows)
+        // Heavy ones not skipped, the same.
+        val all = TimedMilkdrop(mapOf(order[0] to 60L, order[1] to 10L, order[2] to 10L))
+        timed(all, VisualsSettings(heavy = setOf(order[0]), skipHeavy = false), onTooSlow = { kept += it }).apply { created(); repeat(100) { frame() } }
+        assertEquals(listOf(order[0]), all.shows)
+        assertEquals(emptyList<String>(), kept)
+    }
+
+    @Test
+    fun setToNeverAVisualStaysTillTheNextIsAskedFor() {
+        val milkdrop = TimedMilkdrop(mapOf("a" to 10L, "b" to 10L, "c" to 10L))
+        val renderer = timed(milkdrop, VisualsSettings(changeMs = VisualsSettings.NEVER))
+        renderer.created()
+        repeat(5_000) { renderer.frame() }
+        assertEquals(1, milkdrop.shows.size)
+        renderer.skipTo(1)
+        renderer.frame()
+        assertEquals(2, milkdrop.shows.size)
+    }
+
+    @Test
+    fun visualsSettingsAreKept() {
+        val store = VisualsStore(ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("visuals-test", 0))
+        assertEquals(VisualsSettings(), store.load())
+        store.turn("a", on = false)
+        store.heavy("b")
+        assertEquals(VisualsSettings(off = setOf("a"), heavy = setOf("b")), store.load())
+        assertTrue(!store.load().shows("a") && !store.load().shows("b") && store.load().shows("c"))
+        // A heavy one turned on is kept on; turned off again, it isn't.
+        store.turn("b", on = true)
+        assertEquals(setOf("b"), store.load().keep)
+        assertTrue(store.load().shows("b"))
+        store.turn("b", on = false)
+        assertEquals(emptySet<String>(), store.load().keep)
+        assertEquals(setOf("a", "b"), store.load().off)
+        store.turn("a", on = true)
+        assertEquals(setOf("b"), store.load().off)
+        // Heavy ones shown, and how long each shows; a length Settings doesn't offer is the usual.
+        store.skipHeavy(false)
+        store.changeEvery(60_000)
+        assertEquals(false to 60_000L, store.load().let { it.skipHeavy to it.changeMs })
+        store.changeEvery(1)
+        assertEquals(MilkdropRenderer.PRESET_MS, store.load().changeMs)
     }
 }

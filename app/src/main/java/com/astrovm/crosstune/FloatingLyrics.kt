@@ -112,7 +112,7 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     ) {
         // The visuals behind the words, shaded as dark as the background is set.
         if (options.visuals) {
-            MilkdropVisuals(state.visualsSkips, Modifier.matchParentSize())
+            MilkdropVisuals(state.visualsPlay, Modifier.matchParentSize())
             Box(Modifier.matchParentSize().background(shade))
         }
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {

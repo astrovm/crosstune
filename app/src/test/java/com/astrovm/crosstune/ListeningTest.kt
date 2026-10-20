@@ -1278,6 +1278,11 @@ class ListeningTest {
         click(string(R.string.visuals_next))
         assertFalse(shown(string(R.string.visuals_next)))
         assertTrue(visualsShown().isNotEmpty())
+        // Never this one again, with the menu closing.
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_drop))
+        assertFalse(shown(string(R.string.visuals_drop)))
+        assertEquals(1, controllerModel().uiState.visualsDrops)
 
         // Scrolling the words, the bar makes way, and comes back once they rest.
         composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))

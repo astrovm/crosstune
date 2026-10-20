@@ -223,6 +223,15 @@
     <string name="visuals_hide">Visuals verbergen</string>
     <string name="visuals_next">Volgende visual</string>
     <string name="visuals_shade">Verduistering van de visuals</string>
+    <string name="visuals_drop">Deze niet meer tonen</string>
+    <string name="settings_visuals_title">Visuals</string>
+    <string name="setting_skip_heavy_visuals">Zware visuals overslaan</string>
+    <string name="setting_skip_heavy_visuals_description">Te traag voor deze telefoon, waardoor de tekst erover hapert</string>
+    <string name="setting_visuals_change">Wisselen elke</string>
+    <string name="visuals_change_never">Nooit</string>
+    <string name="setting_visuals_list">Welke visuals</string>
+    <string name="visuals_list_summary">%1$d van %2$d aan</string>
+    <string name="visual_heavy">Te zwaar voor deze telefoon</string>
     <string name="visuals_only">Alleen visuals</string>
     <string name="visuals_options">Visuals-opties</string>
     <string name="visuals_show_words">Songtekst tonen</string>

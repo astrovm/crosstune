@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.res.AssetManager
 import android.media.audiofx.Visualizer
 import android.graphics.SurfaceTexture
@@ -115,36 +116,106 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
 }
 
 /** The presets that come with the app, in assets/milkdrop. */
+/** The presets that come with the app, in assets/milkdrop, by name: their file's, without .milk. */
 internal fun milkdropPresets(assets: AssetManager): List<String> =
-    assets.list(PRESETS).orEmpty().filter { it.endsWith(".milk") }.sorted().map { name ->
-        assets.open("$PRESETS/$name").bufferedReader().use { it.readText() }
-    }
+    assets.list(PRESETS).orEmpty().filter { it.endsWith(".milk") }.sorted().map { it.removeSuffix(".milk") }
+
+/** The text of preset [name]'s .milk file. */
+internal fun milkdropPreset(assets: AssetManager, name: String): String =
+    assets.open("$PRESETS/$name.milk").bufferedReader().use { it.readText() }
 
 private const val PRESETS = "milkdrop"
 
 /**
- * Draws [milkdrop] in a GL view: a preset at random, then another every [presetMs], blending in,
- * all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the battery. A
- * preset this phone draws too slowly, which makes the words over it stutter too, is passed over
- * from then on.
+ * How the visuals are picked, by preset name: those turned [off]; those this phone draws too
+ * slowly, [heavy], passed over while [skipHeavy], but for those turned on anyway, [keep]; and how
+ * long each shows, [changeMs], the next never coming on its own at [NEVER].
+ */
+internal data class VisualsSettings(
+    val off: Set<String> = emptySet(),
+    val heavy: Set<String> = emptySet(),
+    val keep: Set<String> = emptySet(),
+    val skipHeavy: Boolean = true,
+    val changeMs: Long = MilkdropRenderer.PRESET_MS
+) {
+    /** Whether preset [name] is passed over as too slow. */
+    fun skips(name: String) = skipHeavy && name in heavy && name !in keep
+
+    /** Whether preset [name] shows: not turned off, nor too slow. */
+    fun shows(name: String) = name !in off && !skips(name)
+
+    companion object {
+        const val NEVER = Long.MAX_VALUE
+        /** How long each can show, as Settings offers. */
+        val CHANGE_EVERY = listOf(15_000L, 30_000L, 60_000L, NEVER)
+    }
+}
+
+/** [VisualsSettings], kept with the app's settings. */
+internal class VisualsStore(private val preferences: SharedPreferences) {
+    fun load() = VisualsSettings(
+        off = set(KEY_OFF),
+        heavy = set(KEY_HEAVY),
+        keep = set(KEY_KEEP),
+        skipHeavy = preferences.getBoolean(KEY_SKIP_HEAVY, true),
+        changeMs = preferences.getLong(KEY_CHANGE_MS, MilkdropRenderer.PRESET_MS).takeIf { it in VisualsSettings.CHANGE_EVERY } ?: MilkdropRenderer.PRESET_MS
+    )
+
+    /** Preset [name] on or off; a heavy one turned on is kept on, rather than passed over again. */
+    fun turn(name: String, on: Boolean) = synchronized(this) {
+        preferences.edit {
+            putStringSet(KEY_OFF, if (on) set(KEY_OFF) - name else set(KEY_OFF) + name)
+            if (name in set(KEY_HEAVY)) putStringSet(KEY_KEEP, if (on) set(KEY_KEEP) + name else set(KEY_KEEP) - name)
+        }
+    }
+
+    /** Preset [name] drew too slowly on this phone. */
+    fun heavy(name: String) = synchronized(this) { preferences.edit { putStringSet(KEY_HEAVY, set(KEY_HEAVY) + name) } }
+
+    fun skipHeavy(on: Boolean) = preferences.edit { putBoolean(KEY_SKIP_HEAVY, on) }
+
+    fun changeEvery(ms: Long) = preferences.edit { putLong(KEY_CHANGE_MS, ms) }
+
+    private fun set(key: String): Set<String> = preferences.getStringSet(key, null).orEmpty().toSet()
+
+    companion object {
+        private const val KEY_OFF = "visuals_off"
+        private const val KEY_HEAVY = "visuals_heavy"
+        private const val KEY_KEEP = "visuals_keep"
+        private const val KEY_SKIP_HEAVY = "visuals_skip_heavy"
+        private const val KEY_CHANGE_MS = "visuals_change_ms"
+        val KEYS = setOf(KEY_OFF, KEY_HEAVY, KEY_KEEP, KEY_SKIP_HEAVY, KEY_CHANGE_MS)
+    }
+}
+
+/**
+ * Draws [milkdrop] in a GL view: a preset at random, then another as often as [settings] say,
+ * blending in, all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the
+ * battery. A preset this phone draws too slowly, which makes the words over it stutter too, is
+ * passed over from then on, while settings say so.
  */
 internal class MilkdropRenderer(
     private val milkdrop: Milkdrop,
+    /** The presets' names. */
     private val presets: () -> List<String>,
     private val tap: () -> SoundTap?,
     private val random: Random = Random.Default,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val sleep: (Long) -> Unit = Thread::sleep,
-    private val presetMs: Long = PRESET_MS,
+    settings: VisualsSettings = VisualsSettings(),
     /** Skips asked for before it started, which it doesn't make. */
     skips: Int = 0,
-    /** The presets, by [presetKey], this phone drew too slowly before. */
-    tooSlow: Set<String> = emptySet(),
-    /** Told of a preset, by [presetKey], this phone draws too slowly, to pass it over next time too. */
+    /** The same for drops. */
+    drops: Int = 0,
+    /** The text of the preset with a name. */
+    private val text: (String) -> String = { it },
+    /** Told of a preset this phone draws too slowly, to pass it over next time too. */
     private val onTooSlow: (String) -> Unit = {},
+    /** Told of the preset shown when it's asked not to be shown again. */
+    private val onDrop: (String) -> Unit = {},
     /**
      * A debug mode: each preset for [BENCH_MS], as fast as it draws, [report]ing its frames a second
-     * as "key fps", then all of them, slowest first, before it goes on as usual.
+     * as "name: fps", then all of them, slowest first, before it goes on as usual.
      */
     bench: Boolean = false,
     private val report: (String) -> Unit = {}
@@ -162,7 +233,14 @@ internal class MilkdropRenderer(
     private var drawnWidth = 0
     private var drawnHeight = 0
     private val samples = ByteArray(OutputMixTap.SAMPLES)
-    private val slow = tooSlow.toMutableSet()
+
+    /** As changed in Settings, from the main thread. */
+    @Volatile
+    var settings = settings
+
+    /** Found too slow, or dropped, till [settings] have caught up. */
+    private val slow = mutableSetOf<String>()
+    private val dropped = mutableSetOf<String>()
     private var current: String? = null
     private var timedMs = 0L
     private var timedFrames = 0
@@ -196,7 +274,16 @@ internal class MilkdropRenderer(
         val wait = drawnAt + FRAME_MS - now()
         if (wait > 0) sleep(wait)
         drawnAt = now()
-        if (skipsDone != skipsAsked || drawnAt - shownAt >= presetMs) {
+        if (dropsDone != dropsAsked) {
+            dropsDone = dropsAsked
+            current?.let {
+                dropped += it
+                onDrop(it)
+            }
+            showNext(smooth = false)
+        }
+        val changeMs = settings.changeMs
+        if (skipsDone != skipsAsked || (changeMs != VisualsSettings.NEVER && drawnAt - shownAt >= changeMs)) {
             skipsDone = skipsAsked
             showNext(smooth = true)
         }
@@ -224,10 +311,10 @@ internal class MilkdropRenderer(
         val at = now()
         if (at - shownAt >= BENCH_MS) {
             val fps = (benchFrames * 1000 / (BENCH_MS - BENCH_FROM_MS)).toInt()
-            current?.let { benched += presetKey(it) to fps }
-            report("${current?.let(::presetKey)} $fps")
+            current?.let { benched += it to fps }
+            report("$current: $fps")
             if (benched.size >= shown.size) {
-                report("slowest first: " + benched.sortedBy { it.second }.joinToString { "${it.first} ${it.second}" })
+                report("slowest first: " + benched.sortedBy { it.second }.joinToString { "${it.first}: ${it.second}" })
                 benching = false
             }
             showNext(smooth = false)
@@ -255,27 +342,33 @@ internal class MilkdropRenderer(
         if (timed || since < TIME_TO_MS) return
         timed = true
         val preset = current ?: return
+        // Turned on anyway, or with heavy ones kept, it isn't passed over.
+        if (!settings.skipHeavy || preset in settings.keep) return
         if (timedFrames < TIMED_FRAMES || timedMs / timedFrames <= SLOW_FRAME_MS) return
-        presetKey(preset).let { key ->
-            slow += key
-            onTooSlow(key)
-        }
+        slow += preset
+        onTooSlow(preset)
         // Cut straight to the next, rather than blending in, which would draw this one a while longer.
         showNext(smooth = false)
     }
 
-    /** The next preset that loads, trying each at most once; one too slow only when they all are. */
+    /**
+     * The next preset that loads, trying each at most once: of those that show, or, when none does,
+     * of those not turned off, or else any. In the debug mode, every one.
+     */
     private fun showNext(smooth: Boolean) {
         shownAt = now()
         timedMs = 0
         timedFrames = 0
         timed = false
-        val anyFast = shown.any { presetKey(it) !in slow }
+        val settings = settings
+        val on = shown.filter { it !in settings.off && it !in dropped }
+        val showing = on.filter { settings.shows(it) && (it !in slow || !settings.skipHeavy || it in settings.keep) }
+        val picks = (if (benching) shown else showing.ifEmpty { on.ifEmpty { shown } }).toSet()
         repeat(shown.size) {
             val preset = shown[next]
             next = (next + 1) % shown.size
-            if (anyFast && !benching && presetKey(preset) in slow) return@repeat
-            if (milkdrop.show(preset, smooth)) {
+            if (preset !in picks) return@repeat
+            if (milkdrop.show(text(preset), smooth)) {
                 current = preset
                 return
             }
@@ -289,6 +382,15 @@ internal class MilkdropRenderer(
     /** Moves on to the next preset at the next frame, once for each time [skips] has gone up. */
     fun skipTo(skips: Int) {
         skipsAsked = skips
+    }
+
+    @Volatile
+    private var dropsAsked = drops
+    private var dropsDone = drops
+
+    /** Passes over the preset shown from now on, at the next frame, once for each time [drops] has gone up. */
+    fun dropTo(drops: Int) {
+        dropsAsked = drops
     }
 
     /** Stops drawing and listening; on the GL thread, while its context is still there. */
@@ -313,9 +415,6 @@ internal class MilkdropRenderer(
                 into[i] = (128 + 110 * level * wave).toInt().toByte()
             }
         }
-
-        /** A preset, the text of its .milk file, by a key short enough to keep. */
-        fun presetKey(preset: String): String = Integer.toHexString(preset.hashCode())
 
         const val PRESET_MS = 30_000L
         /** 30 frames a second. */
@@ -478,35 +577,46 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
     }
 }
 
+/**
+ * What the visuals are asked to do: move on each time [skips] goes up, pass over the one showing
+ * from then on each time [drops] does, and pick as [settings] say.
+ */
+internal data class VisualsPlay(val skips: Int = 0, val drops: Int = 0, val settings: VisualsSettings = VisualsSettings())
+
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
-internal val LocalVisuals = staticCompositionLocalOf<@Composable (skips: Int, modifier: Modifier) -> Unit> {
-    { skips, modifier -> MilkdropVisuals(skips, modifier) }
+internal val LocalVisuals = staticCompositionLocalOf<@Composable (play: VisualsPlay, modifier: Modifier) -> Unit> {
+    { play, modifier -> MilkdropVisuals(play, modifier) }
 }
 
-/** MilkDrop visuals, moving to what the phone plays; each time [skips] goes up, on to the next. */
+/**
+ * MilkDrop visuals, moving to what the phone plays, as [play] asks. Those too slow, and those
+ * dropped, are kept with the app's settings, which [play] then has.
+ */
 @Composable
-internal fun MilkdropVisuals(skips: Int, modifier: Modifier = Modifier) {
+internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { context ->
-            // The presets too slow on this phone are kept, to pass over from the start next time.
-            val kept = context.getSharedPreferences(VISUALS_PREFS, Context.MODE_PRIVATE)
+            val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
             val renderer = MilkdropRenderer(
-                MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory, skips = skips,
-                tooSlow = kept.getStringSet(KEY_TOO_SLOW, null).orEmpty(),
-                onTooSlow = { key -> synchronized(kept) { kept.edit { putStringSet(KEY_TOO_SLOW, kept.getStringSet(KEY_TOO_SLOW, null).orEmpty() + key) } } },
+                MainActivity.milkdropFactory(), { milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
+                settings = play.settings, skips = play.skips, drops = play.drops,
+                text = { milkdropPreset(context.assets, it) },
+                onTooSlow = store::heavy,
+                onDrop = { store.turn(it, on = false) },
                 // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
                 bench = systemProperty("debug.crosstune.visuals_bench") == "1",
                 report = { Log.i("CrosstuneVisuals", it) }
             )
             MilkdropView(context, renderer)
         },
-        update = { it.renderer.skipTo(skips) },
+        update = {
+            it.renderer.settings = play.settings
+            it.renderer.skipTo(play.skips)
+            it.renderer.dropTo(play.drops)
+        },
         modifier = modifier
     )
 }
-
-private const val VISUALS_PREFS = "milkdrop"
-private const val KEY_TOO_SLOW = "too_slow"
 
 /** A system property, set with adb shell setprop; null when it can't be read. */
 private fun systemProperty(name: String): String? = runCatching {

@@ -303,6 +303,13 @@ internal data class ScreenActions(
     /** Visuals on or off behind the words; on asks for the microphone, which Android needs to share what plays. */
     val onVisualsChange: (Boolean) -> Unit = {},
     val onNextVisual: () -> Unit = {},
+    /** Never shows the visual showing again. */
+    val onDropVisual: () -> Unit = {},
+    /** A visual on or off, by name, as Settings lists them. */
+    val onVisualOnChange: (name: String, on: Boolean) -> Unit = { _, _ -> },
+    val onSkipHeavyVisualsChange: (Boolean) -> Unit = {},
+    /** How long each visual shows, or [VisualsSettings.NEVER]. */
+    val onVisualsChangeEveryChange: (Long) -> Unit = {},
     /** How dark the ground over the visuals is; kept once [save]. */
     val onVisualsShadeChange: (shade: Float, save: Boolean) -> Unit = { _, _ -> },
     /** Opens the chosen song from the list of songs a typed name turned up. */

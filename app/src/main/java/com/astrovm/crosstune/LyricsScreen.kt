@@ -360,7 +360,7 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            LocalVisuals.current(state.visualsSkips, Modifier.fillMaxSize())
+            LocalVisuals.current(state.visualsPlay, Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
@@ -595,7 +595,7 @@ private val HEADER_SHADE = 72.dp
 private val BAR_FADE = 88.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
-private const val MAX_VISUALS_SHADE = 0.9f
+internal const val MAX_VISUALS_SHADE = 0.9f
 
 /** How long after the words stop being scrolled the bar comes back. */
 private const val BAR_BACK_MS = 1_200L
@@ -1017,7 +1017,10 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
     }
 }
 
-/** What can be done with the visuals while they're on: how dark the ground over them is, the next, them alone, or off. */
+/**
+ * What can be done with the visuals while they're on: how dark the ground over them is, the next,
+ * never this one again, them alone, or off.
+ */
 @Composable
 private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
@@ -1044,6 +1047,14 @@ private fun VisualsMenu(open: Boolean, shade: Float, actions: ScreenActions, onO
             onClick = {
                 onClose()
                 actions.onNextVisual()
+            }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.visuals_drop)) },
+            leadingIcon = { AppIcon(R.drawable.ic_visibility_off, contentDescription = null) },
+            onClick = {
+                onClose()
+                actions.onDropVisual()
             }
         )
         DropdownMenuItem(

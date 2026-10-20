@@ -135,6 +135,7 @@ internal class MainViewModel(
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
+            visualsSettings = VisualsStore(preferences).load(),
             canFollowApps = playback?.hasAccess() == true,
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
@@ -179,8 +180,16 @@ internal class MainViewModel(
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.copy(canSetUpInOneTap = oneTap.available()) }
 
+    private val visualsStore = VisualsStore(preferences)
+
+    /** Visuals settings changed, here or by the visuals themselves, e.g. one found too slow, show at once. */
+    private val visualsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key in VisualsStore.KEYS) uiState = uiState.copy(visualsSettings = visualsStore.load())
+    }.also(preferences::registerOnSharedPreferenceChangeListener)
+
     override fun onCleared() {
         stopWatchingOneTap?.invoke()
+        preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
     }
 
     /**
@@ -1469,6 +1478,18 @@ internal class MainViewModel(
     fun nextVisual() {
         uiState = uiState.copy(visualsSkips = uiState.visualsSkips + 1)
     }
+
+    /** Never shows the visual showing again, and moves on. */
+    fun dropVisual() {
+        uiState = uiState.copy(visualsDrops = uiState.visualsDrops + 1)
+    }
+
+    /** Visual [name] on or off, as Settings lists them. */
+    fun setVisualOn(name: String, on: Boolean) = visualsStore.turn(name, on)
+
+    fun setSkipHeavyVisuals(on: Boolean) = visualsStore.skipHeavy(on)
+
+    fun setVisualsChangeEvery(ms: Long) = visualsStore.changeEvery(ms)
 
     fun setVisuals(on: Boolean) {
         preferences.edit { putBoolean(KEY_VISUALS, on) }
