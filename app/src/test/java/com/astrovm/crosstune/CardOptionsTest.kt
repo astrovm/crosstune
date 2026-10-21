@@ -23,7 +23,7 @@ class CardOptionsTest {
             .putBoolean("card_latin", false).putBoolean("card_translation", false)
             .putBoolean("lyrics_romaji_typed", true).commit()
         assertEquals(
-            CardOptions(CardSide(wordsAs = WordsAs.LATIN, romajiTyped = true), CardSide(romajiTyped = true)),
+            CardOptions(CardSide(wordsAs = WordsAs.LATIN, romajiTyped = true), CardSide(romajiTyped = true, sound = true)),
             CardOptions.load(prefs)
         )
         prefs.edit().putString("card_front", "unknown").commit()
