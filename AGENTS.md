@@ -42,7 +42,7 @@ Playback follows and controls other music apps through Android's media sessions 
 ## Verifying
 
 - Smallest proof first: the test you touched, not the whole suite. CI owns `:app:ci`.
-- To try a change on a phone, build the APK first and alone: `./gradlew :app:assembleDev`. Install it on the phones as soon as it's built, before any test runs. Only then start `./gradlew :app:ci -x :app:assembleRelease -x :app:assembleDev` in the background. Never put both in one Gradle command: it runs the tests first, and one failing test means no APK.
+- Order, every time: 1) push, so the PR's CI starts; 2) `./gradlew :app:assembleDev` alone; 3) install the APK on the phones; 4) `./gradlew :app:ci -x :app:assembleRelease -x :app:assembleDev` in the background. Never put the build and the tests in one Gradle command: it runs the tests first, and one failing test means no APK.
 - Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
