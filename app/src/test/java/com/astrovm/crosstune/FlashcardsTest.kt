@@ -518,6 +518,31 @@ class FlashcardsTest {
     }
 
     @Test
+    fun aVisibleSizeControlOpensItsSliderAndKeepsLinkedWordsTogether() {
+        saved("""{"text":"夜","reading":"よる","romanized":"yoru","translation":"Night","title":"Demo","artist":"Band"}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val options = { model().uiState.cardTypes.first().options }
+        fun size(layer: Int, sizeLabel: Int, value: Float) {
+            click("${string(layer)}, ${string(sizeLabel)}")
+            composeRule.onNode(hasContentDescription(string(layer)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(value) }
+            click("${string(layer)}, ${string(sizeLabel)}")
+        }
+        size(R.string.visuals_show_words, R.string.lyrics_words_size, MAX_WORDS_SCALE)
+        assertEquals(MAX_WORDS_SCALE, options().front.wordsScale, 0f)
+        size(R.string.lyrics_romanized, R.string.lyrics_words_size, MIN_WORDS_SCALE)
+        assertEquals(MIN_WORDS_SCALE, options().front.wordsScale, 0f)
+        size(R.string.lyrics_readings, R.string.lyrics_reading_size, MAX_READING_SCALE)
+        assertEquals(MAX_READING_SCALE, options().front.readingScale, 0f)
+        size(R.string.lyrics_translation, R.string.lyrics_translation_size, MAX_WORDS_SCALE)
+        assertEquals(MAX_WORDS_SCALE, options().front.translationScale, 0f)
+        assertEquals(CardOptions().back, options().back)
+    }
+
+    @Test
     fun linesMakeACardOfEachKindThatIsOnAndTheCardSaysWhichItIs() {
         saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1,""" +
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
