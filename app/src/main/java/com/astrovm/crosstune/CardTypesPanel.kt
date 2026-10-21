@@ -317,9 +317,9 @@ private fun LayerRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f).alpha(if (on) 1f else 0.4f)
         )
-        TextButton(onClick = { sizing = !sizing }, modifier = Modifier.semantics { contentDescription = sizeName }) {
+        TextButton(onClick = { sizing = !sizing }, modifier = Modifier.semantics { contentDescription = "$name, $sizeName" }) {
             if (label == R.string.visuals_show_words || label == R.string.lyrics_romanized) {
-                AppIcon(R.drawable.ic_link, contentDescription = stringResource(R.string.lyrics_words_size), modifier = Modifier.size(14.dp))
+                AppIcon(R.drawable.ic_link, contentDescription = null, modifier = Modifier.size(14.dp))
             }
             Text(NumberFormat.getPercentInstance().format(sizeShare(latest, range)))
         }
