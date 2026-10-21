@@ -300,9 +300,8 @@ private fun LayerRow(
     Column {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("card-layer-$label")
             .transformable(pinch, canPan = { false })
-
     ) {
         Box(
             contentAlignment = Alignment.Center,

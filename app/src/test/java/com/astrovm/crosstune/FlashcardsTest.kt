@@ -508,7 +508,7 @@ class FlashcardsTest {
         assertEquals(1.15f, read().back.wordsScale, 0.001f)
         assertEquals(1f, read().front.translationScale, 0f)
         // Two fingers pulling apart make the back's words bigger, and it's kept once they let go.
-        rows()[0].performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
+        composeRule.onNodeWithTag("card-layer-${R.string.visuals_show_words}").performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
         composeRule.waitForIdle()
         assertTrue(read().back.wordsScale > 1.5f)
         assertEquals(read().back.wordsScale, loadCardTypes(prefs()).first { it.id == READ_TYPE }.options.back.wordsScale, 0f)
@@ -526,10 +526,10 @@ class FlashcardsTest {
         openKind(string(R.string.card_type_read))
         val options = { model().uiState.cardTypes.first().options }
         fun size(layer: Int, sizeLabel: Int, value: Float) {
-            click("${string(layer)}, ${string(sizeLabel)}")
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and hasClickAction()).performClick()
             composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(value) }
-            click("${string(layer)}, ${string(sizeLabel)}")
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and hasClickAction()).performClick()
         }
         size(R.string.visuals_show_words, R.string.lyrics_words_size, MAX_WORDS_SCALE)
         assertEquals(MAX_WORDS_SCALE, options().front.wordsScale, 0f)
