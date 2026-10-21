@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -97,6 +97,9 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                             title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp).clickable { editing = kind.id }.padding(vertical = 12.dp)
                         )
+                        // The name opens its editor, and this says so.
+                        AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp).alpha(0.6f))
+                        Spacer(Modifier.width(12.dp))
                         // One kind always stays on, so there's always a card.
                         Switch(
                             checked = kind.on, enabled = !(kind.on && last), onCheckedChange = { on -> change(types.map { if (it.id == kind.id) it.copy(on = on) else it }, true) },
@@ -161,19 +164,20 @@ private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, cha
 }
 
 /**
- * One side's layers, a row each, with an eye to show or hide it: the words, tapped on their tag to
+ * One side's layers, a row each, with an eye to show or hide it: the line's sound; the words, tapped on their tag to
  * show as written, in kana or in Latin letters; their reading over them; the same in Latin letters,
  * tapped to spell as typed; and what they mean. Pinching a row makes it bigger or smaller.
  */
 @Composable
 private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, side: CardSide, onChange: (CardSide) -> Unit) {
     val japanese = script == Script.JAPANESE
-    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
         if (japanese) add(WordsAs.KANA)
         if (script != null) add(WordsAs.LATIN)
     }
+    SoundRow(side.sound) { onChange(side.copy(sound = it)) }
     val glyph = { shown: WordsAs -> when (shown) { WordsAs.WRITTEN -> script?.glyph ?: "文"; WordsAs.KANA -> "あ"; WordsAs.LATIN -> "Aa" } }
     LayerRow(R.string.visuals_show_words, side.words, { onChange(side.copy(words = it)) }, line.shownAs(side.wordsAs, side.romajiTyped), side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
         if (wordsAs.size > 1) {
@@ -195,7 +199,23 @@ private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, si
         }
     }
     LayerRow(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, line.translation, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) })
-    HorizontalDivider(Modifier.padding(top = 4.dp))
+}
+
+/** The line's sound as a layer of a card's side: an eye to turn it on or off, and the button it makes. */
+@Composable
+private fun SoundRow(on: Boolean, onToggle: (Boolean) -> Unit) {
+    val name = stringResource(R.string.practice_play)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(48.dp).toggleable(on, role = Role.Switch, onValueChange = onToggle).semantics { contentDescription = name }
+        ) { AppIcon(if (on) R.drawable.ic_visibility else R.drawable.ic_visibility_off, contentDescription = null) }
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(32.dp).alpha(if (on) 1f else 0.4f)) {
+            Box(contentAlignment = Alignment.Center) {
+                AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        }
+    }
 }
 
 /** How much one pinch step, or Bigger and Smaller, changes a size. */

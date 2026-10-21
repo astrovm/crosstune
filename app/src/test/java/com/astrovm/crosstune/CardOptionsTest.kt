@@ -43,7 +43,7 @@ class CardOptionsTest {
                 wordsScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
                 translationScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
                 readingScale = MIN_READING_SCALE + random.nextFloat() * (MAX_READING_SCALE - MIN_READING_SCALE),
-                romajiTyped = random.nextBoolean()
+                romajiTyped = random.nextBoolean(), sound = random.nextBoolean()
             )
             val options = CardOptions(side(), side())
             val type = CardType("type1", "Mine", true, options)
@@ -78,5 +78,19 @@ class CardOptionsTest {
         assertEquals(2f, CardSide.fromJson(old.put("translationScale", 2.0), CardSide()).translationScale, 0f)
         prefs.edit().putFloat("card_front_words_scale", 2f).commit()
         assertEquals(2f, CardOptions.load(prefs).front.translationScale, 0f)
+    }
+
+    @Test
+    fun aSideKeptBeforeItHadASoundPlaysTheLineOnlyIfItShowedNothing() {
+        val old = org.json.JSONObject(CardSide().toJson().toString().replace(Regex(",?\"sound\":(true|false)"), ""))
+        assertFalse(old.has("sound"))
+        assertFalse(CardSide.fromJson(old, CardSide()).sound)
+        assertTrue(CardSide.fromJson(old, CardSide(sound = true)).sound)
+        assertTrue(CardSide.fromJson(old.put("words", false), CardSide()).sound)
+        // The back plays it, as it did, and the front only when it showed nothing.
+        assertTrue(CardOptions.load(prefs).back.sound)
+        assertFalse(CardOptions.load(prefs).front.sound)
+        prefs.edit().putBoolean("card_front_words", false).commit()
+        assertTrue(CardOptions.load(prefs).front.sound)
     }
 }

@@ -49,6 +49,8 @@ class CardTypesTest {
         assertEquals(TRANSLATE_IT.options.back, loaded[0].options.back)
         assertEquals("", loaded[1].name)
         assertFalse(loaded[1].options.front.words)
+        // With no layers and no sound kept, the front was the line played.
+        assertTrue(loaded[1].options.front.sound)
         assertEquals(READ_IT.options.back, loaded[1].options.back)
         // Nothing readable left, or not even JSON, it's the three it started with.
         prefs.edit().putString("card_types", "[]").commit()

@@ -167,7 +167,7 @@ private fun CaughtUp() {
 }
 
 /**
- * A card: the song it's from and its front; once turned, its back comes in below, with its sound. Turned, it's said whether it was known, each button saying when it's back.
+ * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
 private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions) {
@@ -195,14 +195,16 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
-                // A front with no layers is the line itself, played; with no way to play it, the words stand in.
-                val heard = type.hears && practice.sound != LineSound.NONE
-                if (heard) LineSound(line, practice.sound, actions.onReplayLine)
-                else CardSideContent(line, if (type.hears) CardSide() else cards.front, back = false)
+                // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
+                val front = cards.front
+                val plays = front.sound && practice.sound != LineSound.NONE
+                if (plays) LineSound(line, practice.sound, actions.onReplayLine)
+                if (!front.bare) CardSideContent(line, front, back = false)
+                else if (!plays) CardSideContent(line, CardSide(), back = false)
                 // Turned, the other side comes in below the front, which stays.
                 if (practice.turned) {
                     HorizontalDivider()
-                    if (!heard) LineSound(line, practice.sound, actions.onReplayLine)
+                    if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
                     CardSideContent(line, cards.back, back = true)
                 }
             }

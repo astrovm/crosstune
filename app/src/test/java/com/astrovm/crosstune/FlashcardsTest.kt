@@ -416,7 +416,7 @@ class FlashcardsTest {
         assertEquals(
             CardOptions(
                 front = CardSide(wordsAs = WordsAs.KANA, latin = true, translation = true, romajiTyped = true),
-                back = CardSide(wordsAs = WordsAs.LATIN, readings = true, latin = true, translation = true)
+                back = CardSide(wordsAs = WordsAs.LATIN, readings = true, latin = true, translation = true, sound = true)
             ), loadCardTypes(prefs()).first { it.id == READ_TYPE }.options
         )
         pressBack()
@@ -575,6 +575,33 @@ class FlashcardsTest {
         assertTrue(onCard("One"))
         assertTrue(onCard("Uno"))
         assertEquals(seeks, phone.seeks.size)
+    }
+
+    @Test
+    fun aSidePlaysTheLineOnlyWhenItHasItsSound() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""")
+        appHas("Other", atMs = 0)
+        launch()
+        practiseAll(1)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        // Read it plays the line once it's turned: its back has the sound, its front doesn't.
+        assertFalse(described(string(R.string.practice_play)))
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val read = { model().uiState.cardTypes.first { it.id == READ_TYPE }.options }
+        assertTrue(read().back.sound && !read().front.sound)
+        // The sound moves from the back to the front.
+        tag(string(R.string.practice_play))
+        tag(string(R.string.practice_play), back = true)
+        assertTrue(read().front.sound && !read().back.sound)
+        pressBack()
+        pressBack()
+        assertEquals(1, composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play))).fetchSemanticsNodes().size)
+        val seeks = phone.seeks.size
+        click(string(R.string.practice_show))
+        pass(1_000)
+        assertEquals(seeks, phone.seeks.size)
+        assertEquals(1, composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play))).fetchSemanticsNodes().size)
     }
 
     @Test

@@ -120,7 +120,7 @@ internal class PracticeCards(
         val line = practice.line ?: return
         val playable = line.timed && playback?.hasAccess() == true
         uiState = uiState.copy(practice = practice.copy(turned = false, lastSong = line, sound = if (playable) LineSound.LOADING else LineSound.NONE))
-        if (playable) sound(line, play = hears(line))
+        if (playable) sound(line, play = typeOf(line).hears)
     }
 
     /**
@@ -194,8 +194,8 @@ internal class PracticeCards(
         uiState = uiState.copy(practice = practice.copy(sound = sound))
     }
 
-    /** Whether [line]'s card asks by playing it. */
-    private fun hears(line: SavedLine) = uiState.cardTypes.firstOrNull { it.id == line.cardType }?.hears == true
+    /** The kind of card [line]'s is. */
+    private fun typeOf(line: SavedLine) = uiState.cardTypes.firstOrNull { it.id == line.cardType } ?: READ_IT
 
     /** Plays the card's line again. */
     fun replay() {
@@ -204,11 +204,11 @@ internal class PracticeCards(
         sound(line)
     }
 
-    /** Turns the card, to say whether it was known, and plays its line, now that it's the answer, unless it was the question. */
+    /** Turns the card, to say whether it was known, and plays its line if the back has its sound. */
     fun turn() {
         val practice = uiState.practice?.takeIf { !it.turned } ?: return
         uiState = uiState.copy(practice = practice.copy(turned = true))
-        if (practice.sound == LineSound.PLAYED && practice.line?.let(::hears) != true) replay()
+        if (practice.sound == LineSound.PLAYED && practice.line?.let(::typeOf)?.options?.back?.sound == true) replay()
     }
 
     /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */

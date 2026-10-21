@@ -20,11 +20,11 @@ internal const val TRANSLATE_TYPE = "translate"
  * and stay.
  */
 internal data class CardType(val id: String, val name: String?, val on: Boolean, val options: CardOptions) {
-    /** Whether the line itself is the front: no layer is shown, so it plays. */
-    val hears: Boolean get() = options.front.run { !words && !translation && !latin && !readings }
+    /** Whether the line plays in front, as the question. */
+    val hears: Boolean get() = options.front.sound
 
-    /** Whether [line] has something to ask with: this kind's front shows a layer it has, or plays a line that can be. */
-    fun fits(line: SavedLine): Boolean = if (hears) line.timed else options.front.run {
+    /** Whether [line] has something to ask with: this kind's front plays a line that can be, or shows a layer it has. */
+    fun fits(line: SavedLine): Boolean = (hears && line.timed) || options.front.run {
         words || (translation && line.translation != null) || (latin && line.romanized != null) || (readings && line.reading != null)
     }
 
@@ -36,10 +36,10 @@ internal data class CardType(val id: String, val name: String?, val on: Boolean,
 internal val READ_IT = CardType(READ_TYPE, null, true, CardOptions())
 
 /** Hear it: the line plays in front, the words, how they read and what they mean behind; off until it's asked for. */
-internal val HEAR_IT = CardType(HEAR_TYPE, null, false, CardOptions(CardSide(words = false), CardSide(readings = true, latin = true, translation = true)))
+internal val HEAR_IT = CardType(HEAR_TYPE, null, false, CardOptions(CardSide(words = false, sound = true), CardSide(readings = true, latin = true, translation = true)))
 
 /** Translate it: what it means in front, the words and how they read behind; off until it's asked for. */
-internal val TRANSLATE_IT = CardType(TRANSLATE_TYPE, null, false, CardOptions(CardSide(words = false, translation = true), CardSide(readings = true)))
+internal val TRANSLATE_IT = CardType(TRANSLATE_TYPE, null, false, CardOptions(CardSide(words = false, translation = true), CardSide(readings = true, sound = true)))
 
 /** The kinds the app starts with, which stay. */
 internal val DEFAULT_CARD_TYPES = listOf(READ_IT, HEAR_IT, TRANSLATE_IT)

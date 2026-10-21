@@ -107,10 +107,14 @@ internal data class CardSide(
     val wordsScale: Float = 1f,
     val translationScale: Float = wordsScale,
     val readingScale: Float = 0.55f,
-    val romajiTyped: Boolean = false
+    val romajiTyped: Boolean = false,
+    val sound: Boolean = false
 ) {
+    /** Whether no text layer is shown, so the side is the line itself, played, or nothing. */
+    val bare: Boolean get() = !words && !readings && !latin && !translation
+
     fun toJson(): JSONObject = JSONObject().put("words", words).put("wordsAs", wordsAs.name).put("readings", readings).put("latin", latin)
-        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped)
+        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped).put("sound", sound)
 
     companion object {
         fun fromJson(json: JSONObject, defaults: CardSide): CardSide {
@@ -126,7 +130,10 @@ internal data class CardSide(
                 translationScale = json.optDouble("translationScale", words.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
                 readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
                 romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
-            )
+            ).let {
+                // Kept before it had a layer of its own, a side with no text was the line, played.
+                it.copy(sound = if (json.has("sound")) json.optBoolean("sound") else defaults.sound || it.bare)
+            }
         }
 
         /** Read from the keys it was kept under before there were kinds of card. */
@@ -140,14 +147,14 @@ internal data class CardSide(
             translationScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
             readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
             romajiTyped = preferences.getBoolean("${prefix}_romaji_typed", defaults.romajiTyped)
-        )
+        ).let { it.copy(sound = preferences.getBoolean("${prefix}_sound", defaults.sound || it.bare)) }
     }
 }
 
 /** Each side keeps its own text layers, without changing the lyrics display settings. */
 internal data class CardOptions(
     val front: CardSide = CardSide(),
-    val back: CardSide = CardSide(readings = true, latin = true, translation = true)
+    val back: CardSide = CardSide(readings = true, latin = true, translation = true, sound = true)
 ) {
     companion object {
         /** What was kept before there were kinds of card. */
@@ -161,7 +168,8 @@ internal data class CardOptions(
                 readings = preferences.getBoolean("card_readings", true),
                 latin = preferences.getBoolean("card_latin", true),
                 translation = preferences.getBoolean("card_translation", true),
-                romajiTyped = typed
+                romajiTyped = typed,
+                sound = true
             )
             return CardOptions(CardSide.load(preferences, "card_front", front), CardSide.load(preferences, "card_back", back))
         }
