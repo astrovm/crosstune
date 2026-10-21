@@ -48,7 +48,7 @@ import kotlin.math.hypot
 internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
-    val learningActions: ScreenActions get() = ScreenActions()
+    val learningActions: ScreenActions
     fun toggleListening()
     /** Plays or pauses the song in the music app the words follow. */
     fun playPause()

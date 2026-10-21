@@ -527,7 +527,7 @@ class FlashcardsTest {
         val options = { model().uiState.cardTypes.first().options }
         fun size(layer: Int, sizeLabel: Int, value: Float) {
             click("${string(layer)}, ${string(sizeLabel)}")
-            composeRule.onNode(hasContentDescription(string(layer)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
                 .performSemanticsAction(SemanticsActions.SetProgress) { it(value) }
             click("${string(layer)}, ${string(sizeLabel)}")
         }

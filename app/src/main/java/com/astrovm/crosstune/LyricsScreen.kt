@@ -778,7 +778,7 @@ private fun MenuCaption(@StringRes text: Int) {
  * How big something is, slid within its readable [range], labeled from 1% to 100%.
  */
 @Composable
-internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size) {
+internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size, description: String? = null) {
     val size = stringResource(label)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -795,7 +795,7 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
             },
             onValueChangeFinished = { onChange(latest, true) },
             valueRange = range,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = size }
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = description ?: size }
         )
     }
 }

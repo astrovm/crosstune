@@ -53,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
@@ -301,12 +302,7 @@ private fun LayerRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .transformable(pinch, canPan = { false })
-            .semantics {
-                customActions = listOf(
-                    CustomAccessibilityAction(bigger) { onScale((scale * SIZE_STEP).coerceIn(range)); true },
-                    CustomAccessibilityAction(smaller) { onScale((scale / SIZE_STEP).coerceIn(range)); true }
-                )
-            }
+
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -315,9 +311,15 @@ private fun LayerRow(
         Text(
             sample?.takeIf { it.isNotBlank() } ?: name, maxLines = 1, overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f).alpha(if (on) 1f else 0.4f)
+            modifier = Modifier.weight(1f).alpha(if (on) 1f else 0.7f).clearAndSetSemantics {}
         )
-        TextButton(onClick = { sizing = !sizing }, modifier = Modifier.semantics { contentDescription = "$name, $sizeName" }) {
+        TextButton(onClick = { sizing = !sizing }, modifier = Modifier.semantics {
+            contentDescription = "$name, $sizeName"
+            customActions = listOf(
+                CustomAccessibilityAction(bigger) { onScale((scale * SIZE_STEP).coerceIn(range)); true },
+                CustomAccessibilityAction(smaller) { onScale((scale / SIZE_STEP).coerceIn(range)); true }
+            )
+        }) {
             if (label == R.string.visuals_show_words || label == R.string.lyrics_romanized) {
                 AppIcon(R.drawable.ic_link, contentDescription = null, modifier = Modifier.size(14.dp))
             }
@@ -325,7 +327,7 @@ private fun LayerRow(
         }
         tag()
     }
-    if (sizing) SizeSlider(label, scale, range, { value, _ -> onScale(value) })
+    if (sizing) SizeSlider(label, scale, range, { value, _ -> onScale(value) }, description = "$name, $sizeName")
     }
 }
 
