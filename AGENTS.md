@@ -15,7 +15,7 @@ python3 scripts/build-site.py             # after changing site/; commit docs/ t
 
 Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `app/build/reports/kover/reportDebug.xml`.
 
-Live Edit (Android Studio) is for tweaks inside composable bodies: edit the file while it's open in Studio and it reaches a debug build on a phone in seconds. Strings, `UiState`, new functions and signature changes need a real build. It doesn't replace the order under Verifying.
+Live Edit (Android Studio) is for tweaks inside composable bodies: edit the file while it's open in Studio and it reaches a debug build on a phone in seconds. Strings, `UiState`, new functions and signature changes need a real build: run the debug app from Studio's Run button, which keeps Live Edit connected. It doesn't replace the order under Verifying.
 
 ## Hit every surface
 
@@ -46,7 +46,7 @@ Playback follows and controls other music apps through Android's media sessions 
 ## Verifying
 
 - Smallest proof first: the test you touched, not the whole suite. CI owns `:app:ci`.
-- Order, every time: 1) push, so the PR's CI starts; 2) `./gradlew :app:assembleDev` alone; 3) install the APK on the phones; 4) `./gradlew :app:ci -x :app:assembleRelease -x :app:assembleDev` in the background. Never put the build and the tests in one Gradle command: it runs the tests first, and one failing test means no APK.
+- Order, every time: 1) push, so the PR's CI starts; 2) the phone gets the app: when the user is testing with the debug build and Live Edit, deploy that from Studio and skip `assembleDev`; otherwise `./gradlew :app:assembleDev` alone, then install the APK; 3) `./gradlew :app:ci -x :app:assembleRelease -x :app:assembleDev` in the background. Install nothing on the POCO unless asked. Never put the build and the tests in one Gradle command: it runs the tests first, and one failing test means no APK.
 - Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
