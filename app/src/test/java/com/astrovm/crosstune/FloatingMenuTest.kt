@@ -69,13 +69,13 @@ class FloatingMenuTest {
                     following = Following(PlaybackClock(1_000, 0, playing = false), null, false), learning = learning.value), actions, true, {})
             }
         }
-        val before = compose.onNodeWithText("夜").getUnclippedBoundsInRoot().height
+        val before = compose.onNodeWithText("夜").getUnclippedBoundsInRoot().let { it.bottom - it.top }
         compose.onNodeWithContentDescription(app.getString(R.string.floating_customize)).performClick()
         compose.onNodeWithText(app.getString(R.string.lyrics_learn)).performClick()
         compose.onNodeWithText(app.getString(R.string.floating_shared)).assertExists()
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_words_size)).performSemanticsAction(SemanticsActions.SetProgress) { it(1.5f) }
         assertEquals(1.5f, learning.value.wordsScale, 0f)
-        assertTrue(compose.onNodeWithText("夜").getUnclippedBoundsInRoot().height > before)
+        assertTrue(compose.onNodeWithText("夜").getUnclippedBoundsInRoot().let { it.bottom - it.top } > before)
         compose.onNodeWithText(app.getString(R.string.lyrics_translation)).performScrollTo().performClick()
         assertTrue(!learning.value.translation)
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_reading_options)).performScrollTo().performClick()
