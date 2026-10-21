@@ -857,7 +857,7 @@ class FlashcardsTest {
         waitUntil { !shown("Demo") }
         click(string(R.string.undo_button))
         waitUntil { shown("Demo") }
-        assertEquals(2, savedLine("Moon").box)
+        assertEquals(3, savedLine("Moon").interval)
         assertEquals(later, savedLine("Moon").due)
         // A second removal's offer replaces the first's; with none left, the list stays while it shows.
         song("Other").performTouchInput { swipeRight() }

@@ -169,8 +169,7 @@ private fun CaughtUp() {
 }
 
 /**
- * A card: the song it's from and the line as written; once turned, its sound, how it reads and what
- * it means. Turned, it's said whether it was known, each button saying when it's back.
+ * A card: the song it's from and its front; once turned, its back comes in below, with its sound. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
 private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, back: Boolean, actions: ScreenActions) {
@@ -196,8 +195,13 @@ private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, back: 
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions)
-                if (back) LineSound(line, practice.sound, actions.onReplayLine)
-                CardSideContent(line, if (back) cards.back else cards.front, back)
+                CardSideContent(line, cards.front, back = false)
+                // Turned, the other side comes in below the front, which stays.
+                if (back) {
+                    HorizontalDivider()
+                    LineSound(line, practice.sound, actions.onReplayLine)
+                    CardSideContent(line, cards.back, back = true)
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
