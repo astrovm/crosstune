@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A piano: a frame with two black keys, drawn to match Material Symbols Rounded -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?android:attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M160,200h640q60,0 60,60v440q0,60 -60,60H160q-60,0 -60,-60V260q0,-60 60,-60zM180,280v400h600V280z"/>
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M320,280h120v220h-40v180h-40V500h-40zM520,280h120v220h-40v180h-40V500h-40z"/>
+</vector>

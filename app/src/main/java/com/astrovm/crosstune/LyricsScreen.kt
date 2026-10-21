@@ -728,7 +728,7 @@ internal fun WordsOptions(learning: Learning, actions: ScreenActions, details: B
             }
         }
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange, icon = R.drawable.ic_translate)
         if (learning.translation) {
             SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
         }
@@ -753,11 +753,12 @@ internal fun sizeShare(scale: Float, range: ClosedFloatingPointRange<Float>): Fl
 
 /** A setting that takes effect as soon as its switch changes. */
 @Composable
-private fun ReadingSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+private fun ReadingSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit, @DrawableRes icon: Int? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
+        if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
         Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = on, onCheckedChange = null)
     }
@@ -829,7 +830,7 @@ private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onC
         }
         // Chords are learned like lines are, so they're switched on here.
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
-        MenuSwitch(R.string.lyrics_chords, state.chords.on, actions.onChordsChange)
+        MenuSwitch(R.string.lyrics_chords, state.chords.on, R.drawable.ic_chords, actions.onChordsChange)
     }
 }
 
@@ -1190,7 +1191,7 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = darken }
             )
         }
-        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp)
+        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp, icon = R.drawable.ic_timer)
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         MenuAction(R.drawable.ic_skip_next, R.string.visuals_next) {
             onClose()
@@ -1248,11 +1249,12 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
 
 /** A setting in a card, switched as soon as it changes, and the card stays open. */
 @Composable
-internal fun MenuSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun MenuSwitch(@StringRes label: Int, on: Boolean, @DrawableRes icon: Int? = null, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
+        if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
         Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = on, onCheckedChange = null)
     }

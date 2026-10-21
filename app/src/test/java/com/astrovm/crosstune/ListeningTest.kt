@@ -1219,7 +1219,7 @@ class ListeningTest {
         composeRule.onNodeWithText("Demo two").performClick()
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
         click(string(R.string.lyrics_sync_earlier))
-        assertEquals(listOf(SyncPoint(10_000, 4_500)), kept())
+        assertEquals(listOf(SyncPoint(0, 0), SyncPoint(10_000, 4_500)), kept())
     }
 
     @Test
