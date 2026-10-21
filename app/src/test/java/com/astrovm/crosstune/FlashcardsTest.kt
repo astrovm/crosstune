@@ -500,6 +500,11 @@ class FlashcardsTest {
         assertEquals(MIN_READING_SCALE, read().back.readingScale, 0f)
         step(6, R.string.practice_bigger)
         assertEquals(1.15f, read().back.wordsScale, 0.001f)
+        // The meaning has a size of its own, apart from the words.
+        step(7, R.string.practice_bigger)
+        assertEquals(1.15f, read().back.translationScale, 0.001f)
+        assertEquals(1.15f, read().back.wordsScale, 0.001f)
+        assertEquals(1f, read().front.translationScale, 0f)
         // Two fingers pulling apart make the back's words bigger, and it's kept once they let go.
         rows()[4].performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
         composeRule.waitForIdle()

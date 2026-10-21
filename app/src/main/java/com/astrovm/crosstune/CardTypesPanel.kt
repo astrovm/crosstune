@@ -194,7 +194,7 @@ private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, si
             if (japanese) Tag(if (side.romajiTyped) "wo" else "o", stringResource(R.string.lyrics_romaji_typed), side.romajiTyped) { onChange(side.copy(romajiTyped = !side.romajiTyped)) }
         }
     }
-    LayerRow(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, line.translation, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) })
+    LayerRow(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, line.translation, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) })
     HorizontalDivider(Modifier.padding(top = 4.dp))
 }
 

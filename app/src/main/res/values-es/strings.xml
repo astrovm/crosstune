@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Lectura sobre las palabras</string>
     <string name="lyrics_reading_size">Tamaño de la lectura</string>
     <string name="lyrics_words_size">Tamaño de la letra</string>
+    <string name="lyrics_translation_size">Tamaño de la traducción</string>
     <string name="lyrics_show_as">Mostrar como</string>
     <string name="lyrics_also_show">Mostrar también</string>
     <string name="report_problem">Reportar un problema</string>

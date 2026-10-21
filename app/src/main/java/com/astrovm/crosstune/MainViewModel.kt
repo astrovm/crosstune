@@ -160,6 +160,8 @@ internal class MainViewModel(
                 untranslated = preferences.getStringSet(KEY_UNTRANSLATED, null).orEmpty().filter { it in AppLanguage.untranslatedTags }.toSet(),
                 readingScale = preferences.getFloat(KEY_READING_SCALE, READING_SCALE).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
                 wordsScale = preferences.getFloat(KEY_WORDS_SCALE, 1f).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+                // Until it's set, it's as big as the words, as it was when they went together.
+                translationScale = preferences.getFloat(KEY_TRANSLATION_SCALE, preferences.getFloat(KEY_WORDS_SCALE, 1f)).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN,
                 romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false)
             ),
@@ -2342,6 +2344,12 @@ internal class MainViewModel(
         uiState = uiState.copy(learning = uiState.learning.copy(wordsScale = scale))
     }
 
+    /** Kept only once let go, [save], rather than at every step of the slider. */
+    fun setTranslationScale(scale: Float, save: Boolean) {
+        if (save) preferences.edit { putFloat(KEY_TRANSLATION_SCALE, scale) }
+        uiState = uiState.copy(learning = uiState.learning.copy(translationScale = scale))
+    }
+
     fun setRomanized(on: Boolean) {
         preferences.edit { putBoolean(KEY_ROMANIZED, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(romanized = on))
@@ -2844,6 +2852,7 @@ internal class MainViewModel(
         private const val KEY_UNTRANSLATED = "untranslated_languages"
         private const val KEY_READING_SCALE = "reading_scale"
         private const val KEY_WORDS_SCALE = "words_scale"
+        private const val KEY_TRANSLATION_SCALE = "translation_scale"
         private const val KEY_CHATGPT_WELCOMED = "chatgpt_welcomed"
         private const val KEY_FLOATING_BACKGROUND = "floating_background"
         private const val KEY_FLOATING_SCALE = "floating_scale"

@@ -297,6 +297,7 @@
     <string name="lyrics_readings">在文字上方显示读音</string>
     <string name="lyrics_reading_size">读音大小</string>
     <string name="lyrics_words_size">歌词大小</string>
+    <string name="lyrics_translation_size">翻译大小</string>
     <string name="lyrics_show_as">显示方式</string>
     <string name="lyrics_also_show">同时显示</string>
     <string name="report_problem">报告问题</string>

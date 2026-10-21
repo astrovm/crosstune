@@ -105,23 +105,29 @@ internal data class CardSide(
     val latin: Boolean = false,
     val translation: Boolean = false,
     val wordsScale: Float = 1f,
+    val translationScale: Float = wordsScale,
     val readingScale: Float = 0.55f,
     val romajiTyped: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject().put("words", words).put("wordsAs", wordsAs.name).put("readings", readings).put("latin", latin)
-        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped)
+        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped)
 
     companion object {
-        fun fromJson(json: JSONObject, defaults: CardSide) = CardSide(
-            words = json.optBoolean("words", defaults.words),
-            wordsAs = WordsAs.entries.firstOrNull { it.name == json.optString("wordsAs") } ?: defaults.wordsAs,
-            readings = json.optBoolean("readings", defaults.readings),
-            latin = json.optBoolean("latin", defaults.latin),
-            translation = json.optBoolean("translation", defaults.translation),
-            wordsScale = json.optDouble("wordsScale", defaults.wordsScale.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
-            readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
-            romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
-        )
+        fun fromJson(json: JSONObject, defaults: CardSide): CardSide {
+            val words = json.optDouble("wordsScale", defaults.wordsScale.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE)
+            return CardSide(
+                words = json.optBoolean("words", defaults.words),
+                wordsAs = WordsAs.entries.firstOrNull { it.name == json.optString("wordsAs") } ?: defaults.wordsAs,
+                readings = json.optBoolean("readings", defaults.readings),
+                latin = json.optBoolean("latin", defaults.latin),
+                translation = json.optBoolean("translation", defaults.translation),
+                wordsScale = words,
+                // Kept before it had a size of its own, it was as big as the words.
+                translationScale = json.optDouble("translationScale", words.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+                readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
+                romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
+            )
+        }
 
         /** Read from the keys it was kept under before there were kinds of card. */
         fun load(preferences: SharedPreferences, prefix: String, defaults: CardSide) = CardSide(
@@ -131,6 +137,7 @@ internal data class CardSide(
             latin = preferences.getBoolean("${prefix}_latin", defaults.latin),
             translation = preferences.getBoolean("${prefix}_translation", defaults.translation),
             wordsScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+            translationScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
             readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
             romajiTyped = preferences.getBoolean("${prefix}_romaji_typed", defaults.romajiTyped)
         )

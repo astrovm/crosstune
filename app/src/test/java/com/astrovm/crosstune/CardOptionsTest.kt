@@ -41,6 +41,7 @@ class CardOptionsTest {
                 words = random.nextBoolean(), wordsAs = WordsAs.entries[random.nextInt(WordsAs.entries.size)],
                 readings = random.nextBoolean(), latin = random.nextBoolean(), translation = random.nextBoolean(),
                 wordsScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
+                translationScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
                 readingScale = MIN_READING_SCALE + random.nextFloat() * (MAX_READING_SCALE - MIN_READING_SCALE),
                 romajiTyped = random.nextBoolean()
             )
@@ -67,5 +68,15 @@ class CardOptionsTest {
         assertEquals(MAX_WORDS_SCALE, cards.back.wordsScale, 0f)
         assertEquals(MIN_READING_SCALE, cards.back.readingScale, 0f)
         assertTrue(cards.front.words && cards.back.words)
+    }
+
+    @Test
+    fun aTranslationKeptBeforeItHadASizeOfItsOwnIsAsBigAsTheWordsWere() {
+        val old = org.json.JSONObject(CardSide(wordsScale = 1.5f).toJson().toString().replace(Regex(",?\"translationScale\":[0-9.]+"), ""))
+        assertFalse(old.has("translationScale"))
+        assertEquals(1.5f, CardSide.fromJson(old, CardSide()).translationScale, 0f)
+        assertEquals(2f, CardSide.fromJson(old.put("translationScale", 2.0), CardSide()).translationScale, 0f)
+        prefs.edit().putFloat("card_front_words_scale", 2f).commit()
+        assertEquals(2f, CardOptions.load(prefs).front.translationScale, 0f)
     }
 }

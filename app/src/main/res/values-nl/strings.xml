@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
     <string name="lyrics_reading_size">Grootte van de uitspraak</string>
     <string name="lyrics_words_size">Tekstgrootte</string>
+    <string name="lyrics_translation_size">Vertaalgrootte</string>
     <string name="lyrics_show_as">Toon als</string>
     <string name="lyrics_also_show">Toon ook</string>
     <string name="report_problem">Probleem melden</string>

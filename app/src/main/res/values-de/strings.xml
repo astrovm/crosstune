@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Lesung über den Wörtern</string>
     <string name="lyrics_reading_size">Größe der Lesung</string>
     <string name="lyrics_words_size">Textgröße</string>
+    <string name="lyrics_translation_size">Größe der Übersetzung</string>
     <string name="lyrics_show_as">Anzeigen als</string>
     <string name="lyrics_also_show">Auch anzeigen</string>
     <string name="report_problem">Problem melden</string>

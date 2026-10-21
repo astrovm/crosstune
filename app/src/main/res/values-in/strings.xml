@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Bacaan di atas kata</string>
     <string name="lyrics_reading_size">Ukuran bacaan</string>
     <string name="lyrics_words_size">Ukuran lirik</string>
+    <string name="lyrics_translation_size">Ukuran terjemahan</string>
     <string name="lyrics_show_as">Tampilkan sebagai</string>
     <string name="lyrics_also_show">Tampilkan juga</string>
     <string name="report_problem">Laporkan masalah</string>

@@ -297,6 +297,7 @@
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
     <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_words_size">बोलों का आकार</string>
+    <string name="lyrics_translation_size">अनुवाद का आकार</string>
     <string name="lyrics_show_as">इस रूप में दिखाएँ</string>
     <string name="lyrics_also_show">यह भी दिखाएँ</string>
     <string name="report_problem">समस्या की रिपोर्ट करें</string>

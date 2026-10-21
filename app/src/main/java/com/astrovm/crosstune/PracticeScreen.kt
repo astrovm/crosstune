@@ -245,7 +245,7 @@ private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean) {
             line.latin(side.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         if (side.translation) line.translation?.let {
-            Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.primary)
+            Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.translationScale, lineHeight = lineHeight * side.translationScale) }, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

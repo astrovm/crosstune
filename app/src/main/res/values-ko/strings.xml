@@ -297,6 +297,7 @@
     <string name="lyrics_readings">단어 위에 읽기</string>
     <string name="lyrics_reading_size">읽기 크기</string>
     <string name="lyrics_words_size">가사 크기</string>
+    <string name="lyrics_translation_size">번역 크기</string>
     <string name="lyrics_show_as">표시 방식</string>
     <string name="lyrics_also_show">함께 표시</string>
     <string name="report_problem">문제 신고</string>

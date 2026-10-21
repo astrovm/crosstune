@@ -298,6 +298,7 @@
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_words_size">歌詞のサイズ</string>
+    <string name="lyrics_translation_size">翻訳のサイズ</string>
     <string name="lyrics_show_as">表示形式</string>
     <string name="lyrics_also_show">あわせて表示</string>
     <string name="report_problem">問題を報告</string>

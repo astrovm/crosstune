@@ -2633,6 +2633,22 @@ class ListeningTest {
     }
 
     @Test
+    fun theTranslationHasASizeOfItsOwnThatStartsAsBigAsTheWordsWere() {
+        prefs().edit().putFloat("words_scale", 1.5f).putBoolean("lyrics_translation", true).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertEquals(1.5f, controllerModel().uiState.learning.translationScale, 0f)
+        learnMenu()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_translation_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_WORDS_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MAX_WORDS_SCALE, prefs().getFloat("translation_scale", 0f), 0.01f)
+        assertEquals(1.5f, controllerModel().uiState.learning.wordsScale, 0f)
+        // With the translation off there's no size to pick.
+        click(string(R.string.lyrics_translation))
+        assertFalse(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_translation_size))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun lyricsDisplayKeepsReadingDetailsOneTapAwayAndWordsClearOfThePalette() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")

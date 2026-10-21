@@ -430,6 +430,7 @@ class MainActivity : ComponentActivity() {
                         onUntranslatedChange = viewModel::setUntranslated,
                         onReadingScaleChange = viewModel::setReadingScale,
                         onWordsScaleChange = viewModel::setWordsScale,
+                        onTranslationScaleChange = viewModel::setTranslationScale,
                         onSignInWithChatGpt = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

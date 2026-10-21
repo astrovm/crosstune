@@ -318,6 +318,7 @@
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
     <string name="lyrics_words_size">Words size</string>
+    <string name="lyrics_translation_size">Translation size</string>
     <string name="lyrics_show_as">Show as</string>
     <string name="lyrics_also_show">Also show</string>
     <string name="report_problem">Report a problem</string>

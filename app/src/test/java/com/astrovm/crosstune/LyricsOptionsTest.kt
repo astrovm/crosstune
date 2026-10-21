@@ -1,8 +1,5 @@
 package com.astrovm.crosstune
 
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -32,18 +29,6 @@ class LyricsOptionsTest {
             Locale.setDefault(before)
         }
     }
-    @Test
-    fun whatIsUnderTheWordsIsSmallerThanThemButStaysReadable() {
-        val base = TextStyle(fontWeight = FontWeight.Bold)
-        val big = base.beneath(TextStyle(fontSize = 30.sp, lineHeight = 40.sp))
-        assertEquals(18.6f, big.fontSize.value, 0.01f)
-        assertEquals(24.8f, big.lineHeight.value, 0.01f)
-        val small = base.beneath(TextStyle(fontSize = 13.sp, lineHeight = 17.sp))
-        assertEquals(12f, small.fontSize.value, 0f)
-        assertEquals(16f, small.lineHeight.value, 0f)
-        assertEquals(FontWeight.Bold, small.fontWeight)
-    }
-
     @Test
     fun everyPercentSliderStartsAtOneAndKeepsItsReadableMinimum() {
         assertEquals(0.6f, MIN_WORDS_SCALE, 0f)

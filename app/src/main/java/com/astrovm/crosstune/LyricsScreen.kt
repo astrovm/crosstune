@@ -180,7 +180,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
@@ -728,6 +727,9 @@ internal fun WordsOptions(learning: Learning, actions: ScreenActions, details: B
         }
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
         ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        if (learning.translation) {
+            SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
+        }
     }
 }
 
@@ -1402,7 +1404,9 @@ internal class LineHelp(
     /** How big [readings] are beside the words they're over. */
     val readingScale: Float = READING_SCALE,
     /** Whether romaji is spelled as typed rather than as said. */
-    val romajiTyped: Boolean = false
+    val romajiTyped: Boolean = false,
+    /** How big [translation] is, beside how it starts. */
+    val translationScale: Float = 1f
 ) {
     /** The line in Latin letters, spelled as picked. */
     val latin get() = reading?.latin(romajiTyped)
@@ -1410,7 +1414,7 @@ internal class LineHelp(
 
 internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale, romajiTyped)
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale, romajiTyped, translationScale)
 }
 
 
@@ -1529,12 +1533,15 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
-        val small = MaterialTheme.typography.bodyLarge.beneath(style)
+        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
         // Shown in them already, they'd say it twice.
         if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
+        help?.translation?.let {
+            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale)
+            Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
+        }
     }
 }
 
@@ -1778,13 +1785,9 @@ internal const val MAX_WORDS_SCALE = 3f
 /** The smallest words stay at three fifths of their starting size, labeled 1% on the slider. */
 internal const val MIN_WORDS_SCALE = 0.6f
 
-private fun TextUnit.atLeast(least: TextUnit) = if (this < least) least else this
-
-/** What's under the words, e.g. their translation, is smaller than they are, but never too small to read. */
-internal fun TextStyle.beneath(words: TextStyle) = copy(
-    fontSize = (words.fontSize * 0.62f).atLeast(12.sp),
-    lineHeight = (words.lineHeight * 0.62f).atLeast(16.sp)
-)
+/** How big a line's translation starts under the words in the lyrics, and the room it takes. */
+private val TRANSLATION_SIZE = 14.sp
+private val TRANSLATION_LINE = 20.sp
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f

@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
     <string name="lyrics_reading_size">Okunuş boyutu</string>
     <string name="lyrics_words_size">Söz boyutu</string>
+    <string name="lyrics_translation_size">Çeviri boyutu</string>
     <string name="lyrics_show_as">Şöyle göster</string>
     <string name="lyrics_also_show">Ayrıca göster</string>
     <string name="report_problem">Sorun bildir</string>
