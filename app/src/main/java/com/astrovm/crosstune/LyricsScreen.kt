@@ -1528,7 +1528,7 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
-        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
+        val small = MaterialTheme.typography.bodyLarge.beneath(style)
         // Shown in them already, they'd say it twice.
         if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1774,8 +1774,14 @@ internal const val MIN_READING_SCALE = READING_SCALE
 /** The largest the words can be, beside how they start. The slider reads 100% here. */
 internal const val MAX_WORDS_SCALE = 3f
 
-/** The smallest words stay at three quarters of their starting size, labeled 1% on the slider. */
-internal const val MIN_WORDS_SCALE = 0.75f
+/** The smallest words stay at three fifths of their starting size, labeled 1% on the slider. */
+internal const val MIN_WORDS_SCALE = 0.6f
+
+/** What's under the words, e.g. their translation, is smaller than they are, but never too small to read. */
+internal fun TextStyle.beneath(words: TextStyle) = copy(
+    fontSize = (words.fontSize * 0.62f).coerceAtLeast(12.sp),
+    lineHeight = (words.lineHeight * 0.62f).coerceAtLeast(16.sp)
+)
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f
