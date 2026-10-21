@@ -1441,6 +1441,7 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
 }
 
 /** A strip over the words: they can follow the music app playing the song, once it's allowed. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -> Unit) {
     Surface(
@@ -1449,10 +1450,14 @@ private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
-            IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+        val stacked = LocalDensity.current.fontScale > 1.3f
+        FlowRow(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium,
+                modifier = if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
+                IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+            }
         }
     }
 }
