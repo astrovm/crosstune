@@ -702,7 +702,7 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
                 val script = learning.script
                 if (script != null) {
                     MenuCaption(R.string.lyrics_show_as)
-                    WordsAsPicker(script, learning, actions)
+                    WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
                 }
                 SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
                 if (script != null && (learning.showsAs != WordsAs.LATIN || script == Script.JAPANESE)) {
@@ -767,11 +767,11 @@ private fun MenuCaption(@StringRes text: Int) {
  * 100%. Words stay big enough to read. Readings run from 1% of their largest size up to it.
  */
 @Composable
-private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
+internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size) {
     val size = stringResource(label)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AppIcon(R.drawable.ic_format_size, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
+            AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
             Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range.endInclusive)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
@@ -946,9 +946,9 @@ private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, be
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenActions) {
+internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsAs) -> Unit, fromRomaji: Boolean = false) {
     val choices = buildList {
-        add(Triple(WordsAs.WRITTEN, script.glyph, R.string.lyrics_as_written))
+        add(Triple(WordsAs.WRITTEN, script?.glyph ?: "文", R.string.lyrics_as_written))
         if (script == Script.JAPANESE) add(Triple(WordsAs.KANA, "あ", R.string.lyrics_only_kana))
         add(Triple(WordsAs.LATIN, "Aa", R.string.lyrics_only_latin))
     }
@@ -956,8 +956,8 @@ private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenAct
         choices.forEachIndexed { index, (wordsAs, glyph, label) ->
             val name = stringResource(label)
             SegmentedButton(
-                selected = learning.showsAs == wordsAs,
-                onClick = { actions.onWordsAsChange(wordsAs) },
+                selected = selected == wordsAs,
+                onClick = { onChange(wordsAs) },
                 shape = SegmentedButtonDefaults.itemShape(index, choices.size),
                 icon = {},
                 modifier = Modifier.semantics { contentDescription = name }
@@ -971,7 +971,7 @@ private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenAct
                     }), style = MaterialTheme.typography.labelSmall)
                 }
                 // Found in romaji, the words as written are ChatGPT's.
-                if (wordsAs == WordsAs.WRITTEN && learning.fromRomaji) {
+                if (wordsAs == WordsAs.WRITTEN && fromRomaji) {
                     AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.padding(start = 4.dp).size(14.dp))
                 }
             }

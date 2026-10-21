@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.selection.toggleable
@@ -28,7 +31,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.text.NumberFormat
 
 internal const val FLOATING_LYRICS_TAG = "floating-lyrics"
 internal const val FLOATING_CUSTOMIZE_TAG = "floating-customize"
@@ -267,19 +268,20 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
         shadowElevation = 6.dp,
         modifier = Modifier.padding(top = 8.dp).fillMaxWidth().testTag(FLOATING_CUSTOMIZE_TAG)
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
+        Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
+            .verticalScroll(rememberScrollState()).padding(16.dp)) {
             Column(
                 modifier = Modifier.onGloballyPositioned { area ->
                     val bounds = area.boundsInWindow()
                     actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
                 }
             ) {
-                FloatingPercent(stringResource(R.string.floating_text_size), options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, actions.onSave) {
-                    actions.onChange(options.copy(scale = it), false)
-                }
-                FloatingPercent(stringResource(R.string.floating_background), options.background, 0f..FloatingOptions.MAX_BACKGROUND, actions.onSave) {
-                    actions.onChange(options.copy(background = it), false)
-                }
+                SizeSlider(R.string.floating_text_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
+                    if (save) actions.onSave() else actions.onChange(options.copy(scale = value), false)
+                })
+                SizeSlider(R.string.floating_background, options.background, 0f..FloatingOptions.MAX_BACKGROUND, onChange = { value, save ->
+                    if (save) actions.onSave() else actions.onChange(options.copy(background = value), false)
+                }, icon = R.drawable.ic_shade)
             }
             MenuSwitch(R.string.floating_previous_line, options.previousLine) { actions.onChange(options.copy(previousLine = it), true) }
             MenuSwitch(R.string.floating_next_line, options.nextLine) { actions.onChange(options.copy(nextLine = it), true) }
@@ -320,37 +322,6 @@ internal fun FloatPermissionDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.floating_permission_continue)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } }
     )
-}
-
-/**
- * A size or a darkness on the floating words, as its share of the large end, which reads 100%.
- * Text size starts above 1% of that end, so its left end is higher. Darkness runs from none to full.
- */
-@Composable
-private fun FloatingPercent(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onFinished: () -> Unit,
-    onChange: (Float) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(
-                NumberFormat.getPercentInstance().format(sizeShare(value, range.endInclusive)),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            onValueChangeFinished = onFinished,
-            valueRange = range,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
-        )
-    }
 }
 
 /** Below this much band, the words are outlined to read on whatever's under them. */

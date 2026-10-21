@@ -37,9 +37,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.material3.RadioButton
-import androidx.compose.ui.semantics.Role
 import androidx.annotation.StringRes
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -274,8 +271,10 @@ private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, 
  */
 @Composable
 private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+    var details by remember { mutableStateOf(false) }
+    BackHandler { if (details) details = false else onClose() }
     val japanese = line.reading?.any(Readings::isKana) == true
+    val script = if (japanese || cards.front == WordsAs.KANA) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -283,34 +282,30 @@ private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolea
         shadowElevation = 6.dp,
         modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
     ) {
-        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            FrontChoice(R.string.lyrics_as_written, WordsAs.WRITTEN, cards, actions)
-            if (japanese || cards.front == WordsAs.KANA) FrontChoice(R.string.lyrics_only_kana, WordsAs.KANA, cards, actions)
-            FrontChoice(R.string.lyrics_only_latin, WordsAs.LATIN, cards, actions)
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            MenuSwitch(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
-            if (cards.front != WordsAs.LATIN) MenuSwitch(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
-            // Romaji shown, it can be spelled as typed rather than as said.
-            if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) MenuSwitch(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
-            MenuSwitch(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
+        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
+            if (details) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { details = false }) {
+                        AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+                    }
+                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
+                }
+                MenuSwitch(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
+                if (cards.front != WordsAs.LATIN) MenuSwitch(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
+                if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) MenuSwitch(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
+            } else {
+                Text(stringResource(R.string.lyrics_show_as), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+                WordsAsPicker(script, cards.front, { actions.onCardOptionsChange(cards.copy(front = it)) })
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { details = true }) {
+                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                MenuSwitch(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
+            }
         }
-    }
-}
-
-/** One way the front can show, picked while it does. */
-@Composable
-private fun FrontChoice(@StringRes label: Int, front: WordsAs, cards: CardOptions, actions: ScreenActions) {
-    val picked = cards.front == front
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
-            selected = picked,
-            role = Role.RadioButton,
-            onClick = { actions.onCardOptionsChange(cards.copy(front = front)) }
-        )
-    ) {
-        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        RadioButton(selected = picked, onClick = null)
     }
 }
 
