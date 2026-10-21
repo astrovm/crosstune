@@ -321,7 +321,8 @@
     <string name="practice_show">Antwoord tonen</string>
     <string name="practice_card_options">Kaartopties</string>
     <string name="card_type_read">Lezen</string>
-    <string name="card_type_say">Zeggen</string>
+    <string name="card_type_hear">Luisteren</string>
+    <string name="card_type_translate">Vertalen</string>
     <string name="card_type_new">Nieuw type</string>
     <string name="card_type_name">Naam</string>
     <string name="card_type_delete">Type verwijderen</string>

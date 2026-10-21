@@ -195,11 +195,14 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
-                CardSideContent(line, cards.front, back = false)
+                // A front with no layers is the line itself, played; with no way to play it, the words stand in.
+                val heard = type.hears && practice.sound != LineSound.NONE
+                if (heard) LineSound(line, practice.sound, actions.onReplayLine)
+                else CardSideContent(line, if (type.hears) CardSide() else cards.front, back = false)
                 // Turned, the other side comes in below the front, which stays.
                 if (practice.turned) {
                     HorizontalDivider()
-                    LineSound(line, practice.sound, actions.onReplayLine)
+                    if (!heard) LineSound(line, practice.sound, actions.onReplayLine)
                     CardSideContent(line, cards.back, back = true)
                 }
             }

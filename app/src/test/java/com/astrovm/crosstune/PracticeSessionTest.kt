@@ -98,8 +98,8 @@ class PracticeSessionTest {
         assertEquals("6m", waitText(330_000L, Locale.US))
         assertEquals("5h", waitText(5 * 60 * 60_000L, Locale.US))
         assertEquals("3d", waitText(3 * day, Locale.US))
-        assertEquals("1mo", waitText(30 * day, Locale.US))
-        assertEquals("4mo", waitText(130 * day, Locale.US))
-        assertEquals("1y", waitText(400 * day, Locale.US))
+        assertEquals("1 mth", waitText(30 * day, Locale.US))
+        assertEquals("4 mths", waitText(130 * day, Locale.US))
+        assertEquals("1 yr", waitText(400 * day, Locale.US))
     }
 }

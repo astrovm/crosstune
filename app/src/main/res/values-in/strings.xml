@@ -321,7 +321,8 @@
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_card_options">Opsi kartu</string>
     <string name="card_type_read">Baca</string>
-    <string name="card_type_say">Ucapkan</string>
+    <string name="card_type_hear">Dengar</string>
+    <string name="card_type_translate">Terjemahkan</string>
     <string name="card_type_new">Tipe baru</string>
     <string name="card_type_name">Nama</string>
     <string name="card_type_delete">Hapus tipe</string>

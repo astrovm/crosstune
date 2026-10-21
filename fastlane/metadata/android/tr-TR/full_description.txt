@@ -15,7 +15,7 @@ Biri size bir müzik servisinden bağlantı gönderiyor ama siz başka birinde d
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
 <li>Bağlantı yerine şarkının adını yazarak şarkıyı bulun ve açtığınız her şarkının sözlerini okuyun.</li>
 <li>Zamanlı sözler: müzik uygulamanı takip eder ya da seninle birlikte dinler, diğer uygulamaların üzerinde yüzer ve arkada MilkDrop görselleriyle akar.</li>
-<li>Kana, pinyin, romaji ve diğer yazılar için Latin harfleriyle, henüz okuyamadığın diller için çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin.</li>
+<li>Kana, pinyin, romaji ve diğer yazılar için Latin harfleriyle, henüz okuyamadığın diller için çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun.</li>
 <li>Şarkıları baştan sona çevirmek, satırları açıklamak, öğrenmeye değer kelimeleri bulmak ve şarkıları tarif ederek aramak için ücretli ChatGPT planınla giriş yap.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>

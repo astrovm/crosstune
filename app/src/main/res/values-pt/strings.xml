@@ -321,7 +321,8 @@
     <string name="practice_show">Ver resposta</string>
     <string name="practice_card_options">Opções dos cartões</string>
     <string name="card_type_read">Ler</string>
-    <string name="card_type_say">Dizer</string>
+    <string name="card_type_hear">Ouvir</string>
+    <string name="card_type_translate">Traduzir</string>
     <string name="card_type_new">Novo tipo</string>
     <string name="card_type_name">Nome</string>
     <string name="card_type_delete">Excluir tipo</string>

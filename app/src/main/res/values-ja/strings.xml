@@ -322,7 +322,8 @@
     <string name="practice_show">答えを見る</string>
     <string name="practice_card_options">カードの設定</string>
     <string name="card_type_read">読む</string>
-    <string name="card_type_say">言う</string>
+    <string name="card_type_hear">聞く</string>
+    <string name="card_type_translate">訳す</string>
     <string name="card_type_new">新しい種類</string>
     <string name="card_type_name">名前</string>
     <string name="card_type_delete">種類を削除</string>

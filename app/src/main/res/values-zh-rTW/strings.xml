@@ -321,7 +321,8 @@
     <string name="practice_show">檢視答案</string>
     <string name="practice_card_options">卡片選項</string>
     <string name="card_type_read">讀</string>
-    <string name="card_type_say">說</string>
+    <string name="card_type_hear">聽</string>
+    <string name="card_type_translate">譯</string>
     <string name="card_type_new">新類型</string>
     <string name="card_type_name">名稱</string>
     <string name="card_type_delete">刪除類型</string>

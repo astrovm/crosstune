@@ -342,7 +342,8 @@
     <string name="practice_show">Show answer</string>
     <string name="practice_card_options">Card options</string>
     <string name="card_type_read">Read it</string>
-    <string name="card_type_say">Say it</string>
+    <string name="card_type_hear">Hear it</string>
+    <string name="card_type_translate">Translate it</string>
     <string name="card_type_new">New type</string>
     <string name="card_type_name">Name</string>
     <string name="card_type_delete">Delete type</string>

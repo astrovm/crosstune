@@ -37,7 +37,7 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word.
-- **Practice with the music.** Save lines and they come back as cards that play the line in your music app. Choose the text layers and sizes for each side. Rate each one: **Again**, **Hard**, **Good** or **Easy**.
+- **Practice with the music.** Save lines and they come back as cards that play the line in your music app. Choose the text layers and sizes for each side, and make more than one kind of card from a line, each on its own schedule. Rate each one: **Again**, **Hard**, **Good** or **Easy**.
 - **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
 - **Your colors.** Light or dark, your wallpaper's colors, and pure black for OLED screens.
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.

@@ -15,7 +15,7 @@ Qualcuno ti manda un link da un servizio musicale, ma tu ascolti su un altro. To
 <li>Link non leggibile? Aprilo nell'app da cui proviene, copia il testo di ricerca o condividi un link di ricerca.</li>
 <li>Trova un brano digitando il suo nome invece di un link, e leggi il testo di qualsiasi brano apri.</li>
 <li>Testi a tempo: seguono la tua app di musica o ascoltano con te, fluttuano sopra le altre app e scorrono con gli effetti visivi MilkDrop dietro.</li>
-<li>Impara le parole con kana, pinyin, romaji e ogni altra scrittura in lettere latine, e traduzioni per le lingue che non leggi già. Scegli cosa mostrare su ogni lato delle schede di ripasso.</li>
+<li>Impara le parole con kana, pinyin, romaji e ogni altra scrittura in lettere latine, e traduzioni per le lingue che non leggi già. Scegli cosa mostrare su ogni lato delle schede di ripasso. Crea più tipi di scheda da una riga, ognuno con il suo calendario.</li>
 <li>Accedi con il tuo piano ChatGPT a pagamento per tradurre brani interi, spiegare righe, trovare le parole da imparare e cercare brani descrivendoli.</li>
 <li>Colori Material You su Android 12 e versioni successive.</li>
 </ul>

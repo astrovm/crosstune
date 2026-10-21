@@ -321,7 +321,8 @@
     <string name="practice_show">Cevabı göster</string>
     <string name="practice_card_options">Kart seçenekleri</string>
     <string name="card_type_read">Oku</string>
-    <string name="card_type_say">Söyle</string>
+    <string name="card_type_hear">Dinle</string>
+    <string name="card_type_translate">Çevir</string>
     <string name="card_type_new">Yeni tür</string>
     <string name="card_type_name">Ad</string>
     <string name="card_type_delete">Türü sil</string>

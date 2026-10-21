@@ -15,7 +15,7 @@ Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. T
 <li>¿No se puede leer un link? Abrilo en la app de la que viene, copiá el texto de búsqueda o compartí un link de búsqueda.</li>
 <li>Encontrá una canción escribiendo su nombre en lugar de un link, y leé la letra de cualquier canción que abras.</li>
 <li>Letras sincronizadas: siguen tu app de música o escuchan junto con vos, flotan sobre otras apps y se ven con visuales de MilkDrop detrás.</li>
-<li>Aprendé las palabras con kana, pinyin, romaji y cualquier otra escritura en letras latinas, y traducciones para los idiomas que todavía no leés. Elegí qué mostrar en cada lado de las tarjetas de práctica.</li>
+<li>Aprendé las palabras con kana, pinyin, romaji y cualquier otra escritura en letras latinas, y traducciones para los idiomas que todavía no leés. Elegí qué mostrar en cada lado de las tarjetas de práctica. Hacé varios tipos de tarjeta de una misma línea, cada uno con su propio calendario.</li>
 <li>Iniciá sesión con tu plan pago de ChatGPT para traducir canciones enteras, explicar líneas, encontrar palabras que vale la pena aprender y buscar canciones describiéndolas.</li>
 <li>Colores de Material You en Android 12 y posteriores.</li>
 </ul>

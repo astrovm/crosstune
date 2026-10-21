@@ -29,7 +29,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +56,8 @@ import androidx.compose.ui.semantics.role
 internal fun CardType.title(): String = when {
     !name.isNullOrBlank() -> name
     id == READ_TYPE -> stringResource(R.string.card_type_read)
-    id == SAY_TYPE -> stringResource(R.string.card_type_say)
+    id == HEAR_TYPE -> stringResource(R.string.card_type_hear)
+    id == TRANSLATE_TYPE -> stringResource(R.string.card_type_translate)
     else -> stringResource(R.string.card_type_new)
 }
 
@@ -119,7 +119,7 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                 CardTypeEditor(line, type, turned, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
                     change(types.filterNot { it.id == type.id }, true)
                     editing = null
-                }, canDelete = types.size > 1, onFix = { fixing = true })
+                }, canDelete = DEFAULT_CARD_TYPES.none { it.id == type.id }, onFix = { fixing = true })
             }
         }
     }
@@ -205,13 +205,10 @@ private fun LayerRow(
     val bigger = stringResource(R.string.practice_bigger)
     val smaller = stringResource(R.string.practice_smaller)
     var latest by remember(scale) { mutableFloatStateOf(scale) }
-    var pinched by remember { mutableStateOf(false) }
     val pinch = rememberTransformableState { zoom, _, _ ->
         latest = (latest * zoom).coerceIn(range)
-        pinched = true
         onScale(latest)
     }
-    LaunchedEffect(pinch.isTransformInProgress) { if (!pinch.isTransformInProgress && pinched) { pinched = false; onScale(latest) } }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
