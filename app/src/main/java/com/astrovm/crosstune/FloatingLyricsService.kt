@@ -110,8 +110,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START }
 
-    /** Where in the window the sliders are, whose drags are theirs, not the window's. */
-    private var sliders: Rect? = null
+    /** The settings viewport owns its scrolling and slider gestures. */
+    private var editor: Rect? = null
 
     /** Whether the finger dragging the words is over [closeTarget]. */
     private var overClose = false
@@ -217,7 +217,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                             onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
-                            onSlidersAt = { sliders = it }
+                            onEditorAt = { editor = it }
                         ),
                         controls = controls.value,
                         onControls = { controls.value = it }
@@ -278,8 +278,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     /**
      * Holds the words and moves their window with them: a finger dragged moves it, onto the close
      * target to close them, and two pinched make the words bigger or smaller. It goes by where fingers
-     * are on screen, since the window, and everything in it, moves under them. Taps, and drags on the
-     * sliders, are left to the words; a touch anywhere else puts their buttons away.
+     * are on screen, since the window, and everything in it, moves under them. Taps and gestures inside the
+     * settings are left to Compose; a touch anywhere else puts their buttons away.
      */
     private inner class GestureFrame(context: Context, private val host: FloatingHost) : FrameLayout(context) {
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
@@ -302,16 +302,16 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                     downX = event.rawX
                     downY = event.rawY
                     from = Rect(params.x, params.y, params.x + params.width, params.y)
-                    gesture = if (sliders?.contains(event.x.toInt(), event.y.toInt()) == true) Gesture.SLIDER else Gesture.NONE
+                    gesture = if (editor?.contains(event.x.toInt(), event.y.toInt()) == true) Gesture.EDITOR else Gesture.NONE
                 }
-                MotionEvent.ACTION_POINTER_DOWN -> if (gesture != Gesture.SLIDER) {
+                MotionEvent.ACTION_POINTER_DOWN -> if (gesture != Gesture.EDITOR) {
                     pinchFrom = spread(event)
                     scaleFrom = host.state.floating.scale
                     gesture = Gesture.PINCH
                     return true
                 }
                 // Past a tap's wobble it's a drag: the words' own taps are let go, and they move from here.
-                MotionEvent.ACTION_MOVE -> if (gesture != Gesture.SLIDER && hypot(event.rawX - downX, event.rawY - downY) > slop) {
+                MotionEvent.ACTION_MOVE -> if (gesture != Gesture.EDITOR && hypot(event.rawX - downX, event.rawY - downY) > slop) {
                     if (gesture == Gesture.NONE) gesture = Gesture.MOVE
                     drag(event)
                     return true
@@ -390,7 +390,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
     }
 
-    private enum class Gesture { NONE, MOVE, PINCH, SLIDER }
+    private enum class Gesture { NONE, MOVE, PINCH, EDITOR }
 
     private fun showCloseTarget() {
         if (closeTarget != null) return

@@ -1985,6 +1985,13 @@ class ListeningTest {
         touch(MotionEvent.ACTION_MOVE, slider.center.y + 200f)
         touch(MotionEvent.ACTION_UP, slider.center.y + 200f)
         assertEquals(top, (view.layoutParams as WindowManager.LayoutParams).y)
+        // A vertical gesture over settings belongs to their scroll area, not the floating window.
+        val setting = composeRule.onNode(hasText(string(R.string.floating_previous_line))).fetchSemanticsNode().boundsInWindow
+        fun overSettings(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, setting.center.x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        overSettings(MotionEvent.ACTION_DOWN, setting.center.y)
+        overSettings(MotionEvent.ACTION_MOVE, setting.center.y - 100f)
+        overSettings(MotionEvent.ACTION_UP, setting.center.y - 100f)
+        assertEquals(top, (view.layoutParams as WindowManager.LayoutParams).y)
 
         // The line before the one sung shows too, once there is one; the next one, no longer.
         click(string(R.string.floating_previous_line))

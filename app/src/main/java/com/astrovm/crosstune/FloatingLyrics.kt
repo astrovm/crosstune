@@ -4,7 +4,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
@@ -176,7 +177,7 @@ internal class FloatingActions(
     /** A slider let go: keeps how they are now. */
     val onSave: () -> Unit,
     /** Where, in the window, a drag is a slider's own rather than one moving the words; null when nowhere. */
-    val onSlidersAt: (android.graphics.Rect?) -> Unit = {}
+    val onEditorAt: (android.graphics.Rect?) -> Unit = {}
 )
 
 /**
@@ -188,7 +189,7 @@ internal class FloatingActions(
 internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls: Boolean, onControls: (Boolean) -> Unit) {
     var settings by remember { mutableStateOf(false) }
     LaunchedEffect(controls) { if (!controls) settings = false }
-    LaunchedEffect(settings) { if (!settings) actions.onSlidersAt(null) }
+    LaunchedEffect(settings) { if (!settings) actions.onEditorAt(null) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         FloatingLyrics(
             state,
@@ -260,6 +261,7 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
  * How they look, changed on them: the size, the band behind, the lines either side and the visuals;
  * letting touches through to the app below; and Crosstune itself, a tap away. Done puts it all away.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
     Surface(
@@ -267,15 +269,14 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 6.dp,
         modifier = Modifier.padding(top = 8.dp).fillMaxWidth().testTag(FLOATING_CUSTOMIZE_TAG)
+            .onGloballyPositioned { area ->
+                val bounds = area.boundsInWindow()
+                actions.onEditorAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
+            }
     ) {
         Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
             .verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Column(
-                modifier = Modifier.onGloballyPositioned { area ->
-                    val bounds = area.boundsInWindow()
-                    actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
-                }
-            ) {
+            Column {
                 SizeSlider(R.string.floating_text_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
                     if (save) actions.onSave() else actions.onChange(options.copy(scale = value), false)
                 })
@@ -296,12 +297,15 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
                 Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
                 Switch(checked = false, onCheckedChange = null)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 TextButton(onClick = actions.onOpen) {
                     AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(stringResource(R.string.floating_open), modifier = Modifier.padding(start = 8.dp))
                 }
-                Spacer(Modifier.weight(1f))
                 Button(onClick = onDone) { Text(stringResource(R.string.floating_done)) }
             }
         }
