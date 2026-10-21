@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -99,7 +100,12 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                         // One kind always stays on, so there's always a card.
                         Switch(
                             checked = kind.on, enabled = !(kind.on && last), onCheckedChange = { on -> change(types.map { if (it.id == kind.id) it.copy(on = on) else it }, true) },
-                            modifier = Modifier.semantics { contentDescription = title }
+                            modifier = Modifier.semantics { contentDescription = title },
+                            // The last one on can't be turned off, but it still has to look on.
+                            colors = SwitchDefaults.colors(
+                                disabledCheckedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                disabledCheckedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                            )
                         )
                     }
                 }
@@ -119,7 +125,7 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                 CardTypeEditor(line, type, turned, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
                     change(types.filterNot { it.id == type.id }, true)
                     editing = null
-                }, canDelete = DEFAULT_CARD_TYPES.none { it.id == type.id }, onFix = { fixing = true })
+                }, preset = DEFAULT_CARD_TYPES.firstOrNull { it.id == type.id }, onFix = { fixing = true })
             }
         }
     }
@@ -127,7 +133,7 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
 
 /** One kind of card: its name, and what its front and its back show, a row for each layer. */
 @Composable
-private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, canDelete: Boolean, onFix: () -> Unit) {
+private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, preset: CardType?, onFix: () -> Unit) {
     val title = type.title()
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
@@ -135,7 +141,11 @@ private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, cha
             value = type.name ?: title, onValueChange = { change(type.copy(name = it), true) }, singleLine = true,
             label = { Text(stringResource(R.string.card_type_name)) }, shape = MaterialTheme.shapes.small, modifier = Modifier.weight(1f)
         )
-        if (canDelete) IconButton(onClick = onDelete) { AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.card_type_delete)) }
+        if (preset == null) IconButton(onClick = onDelete) { AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.card_type_delete)) }
+        // A preset can't go, but it can come back as it was, which only shows once it's been changed.
+        else if (type.name != preset.name || type.options != preset.options) IconButton(onClick = { change(preset.copy(on = type.on), true) }) {
+            AppIcon(R.drawable.ic_refresh, contentDescription = stringResource(R.string.card_type_reset))
+        }
     }
     val japanese = line.reading?.any(Readings::isKana) == true
     val script = if (japanese) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))

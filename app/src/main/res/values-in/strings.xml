@@ -326,6 +326,7 @@
     <string name="card_type_new">Tipe baru</string>
     <string name="card_type_name">Nama</string>
     <string name="card_type_delete">Hapus tipe</string>
+    <string name="card_type_reset">Kembalikan ke bawaan</string>
     <string name="practice_bigger">Lebih besar</string>
     <string name="practice_smaller">Lebih kecil</string>
     <string name="practice_again">Lagi</string>

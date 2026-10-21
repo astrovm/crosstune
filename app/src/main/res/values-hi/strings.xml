@@ -326,6 +326,7 @@
     <string name="card_type_new">नया प्रकार</string>
     <string name="card_type_name">नाम</string>
     <string name="card_type_delete">प्रकार हटाएँ</string>
+    <string name="card_type_reset">डिफ़ॉल्ट पर लौटाएँ</string>
     <string name="practice_bigger">बड़ा</string>
     <string name="practice_smaller">छोटा</string>
     <string name="practice_again">फिर से</string>

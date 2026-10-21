@@ -326,6 +326,7 @@
     <string name="card_type_new">Новый тип</string>
     <string name="card_type_name">Название</string>
     <string name="card_type_delete">Удалить тип</string>
+    <string name="card_type_reset">Вернуть по умолчанию</string>
     <string name="practice_bigger">Крупнее</string>
     <string name="practice_smaller">Мельче</string>
     <string name="practice_again">Ещё раз</string>

@@ -13,11 +13,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * The cards due at [now], at most [max], each song's together, in the order they're sung, so the
  * music app goes from one song to the next once, and only forward in each. The song due longest
- * comes first. A line has one card in a session, the one of the [types] due longest, as Anki holds
- * back a note's other cards until another day.
+ * comes first. A line has a card in the session for each of the [types] that's due.
  */
 internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE, types: List<CardType> = DEFAULT_CARD_TYPES): List<SavedLine> =
-    lines.mapNotNull { line -> line.cardsDue(now, types).minByOrNull { it.due } }
+    lines.flatMap { it.cardsDue(now, types) }
         .sortedBy { it.due }
         .take(max)
         .groupBy { it.title to it.artist }

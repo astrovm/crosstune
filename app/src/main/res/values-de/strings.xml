@@ -326,6 +326,7 @@
     <string name="card_type_new">Neuer Typ</string>
     <string name="card_type_name">Name</string>
     <string name="card_type_delete">Typ löschen</string>
+    <string name="card_type_reset">Auf Standard zurücksetzen</string>
     <string name="practice_bigger">Größer</string>
     <string name="practice_smaller">Kleiner</string>
     <string name="practice_again">Nochmal</string>

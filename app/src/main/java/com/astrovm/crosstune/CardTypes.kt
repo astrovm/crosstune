@@ -70,3 +70,6 @@ private const val CARD_TYPES_KEY = "card_types"
 /** [line]'s cards that are due at [now], one of each kind in use that suits it, as those cards. */
 internal fun SavedLine.cardsDue(now: Long, types: List<CardType>): List<SavedLine> =
     if (!practisable) emptyList() else types.filter { it.on && it.fits(this) }.map { forType(it.id) }.filter { it.due <= now }
+
+/** How many cards of [lines] are due at [now]. */
+internal fun List<SavedLine>.cardsDueCount(now: Long, types: List<CardType>) = sumOf { it.cardsDue(now, types).size }

@@ -649,7 +649,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         actions = {
             // Saved lines, a tap from what there is to practise, with how many are due.
             if (state.savedLines.any { it.practisable }) {
-                PracticeButton(state.savedLines.count { it.cardsDue(System.currentTimeMillis(), state.cardTypes).isNotEmpty() }, onOpenPractice)
+                PracticeButton(state.savedLines.cardsDueCount(System.currentTimeMillis(), state.cardTypes), onOpenPractice)
             }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))

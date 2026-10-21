@@ -327,6 +327,7 @@
     <string name="card_type_new">新しい種類</string>
     <string name="card_type_name">名前</string>
     <string name="card_type_delete">種類を削除</string>
+    <string name="card_type_reset">初期設定に戻す</string>
     <string name="practice_bigger">大きく</string>
     <string name="practice_smaller">小さく</string>
     <string name="practice_again">もう一度</string>

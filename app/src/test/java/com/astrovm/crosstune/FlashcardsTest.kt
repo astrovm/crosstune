@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -609,6 +610,42 @@ class FlashcardsTest {
         // With none on, the first is.
         composeRule.runOnIdle { model().setCardTypes(model().uiState.cardTypes.map { it.copy(on = false) }, true) }
         assertEquals(listOf(true, false, false), model().uiState.cardTypes.map { it.on })
+    }
+
+    @Test
+    fun aPresetKindComesBackAsItWasWhenItHasBeenChanged() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band"}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_translate))
+        // As it starts there's nothing to put back.
+        assertFalse(described(string(R.string.card_type_reset)))
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Mine")
+        composeRule.waitForIdle()
+        assertEquals("Mine", loadCardTypes(prefs())[2].name)
+        // Changed, it can go back to its name and options, and stays as on or off as it was.
+        click(string(R.string.card_type_reset))
+        assertEquals(TRANSLATE_IT, model().uiState.cardTypes[2])
+        assertFalse(described(string(R.string.card_type_reset)))
+        composeRule.onNode(hasSetTextAction()).assertTextContains(string(R.string.card_type_translate))
+    }
+
+    @Test
+    fun aSessionHasTheCardsOfEveryKindThatIsOn() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}""")
+        saveCardTypes(prefs(), DEFAULT_CARD_TYPES.map { it.copy(on = it.id != HEAR_TYPE) })
+        launch()
+        click(practiceDue(2))
+        click(string(R.string.practice_all_songs))
+        // Both cards of the line are in the one session, the one due longest first.
+        assertTrue(onCard(string(R.string.card_type_translate)))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        assertTrue(onCard(string(R.string.card_type_read)))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        waitUntil { shown(string(R.string.practice_done, 2)) }
     }
 
     @Test

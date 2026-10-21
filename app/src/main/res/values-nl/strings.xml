@@ -326,6 +326,7 @@
     <string name="card_type_new">Nieuw type</string>
     <string name="card_type_name">Naam</string>
     <string name="card_type_delete">Type verwijderen</string>
+    <string name="card_type_reset">Standaard herstellen</string>
     <string name="practice_bigger">Groter</string>
     <string name="practice_smaller">Kleiner</string>
     <string name="practice_again">Nog eens</string>

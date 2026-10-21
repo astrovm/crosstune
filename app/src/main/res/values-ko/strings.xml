@@ -326,6 +326,7 @@
     <string name="card_type_new">새 유형</string>
     <string name="card_type_name">이름</string>
     <string name="card_type_delete">유형 삭제</string>
+    <string name="card_type_reset">기본값으로 되돌리기</string>
     <string name="practice_bigger">크게</string>
     <string name="practice_smaller">작게</string>
     <string name="practice_again">다시</string>

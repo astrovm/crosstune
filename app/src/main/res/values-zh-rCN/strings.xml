@@ -326,6 +326,7 @@
     <string name="card_type_new">新类型</string>
     <string name="card_type_name">名称</string>
     <string name="card_type_delete">删除类型</string>
+    <string name="card_type_reset">恢复默认</string>
     <string name="practice_bigger">放大</string>
     <string name="practice_smaller">缩小</string>
     <string name="practice_again">再来</string>

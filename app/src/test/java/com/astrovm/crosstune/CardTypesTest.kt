@@ -113,7 +113,7 @@ class CardTypesTest {
     }
 
     @Test
-    fun aSessionHasOneCardForALineTheKindDueLongestAndNoneOfAKindThatIsOff() {
+    fun aSessionHasACardOfEachKindThatIsOnAndDueAndNoneOfAKindThatIsOff() {
         val both = listOf(READ_IT, TRANSLATE_IT.copy(on = true))
         val lines = listOf(
             line("Later", "A").copy(due = 50, reviews = mapOf(TRANSLATE_TYPE to Review(due = 10))),
@@ -122,13 +122,13 @@ class CardTypesTest {
             line("No meaning", "A", translation = null, reading = "よむ").copy(due = 1)
         )
         val session = sessionOf(lines, now = 100, types = both)
-        assertEquals(listOf("No meaning", "Sooner", "Later"), session.map { it.text })
-        // Each is the card of the kind due longest: Say it for Later; Read it for Sooner, and for the line Say it has nothing to ask.
-        assertEquals(listOf(READ_TYPE, READ_TYPE, TRANSLATE_TYPE), session.map { it.cardType })
-        assertEquals(10L, session.last().due)
-        // With Say it off there are only first cards.
+        // Every card due, the one due longest first; the line Translate it has nothing to ask has only its Read it.
+        assertEquals(listOf("No meaning", "Sooner", "Later", "Sooner", "Later"), session.map { it.text })
+        assertEquals(listOf(READ_TYPE, READ_TYPE, TRANSLATE_TYPE, TRANSLATE_TYPE, READ_TYPE), session.map { it.cardType })
+        // With Translate it off there are only first cards.
         assertEquals(listOf(READ_TYPE, READ_TYPE, READ_TYPE), sessionOf(lines, now = 100).map { it.cardType })
-        assertEquals(3, sessionOf(lines, now = 100, types = both).size)
+        assertEquals(5, lines.cardsDueCount(100, both))
+        assertEquals(3, lines.cardsDueCount(100, DEFAULT_CARD_TYPES))
         assertTrue(lines[0].cardsDue(5, both).isEmpty())
         assertEquals(listOf(READ_TYPE, TRANSLATE_TYPE), lines[0].cardsDue(100, both).map { it.cardType })
         assertTrue(line("Nothing", translation = null).cardsDue(Long.MAX_VALUE, both).isEmpty())

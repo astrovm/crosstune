@@ -326,6 +326,7 @@
     <string name="card_type_new">Yeni tür</string>
     <string name="card_type_name">Ad</string>
     <string name="card_type_delete">Türü sil</string>
+    <string name="card_type_reset">Varsayılana döndür</string>
     <string name="practice_bigger">Daha büyük</string>
     <string name="practice_smaller">Daha küçük</string>
     <string name="practice_again">Tekrar</string>
