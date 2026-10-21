@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import android.os.SystemClock
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -56,7 +55,7 @@ internal class LayerSwipe {
     val swiping get() = to != null && carryOn == null
 
     /** Moves along by [amount] of the finger's, positive down, and returns how much of it that took. */
-    fun drag(amount: Float, time: Long = SystemClock.uptimeMillis()): Float {
+    fun drag(amount: Float, time: Long): Float {
         if (carryOn != null) return 0f
         if (layer == null) {
             val started = (if (amount < 0f) up else down) ?: return 0f
