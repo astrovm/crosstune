@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.text.NumberFormat
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,10 +25,12 @@ class LyricsOptionsTest {
             assertEquals("拼 · 100%", japanese.copy(script = Script.CHINESE, readingScale = MAX_READING_SCALE).readingSummary("Off"))
             assertEquals("Off", japanese.copy(script = Script.KOREAN).readingSummary("Off"))
             assertEquals("Off", japanese.copy(script = null).readingSummary("Off"))
-            assertEquals(1f, sizeShare(MAX_WORDS_SCALE, MAX_WORDS_SCALE), 0f)
+            val percent = NumberFormat.getPercentInstance()
+            assertEquals("100%", percent.format(sizeShare(MAX_WORDS_SCALE, MAX_WORDS_SCALE)))
+            assertEquals("1%", percent.format(sizeShare(MIN_WORDS_SCALE, MAX_WORDS_SCALE)))
             assertEquals(1f, sizeShare(MAX_READING_SCALE, MAX_READING_SCALE), 0f)
-            assertEquals(0.89375f, sizeShare(1.43f, MAX_WORDS_SCALE), 0.0001f)
-            assertTrue(sizeShare(1.43f, MAX_WORDS_SCALE) <= 1f)
+            // The old largest words, 1.6 times how they start, are under the new 100%.
+            assertTrue(sizeShare(1.6f, MAX_WORDS_SCALE) < 1f)
             assertEquals(0f, sizeShare(1f, 0f), 0f)
             assertEquals(0f, sizeShare(-1f, MAX_WORDS_SCALE), 0f)
         } finally {

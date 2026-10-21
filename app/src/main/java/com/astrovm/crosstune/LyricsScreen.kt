@@ -753,9 +753,9 @@ private fun MenuCaption(@StringRes text: Int) {
 }
 
 /**
- * How big something is, slid within [range] from a small "A" to a big one: the words, from smaller
- * to much bigger than they start, or the readings, from as they start to nearly as big as the words.
- * The number is how far it is toward the large end, which reads 100%.
+ * How big something is, slid within [range] from a small "A" to a big one: the words, from 1% of
+ * their largest size up to three times how they start, or the readings, from as they start to nearly
+ * as big as the words. The number is how far it is toward the large end, which reads 100%.
  */
 @Composable
 private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
@@ -1730,9 +1730,11 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
 internal const val READING_SCALE = 0.45f
 internal const val MAX_READING_SCALE = 0.8f
 
-/** How small and how big the words can be made, beside how they start. */
-internal const val MIN_WORDS_SCALE = 0.75f
-internal const val MAX_WORDS_SCALE = 1.6f
+/** The largest the words can be, beside how they start. The slider reads 100% here. */
+internal const val MAX_WORDS_SCALE = 3f
+
+/** The smallest the words can be: 1% of [MAX_WORDS_SCALE]. */
+internal const val MIN_WORDS_SCALE = MAX_WORDS_SCALE / 100f
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f
