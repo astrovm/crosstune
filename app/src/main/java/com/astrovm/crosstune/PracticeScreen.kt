@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,13 +36,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.annotation.StringRes
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -64,7 +63,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
+import kotlin.math.roundToLong
 
 internal const val PRACTICE_CARD_TAG = "practice-card"
 
@@ -203,12 +205,16 @@ private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, back: 
                 Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(stringResource(R.string.practice_show)) }
             } else {
                 val locale = LocalConfiguration.current.locales[0]
-                // Four, as Anki has them, each saying when the line's back; Good, the usual one, stands out.
+                // Four, in Anki's colors, each saying when the line's back.
+                val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 GRADES.forEach { (grade, label) ->
-                    val modifier = Modifier.weight(1f).height(56.dp)
-                    val content: @Composable RowScope.() -> Unit = { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
-                    if (grade == Grade.GOOD) Button(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
-                    else OutlinedButton(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
+                    val (fill, text) = gradeColors(grade, dark)
+                    Button(
+                        onClick = { answer(grade) },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
+                        contentPadding = GRADE_PADDING
+                    ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
                 }
             }
         }
@@ -405,23 +411,34 @@ private val GRADES = listOf(Grade.AGAIN to R.string.practice_again, Grade.HARD t
 /** Little room around a grade's words, so four fit side by side. */
 private val GRADE_PADDING = PaddingValues(horizontal = 4.dp)
 
-/** A grade button's words: how well it was known, and when it's back if so. */
+/** A grade button's fill and words, the same red, orange, green and blue as AnkiDroid's, in light and dark. */
+private fun gradeColors(grade: Grade, dark: Boolean): Pair<Color, Color> = when (grade) {
+    Grade.AGAIN -> if (dark) Color(0xFF462828) to Color(0xFFEF9A9A) else Color(0xFFFFCDD2) to Color(0xFFB71C1C)
+    Grade.HARD -> if (dark) Color(0xFF4E3122) to Color(0xFFFFCC80) else Color(0xFFFFE0B2) to Color(0xFFB33800)
+    Grade.GOOD -> if (dark) Color(0xFF2C3B2C) to Color(0xFFC5E1A5) else Color(0xFFC8E6C9) to Color(0xFF1B5E20)
+    Grade.EASY -> if (dark) Color(0xFF223946) to Color(0xFF80D8FF) else Color(0xFFB3E5FC) to Color(0xFF01579B)
+}
+
+/** A grade button's words: when the line's back, small, over how well it was known, as in Anki. */
 @Composable
 private fun GradeLabel(label: Int, wait: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
+        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** How long [ms] is, short, in minutes, hours or days, as [locale] writes them, e.g. "10m" or "3d". */
+/** How long [ms] is, short, in minutes, hours, days, months or years, as [locale] writes them, e.g. "10m", "3d" or "1y". */
 internal fun waitText(ms: Long, locale: Locale): String {
     val format = android.icu.text.MeasureFormat.getInstance(locale, android.icu.text.MeasureFormat.FormatWidth.NARROW)
-    val minutes = ms / 60_000
+    val minutes = (ms / 60_000.0).roundToLong()
+    val days = minutes / (24 * 60)
     return when {
         minutes < 60 -> format.format(Measure(minutes, MeasureUnit.MINUTE))
         minutes < 24 * 60 -> format.format(Measure(minutes / 60, MeasureUnit.HOUR))
-        else -> format.format(Measure(minutes / (24 * 60), MeasureUnit.DAY))
+        days < 30 -> format.format(Measure(days, MeasureUnit.DAY))
+        days < 365 -> format.format(Measure(days / 30, MeasureUnit.MONTH))
+        else -> format.format(Measure(days / 365, MeasureUnit.YEAR))
     }
 }
 

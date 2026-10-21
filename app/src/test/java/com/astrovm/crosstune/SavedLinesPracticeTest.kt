@@ -23,55 +23,90 @@ class SavedLinesPracticeTest {
         prefs.edit().clear().commit()
     }
 
+    private val minute = 60 * 1000L
+
     @Test
-    fun aLineKnownComesBackLaterEachTimeAndOneMissedSoon() {
+    fun aNewLineIsLearnedInTwoStepsThenComesBackAfterADay() {
         val store = SavedLinesStore(prefs)
         store.toggle(line)
-        var now = 1_000_000L
-        // Known: back after 1, 3, 7, 16, 35, 75, then 150 days, and 150 from then on.
-        listOf(1L, 3L, 7L, 16L, 35L, 75L, 150L, 150L).forEachIndexed { index, days ->
-            val kept = store.practised(line, Grade.GOOD, now = now).single()
-            assertEquals(minOf(index + 1, 7), kept.box)
-            assertEquals(now + days * day, kept.due)
-            now = kept.due
-        }
-        // Missed: back in ten minutes, from the start.
-        val missed = store.practised(line, Grade.AGAIN, now = now).single()
-        assertEquals(0, missed.box)
-        assertEquals(now + 10 * 60 * 1000L, missed.due)
+        // As in Anki: back in 10 minutes, then, known again, after a day.
+        val first = store.practised(line, Grade.GOOD, now = 0).single()
+        assertEquals(1, first.step)
+        assertEquals(0, first.interval)
+        assertEquals(10 * minute, first.due)
+        val learned = store.practised(first, Grade.GOOD, now = 10 * minute).single()
+        assertEquals(0, learned.step)
+        assertEquals(1, learned.interval)
+        assertEquals(10 * minute + day, learned.due)
         // Kept as practised; another line isn't touched.
-        assertEquals(missed, SavedLinesStore(prefs).load().single())
-        assertEquals(listOf(missed), store.practised(line.copy(text = "Other"), Grade.GOOD, now = now))
+        assertEquals(learned, SavedLinesStore(prefs).load().single())
+        assertEquals(listOf(learned), store.practised(line.copy(text = "Other"), Grade.GOOD, now = 0))
     }
 
     @Test
-    fun aLineKnownWithTroubleStaysOnItsStep() {
-        val store = SavedLinesStore(prefs)
-        store.toggle(line)
-        // First time, back in half a day, sooner than known; known with trouble after that, after as long as last time.
-        val first = store.practised(line, Grade.HARD, now = 0).single()
-        assertEquals(0, first.box)
-        assertEquals(day / 2, first.due)
-        store.practised(line, Grade.GOOD, now = 0)
-        store.practised(line, Grade.GOOD, now = 0)
-        val hard = store.practised(line, Grade.HARD, now = 0).single()
-        assertEquals(2, hard.box)
-        assertEquals(3 * day, hard.due)
-        assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.HARD))
+    fun aNewLineMissedOrKnownWithTroubleStaysAMinuteOrTenAway() {
+        val missed = SavedLinesStore.answered(line, Grade.AGAIN, now = 0)
+        assertEquals(0, missed.step)
+        assertEquals(minute, missed.due)
+        val hard = SavedLinesStore.answered(line, Grade.HARD, now = 0)
+        assertEquals(0, hard.step)
+        assertEquals(330_000L, hard.due)
+        // On its second step, trouble keeps it there; a miss starts the steps over.
+        val second = line.copy(step = 1)
+        assertEquals(10 * minute, SavedLinesStore.answered(second, Grade.HARD, now = 0).due)
+        assertEquals(minute, SavedLinesStore.answered(second, Grade.AGAIN, now = 0).due)
+        assertEquals(0, SavedLinesStore.answered(second, Grade.AGAIN, now = 0).step)
     }
 
     @Test
-    fun aLineKnownEasilySkipsAStep() {
-        val store = SavedLinesStore(prefs)
-        store.toggle(line)
-        var now = 1_000_000L
-        // Easy: back after 3, 16, 75, then 150 days, two steps further each time, to the last.
-        listOf(3L to 2, 16L to 4, 75L to 6, 150L to 7, 150L to 7).forEach { (days, box) ->
-            val kept = store.practised(line, Grade.EASY, now = now).single()
-            assertEquals(box, kept.box)
-            assertEquals(now + days * day, kept.due)
-            now = kept.due
+    fun aNewLineKnownEasilyComesBackAfterFourDays() {
+        val kept = SavedLinesStore.answered(line, Grade.EASY, now = 0)
+        assertEquals(4, kept.interval)
+        assertEquals(4 * day, kept.due)
+        assertEquals(0, kept.step)
+        assertEquals(250, kept.ease)
+    }
+
+    @Test
+    fun aLineKnownGrowsByItsEaseEachTimeAsInAnki() {
+        val ten = line.copy(interval = 10)
+        assertEquals(12 * day, SavedLinesStore.waitFor(ten, Grade.HARD))
+        assertEquals(25 * day, SavedLinesStore.waitFor(ten, Grade.GOOD))
+        assertEquals(33 * day, SavedLinesStore.waitFor(ten, Grade.EASY))
+        // Trouble makes it grow slower from then on, and easy faster.
+        assertEquals(235, SavedLinesStore.answered(ten, Grade.HARD, now = 0).ease)
+        assertEquals(250, SavedLinesStore.answered(ten, Grade.GOOD, now = 0).ease)
+        assertEquals(265, SavedLinesStore.answered(ten, Grade.EASY, now = 0).ease)
+        assertEquals(25, SavedLinesStore.answered(ten, Grade.GOOD, now = 0).interval)
+        // Never by less than a day more than the answer before it.
+        listOf(1, 2, 3).forEach { days ->
+            val waits = Grade.entries.drop(1).map { SavedLinesStore.waitFor(line.copy(interval = days), it) }
+            assertEquals("interval $days: $waits", waits.sorted().distinct(), waits)
+            assertEquals(true, waits.all { it > days * day })
         }
+    }
+
+    @Test
+    fun aLineMissedAfterBeingKnownRelearnsInTenMinutesThenComesBackAfterADay() {
+        val lapsed = SavedLinesStore.answered(line.copy(interval = 40), Grade.AGAIN, now = 0)
+        assertEquals(1, lapsed.interval)
+        assertEquals(1, lapsed.step)
+        assertEquals(230, lapsed.ease)
+        assertEquals(10 * minute, lapsed.due)
+        // Relearning, known brings it back after a day, with trouble in another ten minutes, easy in two days.
+        assertEquals(day, SavedLinesStore.answered(lapsed, Grade.GOOD, now = 0).due)
+        assertEquals(0, SavedLinesStore.answered(lapsed, Grade.GOOD, now = 0).step)
+        assertEquals(10 * minute, SavedLinesStore.answered(lapsed, Grade.HARD, now = 0).due)
+        assertEquals(10 * minute, SavedLinesStore.answered(lapsed, Grade.AGAIN, now = 0).due)
+        assertEquals(2 * day, SavedLinesStore.answered(lapsed, Grade.EASY, now = 0).due)
+    }
+
+    @Test
+    fun aLineNeverGrowsPastAHundredYearsOrEasesBelowAFloor() {
+        val old = line.copy(interval = 36_000, ease = 130)
+        assertEquals(36_500 * day, SavedLinesStore.waitFor(old, Grade.EASY))
+        assertEquals(130, SavedLinesStore.answered(old, Grade.AGAIN, now = 0).ease)
+        assertEquals(130, SavedLinesStore.answered(old, Grade.HARD, now = 0).ease)
     }
 
     @Test
@@ -93,7 +128,7 @@ class SavedLinesPracticeTest {
     fun linesSavedBeforePracticeAreDueRightAway() {
         prefs.edit().putString("saved_lines", """[{"text":"風","translation":"Viento","title":"T","artist":"A"}]""").commit()
         val old = SavedLinesStore(prefs).load().single()
-        assertEquals(0, old.box)
+        assertEquals(0, old.interval)
         assertEquals(0L, old.due)
     }
 
@@ -197,21 +232,20 @@ class SavedLinesPracticeTest {
 
     @Test
     fun howLongALineWaitsDependsOnHowWellItsKnown() {
-        assertEquals(10 * 60 * 1000L, SavedLinesStore.waitFor(line, Grade.AGAIN))
-        assertEquals(day / 2, SavedLinesStore.waitFor(line, Grade.HARD))
-        assertEquals(day, SavedLinesStore.waitFor(line, Grade.GOOD))
-        assertEquals(3 * day, SavedLinesStore.waitFor(line, Grade.EASY))
-        assertEquals(7 * day, SavedLinesStore.waitFor(line.copy(box = 3), Grade.HARD))
-        assertEquals(150 * day, SavedLinesStore.waitFor(line.copy(box = 7), Grade.EASY))
+        assertEquals(minute, SavedLinesStore.waitFor(line, Grade.AGAIN))
+        assertEquals(330_000L, SavedLinesStore.waitFor(line, Grade.HARD))
+        assertEquals(10 * minute, SavedLinesStore.waitFor(line, Grade.GOOD))
+        assertEquals(4 * day, SavedLinesStore.waitFor(line, Grade.EASY))
+        assertEquals(10 * minute, SavedLinesStore.waitFor(line.copy(interval = 7), Grade.AGAIN))
+        assertEquals(8 * day, SavedLinesStore.waitFor(line.copy(interval = 7), Grade.HARD))
+        assertEquals(18 * day, SavedLinesStore.waitFor(line.copy(interval = 7), Grade.GOOD))
     }
 
     @Test
-    fun theFourAnswersOfACardNeverWaitTheSame() {
-        // As in Anki, so the buttons show different times, until the last step of all.
-        (0..5).forEach { box ->
-            val waits = Grade.entries.map { SavedLinesStore.waitFor(line.copy(box = box), it) }
-            assertEquals("box $box: $waits", waits.sorted().distinct(), waits)
-        }
+    fun linesSavedBeforeAnkisWayKeepHowLongTheirBoxMadeThemWait() {
+        prefs.edit().putString("saved_lines", """[{"text":"A","title":"T","artist":"A","box":3},{"text":"B","title":"T","artist":"A","box":9},{"text":"C","title":"T","artist":"A","box":0}]""").commit()
+        assertEquals(listOf(7, 150, 0), SavedLinesStore(prefs).load().map { it.interval })
+        assertEquals(List(3) { 250 }, SavedLinesStore(prefs).load().map { it.ease })
     }
 
     private val night = SavedLine(
@@ -275,7 +309,7 @@ class SavedLinesPracticeTest {
     fun linesOfAJapaneseSongKeptAsAChineseSiteWroteThemLoadAsJapanWritesThem() {
         // Kept before, from words NetEase wrote China's way: 瞬间 for 瞬間, 仆 for 僕, 终 for 終, with China's comma.
         val moment = SavedLine(
-            "真実の瞬间はいつも，", reading = "しんじつのまどか间はいつも，", romanized = "shinjitsu no madoka 间 wa itsumo,", translation = "El momento", title = "Song", artist = "Band", box = 2,
+            "真実の瞬间はいつも，", reading = "しんじつのまどか间はいつも，", romanized = "shinjitsu no madoka 间 wa itsumo,", translation = "El momento", title = "Song", artist = "Band", interval = 3,
             ruby = listOf(Ruby("真実", "しんじつ"), Ruby("の"), Ruby("瞬", "まどか"), Ruby("间はいつも，"))
         )
         val me = SavedLine("仆", reading = "ふ", translation = "yo", title = "Song", artist = "Band", line = "仆や君のため，")

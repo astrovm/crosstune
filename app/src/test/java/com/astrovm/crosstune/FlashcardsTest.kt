@@ -237,7 +237,7 @@ class FlashcardsTest {
         // Known, it's done.
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 1)) }
-        assertEquals(1, savedLine("Stars").box)
+        assertEquals(1, savedLine("Stars").step)
         // Demo was playing before and still is, so there's nothing to go back to.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
         click(string(R.string.floating_close))
