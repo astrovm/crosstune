@@ -2158,7 +2158,12 @@ class ListeningTest {
         click(string(R.string.lyrics_button))
     }
 
-    private fun learnMenu() = click(string(R.string.lyrics_learn))
+    /** Opens the readings palette. Tapping its button again closes it, so a second call stays put. */
+    private fun learnMenu() {
+        if (composeRule.onAllNodesWithTag("lyrics-display-options").fetchSemanticsNodes().isEmpty()) {
+            click(string(R.string.lyrics_learn))
+        }
+    }
 
     private fun studyMenu() = click(string(R.string.lyrics_study))
 
@@ -2620,7 +2625,7 @@ class ListeningTest {
         readingOptions()
         displayOptions()
         // The icon also closes the palette, and reopening starts on the main page.
-        learnMenu()
+        click(string(R.string.lyrics_learn))
         composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
         learnMenu()
         assertTrue(described(string(R.string.lyrics_words_size)))
