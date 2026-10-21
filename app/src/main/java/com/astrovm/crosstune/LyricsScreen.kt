@@ -93,14 +93,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import java.text.NumberFormat
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -694,7 +691,7 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
                 if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
                     ReadingSwitch(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
                     if (learning.readings) {
-                        SizeSlider(R.string.lyrics_reading_size, learning.readingScale, READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+                        SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
                     }
                 }
                 if (learning.showsAs != WordsAs.LATIN) ReadingSwitch(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
@@ -766,9 +763,8 @@ private fun MenuCaption(@StringRes text: Int) {
 }
 
 /**
- * How big something is, slid within [range] from a small "A" to a big one: the words, from 1% of
- * their largest size up to three times how they start, or the readings, from as they start to nearly
- * as big as the words. The number is how far it is toward the large end, which reads 100%.
+ * How big something is, slid within [range]. The number is its share of the large end, which reads
+ * 100%. Words stay big enough to read. Readings run from 1% of their largest size up to it.
  */
 @Composable
 private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
@@ -983,17 +979,6 @@ private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenAct
     }
 }
 
-/** One of what can help, ticked while it's on; the menu stays open, to switch on more. */
-@Composable
-internal fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
-    DropdownMenuItem(
-        text = { Text(stringResource(label)) },
-        trailingIcon = { Checkbox(checked = on, onCheckedChange = null) },
-        onClick = { onChange(!on) },
-        modifier = Modifier.semantics { toggleableState = ToggleableState(on) }
-    )
-}
-
 /** While the words are being translated, or why they couldn't be. */
 @Composable
 private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
@@ -1174,7 +1159,12 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(R.drawable.ic_shade, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-                Text(darken, style = MaterialTheme.typography.bodyLarge)
+                Text(darken, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(
+                    NumberFormat.getPercentInstance().format(sizeShare(state.visualsShade, MAX_VISUALS_SHADE)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
             // Where it was let go is kept, even before the menu has caught up with it.
             var latest by remember { mutableFloatStateOf(state.visualsShade) }
@@ -1247,7 +1237,7 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
 
 /** A setting in a card, switched as soon as it changes, and the card stays open. */
 @Composable
-private fun MenuSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun MenuSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
@@ -1772,11 +1762,17 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
 internal const val READING_SCALE = 0.45f
 internal const val MAX_READING_SCALE = 0.8f
 
+/** The smallest readings: 1% of [MAX_READING_SCALE], so the slider runs from 1% to 100%. */
+internal const val MIN_READING_SCALE = MAX_READING_SCALE / 100f
+
 /** The largest the words can be, beside how they start. The slider reads 100% here. */
 internal const val MAX_WORDS_SCALE = 3f
 
-/** The smallest the words can be: 1% of [MAX_WORDS_SCALE]. */
-internal const val MIN_WORDS_SCALE = MAX_WORDS_SCALE / 100f
+/**
+ * The smallest the words can be: half the size they start at. 1% of [MAX_WORDS_SCALE] is a speck,
+ * too small to read, so the floor is higher and its number is that share of the largest.
+ */
+internal const val MIN_WORDS_SCALE = 0.5f
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f
@@ -2075,7 +2071,11 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             }
             // Wrong words, or out of time, said where they can be put right.
             var reporting by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { reporting = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            TextButton(
+                onClick = { reporting = true },
+                modifier = Modifier.align(Alignment.Start).heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
+            ) {
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(stringResource(R.string.report_problem), modifier = Modifier.padding(start = 8.dp))
             }

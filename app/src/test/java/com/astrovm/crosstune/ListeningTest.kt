@@ -62,6 +62,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import java.text.NumberFormat
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
@@ -1964,6 +1965,10 @@ class ListeningTest {
         floatingSettings()
         // In their place, the buttons, which come back with Done.
         assertFalse(described(string(R.string.floating_close)))
+        // Size is a share of its largest, and the band runs from none to full.
+        val percent = NumberFormat.getPercentInstance()
+        assertTrue(shown(percent.format(sizeShare(1f, FloatingOptions.MAX_SCALE))))
+        assertTrue(shown(percent.format(sizeShare(0f, FloatingOptions.MAX_BACKGROUND))))
 
         // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
         composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
@@ -2582,6 +2587,20 @@ class ListeningTest {
         // Signed out, the song's sheet holds only that, with none of what ChatGPT says.
         aboutSong()
         assertFalse(shown(string(R.string.song_tab_meaning)))
+        // The report action lines up with the song's name in the sheet, not under its middle.
+        val report = composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction()).getBoundsInRoot()
+        val title = composeRule.onAllNodesWithText("Demo")
+        var titleLeft = -1f
+        var titleGap = Float.MAX_VALUE
+        repeat(title.fetchSemanticsNodes().size) { index ->
+            val bounds = title[index].getBoundsInRoot()
+            val gap = (report.top - bounds.bottom).value
+            if (gap in -4f..48f && gap < titleGap) {
+                titleGap = gap
+                titleLeft = bounds.left.value
+            }
+        }
+        assertEquals(titleLeft, report.left.value, 2f)
         click(string(R.string.report_problem))
         click(string(R.string.report_by_email))
         val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
@@ -2602,6 +2621,7 @@ class ListeningTest {
         composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
         composeRule.waitForIdle()
         assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_WORDS_SCALE, MAX_WORDS_SCALE))))
         assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
     }
 
@@ -2684,6 +2704,15 @@ class ListeningTest {
         composeRule.onNodeWithTag("lyrics-visuals-options").assertExists()
         assertTrue(shown(string(R.string.visuals_shade)))
         assertTrue(shown(string(R.string.visuals_next)))
+        val percent = NumberFormat.getPercentInstance()
+        assertTrue(shown(percent.format(sizeShare(DEFAULT_VISUALS_SHADE, MAX_VISUALS_SHADE))))
+        val shade = hasContentDescription(string(R.string.visuals_shade))
+        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        composeRule.waitForIdle()
+        assertTrue(shown(percent.format(sizeShare(0f, MAX_VISUALS_SHADE))))
+        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_VISUALS_SHADE) }
+        composeRule.waitForIdle()
+        assertTrue(shown(percent.format(sizeShare(MAX_VISUALS_SHADE, MAX_VISUALS_SHADE))))
         val visuals = composeRule.onNodeWithTag("lyrics-visuals-options").getBoundsInRoot()
         assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= visuals.top)
         composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
@@ -2709,6 +2738,12 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(0.6f, controllerModel().uiState.learning.readingScale, 0.01f)
         assertEquals(0.6f, prefs().getFloat("reading_scale", 0f), 0.01f)
+        // The small end is 1% of the largest reading, not the size they start at.
+        composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_READING_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MIN_READING_SCALE, controllerModel().uiState.learning.readingScale, 0.0001f)
+        assertEquals(MIN_READING_SCALE, prefs().getFloat("reading_scale", 0f), 0.0001f)
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_READING_SCALE, MAX_READING_SCALE))))
         // Without readings, there's no size to change.
         click(string(R.string.lyrics_readings))
         composeRule.waitForIdle()

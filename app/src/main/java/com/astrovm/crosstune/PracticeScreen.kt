@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,10 +37,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.semantics.Role
 import androidx.annotation.StringRes
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -94,6 +94,10 @@ internal const val PRACTICE_CARD_TAG = "practice-card"
 internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val practice = state.practice ?: return
     BackHandler(onBack = actions.onStopPractice)
+    var optionsOpen by rememberSaveable { mutableStateOf(false) }
+    val optionLineKey = practice.line?.let { "${it.text}|${it.title}|${it.artist}" }
+    // A new card starts clear. The menu stays open only while this one is on screen.
+    LaunchedEffect(optionLineKey) { optionsOpen = false }
     val cover = (practice.line ?: practice.lastSong)?.artworkUrl
     val tint by animateColorAsState(coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary, tween(durationMillis = 700), label = "practice tint")
     val ground = MaterialTheme.colorScheme.surface
@@ -105,8 +109,14 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     val line = practice.line
                     if (practice.total > 0 && line != null) {
                         Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
-                        CardMenu(line, state.cards, state.learning.romajiTyped, actions)
+                        IconButton(onClick = { optionsOpen = !optionsOpen }) {
+                            AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.practice_card_options))
+                        }
                     }
+                }
+                val optionLine = practice.line
+                if (optionsOpen && optionLine != null) {
+                    CardOptions(optionLine, state.cards, state.learning.romajiTyped, actions) { optionsOpen = false }
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
@@ -258,40 +268,50 @@ private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, 
 }
 
 /**
- * What the cards show, picked here: the front as written, only in kana, for Japanese, or only in
- * Latin letters; on the back, the readings, the Latin letters, spelled as typed or as said, and the
- * translation. The menu stays open, to pick more.
+ * What the cards show, in the same card as the lyrics menus: the front as written, only in kana, for
+ * Japanese, or only in Latin letters; on the back, the readings, the Latin letters, spelled as typed
+ * or as said, and the translation. It stays open, to pick more. Back closes it.
  */
 @Composable
-private fun CardMenu(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions) {
-    var open by remember { mutableStateOf(false) }
+private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions, onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
     val japanese = line.reading?.any(Readings::isKana) == true
-    Box {
-        IconButton(onClick = { open = true }) { AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.practice_card_options)) }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            FrontItem(R.string.lyrics_as_written, WordsAs.WRITTEN, cards, actions)
-            if (japanese || cards.front == WordsAs.KANA) FrontItem(R.string.lyrics_only_kana, WordsAs.KANA, cards, actions)
-            FrontItem(R.string.lyrics_only_latin, WordsAs.LATIN, cards, actions)
-            HorizontalDivider()
-            LearnItem(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
-            if (cards.front != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
+    ) {
+        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+            FrontChoice(R.string.lyrics_as_written, WordsAs.WRITTEN, cards, actions)
+            if (japanese || cards.front == WordsAs.KANA) FrontChoice(R.string.lyrics_only_kana, WordsAs.KANA, cards, actions)
+            FrontChoice(R.string.lyrics_only_latin, WordsAs.LATIN, cards, actions)
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            MenuSwitch(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
+            if (cards.front != WordsAs.LATIN) MenuSwitch(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
             // Romaji shown, it can be spelled as typed rather than as said.
-            if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) LearnItem(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
-            LearnItem(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
+            if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) MenuSwitch(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
+            MenuSwitch(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
         }
     }
 }
 
 /** One way the front can show, picked while it does. */
 @Composable
-private fun FrontItem(@StringRes label: Int, front: WordsAs, cards: CardOptions, actions: ScreenActions) {
+private fun FrontChoice(@StringRes label: Int, front: WordsAs, cards: CardOptions, actions: ScreenActions) {
     val picked = cards.front == front
-    DropdownMenuItem(
-        text = { Text(stringResource(label)) },
-        trailingIcon = { RadioButton(selected = picked, onClick = null) },
-        onClick = { actions.onCardOptionsChange(cards.copy(front = front)) },
-        modifier = Modifier.semantics { selected = picked }
-    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+            selected = picked,
+            role = Role.RadioButton,
+            onClick = { actions.onCardOptionsChange(cards.copy(front = front)) }
+        )
+    ) {
+        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        RadioButton(selected = picked, onClick = null)
+    }
 }
 
 /** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */

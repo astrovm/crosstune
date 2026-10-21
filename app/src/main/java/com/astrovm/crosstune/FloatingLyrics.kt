@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.selection.toggleable
@@ -14,7 +13,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,7 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -56,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.NumberFormat
 
 internal const val FLOATING_LYRICS_TAG = "floating-lyrics"
 internal const val FLOATING_CUSTOMIZE_TAG = "floating-customize"
@@ -261,7 +259,6 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
  * How they look, changed on them: the size, the band behind, the lines either side and the visuals;
  * letting touches through to the app below; and Crosstune itself, a tap away. Done puts it all away.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
     Surface(
@@ -277,50 +274,24 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
                     actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
                 }
             ) {
-                val textSize = stringResource(R.string.floating_text_size)
-                Text(textSize, style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    modifier = Modifier.semantics { contentDescription = textSize },
-                    value = options.scale,
-                    onValueChange = { actions.onChange(options.copy(scale = it), false) },
-                    onValueChangeFinished = actions.onSave,
-                    valueRange = FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE
-                )
-                val background = stringResource(R.string.floating_background)
-                Text(background, style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    modifier = Modifier.semantics { contentDescription = background },
-                    value = options.background,
-                    onValueChange = { actions.onChange(options.copy(background = it), false) },
-                    onValueChangeFinished = actions.onSave,
-                    valueRange = 0f..FloatingOptions.MAX_BACKGROUND
-                )
+                FloatingPercent(stringResource(R.string.floating_text_size), options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, actions.onSave) {
+                    actions.onChange(options.copy(scale = it), false)
+                }
+                FloatingPercent(stringResource(R.string.floating_background), options.background, 0f..FloatingOptions.MAX_BACKGROUND, actions.onSave) {
+                    actions.onChange(options.copy(background = it), false)
+                }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = options.previousLine,
-                    onClick = { actions.onChange(options.copy(previousLine = !options.previousLine), true) },
-                    label = { Text(stringResource(R.string.floating_previous_line)) }
-                )
-                FilterChip(
-                    selected = options.nextLine,
-                    onClick = { actions.onChange(options.copy(nextLine = !options.nextLine), true) },
-                    label = { Text(stringResource(R.string.floating_next_line)) }
-                )
-                FilterChip(
-                    selected = options.visuals,
-                    onClick = { actions.onChange(options.copy(visuals = !options.visuals), true) },
-                    label = { Text(stringResource(R.string.floating_visuals)) }
-                )
-            }
+            MenuSwitch(R.string.floating_previous_line, options.previousLine) { actions.onChange(options.copy(previousLine = it), true) }
+            MenuSwitch(R.string.floating_next_line, options.nextLine) { actions.onChange(options.copy(nextLine = it), true) }
+            MenuSwitch(R.string.floating_visuals, options.visuals) { actions.onChange(options.copy(visuals = it), true) }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .toggleable(value = false, role = Role.Switch, onValueChange = { onLock() })
-                    .padding(vertical = 8.dp)
             ) {
-                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
                 Switch(checked = false, onCheckedChange = null)
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -349,6 +320,37 @@ internal fun FloatPermissionDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.floating_permission_continue)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } }
     )
+}
+
+/**
+ * A size or a darkness on the floating words, as its share of the large end, which reads 100%.
+ * Text size starts above 1% of that end, so its left end is higher. Darkness runs from none to full.
+ */
+@Composable
+private fun FloatingPercent(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onFinished: () -> Unit,
+    onChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(
+                NumberFormat.getPercentInstance().format(sizeShare(value, range.endInclusive)),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            onValueChangeFinished = onFinished,
+            valueRange = range,
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+        )
+    }
 }
 
 /** Below this much band, the words are outlined to read on whatever's under them. */

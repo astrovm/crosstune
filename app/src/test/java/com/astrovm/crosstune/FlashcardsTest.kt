@@ -23,6 +23,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -344,6 +345,14 @@ class FlashcardsTest {
         assertTrue(readingShown("とうきょう") && shown("tōkyō e") && shown("To Tokyo"))
         assertFalse(shown("toukyou he"))
         click(string(R.string.practice_card_options))
+        val menu = composeRule.onNodeWithTag("practice-card-options").getBoundsInRoot()
+        val cardBounds = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
+        assertTrue(menu.bottom <= cardBounds.top)
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
+        assertEquals("東京へ", practice().line?.text)
+        click(string(R.string.practice_card_options))
         click(string(R.string.lyrics_romaji_typed))
         assertTrue(shown("toukyou he"))
         assertFalse(shown("tōkyō e"))
@@ -364,6 +373,7 @@ class FlashcardsTest {
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
         assertTrue(shown("Moon"))
+        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
         click(string(R.string.practice_card_options))
         assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_romaji_typed)))
         click(string(R.string.lyrics_as_written))
