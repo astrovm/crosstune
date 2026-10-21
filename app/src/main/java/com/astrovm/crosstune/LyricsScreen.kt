@@ -180,6 +180,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 
@@ -1777,10 +1778,12 @@ internal const val MAX_WORDS_SCALE = 3f
 /** The smallest words stay at three fifths of their starting size, labeled 1% on the slider. */
 internal const val MIN_WORDS_SCALE = 0.6f
 
+private fun TextUnit.atLeast(least: TextUnit) = if (this < least) least else this
+
 /** What's under the words, e.g. their translation, is smaller than they are, but never too small to read. */
 internal fun TextStyle.beneath(words: TextStyle) = copy(
-    fontSize = (words.fontSize * 0.62f).coerceAtLeast(12.sp),
-    lineHeight = (words.lineHeight * 0.62f).coerceAtLeast(16.sp)
+    fontSize = (words.fontSize * 0.62f).atLeast(12.sp),
+    lineHeight = (words.lineHeight * 0.62f).atLeast(16.sp)
 )
 
 /** The room between a row's readings and the words under them, beside the words' size. */
