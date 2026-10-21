@@ -11,12 +11,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The lines due at [now], at most [max], each song's together, in the order they're sung, so the
+ * The cards due at [now], at most [max], each song's together, in the order they're sung, so the
  * music app goes from one song to the next once, and only forward in each. The song due longest
- * comes first.
+ * comes first. A line has one card in a session, the one of the [types] due longest, as Anki holds
+ * back a note's other cards until another day.
  */
-internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE): List<SavedLine> =
-    lines.filter { it.practisable && it.due <= now }
+internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE, types: List<CardType> = DEFAULT_CARD_TYPES): List<SavedLine> =
+    lines.mapNotNull { line -> line.cardsDue(now, types).minByOrNull { it.due } }
         .sortedBy { it.due }
         .take(max)
         .groupBy { it.title to it.artist }
@@ -102,9 +103,9 @@ internal class PracticeCards(
      * to learn it. The music app goes back to [before] once done.
      */
     fun start(song: MusicMetadata?, before: Before?) {
-        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
+        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock(), types = uiState.cardTypes) else {
             val its = uiState.savedLines.filter { it.isOf(song) }
-            sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
+            sessionOf(its, wallClock(), types = uiState.cardTypes).ifEmpty { sessionOf(its, Long.MAX_VALUE, types = uiState.cardTypes) }
         }
         uiState = uiState.copy(practice = Practice(queue, total = queue.size, before = before))
         showCard()

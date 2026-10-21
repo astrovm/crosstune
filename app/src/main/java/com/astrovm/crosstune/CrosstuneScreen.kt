@@ -244,7 +244,7 @@ internal data class ScreenActions(
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},
-    val onCardOptionsChange: (CardOptions, Boolean) -> Unit = { _, _ -> },
+    val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
@@ -649,7 +649,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         actions = {
             // Saved lines, a tap from what there is to practise, with how many are due.
             if (state.savedLines.any { it.practisable }) {
-                PracticeButton(state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }, onOpenPractice)
+                PracticeButton(state.savedLines.count { it.cardsDue(System.currentTimeMillis(), state.cardTypes).isNotEmpty() }, onOpenPractice)
             }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))

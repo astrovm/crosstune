@@ -320,6 +320,13 @@
     <string name="saved_practice">练习</string>
     <string name="practice_show">查看答案</string>
     <string name="practice_card_options">卡片选项</string>
+    <string name="card_type_read">读</string>
+    <string name="card_type_say">说</string>
+    <string name="card_type_new">新类型</string>
+    <string name="card_type_name">名称</string>
+    <string name="card_type_delete">删除类型</string>
+    <string name="practice_bigger">放大</string>
+    <string name="practice_smaller">缩小</string>
     <string name="practice_again">再来</string>
     <string name="practice_hard">困难</string>
     <string name="practice_good">良好</string>

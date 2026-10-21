@@ -320,6 +320,13 @@
     <string name="saved_practice">Latihan</string>
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_card_options">Opsi kartu</string>
+    <string name="card_type_read">Baca</string>
+    <string name="card_type_say">Ucapkan</string>
+    <string name="card_type_new">Tipe baru</string>
+    <string name="card_type_name">Nama</string>
+    <string name="card_type_delete">Hapus tipe</string>
+    <string name="practice_bigger">Lebih besar</string>
+    <string name="practice_smaller">Lebih kecil</string>
     <string name="practice_again">Lagi</string>
     <string name="practice_hard">Sulit</string>
     <string name="practice_good">Baik</string>

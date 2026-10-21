@@ -320,6 +320,13 @@
     <string name="saved_practice">Pratik yap</string>
     <string name="practice_show">Cevabı göster</string>
     <string name="practice_card_options">Kart seçenekleri</string>
+    <string name="card_type_read">Oku</string>
+    <string name="card_type_say">Söyle</string>
+    <string name="card_type_new">Yeni tür</string>
+    <string name="card_type_name">Ad</string>
+    <string name="card_type_delete">Türü sil</string>
+    <string name="practice_bigger">Daha büyük</string>
+    <string name="practice_smaller">Daha küçük</string>
     <string name="practice_again">Tekrar</string>
     <string name="practice_hard">Zor</string>
     <string name="practice_good">İyi</string>

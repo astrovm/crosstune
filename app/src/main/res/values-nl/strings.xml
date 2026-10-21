@@ -320,6 +320,13 @@
     <string name="saved_practice">Oefenen</string>
     <string name="practice_show">Antwoord tonen</string>
     <string name="practice_card_options">Kaartopties</string>
+    <string name="card_type_read">Lezen</string>
+    <string name="card_type_say">Zeggen</string>
+    <string name="card_type_new">Nieuw type</string>
+    <string name="card_type_name">Naam</string>
+    <string name="card_type_delete">Type verwijderen</string>
+    <string name="practice_bigger">Groter</string>
+    <string name="practice_smaller">Kleiner</string>
     <string name="practice_again">Nog eens</string>
     <string name="practice_hard">Moeilijk</string>
     <string name="practice_good">Goed</string>

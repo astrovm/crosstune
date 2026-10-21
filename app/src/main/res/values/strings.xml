@@ -341,6 +341,13 @@
     <string name="saved_practice">Practice</string>
     <string name="practice_show">Show answer</string>
     <string name="practice_card_options">Card options</string>
+    <string name="card_type_read">Read it</string>
+    <string name="card_type_say">Say it</string>
+    <string name="card_type_new">New type</string>
+    <string name="card_type_name">Name</string>
+    <string name="card_type_delete">Delete type</string>
+    <string name="practice_bigger">Bigger</string>
+    <string name="practice_smaller">Smaller</string>
     <string name="practice_again">Again</string>
     <string name="practice_hard">Hard</string>
     <string name="practice_good">Good</string>

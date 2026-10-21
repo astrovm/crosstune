@@ -97,8 +97,6 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val practice = state.practice ?: return
     BackHandler(onBack = actions.onStopPractice)
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
-    var optionsBack by remember { mutableStateOf(practice.turned) }
-    LaunchedEffect(practice.turned) { optionsBack = practice.turned }
     val optionLineKey = practice.line?.let { "${it.text}|${it.title}|${it.artist}" }
     // A new card starts clear. The menu stays open only while this one is on screen.
     LaunchedEffect(optionLineKey) { optionsOpen = false }
@@ -113,20 +111,20 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     val line = practice.line
                     if (practice.total > 0 && line != null) {
                         Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
-                        IconButton(onClick = { optionsBack = practice.turned; optionsOpen = !optionsOpen }) {
+                        IconButton(onClick = { optionsOpen = !optionsOpen }) {
                             AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.practice_card_options))
                         }
                     }
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardOptions(optionLine, state.cards, optionsBack, { optionsBack = it }, practice.turned, actions) { optionsOpen = false }
+                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions) { optionsOpen = false }
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cards, if (optionsOpen) optionsBack else shown.turned, actions)
+                    else Card(line, shown, state.cardTypes, actions)
                 }
             }
         }
@@ -172,7 +170,9 @@ private fun CaughtUp() {
  * A card: the song it's from and its front; once turned, its back comes in below, with its sound. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, back: Boolean, actions: ScreenActions) {
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions) {
+    val type = types.firstOrNull { it.id == line.cardType } ?: READ_IT
+    val cards = type.options
     val haptics = LocalHapticFeedback.current
     val answer = { grade: Grade ->
         haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
@@ -194,10 +194,10 @@ private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, back: 
                 )
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                SongChip(line, actions)
+                SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
                 CardSideContent(line, cards.front, back = false)
                 // Turned, the other side comes in below the front, which stays.
-                if (back) {
+                if (practice.turned) {
                     HorizontalDivider()
                     LineSound(line, practice.sound, actions.onReplayLine)
                     CardSideContent(line, cards.back, back = true)
@@ -247,68 +247,9 @@ private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean) {
     }
 }
 
-/** Front and back use the lyrics controls, with their own layers and a live preview. */
-@Composable
-private fun CardOptions(line: SavedLine, cards: CardOptions, back: Boolean, onBack: (Boolean) -> Unit, turned: Boolean, actions: ScreenActions, onClose: () -> Unit) {
-    var details by remember(back) { mutableStateOf(false) }
-    var fixing by remember { mutableStateOf(false) }
-    BackHandler { if (fixing) fixing = false else if (details) details = false else onClose() }
-    val side = if (back) cards.back else cards.front
-    val update = { value: CardSide, save: Boolean -> actions.onCardOptionsChange(if (back) cards.copy(back = value) else cards.copy(front = value), save) }
-    val japanese = line.reading?.any(Readings::isKana) == true
-    val script = if (japanese) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))
-    val learning = Learning(
-        script = script, wordsAs = if (side.words) side.wordsAs else WordsAs.WRITTEN,
-        readings = side.readings && side.words, romanized = side.latin, translation = side.translation,
-        wordsScale = side.wordsScale, readingScale = side.readingScale, romajiTyped = side.romajiTyped
-    )
-    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        shadowElevation = 6.dp,
-        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
-    ) {
-        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            if (fixing) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { fixing = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
-                    Text(stringResource(R.string.practice_fix_reading), style = MaterialTheme.typography.titleSmall)
-                }
-                ReadingFields(line, onSave = { readings -> actions.onReadCardAs(readings); fixing = false }, onCancel = { fixing = false })
-            } else {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                    listOf(R.string.practice_front, R.string.practice_back).forEachIndexed { index, label ->
-                        SegmentedButton(selected = back == (index == 1), onClick = { onBack(index == 1) }, shape = SegmentedButtonDefaults.itemShape(index, 2)) {
-                            Text(stringResource(label))
-                        }
-                    }
-                }
-                if (!details) MenuSwitch(R.string.visuals_show_words, side.words) { update(side.copy(words = it), true) }
-                WordsOptions(learning, ScreenActions(
-                    onWordsAsChange = { update(side.copy(wordsAs = it), true) },
-                    onWordsScaleChange = { value, save -> update(side.copy(wordsScale = value), save) },
-                    onReadingsChange = { update(side.copy(readings = it), true) },
-                    onReadingScaleChange = { value, save -> update(side.copy(readingScale = value), save) },
-                    onRomanizedChange = { update(side.copy(latin = it), true) },
-                    onRomajiTypedChange = { update(side.copy(romajiTyped = it), true) },
-                    onTranslationChange = { update(side.copy(translation = it), true) }
-                ), details, { details = it }, words = side.words)
-                if (!details && turned && line.readable.isNotEmpty()) {
-                    TextButton(onClick = { fixing = true }, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
-                        AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.practice_fix_reading))
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */
 @Composable
-private fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCancel: () -> Unit) {
+internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCancel: () -> Unit) {
     val parts = line.readable
     val readings = rememberSaveable(line.text, line.title, line.artist, saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
         parts.map { it.reading.orEmpty() }.toMutableStateList()
@@ -403,10 +344,12 @@ private const val BARS = 4
 
 /** The song a card's from: its cover and title. */
 @Composable
-private fun SongChip(line: SavedLine, actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
-        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // With more than one kind of card, which this is.
+        kind?.let { Text(it.title(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
     }
 }
 
@@ -432,17 +375,19 @@ private fun GradeLabel(label: Int, wait: String) {
     }
 }
 
-/** How long [ms] is, short, in minutes, hours, days, months or years, as [locale] writes them, e.g. "10m", "3d" or "1y". */
+/** How long [ms] is, short, in minutes, hours, days, months or years, as [locale] writes them, e.g. "10m", "3d" or "1 yr". */
 internal fun waitText(ms: Long, locale: Locale): String {
     val format = android.icu.text.MeasureFormat.getInstance(locale, android.icu.text.MeasureFormat.FormatWidth.NARROW)
+    // Months and years aren't narrow, as that writes a month as "1m", which is a minute.
+    val long = android.icu.text.MeasureFormat.getInstance(locale, android.icu.text.MeasureFormat.FormatWidth.SHORT)
     val minutes = (ms / 60_000.0).roundToLong()
     val days = minutes / (24 * 60)
     return when {
         minutes < 60 -> format.format(Measure(minutes, MeasureUnit.MINUTE))
         minutes < 24 * 60 -> format.format(Measure(minutes / 60, MeasureUnit.HOUR))
         days < 30 -> format.format(Measure(days, MeasureUnit.DAY))
-        days < 365 -> format.format(Measure(days / 30, MeasureUnit.MONTH))
-        else -> format.format(Measure(days / 365, MeasureUnit.YEAR))
+        days < 365 -> long.format(Measure(days / 30, MeasureUnit.MONTH))
+        else -> long.format(Measure(days / 365, MeasureUnit.YEAR))
     }
 }
 

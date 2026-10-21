@@ -813,7 +813,7 @@ private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onC
         }
         // Only lines with their meaning, or that can be heard, can be practised; with none, they're chosen first.
         val practisable = here.filter { it.practisable }
-        val due = practisable.count { it.due <= System.currentTimeMillis() }
+        val due = practisable.count { it.cardsDue(System.currentTimeMillis(), state.cardTypes).isNotEmpty() }
         MenuAction(
             R.drawable.ic_play, R.string.practice_song,
             trailing = if (due > 0) stringResource(R.string.practice_due, due) else null,

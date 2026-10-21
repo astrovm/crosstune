@@ -320,6 +320,13 @@
     <string name="saved_practice">S\'entraîner</string>
     <string name="practice_show">Voir la réponse</string>
     <string name="practice_card_options">Options des cartes</string>
+    <string name="card_type_read">Lire</string>
+    <string name="card_type_say">Dire</string>
+    <string name="card_type_new">Nouveau type</string>
+    <string name="card_type_name">Nom</string>
+    <string name="card_type_delete">Supprimer le type</string>
+    <string name="practice_bigger">Plus grand</string>
+    <string name="practice_smaller">Plus petit</string>
     <string name="practice_again">Encore</string>
     <string name="practice_hard">Difficile</string>
     <string name="practice_good">Bien</string>

@@ -41,8 +41,19 @@ internal data class SavedLine(
     /** Its reading put right by hand, which stays when the song's are read again. */
     val readByHand: Boolean = false,
     /** Its romaji as a keyboard spells it, when that's not as [romanized] says it. */
-    val typed: String? = null
+    val typed: String? = null,
+    /** How the other kinds of card it makes, by [CardType.id], are going, each as [interval], [ease], [step] and [due] are for the first kind. */
+    val reviews: Map<String, Review> = emptyMap(),
+    /** Which kind of card it is now, by [CardType.id]; its own schedule is the one in [interval], [ease], [step] and [due]. Not kept. */
+    val cardType: String = READ_TYPE
 ) {
+    /** It as the card of kind [id], with that card's schedule in the place of the first kind's. */
+    fun forType(id: String): SavedLine {
+        if (id == READ_TYPE) return copy(cardType = id)
+        val review = reviews[id] ?: Review()
+        return copy(cardType = id, interval = review.interval, ease = review.ease, step = review.step, due = review.due)
+    }
+
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
 
@@ -97,18 +108,22 @@ internal data class CardSide(
     val readingScale: Float = 0.55f,
     val romajiTyped: Boolean = false
 ) {
-    fun save(editor: SharedPreferences.Editor, prefix: String) {
-        editor.putBoolean("${prefix}_words", words)
-            .putString("${prefix}_words_as", wordsAs.name)
-            .putBoolean("${prefix}_readings", readings)
-            .putBoolean("${prefix}_latin", latin)
-            .putBoolean("${prefix}_translation", translation)
-            .putFloat("${prefix}_words_scale", wordsScale)
-            .putFloat("${prefix}_reading_scale", readingScale)
-            .putBoolean("${prefix}_romaji_typed", romajiTyped)
-    }
+    fun toJson(): JSONObject = JSONObject().put("words", words).put("wordsAs", wordsAs.name).put("readings", readings).put("latin", latin)
+        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped)
 
     companion object {
+        fun fromJson(json: JSONObject, defaults: CardSide) = CardSide(
+            words = json.optBoolean("words", defaults.words),
+            wordsAs = WordsAs.entries.firstOrNull { it.name == json.optString("wordsAs") } ?: defaults.wordsAs,
+            readings = json.optBoolean("readings", defaults.readings),
+            latin = json.optBoolean("latin", defaults.latin),
+            translation = json.optBoolean("translation", defaults.translation),
+            wordsScale = json.optDouble("wordsScale", defaults.wordsScale.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+            readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
+            romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
+        )
+
+        /** Read from the keys it was kept under before there were kinds of card. */
         fun load(preferences: SharedPreferences, prefix: String, defaults: CardSide) = CardSide(
             words = preferences.getBoolean("${prefix}_words", defaults.words),
             wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("${prefix}_words_as", defaults.wordsAs.name) } ?: defaults.wordsAs,
@@ -127,12 +142,8 @@ internal data class CardOptions(
     val front: CardSide = CardSide(),
     val back: CardSide = CardSide(readings = true, latin = true, translation = true)
 ) {
-    fun save(preferences: SharedPreferences) = preferences.edit {
-        front.save(this, "card_front")
-        back.save(this, "card_back")
-    }
-
     companion object {
+        /** What was kept before there were kinds of card. */
         fun load(preferences: SharedPreferences): CardOptions {
             val typed = preferences.getBoolean("lyrics_romaji_typed", false)
             val front = CardSide(
@@ -161,7 +172,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed")
+                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews()
             )
         })
     }
@@ -235,8 +246,12 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> =
         update(SavedLine(text, title = title, artist = artist)) { it.copy(explanation = explanation) }
 
-    /** [line] practised at [now], as [grade] says, and when it's due next, as in Anki. */
-    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) { answered(it, grade, now) }
+    /** [line], as the kind of card it is, practised at [now], as [grade] says, and when it's due next, as in Anki. */
+    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) { kept ->
+        val card = answered(kept.forType(line.cardType), grade, now)
+        if (line.cardType == READ_TYPE) kept.copy(interval = card.interval, ease = card.ease, step = card.step, due = card.due)
+        else kept.copy(reviews = kept.reviews + (line.cardType to Review(card.interval, card.ease, card.step, card.due)))
+    }
 
     /** Keeps the line kept as [line] as [change] makes it. */
     private fun update(line: SavedLine, change: (SavedLine) -> SavedLine): List<SavedLine> = save(load().map { if (it.isSame(line)) change(it) else it })
@@ -252,6 +267,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("artwork", line.artworkUrl).put("line", line.line).put("typed", line.typed)
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
                     .apply { if (line.readByHand) put("byHand", true) }
+                    .apply { if (line.reviews.isNotEmpty()) put("reviews", reviewsJson(line.reviews)) }
             )
         }
         preferences.edit { putString(KEY, array.toString()) }
@@ -267,6 +283,16 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     /** The days it waits, or, saved before Anki's way, as long as its old box did. */
     private fun JSONObject.interval(): Int = if (has("interval")) optInt("interval") else optInt("box").let { if (it > 0) LEGACY_DAYS[minOf(it, LEGACY_DAYS.size) - 1] else 0 }
+
+    private fun JSONObject.reviews(): Map<String, Review> = optJSONObject("reviews")?.let { json ->
+        json.keys().asSequence().mapNotNull { id ->
+            json.optJSONObject(id)?.let { id to Review(it.optInt("interval"), it.optInt("ease", START_EASE), it.optInt("step"), it.optLong("due")) }
+        }.toMap()
+    } ?: emptyMap()
+
+    private fun reviewsJson(reviews: Map<String, Review>) = JSONObject().apply {
+        reviews.forEach { (id, review) -> put(id, JSONObject().put("interval", review.interval).put("ease", review.ease).put("step", review.step).put("due", review.due)) }
+    }
 
     private fun JSONObject.time(name: String): Long? = if (has(name)) optLong(name, -1).takeIf { it >= 0 } else null
 
@@ -353,11 +379,12 @@ private const val SAME_MOMENT_MS = 500L
 /** How alike a line's words are to a kept line's to be that line, changed a little. */
 private const val MUCH_THE_SAME = 0.7
 
-/** How many days a line known waits before it's practised again, the more times it's known in a row. */
-
 /** Where a line's ease starts, and the least it falls to, in percent, as in Anki. */
 private const val START_EASE = 250
 private const val MIN_EASE = 130
+
+/** How a line's card of one kind is going: the days it waits, its ease, its step, and when it's due; as for a new card, by default. */
+internal data class Review(val interval: Int = 0, val ease: Int = START_EASE, val step: Int = 0, val due: Long = 0)
 
 /** The longest a line waits, as in Anki: a hundred years. */
 private const val MAX_DAYS = 36_500

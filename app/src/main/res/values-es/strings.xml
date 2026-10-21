@@ -320,6 +320,13 @@
     <string name="saved_practice">Practicar</string>
     <string name="practice_show">Ver respuesta</string>
     <string name="practice_card_options">Opciones de las tarjetas</string>
+    <string name="card_type_read">Leerla</string>
+    <string name="card_type_say">Decirla</string>
+    <string name="card_type_new">Tipo nuevo</string>
+    <string name="card_type_name">Nombre</string>
+    <string name="card_type_delete">Borrar tipo</string>
+    <string name="practice_bigger">Más grande</string>
+    <string name="practice_smaller">Más chico</string>
     <string name="practice_again">Otra vez</string>
     <string name="practice_hard">Difícil</string>
     <string name="practice_good">Bien</string>

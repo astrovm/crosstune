@@ -150,7 +150,7 @@ internal class MainViewModel(
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             chords = ChordsState(on = preferences.getBoolean(KEY_CHORDS, false)),
-            cards = CardOptions.load(preferences),
+            cardTypes = loadCardTypes(preferences),
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, true),
                 romanized = preferences.getBoolean(KEY_ROMANIZED, false),
@@ -2360,10 +2360,11 @@ internal class MainViewModel(
         uiState = uiState.copy(learning = uiState.learning.copy(romajiTyped = on))
     }
 
-    /** What practice cards show, from now on. */
-    fun setCardOptions(cards: CardOptions, save: Boolean) {
-        if (save) cards.save(preferences)
-        uiState = uiState.copy(cards = cards)
+    /** The kinds of practice card, from now on; one is always on. */
+    fun setCardTypes(types: List<CardType>, save: Boolean) {
+        val kinds = if (types.none { it.on }) types.mapIndexed { index, type -> type.copy(on = type.on || index == 0) } else types
+        if (save) saveCardTypes(preferences, kinds)
+        uiState = uiState.copy(cardTypes = kinds)
     }
 
     /** Shows the words as written, or only in kana or Latin letters, from now on. */

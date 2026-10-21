@@ -320,6 +320,13 @@
     <string name="saved_practice">Практика</string>
     <string name="practice_show">Показать ответ</string>
     <string name="practice_card_options">Настройки карточек</string>
+    <string name="card_type_read">Читать</string>
+    <string name="card_type_say">Говорить</string>
+    <string name="card_type_new">Новый тип</string>
+    <string name="card_type_name">Название</string>
+    <string name="card_type_delete">Удалить тип</string>
+    <string name="practice_bigger">Крупнее</string>
+    <string name="practice_smaller">Мельче</string>
     <string name="practice_again">Ещё раз</string>
     <string name="practice_hard">Трудно</string>
     <string name="practice_good">Хорошо</string>

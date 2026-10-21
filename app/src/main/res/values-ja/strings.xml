@@ -321,6 +321,13 @@
     <string name="saved_practice">練習</string>
     <string name="practice_show">答えを見る</string>
     <string name="practice_card_options">カードの設定</string>
+    <string name="card_type_read">読む</string>
+    <string name="card_type_say">言う</string>
+    <string name="card_type_new">新しい種類</string>
+    <string name="card_type_name">名前</string>
+    <string name="card_type_delete">種類を削除</string>
+    <string name="practice_bigger">大きく</string>
+    <string name="practice_smaller">小さく</string>
     <string name="practice_again">もう一度</string>
     <string name="practice_hard">難しい</string>
     <string name="practice_good">正解</string>

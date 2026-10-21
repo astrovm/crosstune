@@ -320,6 +320,13 @@
     <string name="saved_practice">Ćwicz</string>
     <string name="practice_show">Pokaż odpowiedź</string>
     <string name="practice_card_options">Opcje fiszek</string>
+    <string name="card_type_read">Czytaj</string>
+    <string name="card_type_say">Mów</string>
+    <string name="card_type_new">Nowy typ</string>
+    <string name="card_type_name">Nazwa</string>
+    <string name="card_type_delete">Usuń typ</string>
+    <string name="practice_bigger">Większy</string>
+    <string name="practice_smaller">Mniejszy</string>
     <string name="practice_again">Jeszcze raz</string>
     <string name="practice_hard">Trudne</string>
     <string name="practice_good">Dobrze</string>

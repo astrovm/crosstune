@@ -320,6 +320,13 @@
     <string name="saved_practice">연습</string>
     <string name="practice_show">정답 보기</string>
     <string name="practice_card_options">카드 옵션</string>
+    <string name="card_type_read">읽기</string>
+    <string name="card_type_say">말하기</string>
+    <string name="card_type_new">새 유형</string>
+    <string name="card_type_name">이름</string>
+    <string name="card_type_delete">유형 삭제</string>
+    <string name="practice_bigger">크게</string>
+    <string name="practice_smaller">작게</string>
     <string name="practice_again">다시</string>
     <string name="practice_hard">어려움</string>
     <string name="practice_good">좋음</string>

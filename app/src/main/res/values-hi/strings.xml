@@ -320,6 +320,13 @@
     <string name="saved_practice">अभ्यास</string>
     <string name="practice_show">जवाब देखें</string>
     <string name="practice_card_options">कार्ड के विकल्प</string>
+    <string name="card_type_read">पढ़ें</string>
+    <string name="card_type_say">बोलें</string>
+    <string name="card_type_new">नया प्रकार</string>
+    <string name="card_type_name">नाम</string>
+    <string name="card_type_delete">प्रकार हटाएँ</string>
+    <string name="practice_bigger">बड़ा</string>
+    <string name="practice_smaller">छोटा</string>
     <string name="practice_again">फिर से</string>
     <string name="practice_hard">कठिन</string>
     <string name="practice_good">ठीक</string>
