@@ -81,7 +81,7 @@ class FloatingMenuTest {
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_reading_options)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_reading_size)).performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
-        assertEquals(1f, learning.value.readingScale, 0f)
+        assertEquals(MAX_READING_SCALE, learning.value.readingScale, 0f)
         compose.onNodeWithContentDescription(app.getString(R.string.back_button)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(app.getString(R.string.back_button)).performScrollTo().performClick()
         compose.onNodeWithText(app.getString(R.string.floating_overlay_size)).assertExists()
