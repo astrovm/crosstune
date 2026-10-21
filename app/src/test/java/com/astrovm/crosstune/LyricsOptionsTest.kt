@@ -31,7 +31,7 @@ class LyricsOptionsTest {
     }
     @Test
     fun everyPercentSliderStartsAtOneAndKeepsItsReadableMinimum() {
-        assertEquals(0.75f, MIN_WORDS_SCALE, 0f)
+        assertEquals(0.6f, MIN_WORDS_SCALE, 0f)
         assertEquals(0.45f, MIN_READING_SCALE, 0f)
         val ranges = listOf(
             MIN_WORDS_SCALE..MAX_WORDS_SCALE,

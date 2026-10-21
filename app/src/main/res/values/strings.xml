@@ -318,6 +318,7 @@
     <string name="lyrics_readings">Readings over the words</string>
     <string name="lyrics_reading_size">Reading size</string>
     <string name="lyrics_words_size">Words size</string>
+    <string name="lyrics_translation_size">Translation size</string>
     <string name="lyrics_show_as">Show as</string>
     <string name="lyrics_also_show">Also show</string>
     <string name="report_problem">Report a problem</string>
@@ -341,6 +342,15 @@
     <string name="saved_practice">Practice</string>
     <string name="practice_show">Show answer</string>
     <string name="practice_card_options">Card options</string>
+    <string name="card_type_read">Read it</string>
+    <string name="card_type_hear">Hear it</string>
+    <string name="card_type_translate">Translate it</string>
+    <string name="card_type_new">New type</string>
+    <string name="card_type_name">Name</string>
+    <string name="card_type_delete">Delete type</string>
+    <string name="card_type_reset">Reset to default</string>
+    <string name="practice_bigger">Bigger</string>
+    <string name="practice_smaller">Smaller</string>
     <string name="practice_again">Again</string>
     <string name="practice_hard">Hard</string>
     <string name="practice_good">Good</string>
@@ -405,4 +415,8 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="practice_front">Front</string>
+    <string name="practice_back">Back</string>
+    <string name="floating_shared">Shared with lyrics</string>
+    <string name="floating_overlay_size">Overlay size</string>
 </resources>

@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** A line kept to study later, with what helped read it then, and the song it's from. */
 internal data class SavedLine(
@@ -16,8 +17,12 @@ internal data class SavedLine(
     val artist: String,
     /** What ChatGPT said the line means, when asked. */
     val explanation: String? = null,
-    /** How well it's known, from 0, after each time it's practised; odd, its meaning shows first. */
-    val box: Int = 0,
+    /** How many days it waits to come back once learned, as in Anki; 0, still being learned. */
+    val interval: Int = 0,
+    /** How fast that grows, in percent, as in Anki: lower, for a line that's hard. */
+    val ease: Int = START_EASE,
+    /** 1, on its last learning step, or relearning after a miss; 0, on the first. */
+    val step: Int = 0,
     /** When it's next practised, in milliseconds since 1970; 0, right away. */
     val due: Long = 0,
     /** Where it's sung in the song, from its start to the next line's, to play it again; null when not timed. */
@@ -36,8 +41,19 @@ internal data class SavedLine(
     /** Its reading put right by hand, which stays when the song's are read again. */
     val readByHand: Boolean = false,
     /** Its romaji as a keyboard spells it, when that's not as [romanized] says it. */
-    val typed: String? = null
+    val typed: String? = null,
+    /** How the other kinds of card it makes, by [CardType.id], are going, each as [interval], [ease], [step] and [due] are for the first kind. */
+    val reviews: Map<String, Review> = emptyMap(),
+    /** Which kind of card it is now, by [CardType.id]; its own schedule is the one in [interval], [ease], [step] and [due]. Not kept. */
+    val cardType: String = READ_TYPE
 ) {
+    /** It as the card of kind [id], with that card's schedule in the place of the first kind's. */
+    fun forType(id: String): SavedLine {
+        if (id == READ_TYPE) return copy(cardType = id)
+        val review = reviews[id] ?: Review()
+        return copy(cardType = id, interval = review.interval, ease = review.ease, step = review.step, due = review.due)
+    }
+
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
 
@@ -81,35 +97,82 @@ internal data class SavedLine(
     }
 }
 
-/**
- * What practice cards show: the front as written, in kana or in Latin letters, [front]; on the back,
- * the [readings] over the words, the words in [latin] letters, and their [translation].
- */
-internal data class CardOptions(
-    val front: WordsAs = WordsAs.WRITTEN,
-    val readings: Boolean = true,
-    val latin: Boolean = true,
-    val translation: Boolean = true
+/** The text layers and sizes picked independently for one side of a practice card. */
+internal data class CardSide(
+    val words: Boolean = true,
+    val wordsAs: WordsAs = WordsAs.WRITTEN,
+    val readings: Boolean = false,
+    val latin: Boolean = false,
+    val translation: Boolean = false,
+    val wordsScale: Float = 1f,
+    val translationScale: Float = wordsScale,
+    val readingScale: Float = 0.55f,
+    val romajiTyped: Boolean = false,
+    val sound: Boolean = false
 ) {
-    fun save(preferences: SharedPreferences) = preferences.edit {
-        putString(KEY_FRONT, front.name)
-        putBoolean(KEY_READINGS, readings)
-        putBoolean(KEY_LATIN, latin)
-        putBoolean(KEY_TRANSLATION, translation)
-    }
+    /** Whether no text layer is shown, so the side is the line itself, played, or nothing. */
+    val bare: Boolean get() = !words && !readings && !latin && !translation
+
+    fun toJson(): JSONObject = JSONObject().put("words", words).put("wordsAs", wordsAs.name).put("readings", readings).put("latin", latin)
+        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped).put("sound", sound)
 
     companion object {
-        fun load(preferences: SharedPreferences) = CardOptions(
-            front = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_FRONT, null) } ?: WordsAs.WRITTEN,
-            readings = preferences.getBoolean(KEY_READINGS, true),
-            latin = preferences.getBoolean(KEY_LATIN, true),
-            translation = preferences.getBoolean(KEY_TRANSLATION, true)
-        )
+        fun fromJson(json: JSONObject, defaults: CardSide): CardSide {
+            val words = json.optDouble("wordsScale", defaults.wordsScale.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE)
+            return CardSide(
+                words = json.optBoolean("words", defaults.words),
+                wordsAs = WordsAs.entries.firstOrNull { it.name == json.optString("wordsAs") } ?: defaults.wordsAs,
+                readings = json.optBoolean("readings", defaults.readings),
+                latin = json.optBoolean("latin", defaults.latin),
+                translation = json.optBoolean("translation", defaults.translation),
+                wordsScale = words,
+                // Kept before it had a size of its own, it was as big as the words.
+                translationScale = json.optDouble("translationScale", words.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+                readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
+                romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
+            ).let {
+                // Kept before it had a layer of its own, a side with no text was the line, played.
+                it.copy(sound = if (json.has("sound")) json.optBoolean("sound") else defaults.sound || it.bare)
+            }
+        }
 
-        private const val KEY_FRONT = "card_front"
-        private const val KEY_READINGS = "card_readings"
-        private const val KEY_LATIN = "card_latin"
-        private const val KEY_TRANSLATION = "card_translation"
+        /** Read from the keys it was kept under before there were kinds of card. */
+        fun load(preferences: SharedPreferences, prefix: String, defaults: CardSide) = CardSide(
+            words = preferences.getBoolean("${prefix}_words", defaults.words),
+            wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("${prefix}_words_as", defaults.wordsAs.name) } ?: defaults.wordsAs,
+            readings = preferences.getBoolean("${prefix}_readings", defaults.readings),
+            latin = preferences.getBoolean("${prefix}_latin", defaults.latin),
+            translation = preferences.getBoolean("${prefix}_translation", defaults.translation),
+            wordsScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+            translationScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+            readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
+            romajiTyped = preferences.getBoolean("${prefix}_romaji_typed", defaults.romajiTyped)
+        ).let { it.copy(sound = preferences.getBoolean("${prefix}_sound", defaults.sound || it.bare)) }
+    }
+}
+
+/** Each side keeps its own text layers, without changing the lyrics display settings. */
+internal data class CardOptions(
+    val front: CardSide = CardSide(),
+    val back: CardSide = CardSide(readings = true, latin = true, translation = true, sound = true)
+) {
+    companion object {
+        /** What was kept before there were kinds of card. */
+        fun load(preferences: SharedPreferences): CardOptions {
+            val typed = preferences.getBoolean("lyrics_romaji_typed", false)
+            val front = CardSide(
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("card_front", null) } ?: WordsAs.WRITTEN,
+                romajiTyped = typed
+            )
+            val back = CardSide(
+                readings = preferences.getBoolean("card_readings", true),
+                latin = preferences.getBoolean("card_latin", true),
+                translation = preferences.getBoolean("card_translation", true),
+                romajiTyped = typed,
+                sound = true
+            )
+            return CardOptions(CardSide.load(preferences, "card_front", front), CardSide.load(preferences, "card_back", back))
+        }
     }
 }
 
@@ -123,8 +186,8 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
-                json.optInt("box"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed")
+                json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
+                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews()
             )
         })
     }
@@ -156,7 +219,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     fun toggle(line: SavedLine): List<SavedLine> {
         val saved = load()
         if (saved.any { it.isSame(line) }) return save(saved.filterNot { it.isSame(line) })
-        val room = if (saved.size < MAX) saved else saved.minus(saved.asReversed().maxBy { it.box })
+        val room = if (saved.size < MAX) saved else saved.minus(saved.asReversed().maxBy { it.interval })
         return save(listOf(line) + room.take(MAX - 1))
     }
 
@@ -170,7 +233,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         val new = lines.filter { line -> saved.none { it.isSame(line) } }.distinctBy { Triple(it.text, it.title, it.artist) }
         var kept = saved
         new.asReversed().forEach { line ->
-            kept = if (kept.size < MAX) listOf(line) + kept else listOf(line) + kept.minus(kept.asReversed().maxBy { it.box })
+            kept = if (kept.size < MAX) listOf(line) + kept else listOf(line) + kept.minus(kept.asReversed().maxBy { it.interval })
         }
         return save(kept)
     }
@@ -198,18 +261,11 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> =
         update(SavedLine(text, title = title, artist = artist)) { it.copy(explanation = explanation) }
 
-    /**
-     * [line] practised at [now], as [grade] says: known, it comes back after longer each time, 1, 3,
-     * 7, 16, 35, 75 then 150 days, and known easily, a step further; known with trouble, after as long
-     * as last time, a step no further; missed, in ten minutes, from the start again.
-     */
-    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) {
-        when (grade) {
-            Grade.AGAIN -> it.copy(box = 0, due = now + waitFor(it, grade))
-            Grade.HARD -> it.copy(due = now + waitFor(it, grade))
-            Grade.GOOD -> it.copy(box = minOf(it.box + 1, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
-            Grade.EASY -> it.copy(box = minOf(it.box + 2, PRACTICE_DAYS.size), due = now + waitFor(it, grade))
-        }
+    /** [line], as the kind of card it is, practised at [now], as [grade] says, and when it's due next, as in Anki. */
+    fun practised(line: SavedLine, grade: Grade, now: Long): List<SavedLine> = update(line) { kept ->
+        val card = answered(kept.forType(line.cardType), grade, now)
+        if (line.cardType == READ_TYPE) kept.copy(interval = card.interval, ease = card.ease, step = card.step, due = card.due)
+        else kept.copy(reviews = kept.reviews + (line.cardType to Review(card.interval, card.ease, card.step, card.due)))
     }
 
     /** Keeps the line kept as [line] as [change] makes it. */
@@ -221,11 +277,12 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             array.put(
                 JSONObject().put("text", line.text).put("reading", line.reading).put("romanized", line.romanized)
                     .put("translation", line.translation).put("title", line.title).put("artist", line.artist)
-                    .put("explanation", line.explanation).put("box", line.box).put("due", line.due)
+                    .put("explanation", line.explanation).put("interval", line.interval).put("ease", line.ease).put("step", line.step).put("due", line.due)
                     .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
                     .put("artwork", line.artworkUrl).put("line", line.line).put("typed", line.typed)
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
                     .apply { if (line.readByHand) put("byHand", true) }
+                    .apply { if (line.reviews.isNotEmpty()) put("reviews", reviewsJson(line.reviews)) }
             )
         }
         preferences.edit { putString(KEY, array.toString()) }
@@ -239,6 +296,19 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { Ruby(it.optString(0), it.optString(1).takeIf { _ -> !it.isNull(1) }) } }
     }?.takeIf { it.isNotEmpty() }
 
+    /** The days it waits, or, saved before Anki's way, as long as its old box did. */
+    private fun JSONObject.interval(): Int = if (has("interval")) optInt("interval") else optInt("box").let { if (it > 0) LEGACY_DAYS[minOf(it, LEGACY_DAYS.size) - 1] else 0 }
+
+    private fun JSONObject.reviews(): Map<String, Review> = optJSONObject("reviews")?.let { json ->
+        json.keys().asSequence().mapNotNull { id ->
+            json.optJSONObject(id)?.let { id to Review(it.optInt("interval"), it.optInt("ease", START_EASE), it.optInt("step"), it.optLong("due")) }
+        }.toMap()
+    } ?: emptyMap()
+
+    private fun reviewsJson(reviews: Map<String, Review>) = JSONObject().apply {
+        reviews.forEach { (id, review) -> put(id, JSONObject().put("interval", review.interval).put("ease", review.ease).put("step", review.step).put("due", review.due)) }
+    }
+
     private fun JSONObject.time(name: String): Long? = if (has(name)) optLong(name, -1).takeIf { it >= 0 } else null
 
     companion object {
@@ -246,17 +316,38 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
         /** How many lines are kept at most. */
         const val MAX = 500
+        private const val MINUTE_MS = 60 * 1000L
         private const val DAY_MS = 24 * 60 * 60 * 1000L
-        private const val AGAIN_MS = 10 * 60 * 1000L
+        private val LEGACY_DAYS = listOf(1, 3, 7, 16, 35, 75, 150)
+
+        /** [line] once answered as [grade] at [now], with when it's next due: Anki's steps of 1 and 10 minutes, then days. */
+        fun answered(line: SavedLine, grade: Grade, now: Long): SavedLine {
+            val learning = line.interval == 0 || line.step == 1
+            if (learning) {
+                val first = line.interval == 0 && line.step == 0
+                return when (grade) {
+                    Grade.AGAIN -> line.copy(step = if (line.interval == 0) 0 else 1, due = now + if (line.interval == 0) MINUTE_MS else 10 * MINUTE_MS)
+                    Grade.HARD -> line.copy(due = now + if (first) 11 * MINUTE_MS / 2 else 10 * MINUTE_MS)
+                    Grade.GOOD -> if (first) line.copy(step = 1, due = now + 10 * MINUTE_MS) else line.copy(interval = maxOf(line.interval, 1), step = 0, due = now + maxOf(line.interval, 1) * DAY_MS)
+                    Grade.EASY -> (if (line.interval == 0) 4 else line.interval + 1).let { line.copy(interval = it, step = 0, due = now + it * DAY_MS) }
+                }
+            }
+            val hard = maxOf(line.interval + 1, (line.interval * 1.2).roundToInt())
+            val good = maxOf(hard + 1, (line.interval * line.ease / 100.0).roundToInt())
+            val easy = maxOf(good + 1, (line.interval * line.ease * 1.3 / 100.0).roundToInt())
+            return when (grade) {
+                // A miss starts it over from a day, after ten minutes, and it's harder from then on.
+                Grade.AGAIN -> line.copy(interval = 1, ease = maxOf(MIN_EASE, line.ease - 20), step = 1, due = now + 10 * MINUTE_MS)
+                Grade.HARD -> line.copy(ease = maxOf(MIN_EASE, line.ease - 15)).returnsIn(hard, now)
+                Grade.GOOD -> line.returnsIn(good, now)
+                Grade.EASY -> line.copy(ease = line.ease + 15).returnsIn(easy, now)
+            }
+        }
+
+        private fun SavedLine.returnsIn(days: Int, now: Long) = minOf(days, MAX_DAYS).let { copy(interval = it, due = now + it * DAY_MS) }
 
         /** How long [line] waits before it's practised again, answered as [grade]. */
-        fun waitFor(line: SavedLine, grade: Grade): Long = when (grade) {
-            Grade.AGAIN -> AGAIN_MS
-            // On its first day a card has no step to stay on, so known with trouble comes back sooner than known, as in Anki.
-            Grade.HARD -> if (line.box == 0) DAY_MS / 2 else PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.size) - 1] * DAY_MS
-            Grade.GOOD -> PRACTICE_DAYS[minOf(line.box, PRACTICE_DAYS.lastIndex)] * DAY_MS
-            Grade.EASY -> PRACTICE_DAYS[minOf(line.box + 1, PRACTICE_DAYS.lastIndex)] * DAY_MS
-        }
+        fun waitFor(line: SavedLine, grade: Grade): Long = answered(line, grade, 0).due
     }
 }
 
@@ -303,8 +394,15 @@ private const val SAME_MOMENT_MS = 500L
 /** How alike a line's words are to a kept line's to be that line, changed a little. */
 private const val MUCH_THE_SAME = 0.7
 
-/** How many days a line known waits before it's practised again, the more times it's known in a row. */
-private val PRACTICE_DAYS = listOf(1L, 3L, 7L, 16L, 35L, 75L, 150L)
+/** Where a line's ease starts, and the least it falls to, in percent, as in Anki. */
+private const val START_EASE = 250
+private const val MIN_EASE = 130
+
+/** How a line's card of one kind is going: the days it waits, its ease, its step, and when it's due; as for a new card, by default. */
+internal data class Review(val interval: Int = 0, val ease: Int = START_EASE, val step: Int = 0, val due: Long = 0)
+
+/** The longest a line waits, as in Anki: a hundred years. */
+private const val MAX_DAYS = 36_500
 
 /** How a card was answered, once turned, as Anki has it: missed, known with trouble, known, or known without a thought. */
 internal enum class Grade { AGAIN, HARD, GOOD, EASY }

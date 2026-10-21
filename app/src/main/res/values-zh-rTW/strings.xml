@@ -297,6 +297,7 @@
     <string name="lyrics_readings">在文字上方顯示讀音</string>
     <string name="lyrics_reading_size">讀音大小</string>
     <string name="lyrics_words_size">歌詞大小</string>
+    <string name="lyrics_translation_size">翻譯大小</string>
     <string name="lyrics_show_as">顯示方式</string>
     <string name="lyrics_also_show">同時顯示</string>
     <string name="report_problem">回報問題</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">練習</string>
     <string name="practice_show">檢視答案</string>
     <string name="practice_card_options">卡片選項</string>
+    <string name="card_type_read">讀</string>
+    <string name="card_type_hear">聽</string>
+    <string name="card_type_translate">譯</string>
+    <string name="card_type_new">新類型</string>
+    <string name="card_type_name">名稱</string>
+    <string name="card_type_delete">刪除類型</string>
+    <string name="card_type_reset">還原預設</string>
+    <string name="practice_bigger">放大</string>
+    <string name="practice_smaller">縮小</string>
     <string name="practice_again">再來</string>
     <string name="practice_hard">困難</string>
     <string name="practice_good">良好</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">假名</string>
     <string name="lyrics_display_latin">拉丁字母</string>
+    <string name="practice_front">正面</string>
+    <string name="practice_back">背面</string>
+    <string name="floating_shared">與歌詞共用設定</string>
+    <string name="floating_overlay_size">懸浮視窗大小</string>
 </resources>

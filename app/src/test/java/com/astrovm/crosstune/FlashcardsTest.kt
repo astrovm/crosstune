@@ -8,17 +8,23 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -121,6 +127,34 @@ class FlashcardsTest {
 
     private fun click(text: String) {
         composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).onLast().performClick()
+        composeRule.waitForIdle()
+    }
+
+    /** Whether [text] is on the practice card, not in the settings open over it. */
+    private fun onCard(text: String) = composeRule.onAllNodes(hasText(text) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /** Taps the eye of a layer, on the front's rows, or on the back's, which come after them. */
+    private fun eye(label: String, back: Boolean = false) = tag(label, back)
+
+    /** Taps what [label] says, on the front's row, or on the back's, which comes after it. */
+    private fun tag(label: String, back: Boolean = false) {
+        click(string(if (back) R.string.practice_back else R.string.practice_front))
+        composeRule.onAllNodes(hasContentDescription(label)).onFirst().performClick()
+        composeRule.waitForIdle()
+    }
+
+    /** Opens a kind of card in the list, to set its sides; the switch beside its name is another tap. */
+    private fun openKind(name: String) {
+        // The trailing chevron is part of the same target as the name.
+        composeRule.onNode(hasText(name)).performTouchInput { click(Offset(width - 4f, centerY)) }
+        composeRule.waitForIdle()
+    }
+
+    /** A kind of card is open to be set: its name can be changed. */
+    private fun inEditor() = composeRule.onNode(hasSetTextAction()).assertExists()
+
+    private fun pressBack() {
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
     }
 
@@ -231,7 +265,7 @@ class FlashcardsTest {
         // Known, it's done.
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 1)) }
-        assertEquals(1, savedLine("Stars").box)
+        assertEquals(1, savedLine("Stars").step)
         // Demo was playing before and still is, so there's nothing to go back to.
         assertFalse(shown(string(R.string.practice_back_to, "Demo")))
         click(string(R.string.floating_close))
@@ -243,7 +277,7 @@ class FlashcardsTest {
     }
 
     @Test
-    fun aReadingThatIsntHowItsSungIsPutRightByHandOnTheCardsBack() {
+    fun aReadingThatIsntHowItsSungIsPutRightFromTheCardMenu() {
         saved(
             """{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","title":"Other","artist":"Band",""" +
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""",
@@ -251,10 +285,14 @@ class FlashcardsTest {
         )
         launch()
         practiseAll(2)
-        // Only once turned, with its reading shown.
-        assertFalse(described(string(R.string.practice_fix_reading)))
+        // Correction stays in the menu, only after the answer is shown.
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる"))
+        assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_fix_reading))
         // Each kanji, with its reading to change.
         assertTrue(shown("夜") && shown("空"))
@@ -263,6 +301,8 @@ class FlashcardsTest {
         composeRule.onNode(hasText(string(R.string.save_button))).assertIsNotEnabled()
         composeRule.onNode(hasText("night") and hasSetTextAction()).performTextReplacement("よ")
         click(string(R.string.save_button))
+        assertTrue(shown(string(R.string.card_type_new)))
+        click(string(R.string.practice_card_options))
         // On the card now, and kept, in kana and romaji too.
         waitUntil { readingShown("よ") }
         assertFalse(readingShown("よる"))
@@ -270,16 +310,29 @@ class FlashcardsTest {
         val kept = savedLine("夜の空")
         assertEquals("よのそら", kept.reading)
         assertTrue(kept.readByHand)
-        // Cancelled, nothing changes.
+        // Cancel and Back return to the menu without changing the saved reading.
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_fix_reading))
         composeRule.onNode(hasText("そら") and hasSetTextAction()).performTextReplacement("から")
         click(string(R.string.cancel_button))
         assertEquals("よのそら", savedLine("夜の空").reading)
+        assertTrue(shown(string(R.string.card_type_new)))
+        click(string(R.string.practice_fix_reading))
+        click(string(R.string.back_button))
+        assertTrue(shown(string(R.string.card_type_new)))
+        click(string(R.string.practice_fix_reading))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.card_type_new)))
+        assertEquals("よのそら", savedLine("夜の空").reading)
+        click(string(R.string.practice_card_options))
         // A line with no kanji has nothing to put right.
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
         click(string(R.string.practice_show))
         assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.practice_fix_reading)))
     }
 
     @Test
@@ -333,67 +386,348 @@ class FlashcardsTest {
     @Test
     fun theCardsShowWhatsPickedForThemAndKeepItSo() {
         saved(
-            """{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,""" +
-                """"ruby":[["東京","とうきょう"],["へ",null]]}""",
+            """{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,"ruby":[["東京","とうきょう"],["へ",null]]}""",
             """{"text":"Moon","translation":"Luna","title":"Other","artist":"Band","box":1}"""
         )
         launch()
         practiseAll(2)
-        waitUntil { practice().line?.text == "東京へ" }
-        click(string(R.string.practice_show))
-        // The romaji only as said, not as typed too.
-        assertTrue(readingShown("とうきょう") && shown("tōkyō e") && shown("To Tokyo"))
-        assertFalse(shown("toukyou he"))
+        assertTrue(onCard("東京へ"))
+        assertFalse(readingShown("とうきょう") || onCard("To Tokyo") || onCard("tōkyō e"))
         click(string(R.string.practice_card_options))
         val menu = composeRule.onNodeWithTag("practice-card-options").getBoundsInRoot()
-        val cardBounds = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
-        assertTrue(menu.bottom <= cardBounds.top)
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
-        composeRule.waitForIdle()
+        assertTrue(menu.bottom <= card().getBoundsInRoot().top)
+        // The kinds of card are listed, Read it on and Say it off; Read it opens to set its two sides.
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_read))).assertIsOn()
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_translate))).assertIsOff()
+        openKind(string(R.string.card_type_read))
+        // The back first: the words as written, then in kana, then in Latin letters, where nothing else is spelled that way.
+        tag(string(R.string.lyrics_display_original), back = true)
+        click(string(R.string.lyrics_display_latin))
+        // The front in kana, with what it means and its Latin letters as a keyboard spells them.
+        tag(string(R.string.lyrics_display_original))
+        click(string(R.string.lyrics_display_kana))
+        assertTrue(onCard("とうきょうへ"))
+        eye(string(R.string.lyrics_translation))
+        assertTrue(onCard("To Tokyo"))
+        eye(string(R.string.lyrics_romanized))
+        assertTrue(onCard("tōkyō e"))
+        tag(string(R.string.lyrics_romaji_typed))
+        assertTrue(onCard("toukyou he"))
+        assertFalse(prefs().getBoolean("lyrics_romaji_typed", false))
+        assertEquals(
+            CardOptions(
+                front = CardSide(wordsAs = WordsAs.KANA, latin = true, translation = true, romajiTyped = true),
+                back = CardSide(wordsAs = WordsAs.LATIN, readings = true, latin = true, translation = true, sound = true)
+            ), loadCardTypes(prefs()).first { it.id == READ_TYPE }.options
+        )
+        pressBack()
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_read))).assertIsOn()
+        pressBack()
         composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
-        assertEquals("東京へ", practice().line?.text)
-        click(string(R.string.practice_card_options))
-        assertFalse(shown(string(R.string.lyrics_romaji_typed)))
-        click(string(R.string.lyrics_reading_options))
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
-        composeRule.waitForIdle()
-        assertTrue(shown(string(R.string.lyrics_show_as)))
-        click(string(R.string.lyrics_reading_options))
-        click(string(R.string.lyrics_romaji_typed))
-        assertTrue(shown("toukyou he"))
-        assertFalse(shown("tōkyō e"))
-        // Asked in kana, it's answered as written, with no translation or readings when they're off.
-        click(string(R.string.back_button))
-        click(string(R.string.lyrics_only_kana))
-        assertTrue(shown("とうきょうへ") && shown("東京へ"))
-        click(string(R.string.lyrics_translation))
-        click(string(R.string.lyrics_reading_options))
-        click(string(R.string.lyrics_readings))
-        assertFalse(shown("To Tokyo") || readingShown("とうきょう") || described(string(R.string.practice_fix_reading)))
-        // Asked in Latin letters, they're not said again on the back, nor switched off there.
-        click(string(R.string.back_button))
-        click(string(R.string.lyrics_only_latin))
-        composeRule.onAllNodes(hasText("toukyou he")).assertCountEquals(1)
-        assertTrue(shown("東京へ"))
-        assertFalse(shown(string(R.string.lyrics_romanized)))
-        assertEquals(CardOptions(front = WordsAs.LATIN, readings = false, translation = false), CardOptions.load(prefs()))
-        assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
-        click(string(R.string.lyrics_reading_options))
-        assertFalse(shown(string(R.string.lyrics_romanized)))
-        click(string(R.string.practice_card_options))
-        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
-        // A line in no other script shows as written, with nothing to read in kana or spell otherwise.
+        // Turned, the back comes in below the front: the words in Latin letters, and what they mean.
+        click(string(R.string.practice_show))
+        assertTrue(onCard("tōkyō e"))
+        assertEquals(2, composeRule.onAllNodes(hasText("To Tokyo") and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().size)
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
-        assertTrue(shown("Moon"))
         composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
+        // A line with nothing to read or spell has only the words and its meaning to show.
         click(string(R.string.practice_card_options))
-        assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_romaji_typed)))
-        click(string(R.string.lyrics_as_written))
-        click(string(R.string.lyrics_translation))
+        openKind(string(R.string.card_type_read))
+        assertFalse(described(string(R.string.lyrics_readings)) || described(string(R.string.lyrics_romanized)) || described(string(R.string.lyrics_romaji_typed)))
+        pressBack()
+        pressBack()
         click(string(R.string.practice_show))
-        assertTrue(shown("Luna"))
-        assertEquals(CardOptions(readings = false), CardOptions.load(prefs()))
+        assertTrue(onCard("Moon") && onCard("Luna"))
+    }
+
+    @Test
+    fun eachSideCanShowOnlyTheTextLayersPickedForIt() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        // The answer is what the words mean, and nothing else.
+        eye(string(R.string.visuals_show_words), back = true)
+        eye(string(R.string.lyrics_readings), back = true)
+        eye(string(R.string.lyrics_romanized), back = true)
+        pressBack()
+        pressBack()
+        // The front still asks the Japanese words alone.
+        assertTrue(onCard("夜の空"))
+        assertFalse(onCard("Night sky"))
+        click(string(R.string.practice_show))
+        assertTrue(onCard("Night sky"))
+        assertFalse(onCard("yoru no sora") || readingShown("よる"))
+        assertEquals(1, composeRule.onAllNodes(hasText("夜の空") and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().size)
+        // The front with the readings over its words, and the back without its meaning.
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        eye(string(R.string.lyrics_translation), back = true)
+        eye(string(R.string.lyrics_readings))
+        pressBack()
+        pressBack()
+        assertFalse(onCard("Night sky"))
+        assertTrue(readingShown("よる"))
+        val read = model().uiState.cardTypes.first { it.id == READ_TYPE }.options
+        assertFalse(read.back.words || read.back.translation || read.back.readings || read.back.latin)
+        assertTrue(read.front.words && read.front.readings)
+    }
+
+    @Test
+    fun eachSideKeepsItsOwnWordAndReadingSizesPinchedOrSteppedBiggerAndSmaller() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        // Each side has four rows: words, readings, Latin letters and meaning.
+        val rows = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)) }
+        assertEquals(4, rows().fetchSemanticsNodes().size)
+        fun step(row: Int, label: Int) = composeRule.runOnIdle {
+            rows()[row].fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == string(label) }.action()
+        }.also { composeRule.waitForIdle() }
+        val read = { model().uiState.cardTypes.first { it.id == READ_TYPE }.options }
+        step(0, R.string.practice_bigger)
+        assertEquals(1.15f, read().front.wordsScale, 0.001f)
+        step(1, R.string.practice_bigger)
+        assertEquals(0.55f * 1.15f, read().front.readingScale, 0.001f)
+        click(string(R.string.practice_back))
+        step(1, R.string.practice_smaller)
+        assertEquals(0.55f / 1.15f, read().back.readingScale, 0.001f)
+        // Smaller than the least stays at the least.
+        step(1, R.string.practice_smaller)
+        step(1, R.string.practice_smaller)
+        assertEquals(MIN_READING_SCALE, read().back.readingScale, 0f)
+        step(2, R.string.practice_bigger)
+        assertEquals(1.15f, read().back.wordsScale, 0.001f)
+        // The meaning has a size of its own, apart from the words.
+        step(3, R.string.practice_bigger)
+        assertEquals(1.15f, read().back.translationScale, 0.001f)
+        assertEquals(1.15f, read().back.wordsScale, 0.001f)
+        assertEquals(1f, read().front.translationScale, 0f)
+        // Two fingers pulling apart make the back's words bigger, and it's kept once they let go.
+        composeRule.onNodeWithTag("card-layer-${R.string.visuals_show_words}").performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
+        composeRule.waitForIdle()
+        assertTrue(read().back.wordsScale > 1.5f)
+        assertEquals(read().back.wordsScale, loadCardTypes(prefs()).first { it.id == READ_TYPE }.options.back.wordsScale, 0f)
+        // The lyrics keep their own sizes.
+        assertEquals(1f, model().uiState.learning.wordsScale, 0f)
+        assertEquals(READING_SCALE, model().uiState.learning.readingScale, 0f)
+    }
+
+    @Test
+    fun aVisibleSizeControlOpensItsSliderAndKeepsLinkedWordsTogether() {
+        saved("""{"text":"夜","reading":"よる","romanized":"yoru","translation":"Night","title":"Demo","artist":"Band"}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val options = { model().uiState.cardTypes.first().options }
+        fun size(layer: Int, sizeLabel: Int, value: Float) {
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and hasClickAction()).performClick()
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(value) }
+            composeRule.onNode(hasContentDescription("${string(layer)}, ${string(sizeLabel)}") and hasClickAction()).performClick()
+        }
+        size(R.string.visuals_show_words, R.string.lyrics_words_size, MAX_WORDS_SCALE)
+        assertEquals(MAX_WORDS_SCALE, options().front.wordsScale, 0f)
+        size(R.string.lyrics_romanized, R.string.lyrics_words_size, MIN_WORDS_SCALE)
+        assertEquals(MIN_WORDS_SCALE, options().front.wordsScale, 0f)
+        size(R.string.lyrics_readings, R.string.lyrics_reading_size, MAX_READING_SCALE)
+        assertEquals(MAX_READING_SCALE, options().front.readingScale, 0f)
+        size(R.string.lyrics_translation, R.string.lyrics_translation_size, MAX_WORDS_SCALE)
+        assertEquals(MAX_WORDS_SCALE, options().front.translationScale, 0f)
+        assertEquals(CardOptions().back, options().back)
+    }
+
+    @Test
+    fun linesMakeACardOfEachKindThatIsOnAndTheCardSaysWhichItIs() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1,""" +
+                """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
+        launch()
+        click(practiceDue(1))
+        click(string(R.string.practice_all_songs))
+        // With one kind on, a card doesn't say what kind it is.
+        assertFalse(onCard(string(R.string.card_type_read)))
+        click(string(R.string.practice_card_options))
+        // Say it is turned on, and the one kind left can't be turned off, so there's always a card.
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_read))).assertIsNotEnabled()
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_translate))).performClick()
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_translate))).assertIsOn()
+        composeRule.onNode(hasContentDescription(string(R.string.card_type_read))).assertIsEnabled()
+        assertEquals(listOf(true, false, true), model().uiState.cardTypes.map { it.on })
+        pressBack()
+        assertTrue(onCard(string(R.string.card_type_read)))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        waitUntil { shown(string(R.string.practice_done, 1)) }
+        assertEquals(0, savedLine("夜の空").reviews.size)
+        assertTrue(savedLine("夜の空").interval > 3)
+        // Its other card is next, asking for the words from what they mean.
+        click(string(R.string.floating_close))
+        waitUntil { !described(string(R.string.floating_close)) }
+        practiseAll(1)
+        assertTrue(onCard(string(R.string.card_type_translate)))
+        assertTrue(onCard("Night sky"))
+        assertFalse(onCard("夜の空"))
+        click(string(R.string.practice_show))
+        assertTrue(readingShown("よる"))
+        click(string(R.string.practice_good))
+        waitUntil { shown(string(R.string.practice_done, 1)) }
+        assertEquals(setOf(TRANSLATE_TYPE), savedLine("夜の空").reviews.keys)
+        assertEquals(1, savedLine("夜の空").reviews.getValue(TRANSLATE_TYPE).step)
+    }
+
+    @Test
+    fun aHearCardPlaysItsLineAtOnceAndOnlyTheAnswerShowsTheWords() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""")
+        saveCardTypes(prefs(), DEFAULT_CARD_TYPES.map { it.copy(on = it.id == HEAR_TYPE) })
+        appHas("Other", atMs = 0)
+        launch()
+        practiseAll(1)
+        // Heard, not read: it plays before the card is turned, and the words aren't there.
+        waitUntil { practice().sound == LineSound.PLAYING }
+        assertEquals(true, phone.plays.last())
+        assertFalse(onCard("One"))
+        appHas("Other", atMs = 5_000)
+        pass(4_700)
+        pass(300)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        // Turned, it says what was sung, and doesn't play again.
+        val seeks = phone.seeks.size
+        click(string(R.string.practice_show))
+        pass(1_000)
+        assertTrue(onCard("One"))
+        assertTrue(onCard("Uno"))
+        assertEquals(seeks, phone.seeks.size)
+    }
+
+    @Test
+    fun theEditorsSoundPreviewPlaysWithoutTurningTheCard() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","start":5000,"end":9000,"app":"${app.packageName}"}""")
+        appHas("Other", atMs = 0)
+        launch()
+        practiseAll(1)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val seeks = phone.seeks.size
+        click(string(R.string.lyrics_play))
+        waitUntil { phone.seeks.size > seeks }
+        assertFalse(practice().turned)
+        assertFalse(model().uiState.cardTypes.first().options.front.sound)
+    }
+
+    @Test
+    fun aSidePlaysTheLineOnlyWhenItHasItsSound() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""")
+        appHas("Other", atMs = 0)
+        launch()
+        practiseAll(1)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        // Read it plays the line once it's turned: its back has the sound, its front doesn't.
+        assertFalse(described(string(R.string.practice_play)))
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val read = { model().uiState.cardTypes.first { it.id == READ_TYPE }.options }
+        assertTrue(read().back.sound && !read().front.sound)
+        // The sound moves from the back to the front.
+        tag(string(R.string.practice_play))
+        tag(string(R.string.practice_play), back = true)
+        assertTrue(read().front.sound && !read().back.sound)
+        pressBack()
+        pressBack()
+        assertEquals(1, composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play))).fetchSemanticsNodes().size)
+        val seeks = phone.seeks.size
+        click(string(R.string.practice_show))
+        pass(1_000)
+        assertEquals(seeks, phone.seeks.size)
+        assertEquals(1, composeRule.onAllNodes(hasContentDescription(string(R.string.practice_play))).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun aHearCardWithNoWayToPlayShowsTheWordsInstead() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","box":1,"start":5000,"end":9000}""")
+        saveCardTypes(prefs(), DEFAULT_CARD_TYPES.map { it.copy(on = it.id == HEAR_TYPE) })
+        phone.access = false
+        launch()
+        practiseAll(1)
+        assertEquals(LineSound.NONE, practice().sound)
+        assertTrue(onCard("One"))
+    }
+
+    @Test
+    fun aKindOfCardIsMadeRenamedAndDeleted() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band"}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        click(string(R.string.card_type_new))
+        // It starts as the first kind is, and opens to be named.
+        assertEquals(listOf(READ_TYPE, HEAR_TYPE, TRANSLATE_TYPE, "type1"), model().uiState.cardTypes.map { it.id })
+        assertEquals(model().uiState.cardTypes[0].options, model().uiState.cardTypes[3].options)
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Mine")
+        composeRule.waitForIdle()
+        assertEquals("Mine", loadCardTypes(prefs()).last().name)
+        pressBack()
+        composeRule.onNode(hasContentDescription("Mine")).assertIsOn()
+        // Deleted, it's gone; the three the app starts with stay.
+        openKind("Mine")
+        click(string(R.string.card_type_delete))
+        assertEquals(listOf(READ_TYPE, HEAR_TYPE, TRANSLATE_TYPE), model().uiState.cardTypes.map { it.id })
+        click(string(R.string.undo_button))
+        assertEquals("Mine", model().uiState.cardTypes.last().name)
+        openKind("Mine")
+        click(string(R.string.card_type_delete))
+        click(string(R.string.floating_close))
+        listOf(R.string.card_type_translate, R.string.card_type_hear, R.string.card_type_read).forEach {
+            openKind(string(it))
+            assertFalse(described(string(R.string.card_type_delete)))
+            pressBack()
+        }
+        // With none on, the first is.
+        composeRule.runOnIdle { model().setCardTypes(model().uiState.cardTypes.map { it.copy(on = false) }, true) }
+        assertEquals(listOf(true, false, false), model().uiState.cardTypes.map { it.on })
+    }
+
+    @Test
+    fun aPresetKindComesBackAsItWasWhenItHasBeenChanged() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band"}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_translate))
+        // As it starts there's nothing to put back.
+        assertFalse(described(string(R.string.card_type_reset)))
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("Mine")
+        composeRule.waitForIdle()
+        assertEquals("Mine", loadCardTypes(prefs())[2].name)
+        // Changed, it can go back to its name and options, and stays as on or off as it was.
+        click(string(R.string.card_type_reset))
+        assertEquals(TRANSLATE_IT, model().uiState.cardTypes[2])
+        assertFalse(described(string(R.string.card_type_reset)))
+        composeRule.onNode(hasSetTextAction()).assertTextContains(string(R.string.card_type_translate))
+        click(string(R.string.undo_button))
+        assertEquals("Mine", model().uiState.cardTypes[2].name)
+    }
+
+    @Test
+    fun aSessionHasTheCardsOfEveryKindThatIsOn() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","interval":3,"due":1}""")
+        saveCardTypes(prefs(), DEFAULT_CARD_TYPES.map { it.copy(on = it.id != HEAR_TYPE) })
+        launch()
+        click(practiceDue(2))
+        click(string(R.string.practice_all_songs))
+        // Both cards of the line are in the one session, the one due longest first.
+        assertTrue(onCard(string(R.string.card_type_translate)))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        assertTrue(onCard(string(R.string.card_type_read)))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        waitUntil { shown(string(R.string.practice_done, 2)) }
     }
 
     @Test
@@ -775,7 +1109,7 @@ class FlashcardsTest {
         waitUntil { !shown("Demo") }
         click(string(R.string.undo_button))
         waitUntil { shown("Demo") }
-        assertEquals(2, savedLine("Moon").box)
+        assertEquals(3, savedLine("Moon").interval)
         assertEquals(later, savedLine("Moon").due)
         // A second removal's offer replaces the first's; with none left, the list stays while it shows.
         song("Other").performTouchInput { swipeRight() }

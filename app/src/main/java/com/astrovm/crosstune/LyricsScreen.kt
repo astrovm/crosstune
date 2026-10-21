@@ -259,7 +259,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             override suspend fun onPreFling(available: Velocity): Velocity = Velocity(0f, layers.flung(available.y))
         }
     }
-    WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
+    WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
@@ -391,7 +391,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
  * are either way, so the words coming and going don't start them over.
  */
 @Composable
-private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
+private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -404,7 +404,9 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {
-                content(Color.Black.copy(alpha = state.visualsShade))
+                // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
+                val readingShade = if (menuOpen) 0.75f else 0.5f
+                content(Color.Black.copy(alpha = readingShade + (1f - readingShade) * state.visualsShade))
             }
         }
     }
@@ -680,46 +682,55 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
         modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag("lyrics-display-options")
     ) {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            if (details) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { details = false }) {
-                        AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
-                    }
-                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
-                }
-                val script = learning.script
-                if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
-                    ReadingSwitch(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-                    if (learning.readings) {
-                        SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
-                    }
-                }
-                if (learning.showsAs != WordsAs.LATIN) ReadingSwitch(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
-                if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
-                    ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
-                }
-            } else {
-                val script = learning.script
-                if (script != null) {
-                    MenuCaption(R.string.lyrics_show_as)
-                    WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
-                }
-                SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
-                if (script != null && (learning.showsAs != WordsAs.LATIN || script == Script.JAPANESE)) {
-                    val readingLabel = stringResource(R.string.lyrics_reading_options)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { details = true }
-                            .semantics { contentDescription = readingLabel }
-                    ) {
-                        Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Text(learning.readingSummary(stringResource(R.string.lyrics_readings_off)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
-                    }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+            WordsOptions(learning, actions, details, { details = it })
+        }
+    }
+}
+
+/** The same display controls in lyrics and on either side of a practice card. */
+@Composable
+internal fun WordsOptions(learning: Learning, actions: ScreenActions, details: Boolean, onDetails: (Boolean) -> Unit, words: Boolean = true) {
+    if (details) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onDetails(false) }) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
             }
+            Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
+        }
+        val script = learning.script
+        if (words && (script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
+            ReadingSwitch(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+            if (learning.readings) {
+                SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+            }
+        }
+        if (learning.showsAs != WordsAs.LATIN) ReadingSwitch(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+        if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
+            ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
+        }
+    } else {
+        val script = learning.script
+        if (words && script != null) {
+            MenuCaption(R.string.lyrics_show_as)
+            WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
+        }
+        SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+        if (script != null && (learning.showsAs != WordsAs.LATIN || script == Script.JAPANESE)) {
+            val readingLabel = stringResource(R.string.lyrics_reading_options)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onDetails(true) }
+                    .semantics { contentDescription = readingLabel }
+            ) {
+                Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text(learning.readingSummary(stringResource(R.string.lyrics_readings_off)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
+            }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+        if (learning.translation) {
+            SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
         }
     }
 }
@@ -767,7 +778,7 @@ private fun MenuCaption(@StringRes text: Int) {
  * How big something is, slid within its readable [range], labeled from 1% to 100%.
  */
 @Composable
-internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size) {
+internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size, description: String? = null) {
     val size = stringResource(label)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -784,7 +795,7 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
             },
             onValueChangeFinished = { onChange(latest, true) },
             valueRange = range,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = size }
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = description ?: size }
         )
     }
 }
@@ -807,7 +818,7 @@ private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onC
         }
         // Only lines with their meaning, or that can be heard, can be practised; with none, they're chosen first.
         val practisable = here.filter { it.practisable }
-        val due = practisable.count { it.due <= System.currentTimeMillis() }
+        val due = practisable.cardsDueCount(System.currentTimeMillis(), state.cardTypes)
         MenuAction(
             R.drawable.ic_play, R.string.practice_song,
             trailing = if (due > 0) stringResource(R.string.practice_due, due) else null,
@@ -1395,7 +1406,9 @@ internal class LineHelp(
     /** How big [readings] are beside the words they're over. */
     val readingScale: Float = READING_SCALE,
     /** Whether romaji is spelled as typed rather than as said. */
-    val romajiTyped: Boolean = false
+    val romajiTyped: Boolean = false,
+    /** How big [translation] is, beside how it starts. */
+    val translationScale: Float = 1f
 ) {
     /** The line in Latin letters, spelled as picked. */
     val latin get() = reading?.latin(romajiTyped)
@@ -1403,7 +1416,7 @@ internal class LineHelp(
 
 internal fun Learning.helpFor(index: Int): LineHelp? {
     if (!shows) return null
-    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale, romajiTyped)
+    return LineHelp(lines.getOrNull(index), readings, romanized, translations.getOrNull(index).takeIf { translation }, insteadOf(index), readingScale, romajiTyped, translationScale)
 }
 
 
@@ -1428,6 +1441,7 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
 }
 
 /** A strip over the words: they can follow the music app playing the song, once it's allowed. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -> Unit) {
     Surface(
@@ -1436,10 +1450,14 @@ private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
-            IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+        val stacked = LocalDensity.current.fontScale > 1.3f
+        FlowRow(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_follow_allow), style = MaterialTheme.typography.bodyMedium,
+                modifier = if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OneTapButton(stringResource(R.string.follow_turn_on), actions.onAllowFollowing, fixing = fixing)
+                IconButton(onClick = onDismiss) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button)) }
+            }
         }
     }
 }
@@ -1527,7 +1545,10 @@ private fun LyricLineText(
         if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        help?.translation?.let { Text(it, style = small, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp)) }
+        help?.translation?.let {
+            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale)
+            Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
+        }
     }
 }
 
@@ -1768,8 +1789,12 @@ internal const val MIN_READING_SCALE = READING_SCALE
 /** The largest the words can be, beside how they start. The slider reads 100% here. */
 internal const val MAX_WORDS_SCALE = 3f
 
-/** The smallest words stay at three quarters of their starting size, labeled 1% on the slider. */
-internal const val MIN_WORDS_SCALE = 0.75f
+/** The smallest words stay at three fifths of their starting size, labeled 1% on the slider. */
+internal const val MIN_WORDS_SCALE = 0.6f
+
+/** How big a line's translation starts under the words in the lyrics, and the room it takes. */
+private val TRANSLATION_SIZE = 14.sp
+private val TRANSLATION_LINE = 20.sp
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f

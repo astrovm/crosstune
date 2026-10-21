@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Czytanie nad słowami</string>
     <string name="lyrics_reading_size">Rozmiar czytania</string>
     <string name="lyrics_words_size">Rozmiar tekstu</string>
+    <string name="lyrics_translation_size">Rozmiar tłumaczenia</string>
     <string name="lyrics_show_as">Pokaż jako</string>
     <string name="lyrics_also_show">Pokaż też</string>
     <string name="report_problem">Zgłoś problem</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Ćwicz</string>
     <string name="practice_show">Pokaż odpowiedź</string>
     <string name="practice_card_options">Opcje fiszek</string>
+    <string name="card_type_read">Czytaj</string>
+    <string name="card_type_hear">Słuchaj</string>
+    <string name="card_type_translate">Tłumacz</string>
+    <string name="card_type_new">Nowy typ</string>
+    <string name="card_type_name">Nazwa</string>
+    <string name="card_type_delete">Usuń typ</string>
+    <string name="card_type_reset">Przywróć domyślne</string>
+    <string name="practice_bigger">Większy</string>
+    <string name="practice_smaller">Mniejszy</string>
     <string name="practice_again">Jeszcze raz</string>
     <string name="practice_hard">Trudne</string>
     <string name="practice_good">Dobrze</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Oryginał</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Łacinka</string>
+    <string name="practice_front">Przód</string>
+    <string name="practice_back">Tył</string>
+    <string name="floating_shared">Wspólne z tekstem piosenki</string>
+    <string name="floating_overlay_size">Rozmiar pływającego okna</string>
 </resources>

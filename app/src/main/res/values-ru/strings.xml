@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_reading_size">Размер чтения</string>
     <string name="lyrics_words_size">Размер текста</string>
+    <string name="lyrics_translation_size">Размер перевода</string>
     <string name="lyrics_show_as">Показывать как</string>
     <string name="lyrics_also_show">Показывать ещё</string>
     <string name="report_problem">Сообщить о проблеме</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Практика</string>
     <string name="practice_show">Показать ответ</string>
     <string name="practice_card_options">Настройки карточек</string>
+    <string name="card_type_read">Читать</string>
+    <string name="card_type_hear">Слушать</string>
+    <string name="card_type_translate">Переводить</string>
+    <string name="card_type_new">Новый тип</string>
+    <string name="card_type_name">Название</string>
+    <string name="card_type_delete">Удалить тип</string>
+    <string name="card_type_reset">Вернуть по умолчанию</string>
+    <string name="practice_bigger">Крупнее</string>
+    <string name="practice_smaller">Мельче</string>
     <string name="practice_again">Ещё раз</string>
     <string name="practice_hard">Трудно</string>
     <string name="practice_good">Хорошо</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Оригинал</string>
     <string name="lyrics_display_kana">Кана</string>
     <string name="lyrics_display_latin">Латиница</string>
+    <string name="practice_front">Лицевая сторона</string>
+    <string name="practice_back">Обратная сторона</string>
+    <string name="floating_shared">Общие настройки с текстом песни</string>
+    <string name="floating_overlay_size">Размер плавающего окна</string>
 </resources>

@@ -13,8 +13,8 @@ import kotlin.random.Random
 @RunWith(RobolectricTestRunner::class)
 class PracticeSessionTest {
 
-    private fun line(text: String, title: String = "Demo", due: Long = 0, start: Long? = null, translation: String? = "Meaning", box: Int = 0) =
-        SavedLine(text, translation = translation, title = title, artist = "Band", due = due, startMs = start, endMs = start?.plus(5_000), box = box)
+    private fun line(text: String, title: String = "Demo", due: Long = 0, start: Long? = null, translation: String? = "Meaning") =
+        SavedLine(text, translation = translation, title = title, artist = "Band", due = due, startMs = start, endMs = start?.plus(5_000))
 
     @Test
     fun aSessionTakesTheLinesDueLongestEachSongsTogetherInTheOrderTheyreSung() {
@@ -92,9 +92,14 @@ class PracticeSessionTest {
     }
 
     @Test
-    fun howLongALineWaitsIsWrittenShortInMinutesHoursOrDays() {
+    fun howLongALineWaitsIsWrittenShortInMinutesHoursDaysMonthsOrYears() {
+        val day = 24 * 60 * 60_000L
         assertEquals("10m", waitText(10 * 60_000L, Locale.US))
+        assertEquals("6m", waitText(330_000L, Locale.US))
         assertEquals("5h", waitText(5 * 60 * 60_000L, Locale.US))
-        assertEquals("3d", waitText(3 * 24 * 60 * 60_000L, Locale.US))
+        assertEquals("3d", waitText(3 * day, Locale.US))
+        assertEquals("1 mth", waitText(30 * day, Locale.US))
+        assertEquals("4 mths", waitText(130 * day, Locale.US))
+        assertEquals("1 yr", waitText(400 * day, Locale.US))
     }
 }

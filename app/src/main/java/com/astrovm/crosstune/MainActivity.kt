@@ -142,6 +142,16 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }
         }
+        override val learningActions get() = ScreenActions(
+            onWordsAsChange = viewModel::setWordsAs,
+            onReadingsChange = viewModel::setReadings,
+            onRomanizedChange = viewModel::setRomanized,
+            onRomajiTypedChange = viewModel::setRomajiTyped,
+            onTranslationChange = viewModel::setTranslation,
+            onWordsScaleChange = viewModel::setWordsScale,
+            onReadingScaleChange = viewModel::setReadingScale,
+            onTranslationScaleChange = viewModel::setTranslationScale
+        )
         override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {
@@ -392,7 +402,7 @@ class MainActivity : ComponentActivity() {
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,
                         onRomajiTypedChange = viewModel::setRomajiTyped,
-                        onCardOptionsChange = viewModel::setCardOptions,
+                        onCardTypesChange = viewModel::setCardTypes,
                         onTranslationChange = viewModel::setTranslation,
                         onChordsChange = viewModel::setChords,
                         onRetryTranslation = viewModel::retryTranslation,
@@ -430,6 +440,7 @@ class MainActivity : ComponentActivity() {
                         onUntranslatedChange = viewModel::setUntranslated,
                         onReadingScaleChange = viewModel::setReadingScale,
                         onWordsScaleChange = viewModel::setWordsScale,
+                        onTranslationScaleChange = viewModel::setTranslationScale,
                         onSignInWithChatGpt = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

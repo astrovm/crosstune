@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Bacaan di atas kata</string>
     <string name="lyrics_reading_size">Ukuran bacaan</string>
     <string name="lyrics_words_size">Ukuran lirik</string>
+    <string name="lyrics_translation_size">Ukuran terjemahan</string>
     <string name="lyrics_show_as">Tampilkan sebagai</string>
     <string name="lyrics_also_show">Tampilkan juga</string>
     <string name="report_problem">Laporkan masalah</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Latihan</string>
     <string name="practice_show">Lihat jawaban</string>
     <string name="practice_card_options">Opsi kartu</string>
+    <string name="card_type_read">Baca</string>
+    <string name="card_type_hear">Dengar</string>
+    <string name="card_type_translate">Terjemahkan</string>
+    <string name="card_type_new">Tipe baru</string>
+    <string name="card_type_name">Nama</string>
+    <string name="card_type_delete">Hapus tipe</string>
+    <string name="card_type_reset">Kembalikan ke bawaan</string>
+    <string name="practice_bigger">Lebih besar</string>
+    <string name="practice_smaller">Lebih kecil</string>
     <string name="practice_again">Lagi</string>
     <string name="practice_hard">Sulit</string>
     <string name="practice_good">Baik</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Asli</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="practice_front">Depan</string>
+    <string name="practice_back">Belakang</string>
+    <string name="floating_shared">Dibagikan dengan lirik</string>
+    <string name="floating_overlay_size">Ukuran jendela mengambang</string>
 </resources>

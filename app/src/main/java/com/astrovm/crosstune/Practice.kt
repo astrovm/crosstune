@@ -11,12 +11,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The lines due at [now], at most [max], each song's together, in the order they're sung, so the
+ * The cards due at [now], at most [max], each song's together, in the order they're sung, so the
  * music app goes from one song to the next once, and only forward in each. The song due longest
- * comes first.
+ * comes first. A line has a card in the session for each of the [types] that's due.
  */
-internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE): List<SavedLine> =
-    lines.filter { it.practisable && it.due <= now }
+internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE, types: List<CardType> = DEFAULT_CARD_TYPES): List<SavedLine> =
+    lines.flatMap { it.cardsDue(now, types) }
         .sortedBy { it.due }
         .take(max)
         .groupBy { it.title to it.artist }
@@ -102,9 +102,9 @@ internal class PracticeCards(
      * to learn it. The music app goes back to [before] once done.
      */
     fun start(song: MusicMetadata?, before: Before?) {
-        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock()) else {
+        val queue = if (song == null) sessionOf(uiState.savedLines, wallClock(), types = uiState.cardTypes) else {
             val its = uiState.savedLines.filter { it.isOf(song) }
-            sessionOf(its, wallClock()).ifEmpty { sessionOf(its, Long.MAX_VALUE) }
+            sessionOf(its, wallClock(), types = uiState.cardTypes).ifEmpty { sessionOf(its, Long.MAX_VALUE, types = uiState.cardTypes) }
         }
         uiState = uiState.copy(practice = Practice(queue, total = queue.size, before = before))
         showCard()
@@ -112,7 +112,7 @@ internal class PracticeCards(
 
     /**
      * Shows the next card, with its line ready in the music app, not played: heard, it would say how
-     * it reads, which is what's asked. It plays once the card's turned.
+     * it reads, which is what's asked. It plays once the card's turned, or at once when hearing it is the question.
      */
     private fun showCard() {
         soundJob?.cancel()
@@ -120,7 +120,7 @@ internal class PracticeCards(
         val line = practice.line ?: return
         val playable = line.timed && playback?.hasAccess() == true
         uiState = uiState.copy(practice = practice.copy(turned = false, lastSong = line, sound = if (playable) LineSound.LOADING else LineSound.NONE))
-        if (playable) sound(line, play = false)
+        if (playable) sound(line, play = typeOf(line).hears)
     }
 
     /**
@@ -194,6 +194,9 @@ internal class PracticeCards(
         uiState = uiState.copy(practice = practice.copy(sound = sound))
     }
 
+    /** The kind of card [line]'s is. */
+    private fun typeOf(line: SavedLine) = uiState.cardTypes.firstOrNull { it.id == line.cardType } ?: READ_IT
+
     /** Plays the card's line again. */
     fun replay() {
         val practice = uiState.practice ?: return
@@ -201,11 +204,11 @@ internal class PracticeCards(
         sound(line)
     }
 
-    /** Turns the card, to say whether it was known, and plays its line, now that it's the answer. */
+    /** Turns the card, to say whether it was known, and plays its line if the back has its sound. */
     fun turn() {
         val practice = uiState.practice?.takeIf { !it.turned } ?: return
         uiState = uiState.copy(practice = practice.copy(turned = true))
-        if (practice.sound == LineSound.PLAYED) replay()
+        if (practice.sound == LineSound.PLAYED && practice.line?.let(::typeOf)?.options?.back?.sound == true) replay()
     }
 
     /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */

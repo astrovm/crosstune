@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Lesung über den Wörtern</string>
     <string name="lyrics_reading_size">Größe der Lesung</string>
     <string name="lyrics_words_size">Textgröße</string>
+    <string name="lyrics_translation_size">Größe der Übersetzung</string>
     <string name="lyrics_show_as">Anzeigen als</string>
     <string name="lyrics_also_show">Auch anzeigen</string>
     <string name="report_problem">Problem melden</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Üben</string>
     <string name="practice_show">Antwort zeigen</string>
     <string name="practice_card_options">Kartenoptionen</string>
+    <string name="card_type_read">Lesen</string>
+    <string name="card_type_hear">Hören</string>
+    <string name="card_type_translate">Übersetzen</string>
+    <string name="card_type_new">Neuer Typ</string>
+    <string name="card_type_name">Name</string>
+    <string name="card_type_delete">Typ löschen</string>
+    <string name="card_type_reset">Auf Standard zurücksetzen</string>
+    <string name="practice_bigger">Größer</string>
+    <string name="practice_smaller">Kleiner</string>
     <string name="practice_again">Nochmal</string>
     <string name="practice_hard">Schwer</string>
     <string name="practice_good">Gut</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Lateinisch</string>
+    <string name="practice_front">Vorderseite</string>
+    <string name="practice_back">Rückseite</string>
+    <string name="floating_shared">Mit dem Liedtext geteilt</string>
+    <string name="floating_overlay_size">Größe des schwebenden Fensters</string>
 </resources>

@@ -1971,7 +1971,7 @@ class ListeningTest {
         assertTrue(shown(percent.format(sizeShare(0f, 0f..FloatingOptions.MAX_BACKGROUND))))
 
         // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
-        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_overlay_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
         composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_background))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         composeRule.waitForIdle()
         assertEquals(0.5f, controllerModel().uiState.floating.background, 0.01f)
@@ -2428,7 +2428,7 @@ class ListeningTest {
         click(string(R.string.practice_song))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        assertEquals(1, SavedLinesStore(prefs()).load().single().box)
+        assertEquals(1, SavedLinesStore(prefs()).load().single().step)
         // Nothing else is due: one practised.
         waitForText(string(R.string.practice_done, 1))
         // Closed, it's back to the words.
@@ -2449,7 +2449,7 @@ class ListeningTest {
         assertFalse(shown("[Night sky]") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
         controllerModel().gradePractice(Grade.GOOD)
-        assertEquals(0, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.box)
+        assertEquals(0L, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.due)
         // Tapped, the card turns.
         composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
         waitForText("[Night sky]")
@@ -2457,15 +2457,15 @@ class ListeningTest {
         val before = System.currentTimeMillis()
         click(string(R.string.practice_good))
         val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
-        assertEquals(1, good.box)
-        assertTrue(good.due >= before + DAY_MS && good.due <= System.currentTimeMillis() + DAY_MS)
+        assertEquals(1, good.step)
+        assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
         // Known once before, it asks the same, and known again, it's back later.
         waitForDescription(string(R.string.practice_progress, 1, 2))
         assertTrue(shown("Stars") && !shown("[Stars]"))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
-        assertEquals(2, again.box)
+        assertEquals(3, again.interval)
         assertTrue(again.due >= before + 3 * DAY_MS)
         waitForText(string(R.string.practice_done, 2))
     }
@@ -2487,8 +2487,8 @@ class ListeningTest {
         val kept = SavedLinesStore(prefs()).load()
         // Each the line it is now, practised as far as it was, translated and timed as the song is now.
         assertEquals(listOf("Night sky", "Stars shine so bright", "Stars shine so  bright", "Moonlight", "sky", "shines", "Rain on the roof", "Night sky"), kept.map { it.text })
-        assertEquals(listOf(2, 1), kept.take(2).map { it.box })
-        assertEquals(3, kept[3].box)
+        assertEquals(listOf(3, 1), kept.take(2).map { it.interval })
+        assertEquals(7, kept[3].interval)
         assertEquals(5L, kept[0].due)
         assertEquals("Looking up.", kept[0].explanation)
         assertEquals(1_000L to 5_000L, kept[0].startMs to kept[0].endMs)
@@ -2512,7 +2512,7 @@ class ListeningTest {
         wordsOf(ROMAJI, "yoru ni kimi wa", openAi = openAi)
         waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "星が光る" }
         val kept = SavedLinesStore(prefs()).load().single()
-        assertEquals(2, kept.box)
+        assertEquals(3, kept.interval)
         assertEquals(1000L, kept.startMs)
         assertEquals(30000L, kept.endMs)
     }
@@ -2530,7 +2530,7 @@ class ListeningTest {
         waitForText("[Night sky]")
         // Missed, it's back in ten minutes, and once more before the session's done.
         click(string(R.string.practice_again))
-        assertEquals(0, SavedLinesStore(prefs()).load().single().box)
+        assertEquals(0, SavedLinesStore(prefs()).load().single().step)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.practice?.missed == 1 && shown(string(R.string.practice_show)) }
         assertEquals(1, controllerModel().uiState.practice!!.queue.size)
         // Back goes back to the words.
@@ -2630,6 +2630,22 @@ class ListeningTest {
         assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
         assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_WORDS_SCALE, MIN_WORDS_SCALE..MAX_WORDS_SCALE))))
         assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
+    }
+
+    @Test
+    fun theTranslationHasASizeOfItsOwnThatStartsAsBigAsTheWordsWere() {
+        prefs().edit().putFloat("words_scale", 1.5f).putBoolean("lyrics_translation", true).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertEquals(1.5f, controllerModel().uiState.learning.translationScale, 0f)
+        learnMenu()
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_translation_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_WORDS_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MAX_WORDS_SCALE, prefs().getFloat("translation_scale", 0f), 0.01f)
+        assertEquals(1.5f, controllerModel().uiState.learning.wordsScale, 0f)
+        // With the translation off there's no size to pick.
+        click(string(R.string.lyrics_translation))
+        assertFalse(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_translation_size))).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

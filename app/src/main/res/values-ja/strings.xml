@@ -298,6 +298,7 @@
     <string name="lyrics_readings">単語の上に読み</string>
     <string name="lyrics_reading_size">読みのサイズ</string>
     <string name="lyrics_words_size">歌詞のサイズ</string>
+    <string name="lyrics_translation_size">翻訳のサイズ</string>
     <string name="lyrics_show_as">表示形式</string>
     <string name="lyrics_also_show">あわせて表示</string>
     <string name="report_problem">問題を報告</string>
@@ -321,6 +322,15 @@
     <string name="saved_practice">練習</string>
     <string name="practice_show">答えを見る</string>
     <string name="practice_card_options">カードの設定</string>
+    <string name="card_type_read">読む</string>
+    <string name="card_type_hear">聞く</string>
+    <string name="card_type_translate">訳す</string>
+    <string name="card_type_new">新しい種類</string>
+    <string name="card_type_name">名前</string>
+    <string name="card_type_delete">種類を削除</string>
+    <string name="card_type_reset">初期設定に戻す</string>
+    <string name="practice_bigger">大きく</string>
+    <string name="practice_smaller">小さく</string>
     <string name="practice_again">もう一度</string>
     <string name="practice_hard">難しい</string>
     <string name="practice_good">正解</string>
@@ -385,4 +395,8 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">かな</string>
     <string name="lyrics_display_latin">ラテン字</string>
+    <string name="practice_front">表</string>
+    <string name="practice_back">裏</string>
+    <string name="floating_shared">歌詞と設定を共有</string>
+    <string name="floating_overlay_size">フローティングウィンドウのサイズ</string>
 </resources>

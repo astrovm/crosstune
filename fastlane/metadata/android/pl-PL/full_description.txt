@@ -15,7 +15,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Znajdź utwór, wpisując jego nazwę zamiast linku, i czytaj tekst dowolnego utworu, który otworzysz.</li>
 <li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle.</li>
-<li>Ucz się słów dzięki kanie, pinyinowi, romaji i każdemu innemu pismu łacinką oraz tłumaczeniom na języki, których jeszcze nie czytasz.</li>
+<li>Ucz się słów dzięki kanie, pinyinowi, romaji i każdemu innemu pismu łacinką oraz tłumaczeniom na języki, których jeszcze nie czytasz. Wybierz, co ma być widoczne na każdej stronie fiszki. Z jednego wiersza zrobisz kilka rodzajów fiszek, każdy z własnym harmonogramem.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
 <li>Kolory Material You na Androidzie 12 i nowszych.</li>
 </ul>

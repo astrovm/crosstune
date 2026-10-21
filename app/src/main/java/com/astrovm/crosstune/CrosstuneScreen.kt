@@ -244,7 +244,7 @@ internal data class ScreenActions(
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},
-    val onCardOptionsChange: (CardOptions) -> Unit = {},
+    val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
@@ -302,6 +302,7 @@ internal data class ScreenActions(
     /** How big readings are beside the words; kept when [save]d, once let go. */
     val onReadingScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onWordsScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
+    val onTranslationScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onSignInWithChatGpt: () -> Unit = {},
     val onCancelChatGptSignIn: () -> Unit = {},
     val onSignOutOfChatGpt: () -> Unit = {},
@@ -649,7 +650,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         actions = {
             // Saved lines, a tap from what there is to practise, with how many are due.
             if (state.savedLines.any { it.practisable }) {
-                PracticeButton(state.savedLines.count { it.practisable && it.due <= System.currentTimeMillis() }, onOpenPractice)
+                PracticeButton(state.savedLines.cardsDueCount(System.currentTimeMillis(), state.cardTypes), onOpenPractice)
             }
             IconButton(onClick = onOpenSettings) {
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))

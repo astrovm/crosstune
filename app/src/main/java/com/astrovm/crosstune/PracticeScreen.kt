@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,14 +36,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.annotation.StringRes
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,7 +63,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
+import kotlin.math.roundToLong
 
 internal const val PRACTICE_CARD_TAG = "practice-card"
 
@@ -92,6 +97,8 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val practice = state.practice ?: return
     BackHandler(onBack = actions.onStopPractice)
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<CardPreview?>(null) }
+    LaunchedEffect(optionsOpen) { if (!optionsOpen) preview = null }
     val optionLineKey = practice.line?.let { "${it.text}|${it.title}|${it.artist}" }
     // A new card starts clear. The menu stays open only while this one is on screen.
     LaunchedEffect(optionLineKey) { optionsOpen = false }
@@ -113,13 +120,13 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardOptions(optionLine, state.cards, state.learning.romajiTyped, actions) { optionsOpen = false }
+                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it }, canPlay = practice.sound != LineSound.NONE)
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cards, state.learning.romajiTyped, actions)
+                    else Card(line, shown, state.cardTypes, actions, preview.takeIf { optionsOpen })
                 }
             }
         }
@@ -162,11 +169,12 @@ private fun CaughtUp() {
 }
 
 /**
- * A card: the song it's from and the line as written; once turned, its sound, how it reads and what
- * it means. Turned, it's said whether it was known, each button saying when it's back.
+ * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions) {
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null) {
+    val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
+    val cards = type.options
     val haptics = LocalHapticFeedback.current
     val answer = { grade: Grade ->
         haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
@@ -183,135 +191,78 @@ private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, romaji
                 .testTag(PRACTICE_CARD_TAG)
                 // Tapped, it turns: a button with a name for TalkBack, as Show answer is.
                 .then(
-                    if (practice.turned) Modifier
+                    if (practice.turned || preview != null) Modifier
                     else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                 )
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                SongChip(line, actions)
-                CardFront(line, line.shownAs(cards.front, romajiTyped))
-                // Heard, the line says how it reads, so it's part of the answer.
+                SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
+                // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
+                if (preview != null) {
+                    val side = if (preview.back) cards.back else cards.front
+                    if (side.sound) LineSound(line, practice.sound, actions.onReplayLine)
+                    CardSideContent(line, side, preview.back)
+                } else {
+                val front = cards.front
+                val plays = front.sound && practice.sound != LineSound.NONE
+                if (plays) LineSound(line, practice.sound, actions.onReplayLine)
+                if (!front.bare) CardSideContent(line, front, back = false)
+                else if (!plays) CardSideContent(line, CardSide(), back = false)
+                // Turned, the other side comes in below the front, which stays.
                 if (practice.turned) {
                     HorizontalDivider()
-                    LineSound(line, practice.sound, actions.onReplayLine)
-                    CardBack(line, cards, romajiTyped, actions.onReadCardAs)
+                    if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
+                    CardSideContent(line, cards.back, back = true)
+                }
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        if (preview == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             if (!practice.turned) {
-                Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(stringResource(R.string.practice_show)) }
+                Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
             } else {
                 val locale = LocalConfiguration.current.locales[0]
-                // Four, as Anki has them, each saying when the line's back; Good, the usual one, stands out.
+                // Four, in Anki's colors, each saying when the line's back.
+                val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 GRADES.forEach { (grade, label) ->
-                    val modifier = Modifier.weight(1f).height(56.dp)
-                    val content: @Composable RowScope.() -> Unit = { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
-                    if (grade == Grade.GOOD) Button(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
-                    else OutlinedButton(onClick = { answer(grade) }, modifier = modifier, contentPadding = GRADE_PADDING, content = content)
+                    val (fill, text) = gradeColors(grade, dark)
+                    Button(
+                        onClick = { answer(grade) },
+                        modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
+                        contentPadding = GRADE_PADDING
+                    ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
                 }
             }
         }
     }
 }
 
-/**
- * What's asked: the line [shown] as written, or in kana or Latin letters, nothing over it; a word big,
- * with the line it's sung in under it.
- */
+/** Only the text layers picked for this side, previewed while its settings are open. */
 @Composable
-private fun CardFront(line: SavedLine, shown: String) {
-    val sungIn = line.line
-    if (sungIn == null) {
-        Text(shown, style = MaterialTheme.typography.headlineMedium.writing(shown), fontWeight = FontWeight.Bold)
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(shown, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text(sungIn, style = MaterialTheme.typography.bodyLarge.writing(sungIn), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-/**
- * The answer, as [cards] has it: the words as written, when the front showed them otherwise, with how
- * they read over them; in Latin letters, spelled as picked; and what they mean.
- * A reading that isn't how it's sung can be put right, kanji by kanji.
- */
-@Composable
-private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, onReadAs: (List<String>) -> Unit) {
-    var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
+private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean) {
+    val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
+    val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
+    val shown = line.shownAs(side.wordsAs, side.romajiTyped)
+    val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold).writing(line.text)
-        val ruby = line.ruby ?: line.reading?.takeIf { line.line != null }?.let { listOf(Ruby(line.text, it)) }
-        // Asked otherwise, it's answered as written.
-        val written = line.shownAs(cards.front, romajiTyped) != line.text
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (cards.readings && ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
-                else if (written) Text(line.text, style = style)
-                else if (cards.readings) line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
-            }
-            if (cards.readings && line.readable.isNotEmpty() && !fixing) {
-                IconButton(onClick = { fixing = true }) { AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.practice_fix_reading)) }
-            }
+        if (side.words) {
+            if (side.wordsAs == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
+            else Text(shown, style = style)
+            line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        if (fixing) ReadingFields(line, onSave = { readings -> fixing = false; onReadAs(readings) }, onCancel = { fixing = false })
-        // Only as picked, as said or as typed; not again when the front showed it so.
-        if (cards.latin && cards.front != WordsAs.LATIN) {
-            line.latin(romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (side.latin && (!side.words || side.wordsAs != WordsAs.LATIN)) {
+            line.latin(side.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        if (cards.translation) line.translation?.let { Text(it, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
-    }
-}
-
-/**
- * What the cards show, in the same card as the lyrics menus: the front as written, only in kana, for
- * Japanese, or only in Latin letters; on the back, the readings, the Latin letters, spelled as typed
- * or as said, and the translation. It stays open, to pick more. Back closes it.
- */
-@Composable
-private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions, onClose: () -> Unit) {
-    var details by remember { mutableStateOf(false) }
-    BackHandler { if (details) details = false else onClose() }
-    val japanese = line.reading?.any(Readings::isKana) == true
-    val script = if (japanese || cards.front == WordsAs.KANA) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))
-    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        shadowElevation = 6.dp,
-        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
-    ) {
-        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            if (details) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { details = false }) {
-                        AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
-                    }
-                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
-                }
-                MenuSwitch(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
-                if (cards.front != WordsAs.LATIN) MenuSwitch(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
-                if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) MenuSwitch(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
-            } else {
-                Text(stringResource(R.string.lyrics_show_as), style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
-                WordsAsPicker(script, cards.front, { actions.onCardOptionsChange(cards.copy(front = it)) })
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { details = true }) {
-                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
-                }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                MenuSwitch(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
-            }
+        if (side.translation) line.translation?.let {
+            Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.translationScale, lineHeight = lineHeight * side.translationScale) }, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
 
 /** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */
 @Composable
-private fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCancel: () -> Unit) {
+internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCancel: () -> Unit) {
     val parts = line.readable
     val readings = rememberSaveable(line.text, line.title, line.artist, saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
         parts.map { it.reading.orEmpty() }.toMutableStateList()
@@ -335,9 +286,6 @@ private fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCan
         }
     }
 }
-
-/** Readings over a card's words, bigger than over lyrics, as they're the answer. */
-private const val CARD_READING_SCALE = 0.55f
 
 /**
  * How the line sounds: the music app's name while it gets there; then a button that fills as the
@@ -364,7 +312,7 @@ private fun AppLoading(app: String?) {
             }.getOrNull()
         }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(56.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(min = 56.dp)) {
         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         known?.let { (label, icon) ->
             Image(icon, contentDescription = null, modifier = Modifier.size(20.dp).clip(CircleShape))
@@ -409,10 +357,12 @@ private const val BARS = 4
 
 /** The song a card's from: its cover and title. */
 @Composable
-private fun SongChip(line: SavedLine, actions: ScreenActions) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun SongChip(line: SavedLine, actions: ScreenActions, kind: CardType? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         CoverArt(line.artworkUrl, actions.loadArtwork, size = 24.dp)
-        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(line.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // With more than one kind of card, which this is.
+        kind?.let { Text(it.title(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1) }
     }
 }
 
@@ -421,23 +371,36 @@ private val GRADES = listOf(Grade.AGAIN to R.string.practice_again, Grade.HARD t
 /** Little room around a grade's words, so four fit side by side. */
 private val GRADE_PADDING = PaddingValues(horizontal = 4.dp)
 
-/** A grade button's words: how well it was known, and when it's back if so. */
+/** A grade button's fill and words, the same red, orange, green and blue as AnkiDroid's, in light and dark. */
+private fun gradeColors(grade: Grade, dark: Boolean): Pair<Color, Color> = when (grade) {
+    Grade.AGAIN -> if (dark) Color(0xFF462828) to Color(0xFFEF9A9A) else Color(0xFFFFCDD2) to Color(0xFFB71C1C)
+    Grade.HARD -> if (dark) Color(0xFF4E3122) to Color(0xFFFFCC80) else Color(0xFFFFE0B2) to Color(0xFFB33800)
+    Grade.GOOD -> if (dark) Color(0xFF2C3B2C) to Color(0xFFC5E1A5) else Color(0xFFC8E6C9) to Color(0xFF1B5E20)
+    Grade.EASY -> if (dark) Color(0xFF223946) to Color(0xFF80D8FF) else Color(0xFFB3E5FC) to Color(0xFF01579B)
+}
+
+/** A grade button's words: when the line's back, small, over how well it was known, as in Anki. */
 @Composable
 private fun GradeLabel(label: Int, wait: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(wait, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
+        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** How long [ms] is, short, in minutes, hours or days, as [locale] writes them, e.g. "10m" or "3d". */
+/** How long [ms] is, short, in minutes, hours, days, months or years, as [locale] writes them, e.g. "10m", "3d" or "1 yr". */
 internal fun waitText(ms: Long, locale: Locale): String {
     val format = android.icu.text.MeasureFormat.getInstance(locale, android.icu.text.MeasureFormat.FormatWidth.NARROW)
-    val minutes = ms / 60_000
+    // Months and years aren't narrow, as that writes a month as "1m", which is a minute.
+    val long = android.icu.text.MeasureFormat.getInstance(locale, android.icu.text.MeasureFormat.FormatWidth.SHORT)
+    val minutes = (ms / 60_000.0).roundToLong()
+    val days = minutes / (24 * 60)
     return when {
         minutes < 60 -> format.format(Measure(minutes, MeasureUnit.MINUTE))
         minutes < 24 * 60 -> format.format(Measure(minutes / 60, MeasureUnit.HOUR))
-        else -> format.format(Measure(minutes / (24 * 60), MeasureUnit.DAY))
+        days < 30 -> format.format(Measure(days, MeasureUnit.DAY))
+        days < 365 -> long.format(Measure(days / 30, MeasureUnit.MONTH))
+        else -> long.format(Measure(days / 365, MeasureUnit.YEAR))
     }
 }
 

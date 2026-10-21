@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Kelimelerin üstünde okunuş</string>
     <string name="lyrics_reading_size">Okunuş boyutu</string>
     <string name="lyrics_words_size">Söz boyutu</string>
+    <string name="lyrics_translation_size">Çeviri boyutu</string>
     <string name="lyrics_show_as">Şöyle göster</string>
     <string name="lyrics_also_show">Ayrıca göster</string>
     <string name="report_problem">Sorun bildir</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Pratik yap</string>
     <string name="practice_show">Cevabı göster</string>
     <string name="practice_card_options">Kart seçenekleri</string>
+    <string name="card_type_read">Oku</string>
+    <string name="card_type_hear">Dinle</string>
+    <string name="card_type_translate">Çevir</string>
+    <string name="card_type_new">Yeni tür</string>
+    <string name="card_type_name">Ad</string>
+    <string name="card_type_delete">Türü sil</string>
+    <string name="card_type_reset">Varsayılana döndür</string>
+    <string name="practice_bigger">Daha büyük</string>
+    <string name="practice_smaller">Daha küçük</string>
     <string name="practice_again">Tekrar</string>
     <string name="practice_hard">Zor</string>
     <string name="practice_good">İyi</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Orijinal</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="practice_front">Ön</string>
+    <string name="practice_back">Arka</string>
+    <string name="floating_shared">Şarkı sözleriyle ortak</string>
+    <string name="floating_overlay_size">Kayan pencere boyutu</string>
 </resources>

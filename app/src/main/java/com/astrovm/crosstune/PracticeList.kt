@@ -50,7 +50,7 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
     BackHandler(onBack = onBack)
     val now = System.currentTimeMillis()
     val songs = state.savedLines.groupBy { it.title to it.artist }
-        .map { (song, lines) -> PracticeSong(MusicMetadata(song.first, song.second, artworkUrl = lines.firstNotNullOfOrNull { it.artworkUrl }), lines, lines.count { it.practisable && it.due <= now }) }
+        .map { (song, lines) -> PracticeSong(MusicMetadata(song.first, song.second, artworkUrl = lines.firstNotNullOfOrNull { it.artworkUrl }), lines, lines.cardsDueCount(now, state.cardTypes)) }
         .sortedWith(compareByDescending<PracticeSong> { it.due }.thenBy { it.song.title.lowercase() })
     // A song's lines let go, until the offer to keep them again is gone.
     var removed by remember { mutableStateOf<List<SavedLine>?>(null) }

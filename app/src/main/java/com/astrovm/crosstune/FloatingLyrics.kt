@@ -139,10 +139,17 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                     help?.translation
                 ).distinct()
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    before?.let { Line(it, lit = false, options.scale, ink, outline) }
-                    Line(first, lit = true, options.scale, ink, outline)
-                    helps.forEach { Line(it, lit = false, options.scale, ink, outline) }
-                    if (options.nextLine) second?.let { Line(it, lit = false, options.scale, ink, outline) }
+                    before?.let { Line(it, lit = false, options.scale * learning.wordsScale, ink, outline) }
+                    Line(first, lit = true, options.scale * if (current != null) learning.wordsScale else 1f, ink, outline)
+                    helps.forEach { text ->
+                        val layerScale = when (text) {
+                            reading?.reading -> (help?.readingScale ?: READING_SCALE) / READING_SCALE
+                            help?.translation -> help?.translationScale ?: 1f
+                            else -> learning.wordsScale
+                        }
+                        Line(text, lit = false, options.scale * layerScale, ink, outline)
+                    }
+                    if (options.nextLine) second?.let { Line(it, lit = false, options.scale * learning.wordsScale, ink, outline) }
                 }
             }
         }
@@ -177,7 +184,8 @@ internal class FloatingActions(
     /** A slider let go: keeps how they are now. */
     val onSave: () -> Unit,
     /** Where, in the window, a drag is a slider's own rather than one moving the words; null when nowhere. */
-    val onEditorAt: (android.graphics.Rect?) -> Unit = {}
+    val onEditorAt: (android.graphics.Rect?) -> Unit = {},
+    val learning: ScreenActions = ScreenActions()
 )
 
 /**
@@ -210,7 +218,7 @@ internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls
                 FloatingPanel.NONE -> Box(Modifier.fillMaxWidth())
                 FloatingPanel.BUTTONS -> FloatingButtons(state, actions, onSettings = { settings = true })
                 else -> FloatingSettings(
-                    state.floating, actions,
+                    state, actions,
                     onLock = {
                         onControls(false)
                         actions.onLock()
@@ -231,7 +239,12 @@ private enum class FloatingPanel { NONE, BUTTONS, SETTINGS }
 @Composable
 private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings: () -> Unit) {
     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 6.dp, modifier = Modifier.padding(top = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+        if (state.following == null) {
+            Text(stringResource(if (state.listeningAlong) R.string.listening_text else R.string.lyrics_listen_along),
+                style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             val app = state.following?.takeIf { it.app != null }
             if (app != null) {
                 val playing = app.clock.playing
@@ -254,6 +267,7 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
             IconButton(onClick = onSettings) { AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.floating_customize)) }
             IconButton(onClick = actions.onClose) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.floating_close)) }
         }
+        }
     }
 }
 
@@ -263,7 +277,10 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
+private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
+    val options = state.floating
+    var words by remember { mutableStateOf(false) }
+    var details by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -276,8 +293,21 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
     ) {
         Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
             .verticalScroll(rememberScrollState()).padding(16.dp)) {
+            if (words) {
+                if (!details) Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { if (details) details = false else words = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
+                    Text(stringResource(R.string.lyrics_learn), style = MaterialTheme.typography.titleSmall)
+                }
+                Text(stringResource(R.string.floating_shared), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                WordsOptions(state.learning, actions.learning, details, { details = it })
+            } else {
+            TextButton(onClick = { words = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                AppIcon(R.drawable.ic_translate, contentDescription = null)
+                Text(stringResource(R.string.lyrics_learn), modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                AppIcon(R.drawable.ic_chevron_right, contentDescription = null)
+            }
             Column {
-                SizeSlider(R.string.floating_text_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
+                SizeSlider(R.string.floating_overlay_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
                     if (save) actions.onSave() else actions.onChange(options.copy(scale = value), false)
                 })
                 SizeSlider(R.string.floating_background, options.background, 0f..FloatingOptions.MAX_BACKGROUND, onChange = { value, save ->
@@ -287,15 +317,10 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
             MenuSwitch(R.string.floating_previous_line, options.previousLine) { actions.onChange(options.copy(previousLine = it), true) }
             MenuSwitch(R.string.floating_next_line, options.nextLine) { actions.onChange(options.copy(nextLine = it), true) }
             MenuSwitch(R.string.floating_visuals, options.visuals) { actions.onChange(options.copy(visuals = it), true) }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .toggleable(value = false, role = Role.Switch, onValueChange = { onLock() })
-            ) {
-                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
-                Switch(checked = false, onCheckedChange = null)
+            TextButton(onClick = onLock, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                AppIcon(R.drawable.ic_lock, contentDescription = null)
+                Text(stringResource(R.string.floating_lock), modifier = Modifier.weight(1f).padding(start = 12.dp))
+            }
             }
             FlowRow(
                 horizontalArrangement = Arrangement.SpaceBetween,

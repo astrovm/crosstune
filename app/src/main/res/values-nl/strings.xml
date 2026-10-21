@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Uitspraak boven de woorden</string>
     <string name="lyrics_reading_size">Grootte van de uitspraak</string>
     <string name="lyrics_words_size">Tekstgrootte</string>
+    <string name="lyrics_translation_size">Vertaalgrootte</string>
     <string name="lyrics_show_as">Toon als</string>
     <string name="lyrics_also_show">Toon ook</string>
     <string name="report_problem">Probleem melden</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Oefenen</string>
     <string name="practice_show">Antwoord tonen</string>
     <string name="practice_card_options">Kaartopties</string>
+    <string name="card_type_read">Lezen</string>
+    <string name="card_type_hear">Luisteren</string>
+    <string name="card_type_translate">Vertalen</string>
+    <string name="card_type_new">Nieuw type</string>
+    <string name="card_type_name">Naam</string>
+    <string name="card_type_delete">Type verwijderen</string>
+    <string name="card_type_reset">Standaard herstellen</string>
+    <string name="practice_bigger">Groter</string>
+    <string name="practice_smaller">Kleiner</string>
     <string name="practice_again">Nog eens</string>
     <string name="practice_hard">Moeilijk</string>
     <string name="practice_good">Goed</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Origineel</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latijn</string>
+    <string name="practice_front">Voorkant</string>
+    <string name="practice_back">Achterkant</string>
+    <string name="floating_shared">Gedeeld met songtekst</string>
+    <string name="floating_overlay_size">Grootte zwevend venster</string>
 </resources>

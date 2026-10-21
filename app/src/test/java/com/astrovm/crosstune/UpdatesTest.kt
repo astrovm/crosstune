@@ -140,18 +140,23 @@ class UpdatesTest {
     @Test
     fun onlyTheReleasedAppLooksForUpdates() {
         // Tests run a debug build, which GitHub doesn't have.
-        assertEquals("com.astrovm.crosstune", app.packageName)
-        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
+        assertEquals("com.astrovm.crosstune.debug", app.packageName)
         assertFalse(isRelease(app))
-        app.applicationInfo.flags = app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE.inv()
-        assertTrue(isRelease(app))
-        // And only from a file.
-        shadowOf(app.packageManager).setInstallSourceInfo(app.packageName, null, null, null, "com.android.vending", null, PackageInstaller.PACKAGE_SOURCE_STORE)
-        assertFalse(looksForUpdates(app))
-        shadowOf(app.packageManager).setInstallSourceInfo(app.packageName, null, null, null, null, null, PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED)
-        assertTrue(looksForUpdates(app))
+        // Simulate the released package as well as its release flags.
+        val release = object : android.content.ContextWrapper(app) {
+            override fun getPackageName() = "com.astrovm.crosstune"
+        }
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
-        assertFalse(looksForUpdates(app))
+        assertFalse(isRelease(release))
+        app.applicationInfo.flags = app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE.inv()
+        assertTrue(isRelease(release))
+        // And only from a file.
+        shadowOf(app.packageManager).setInstallSourceInfo(release.packageName, null, null, null, "com.android.vending", null, PackageInstaller.PACKAGE_SOURCE_STORE)
+        assertFalse(looksForUpdates(release))
+        shadowOf(app.packageManager).setInstallSourceInfo(release.packageName, null, null, null, null, null, PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED)
+        assertTrue(looksForUpdates(release))
+        app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
+        assertFalse(looksForUpdates(release))
     }
 
     private companion object {

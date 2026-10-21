@@ -297,6 +297,7 @@
     <string name="lyrics_readings">Leitura sobre as palavras</string>
     <string name="lyrics_reading_size">Tamanho da leitura</string>
     <string name="lyrics_words_size">Tamanho da letra</string>
+    <string name="lyrics_translation_size">Tamanho da tradução</string>
     <string name="lyrics_show_as">Mostrar como</string>
     <string name="lyrics_also_show">Mostrar também</string>
     <string name="report_problem">Relatar um problema</string>
@@ -320,6 +321,15 @@
     <string name="saved_practice">Praticar</string>
     <string name="practice_show">Ver resposta</string>
     <string name="practice_card_options">Opções dos cartões</string>
+    <string name="card_type_read">Ler</string>
+    <string name="card_type_hear">Ouvir</string>
+    <string name="card_type_translate">Traduzir</string>
+    <string name="card_type_new">Novo tipo</string>
+    <string name="card_type_name">Nome</string>
+    <string name="card_type_delete">Excluir tipo</string>
+    <string name="card_type_reset">Restaurar padrão</string>
+    <string name="practice_bigger">Maior</string>
+    <string name="practice_smaller">Menor</string>
     <string name="practice_again">De novo</string>
     <string name="practice_hard">Difícil</string>
     <string name="practice_good">Bom</string>
@@ -384,4 +394,8 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latim</string>
+    <string name="practice_front">Frente</string>
+    <string name="practice_back">Verso</string>
+    <string name="floating_shared">Compartilhado com a letra</string>
+    <string name="floating_overlay_size">Tamanho da janela flutuante</string>
 </resources>
