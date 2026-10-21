@@ -23,6 +23,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -344,26 +345,48 @@ class FlashcardsTest {
         assertTrue(readingShown("とうきょう") && shown("tōkyō e") && shown("To Tokyo"))
         assertFalse(shown("toukyou he"))
         click(string(R.string.practice_card_options))
+        val menu = composeRule.onNodeWithTag("practice-card-options").getBoundsInRoot()
+        val cardBounds = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
+        assertTrue(menu.bottom <= cardBounds.top)
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
+        assertEquals("東京へ", practice().line?.text)
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        click(string(R.string.lyrics_reading_options))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.lyrics_show_as)))
+        click(string(R.string.lyrics_reading_options))
         click(string(R.string.lyrics_romaji_typed))
         assertTrue(shown("toukyou he"))
         assertFalse(shown("tōkyō e"))
         // Asked in kana, it's answered as written, with no translation or readings when they're off.
+        click(string(R.string.back_button))
         click(string(R.string.lyrics_only_kana))
         assertTrue(shown("とうきょうへ") && shown("東京へ"))
         click(string(R.string.lyrics_translation))
+        click(string(R.string.lyrics_reading_options))
         click(string(R.string.lyrics_readings))
         assertFalse(shown("To Tokyo") || readingShown("とうきょう") || described(string(R.string.practice_fix_reading)))
         // Asked in Latin letters, they're not said again on the back, nor switched off there.
+        click(string(R.string.back_button))
         click(string(R.string.lyrics_only_latin))
         composeRule.onAllNodes(hasText("toukyou he")).assertCountEquals(1)
         assertTrue(shown("東京へ"))
         assertFalse(shown(string(R.string.lyrics_romanized)))
         assertEquals(CardOptions(front = WordsAs.LATIN, readings = false, translation = false), CardOptions.load(prefs()))
         assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
+        click(string(R.string.lyrics_reading_options))
+        assertFalse(shown(string(R.string.lyrics_romanized)))
+        click(string(R.string.practice_card_options))
+        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
         // A line in no other script shows as written, with nothing to read in kana or spell otherwise.
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
         assertTrue(shown("Moon"))
+        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
         click(string(R.string.practice_card_options))
         assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_romaji_typed)))
         click(string(R.string.lyrics_as_written))

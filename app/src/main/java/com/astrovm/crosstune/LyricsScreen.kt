@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Slider
 import androidx.compose.ui.draw.drawWithContent
@@ -21,6 +20,7 @@ import kotlin.math.abs
 import kotlin.math.sign
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,16 +85,19 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
+import java.text.NumberFormat
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -232,6 +235,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // The bar makes way while the words are scrolled, and comes back once they rest.
     var scrolledAt by remember { mutableLongStateOf(0L) }
     var barShown by remember { mutableStateOf(true) }
+    var barMenu by remember(song) { mutableStateOf<BarMenu?>(null) }
+    var actionsHeight by remember { mutableStateOf(0.dp) }
     LaunchedEffect(scrolledAt) {
         if (scrolledAt == 0L) return@LaunchedEffect
         barShown = false
@@ -305,7 +310,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             AnimatedVisibility(visible = syncing) {
                 SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = BAR_SPACE)) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
                     if (shown == LyricsShown.LOADING) {
@@ -337,8 +342,23 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 }
             }
         }
+        // A touch on the words, or anywhere else outside the card, puts the menu away. A tap and a
+        // hold both do. The card and the bar are drawn over this, so they still take their own touches.
+        if (barMenu != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .testTag("lyrics-menu-scrim")
+                    .pointerInput(barMenu) {
+                        detectTapGestures(
+                            onTap = { barMenu = null },
+                            onLongPress = { barMenu = null },
+                        )
+                    }
+            )
+        }
         AnimatedVisibility(
-            visible = barShown,
+            visible = barShown || barMenu != null,
             enter = slideInVertically { it * 2 } + fadeIn(),
             exit = slideOutVertically { it * 2 } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
@@ -346,7 +366,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             LyricsActions(
                 state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
-                onChooseLines = { practise -> choosing = practise }
+                onChooseLines = { practise -> choosing = practise },
+                menu = barMenu, onMenuChange = { barMenu = it }, onHeightChange = { actionsHeight = it },
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
     }
@@ -544,10 +566,20 @@ private fun LyricsActions(
     onSync: () -> Unit,
     /** Opens the song's lines to choose from, to practise after when true. */
     onChooseLines: (Boolean) -> Unit,
+    menu: BarMenu?,
+    onMenuChange: (BarMenu?) -> Unit,
+    onHeightChange: (Dp) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var menu by remember { mutableStateOf<BarMenu?>(null) }
-    Box(modifier = modifier) {
+    val density = LocalDensity.current
+    // The readings page handles back first, while it's open, and returns to its card.
+    BackHandler(enabled = menu != null) { onMenuChange(null) }
+    Box(modifier = modifier.widthIn(max = 392.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.onSizeChanged { onHeightChange(with(density) { it.height.toDp() }) }) {
+        val close = { onMenuChange(null) }
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions)
+        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
+        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
             shape = CircleShape,
@@ -555,13 +587,13 @@ private fun LyricsActions(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
-                    BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, onClick = { menu = BarMenu.LEARN })
+                    BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
                 }
                 // The song's lines are learned, and lines kept are studied.
                 if (state.lyrics.isNotEmpty()) {
-                    BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, onClick = { menu = BarMenu.STUDY })
+                    BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
                 }
-                VisualsButton(state.visuals, onClick = { if (state.visuals) menu = BarMenu.VISUALS else actions.onVisualsChange(true) })
+                VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
                 if (state.lyricLines.isNotEmpty()) {
                     IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
@@ -573,12 +605,7 @@ private fun LyricsActions(
                 SyncSource(state, actions)
             }
         }
-        // The menus open from the bar rather than from their button, so they line up with it and
-        // keep off the screen's edge.
-        val close = { menu = null }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions, close)
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
-        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
+        }
     }
 }
 
@@ -641,29 +668,87 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * three; and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions, onClose: () -> Unit) {
-    DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
-        val script = learning.script
-        // A script that reads otherwise can show as written, or only in kana for Japanese, or in Latin letters.
-        if (script != null) {
-            MenuCaption(R.string.lyrics_show_as)
-            WordsAsPicker(script, learning, actions)
-            MenuCaption(R.string.lyrics_also_show)
-        }
-        // Readings sit over the words as written; Latin letters under them, unless they're what shows.
-        if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
-            LearnItem(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-            if (learning.readings) {
-                SizeSlider(R.string.lyrics_reading_size, learning.readingScale, READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions) {
+    if (!open) return
+    var details by remember { mutableStateOf(false) }
+    BackHandler(enabled = details) { details = false }
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag("lyrics-display-options")
+    ) {
+        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
+            if (details) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { details = false }) {
+                        AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+                    }
+                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
+                }
+                val script = learning.script
+                if ((script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
+                    ReadingSwitch(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
+                    if (learning.readings) {
+                        SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+                    }
+                }
+                if (learning.showsAs != WordsAs.LATIN) ReadingSwitch(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
+                if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
+                    ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
+                }
+            } else {
+                val script = learning.script
+                if (script != null) {
+                    MenuCaption(R.string.lyrics_show_as)
+                    WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
+                }
+                SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+                if (script != null && (learning.showsAs != WordsAs.LATIN || script == Script.JAPANESE)) {
+                    val readingLabel = stringResource(R.string.lyrics_reading_options)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { details = true }
+                            .semantics { contentDescription = readingLabel }
+                    ) {
+                        Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(learning.readingSummary(stringResource(R.string.lyrics_readings_off)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
             }
         }
-        if (script != null && learning.showsAs != WordsAs.LATIN) LearnItem(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
-        // Romaji shown, it can be spelled as typed rather than as said.
-        if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
-            LearnItem(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
-        }
-        LearnItem(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
+    }
+}
+
+/** What is switched on, kept short enough to fit beside the way into its settings. */
+internal fun Learning.readingSummary(off: String): String = buildList {
+    if (readings && showsAs == WordsAs.WRITTEN && (script == Script.JAPANESE || script == Script.CHINESE)) {
+        add(if (script == Script.JAPANESE) "あ" else "拼")
+        add(NumberFormat.getPercentInstance().format(sizeShare(readingScale, MIN_READING_SCALE..MAX_READING_SCALE)))
+    }
+    if (romanized || showsAs == WordsAs.LATIN) add("Aa")
+}.joinToString(" · ").ifEmpty { off }
+
+/** A slider's usable range, labeled from 1% to 100% without shrinking its actual minimum. */
+internal fun sizeShare(scale: Float, range: ClosedFloatingPointRange<Float>): Float {
+    if (range.endInclusive <= range.start) return 0.01f
+    val position = ((scale - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+    return 0.01f + position * 0.99f
+}
+
+/** A setting that takes effect as soon as its switch changes. */
+@Composable
+private fun ReadingSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
+    ) {
+        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Switch(checked = on, onCheckedChange = null)
     }
 }
 
@@ -674,20 +759,22 @@ private fun MenuCaption(@StringRes text: Int) {
         stringResource(text),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
+        modifier = Modifier.padding(vertical = 8.dp)
     )
 }
 
 /**
- * How big something is, slid within [range] from a small "A" to a big one: the words, from smaller
- * to much bigger than they start, or the readings, from as they start to nearly as big as the words.
+ * How big something is, slid within its readable [range], labeled from 1% to 100%.
  */
 @Composable
-private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
+internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size) {
     val size = stringResource(label)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp).width(260.dp)) {
-        Text("A", style = MaterialTheme.typography.bodySmall)
-        // Where it was let go is kept, even before the menu has caught up with it.
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
+            Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
         var latest by remember { mutableFloatStateOf(scale) }
         Slider(
             value = scale,
@@ -697,9 +784,8 @@ private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatin
             },
             onValueChangeFinished = { onChange(latest, true) },
             valueRange = range,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = size }
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = size }
         )
-        Text("A", style = MaterialTheme.typography.headlineSmall)
     }
 }
 
@@ -709,35 +795,30 @@ private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatin
  */
 @Composable
 private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onChooseLines: (Boolean) -> Unit, onClose: () -> Unit) {
-    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+    if (!open) return
+    MenuCard("lyrics-study-options") {
         val song = state.lyricsFor
         val here = if (song == null) emptyList() else state.savedLines.filter { it.isOf(song) }
         if (here.isNotEmpty()) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.choose_lines)) },
-                leadingIcon = { AppIcon(R.drawable.ic_playlist_add, contentDescription = null) },
-                trailingIcon = { Text(here.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                onClick = {
-                    onClose()
-                    onChooseLines(false)
-                }
-            )
+            MenuAction(R.drawable.ic_playlist_add, R.string.choose_lines, trailing = here.size.toString()) {
+                onClose()
+                onChooseLines(false)
+            }
         }
         // Only lines with their meaning, or that can be heard, can be practised; with none, they're chosen first.
         val practisable = here.filter { it.practisable }
         val due = practisable.count { it.due <= System.currentTimeMillis() }
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.practice_song)) },
-            leadingIcon = { AppIcon(R.drawable.ic_play, contentDescription = null) },
-            trailingIcon = { if (due > 0) Text(stringResource(R.string.practice_due, due), color = MaterialTheme.colorScheme.primary) },
-            onClick = {
-                onClose()
-                if (practisable.isEmpty()) onChooseLines(true) else actions.onPractiseSong()
-            }
-        )
+        MenuAction(
+            R.drawable.ic_play, R.string.practice_song,
+            trailing = if (due > 0) stringResource(R.string.practice_due, due) else null,
+            accent = true,
+        ) {
+            onClose()
+            if (practisable.isEmpty()) onChooseLines(true) else actions.onPractiseSong()
+        }
         // Chords are learned like lines are, so they're switched on here.
-        HorizontalDivider()
-        LearnItem(R.string.lyrics_chords, state.chords.on, actions.onChordsChange)
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        MenuSwitch(R.string.lyrics_chords, state.chords.on, actions.onChordsChange)
     }
 }
 
@@ -865,41 +946,37 @@ private fun ChoiceRow(text: String, on: Boolean, onChange: (Boolean) -> Unit, be
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WordsAsPicker(script: Script, learning: Learning, actions: ScreenActions) {
+internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsAs) -> Unit, fromRomaji: Boolean = false) {
     val choices = buildList {
-        add(Triple(WordsAs.WRITTEN, script.glyph, R.string.lyrics_as_written))
+        add(Triple(WordsAs.WRITTEN, script?.glyph ?: "文", R.string.lyrics_as_written))
         if (script == Script.JAPANESE) add(Triple(WordsAs.KANA, "あ", R.string.lyrics_only_kana))
         add(Triple(WordsAs.LATIN, "Aa", R.string.lyrics_only_latin))
     }
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).width(260.dp)) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = 8.dp)) {
         choices.forEachIndexed { index, (wordsAs, glyph, label) ->
             val name = stringResource(label)
             SegmentedButton(
-                selected = learning.showsAs == wordsAs,
-                onClick = { actions.onWordsAsChange(wordsAs) },
+                selected = selected == wordsAs,
+                onClick = { onChange(wordsAs) },
                 shape = SegmentedButtonDefaults.itemShape(index, choices.size),
                 icon = {},
-                modifier = Modifier.semantics { contentDescription = name }
+                modifier = Modifier.fillMaxHeight().semantics { contentDescription = name }
             ) {
-                Text(glyph)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(glyph)
+                    Text(stringResource(when (wordsAs) {
+                        WordsAs.WRITTEN -> R.string.lyrics_display_original
+                        WordsAs.KANA -> R.string.lyrics_display_kana
+                        WordsAs.LATIN -> R.string.lyrics_display_latin
+                    }), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 // Found in romaji, the words as written are ChatGPT's.
-                if (wordsAs == WordsAs.WRITTEN && learning.fromRomaji) {
+                if (wordsAs == WordsAs.WRITTEN && fromRomaji) {
                     AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.padding(start = 4.dp).size(14.dp))
                 }
             }
         }
     }
-}
-
-/** One of what can help, ticked while it's on; the menu stays open, to switch on more. */
-@Composable
-internal fun LearnItem(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
-    DropdownMenuItem(
-        text = { Text(stringResource(label)) },
-        trailingIcon = { Checkbox(checked = on, onCheckedChange = null) },
-        onClick = { onChange(!on) },
-        modifier = Modifier.semantics { toggleableState = ToggleableState(on) }
-    )
 }
 
 /** While the words are being translated, or why they couldn't be. */
@@ -1038,18 +1115,24 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
 
 /** A tool of the bar, its icon breathing while what it brings is on its way: a translation, or chords. */
 @Composable
-private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, onClick: () -> Unit) {
+private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes description: Int, selected: Boolean = false, onClick: () -> Unit) {
     val transition = rememberInfiniteTransition(label = "working")
     val breath by transition.animateFloat(1f, 0.35f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "breath")
-    IconButton(onClick = onClick) {
-        AppIcon(icon, contentDescription = stringResource(description), modifier = Modifier.graphicsLayer { alpha = if (working) breath else 1f })
+    IconButton(onClick = onClick, modifier = Modifier.semantics { this.selected = selected }) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape)) {
+            Icon(painterResource(icon), contentDescription = stringResource(description), tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp).graphicsLayer { alpha = if (working) breath else 1f })
+        }
     }
 }
 
 /** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it opens what can be done with them. */
 @Composable
-private fun VisualsButton(on: Boolean, onClick: () -> Unit) =
-    LitButton(on, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
+private fun VisualsButton(on: Boolean, selected: Boolean = on, onClick: () -> Unit) {
+    Box {
+        LitButton(selected, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
+        if (on && !selected) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+    }
+}
 
 /** A button in the bar, lit while what it does is on. */
 @Composable
@@ -1069,11 +1152,20 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
  */
 @Composable
 private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
-    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+    if (!open) return
+    MenuCard("lyrics-visuals-options") {
         // How dark the ground over them is, from none to nearly black.
         val darken = stringResource(R.string.visuals_shade)
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 16.dp).width(240.dp)) {
-            AppIcon(R.drawable.ic_shade, contentDescription = null)
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(R.drawable.ic_shade, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
+                Text(darken, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(
+                    NumberFormat.getPercentInstance().format(sizeShare(state.visualsShade, 0f..MAX_VISUALS_SHADE)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             // Where it was let go is kept, even before the menu has caught up with it.
             var latest by remember { mutableFloatStateOf(state.visualsShade) }
             Slider(
@@ -1084,44 +1176,74 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
                 },
                 onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
                 valueRange = 0f..MAX_VISUALS_SHADE,
-                modifier = Modifier.padding(start = 12.dp).semantics { contentDescription = darken }
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = darken }
             )
         }
-        // In line with the slider above.
-        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.width(260.dp), inset = 16.dp)
-        HorizontalDivider()
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.visuals_next)) },
-            leadingIcon = { AppIcon(R.drawable.ic_skip_next, contentDescription = null) },
-            onClick = {
-                onClose()
-                actions.onNextVisual()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.visuals_drop)) },
-            leadingIcon = { AppIcon(R.drawable.ic_visibility_off, contentDescription = null) },
-            onClick = {
-                onClose()
-                actions.onDropVisual()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.visuals_only)) },
-            leadingIcon = { AppIcon(R.drawable.ic_visuals, contentDescription = null) },
-            onClick = {
-                onClose()
-                onOnlyVisuals()
-            }
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.visuals_hide)) },
-            leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
-            onClick = {
-                onClose()
-                actions.onVisualsChange(false)
-            }
-        )
+        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp)
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        MenuAction(R.drawable.ic_skip_next, R.string.visuals_next) {
+            onClose()
+            actions.onNextVisual()
+        }
+        MenuAction(R.drawable.ic_visibility_off, R.string.visuals_drop) {
+            onClose()
+            actions.onDropVisual()
+        }
+        MenuAction(R.drawable.ic_visuals, R.string.visuals_only) {
+            onClose()
+            onOnlyVisuals()
+        }
+        MenuAction(R.drawable.ic_close, R.string.visuals_hide) {
+            onClose()
+            actions.onVisualsChange(false)
+        }
+    }
+}
+
+/** A card above the bar, the same shape as the readings one, tall enough to scroll on a short screen. */
+@Composable
+private fun MenuCard(tag: String, content: @Composable () -> Unit) {
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag(tag)
+    ) {
+        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+            content()
+        }
+    }
+}
+
+/** One thing a card can do, with what it leads to on the right when there is any. */
+@Composable
+private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: String? = null, accent: Boolean = false, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick)
+    ) {
+        AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
+        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (trailing != null) {
+            Text(
+                trailing,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** A setting in a card, switched as soon as it changes, and the card stays open. */
+@Composable
+internal fun MenuSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
+    ) {
+        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Switch(checked = on, onCheckedChange = null)
     }
 }
 
@@ -1640,9 +1762,14 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
 internal const val READING_SCALE = 0.45f
 internal const val MAX_READING_SCALE = 0.8f
 
-/** How small and how big the words can be made, beside how they start. */
+/** Keep the smallest readings at their usual readable size. */
+internal const val MIN_READING_SCALE = READING_SCALE
+
+/** The largest the words can be, beside how they start. The slider reads 100% here. */
+internal const val MAX_WORDS_SCALE = 3f
+
+/** The smallest words stay at three quarters of their starting size, labeled 1% on the slider. */
 internal const val MIN_WORDS_SCALE = 0.75f
-internal const val MAX_WORDS_SCALE = 1.6f
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f
@@ -1941,7 +2068,11 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             }
             // Wrong words, or out of time, said where they can be put right.
             var reporting by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { reporting = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            TextButton(
+                onClick = { reporting = true },
+                modifier = Modifier.align(Alignment.Start).heightIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
+            ) {
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(stringResource(R.string.report_problem), modifier = Modifier.padding(start = 8.dp))
             }

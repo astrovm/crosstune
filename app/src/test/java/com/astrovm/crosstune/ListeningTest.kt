@@ -62,6 +62,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import java.text.NumberFormat
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
@@ -1964,6 +1965,10 @@ class ListeningTest {
         floatingSettings()
         // In their place, the buttons, which come back with Done.
         assertFalse(described(string(R.string.floating_close)))
+        // Size is a share of its largest, and the band runs from none to full.
+        val percent = NumberFormat.getPercentInstance()
+        assertTrue(shown(percent.format(sizeShare(1f, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE))))
+        assertTrue(shown(percent.format(sizeShare(0f, 0f..FloatingOptions.MAX_BACKGROUND))))
 
         // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
         composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
@@ -1979,6 +1984,13 @@ class ListeningTest {
         touch(MotionEvent.ACTION_DOWN, slider.center.y)
         touch(MotionEvent.ACTION_MOVE, slider.center.y + 200f)
         touch(MotionEvent.ACTION_UP, slider.center.y + 200f)
+        assertEquals(top, (view.layoutParams as WindowManager.LayoutParams).y)
+        // A vertical gesture over settings belongs to their scroll area, not the floating window.
+        val setting = composeRule.onNode(hasText(string(R.string.floating_previous_line))).fetchSemanticsNode().boundsInWindow
+        fun overSettings(action: Int, y: Float) = MotionEvent.obtain(0, 0, action, setting.center.x, y, 0).also { view.dispatchTouchEvent(it) }.recycle()
+        overSettings(MotionEvent.ACTION_DOWN, setting.center.y)
+        overSettings(MotionEvent.ACTION_MOVE, setting.center.y - 100f)
+        overSettings(MotionEvent.ACTION_UP, setting.center.y - 100f)
         assertEquals(top, (view.layoutParams as WindowManager.LayoutParams).y)
 
         // The line before the one sung shows too, once there is one; the next one, no longer.
@@ -2158,9 +2170,23 @@ class ListeningTest {
         click(string(R.string.lyrics_button))
     }
 
-    private fun learnMenu() = click(string(R.string.lyrics_learn))
+    /** Opens the readings palette. Tapping its button again closes it, so a second call stays put. */
+    private fun learnMenu() {
+        if (composeRule.onAllNodesWithTag("lyrics-display-options").fetchSemanticsNodes().isEmpty()) {
+            click(string(R.string.lyrics_learn))
+        }
+    }
 
-    private fun studyMenu() = click(string(R.string.lyrics_study))
+    /** Opens the study card. Tapping its button again closes it, so a second call stays put. */
+    private fun studyMenu() {
+        if (composeRule.onAllNodesWithTag("lyrics-study-options").fetchSemanticsNodes().isEmpty()) {
+            click(string(R.string.lyrics_study))
+        }
+    }
+
+    private fun readingOptions() = click(string(R.string.lyrics_reading_options))
+
+    private fun displayOptions() = click(string(R.string.back_button))
 
     /** Opens what the song's about, from the song at the top, at [tab]. */
     private fun aboutSong(tab: Int? = null) {
@@ -2568,6 +2594,20 @@ class ListeningTest {
         // Signed out, the song's sheet holds only that, with none of what ChatGPT says.
         aboutSong()
         assertFalse(shown(string(R.string.song_tab_meaning)))
+        // The report action lines up with the song's name in the sheet, not under its middle.
+        val report = composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction()).getBoundsInRoot()
+        val title = composeRule.onAllNodesWithText("Demo")
+        var titleLeft = -1f
+        var titleGap = Float.MAX_VALUE
+        repeat(title.fetchSemanticsNodes().size) { index ->
+            val bounds = title[index].getBoundsInRoot()
+            val gap = (report.top - bounds.bottom).value
+            if (gap in -4f..48f && gap < titleGap) {
+                titleGap = gap
+                titleLeft = bounds.left.value
+            }
+        }
+        assertEquals(titleLeft, report.left.value, 2f)
         click(string(R.string.report_problem))
         click(string(R.string.report_by_email))
         val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
@@ -2588,7 +2628,107 @@ class ListeningTest {
         composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
         composeRule.waitForIdle()
         assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_WORDS_SCALE, MIN_WORDS_SCALE..MAX_WORDS_SCALE))))
         assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
+    }
+
+    @Test
+    fun lyricsDisplayKeepsReadingDetailsOneTapAwayAndWordsClearOfThePalette() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        assertTrue(described(string(R.string.lyrics_reading_options)))
+        val palette = composeRule.onNodeWithTag("lyrics-display-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= palette.top)
+        readingOptions()
+        assertTrue(shown(string(R.string.lyrics_readings)))
+        assertFalse(described(string(R.string.lyrics_words_size)))
+        // Back returns to display settings first, then closes them without leaving the song.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.lyrics_words_size)))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        assertTrue(shown("食べる"))
+        learnMenu()
+        readingOptions()
+        displayOptions()
+        // The icon also closes the palette, and reopening starts on the main page.
+        click(string(R.string.lyrics_learn))
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        learnMenu()
+        assertTrue(described(string(R.string.lyrics_words_size)))
+    }
+
+    @Test
+    fun tappingOutsideTheLyricsPaletteClosesItEvenFromTheReadingsPage() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        readingOptions()
+        assertTrue(shown(string(R.string.lyrics_readings)))
+        // The top of the scrim is the words, clear of the card.
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
+        assertTrue(shown("食べる"))
+        // Held on the words, it also goes, and the line does not open to study.
+        learnMenu()
+        composeRule.onNodeWithText("夜空に星が").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
+        composeRule.onNodeWithTag(STUDY_LINE_TAG).assertDoesNotExist()
+        assertTrue(shown("食べる"))
+    }
+
+    @Test
+    fun studyAndVisualsOpenAsCardsClearOfTheWordsAndATouchOutsideClosesThem() {
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitForText("Stars")
+        click(string(R.string.lyrics_study))
+        composeRule.onNodeWithTag("lyrics-study-options").assertExists()
+        assertTrue(shown(string(R.string.practice_song)))
+        val study = composeRule.onNodeWithTag("lyrics-study-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= study.top)
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-study-options").assertDoesNotExist()
+
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        composeRule.onNodeWithTag("lyrics-visuals-options").assertExists()
+        assertTrue(shown(string(R.string.visuals_shade)))
+        assertTrue(shown(string(R.string.visuals_next)))
+        val percent = NumberFormat.getPercentInstance()
+        assertTrue(shown(percent.format(sizeShare(DEFAULT_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
+        val shade = hasContentDescription(string(R.string.visuals_shade))
+        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        composeRule.waitForIdle()
+        assertTrue(shown(percent.format(sizeShare(0f, 0f..MAX_VISUALS_SHADE))))
+        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_VISUALS_SHADE) }
+        composeRule.waitForIdle()
+        assertTrue(shown(percent.format(sizeShare(MAX_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
+        val visuals = composeRule.onNodeWithTag("lyrics-visuals-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= visuals.top)
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-visuals-options").assertDoesNotExist()
+        assertTrue(shown("Night sky"))
     }
 
     @Test
@@ -2599,11 +2739,18 @@ class ListeningTest {
         waitForText("夜空に星が")
         assertEquals(MAX_READING_SCALE, controllerModel().uiState.learning.readingScale)
         learnMenu()
+        readingOptions()
         val size = hasContentDescription(string(R.string.lyrics_reading_size))
         composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
         composeRule.waitForIdle()
         assertEquals(0.6f, controllerModel().uiState.learning.readingScale, 0.01f)
         assertEquals(0.6f, prefs().getFloat("reading_scale", 0f), 0.01f)
+        // The small end reads 1% while keeping readings at a readable size.
+        composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_READING_SCALE) }
+        composeRule.waitForIdle()
+        assertEquals(MIN_READING_SCALE, controllerModel().uiState.learning.readingScale, 0.0001f)
+        assertEquals(MIN_READING_SCALE, prefs().getFloat("reading_scale", 0f), 0.0001f)
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_READING_SCALE, MIN_READING_SCALE..MAX_READING_SCALE))))
         // Without readings, there's no size to change.
         click(string(R.string.lyrics_readings))
         composeRule.waitForIdle()
@@ -2621,9 +2768,11 @@ class ListeningTest {
         assertFalse(shown("夜空に星が"))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertEquals("KANA", prefs().getString("lyrics_words_as", null))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
         // Only in romaji, it isn't said twice.
+        displayOptions()
         click(string(R.string.lyrics_only_latin))
         waitUntil(TIMEOUT_MS) { !shown("よぞらにほしが") }
         assertEquals(1, composeRule.onAllNodes(hasText("yozora ni hoshi ga")).fetchSemanticsNodes().size)
@@ -2790,8 +2939,10 @@ class ListeningTest {
         // Each line laid out as a whole, the kana after a kanji as written.
         assertTrue(shown("食べる") && readingShown("た"))
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        displayOptions()
         click(string(R.string.lyrics_translation))
         waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
         assertTrue(shown("[食べる]"))
@@ -2808,8 +2959,10 @@ class ListeningTest {
 
         // Switched off, each goes; kept off for the next song.
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_readings))
         click(string(R.string.lyrics_romanized))
+        displayOptions()
         click(string(R.string.lyrics_translation))
         composeRule.waitForIdle()
         assertFalse(readingShown("よぞら"))
@@ -2825,6 +2978,7 @@ class ListeningTest {
         learnMenu()
         // Only with romaji shown.
         assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("tookyoo o") }
         click(string(R.string.lyrics_romaji_typed))
@@ -2832,9 +2986,11 @@ class ListeningTest {
         assertFalse(shown("tookyoo o"))
         assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
         // Only in romaji, too.
+        displayOptions()
         click(string(R.string.lyrics_only_latin))
         waitUntil(TIMEOUT_MS) { !shown("東京を") }
         assertTrue(shown("toukyou wo"))
+        readingOptions()
         assertTrue(shown(string(R.string.lyrics_romaji_typed)))
     }
 
@@ -2843,6 +2999,7 @@ class ListeningTest {
         wordsOf("[00:00.00] 사랑해\\n[00:30.00] 좋아", "사랑해\\n좋아")
         waitForText("사랑해")
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
 
@@ -2872,6 +3029,8 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(described(string(R.string.lyrics_translation_failed)))
 
+        // The card covers the words, so it goes away before one can be held.
+        click(string(R.string.lyrics_learn))
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
         composeRule.waitForIdle()
         val line = composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
@@ -2980,11 +3139,14 @@ class ListeningTest {
         // Hangul reads as it's written, so there are only Latin letters, and no kana.
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(described(string(R.string.lyrics_only_kana)))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))
 
-        // With nothing to follow, a line tapped opens to study, its words looked up as the lines are translated.
+        // The card covers the line. Once it is out of the way, a tap opens the line to study,
+        // its words looked up as the lines are translated.
+        click(string(R.string.lyrics_learn))
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_repeat_line)))

@@ -379,4 +379,9 @@
     <string name="lyrics_only_kana">가나만</string>
     <string name="lyrics_only_latin">로마자만</string>
     <string name="lyrics_from_romaji">ChatGPT가 일본어로 표기</string>
+    <string name="lyrics_reading_options">읽기</string>
+    <string name="lyrics_readings_off">꺼짐</string>
+    <string name="lyrics_display_original">원문</string>
+    <string name="lyrics_display_kana">가나</string>
+    <string name="lyrics_display_latin">라틴 문자</string>
 </resources>

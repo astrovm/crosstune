@@ -1,8 +1,11 @@
 package com.astrovm.crosstune
 
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
@@ -14,7 +17,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,10 +30,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -177,7 +177,7 @@ internal class FloatingActions(
     /** A slider let go: keeps how they are now. */
     val onSave: () -> Unit,
     /** Where, in the window, a drag is a slider's own rather than one moving the words; null when nowhere. */
-    val onSlidersAt: (android.graphics.Rect?) -> Unit = {}
+    val onEditorAt: (android.graphics.Rect?) -> Unit = {}
 )
 
 /**
@@ -189,7 +189,7 @@ internal class FloatingActions(
 internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls: Boolean, onControls: (Boolean) -> Unit) {
     var settings by remember { mutableStateOf(false) }
     LaunchedEffect(controls) { if (!controls) settings = false }
-    LaunchedEffect(settings) { if (!settings) actions.onSlidersAt(null) }
+    LaunchedEffect(settings) { if (!settings) actions.onEditorAt(null) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         FloatingLyrics(
             state,
@@ -269,66 +269,43 @@ private fun FloatingSettings(options: FloatingOptions, actions: FloatingActions,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 6.dp,
         modifier = Modifier.padding(top = 8.dp).fillMaxWidth().testTag(FLOATING_CUSTOMIZE_TAG)
+            .onGloballyPositioned { area ->
+                val bounds = area.boundsInWindow()
+                actions.onEditorAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
+            }
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
-            Column(
-                modifier = Modifier.onGloballyPositioned { area ->
-                    val bounds = area.boundsInWindow()
-                    actions.onSlidersAt(android.graphics.Rect(bounds.left.toInt(), bounds.top.toInt(), bounds.right.toInt(), bounds.bottom.toInt()))
-                }
-            ) {
-                val textSize = stringResource(R.string.floating_text_size)
-                Text(textSize, style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    modifier = Modifier.semantics { contentDescription = textSize },
-                    value = options.scale,
-                    onValueChange = { actions.onChange(options.copy(scale = it), false) },
-                    onValueChangeFinished = actions.onSave,
-                    valueRange = FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE
-                )
-                val background = stringResource(R.string.floating_background)
-                Text(background, style = MaterialTheme.typography.labelLarge)
-                Slider(
-                    modifier = Modifier.semantics { contentDescription = background },
-                    value = options.background,
-                    onValueChange = { actions.onChange(options.copy(background = it), false) },
-                    onValueChangeFinished = actions.onSave,
-                    valueRange = 0f..FloatingOptions.MAX_BACKGROUND
-                )
+        Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
+            .verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Column {
+                SizeSlider(R.string.floating_text_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
+                    if (save) actions.onSave() else actions.onChange(options.copy(scale = value), false)
+                })
+                SizeSlider(R.string.floating_background, options.background, 0f..FloatingOptions.MAX_BACKGROUND, onChange = { value, save ->
+                    if (save) actions.onSave() else actions.onChange(options.copy(background = value), false)
+                }, icon = R.drawable.ic_shade)
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = options.previousLine,
-                    onClick = { actions.onChange(options.copy(previousLine = !options.previousLine), true) },
-                    label = { Text(stringResource(R.string.floating_previous_line)) }
-                )
-                FilterChip(
-                    selected = options.nextLine,
-                    onClick = { actions.onChange(options.copy(nextLine = !options.nextLine), true) },
-                    label = { Text(stringResource(R.string.floating_next_line)) }
-                )
-                FilterChip(
-                    selected = options.visuals,
-                    onClick = { actions.onChange(options.copy(visuals = !options.visuals), true) },
-                    label = { Text(stringResource(R.string.floating_visuals)) }
-                )
-            }
+            MenuSwitch(R.string.floating_previous_line, options.previousLine) { actions.onChange(options.copy(previousLine = it), true) }
+            MenuSwitch(R.string.floating_next_line, options.nextLine) { actions.onChange(options.copy(nextLine = it), true) }
+            MenuSwitch(R.string.floating_visuals, options.visuals) { actions.onChange(options.copy(visuals = it), true) }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .toggleable(value = false, role = Role.Switch, onValueChange = { onLock() })
-                    .padding(vertical = 8.dp)
             ) {
-                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.floating_lock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
                 Switch(checked = false, onCheckedChange = null)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 TextButton(onClick = actions.onOpen) {
                     AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(stringResource(R.string.floating_open), modifier = Modifier.padding(start = 8.dp))
                 }
-                Spacer(Modifier.weight(1f))
                 Button(onClick = onDone) { Text(stringResource(R.string.floating_done)) }
             }
         }
