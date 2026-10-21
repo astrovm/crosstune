@@ -109,6 +109,7 @@ internal class MainViewModel(
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
+    private var found: LyricsFinder.Lyrics.Found? = null
 
     /** The words found in romaji, written in Japanese by ChatGPT, line by line, once they are. */
     private var japanese: List<String>? = null
@@ -1290,12 +1291,13 @@ internal class MainViewModel(
         stopLearning()
         stopFollowing()
         foundLines = emptyList()
+        found = null
         japanese = null
         syncPoints = emptyList()
         lyricsJob = viewModelScope.launch {
             var first: LyricsFinder.FirstLook? = null
             uiState = uiState.copy(
-                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
+                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                 canFollowApps = playback?.hasAccess() == true
             )
             try {
@@ -1305,9 +1307,11 @@ internal class MainViewModel(
                 when (val answer = first.lyrics) {
                     is LyricsFinder.Lyrics.Found -> {
                         foundLines = answer.lines
+                        found = answer
                         syncPoints = syncStore.load(song, answer.lines)
                         uiState = uiState.copy(
-                            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false
+                            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+                            lyricsOffTake = timedForAnother(song)
                         )
                         uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
                         followSavedLines(song)
@@ -1339,7 +1343,8 @@ internal class MainViewModel(
         val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
         if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty()) return
         foundLines = better.lines
-        uiState = uiState.copy(lyricLines = better.lines)
+        this.found = better
+        uiState = uiState.copy(lyricLines = better.lines, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
 
@@ -1479,8 +1484,12 @@ internal class MainViewModel(
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
         appFollowing?.takeIf { it.video }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
-        uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown))
+        uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
     }
+
+    /** Whether [song]'s lines are timed for a recording not as long as the one playing (the app's own, for a video), so likely off, and not put right yet. */
+    private fun timedForAnother(song: MusicMetadata) =
+        foundLines.isNotEmpty() && syncPoints.isEmpty() && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false
 
     /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
     private fun leadOf(app: Following, song: MusicMetadata): Long? {
@@ -1728,6 +1737,13 @@ internal class MainViewModel(
         playback?.playPause(song, !app.clock.playing)
     }
 
+    /** All the words [deltaMs] later in the song (earlier, when it's negative), for a song heard a little off. */
+    fun nudgeSync(deltaMs: Long) {
+        val song = uiState.lyricsFor ?: return
+        val first = foundLines.firstOrNull() ?: return
+        setSync(song, if (syncPoints.isEmpty()) listOf(SyncPoint(first.timeMs, first.timeMs + deltaMs)) else syncPoints.map { it.copy(songMs = it.songMs + deltaMs) })
+    }
+
     /** The words back in time as they were found. */
     fun resetSync() {
         setSync(uiState.lyricsFor ?: return, emptyList())
@@ -1737,7 +1753,7 @@ internal class MainViewModel(
         syncPoints = points
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty())
+        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
     }
@@ -1784,7 +1800,7 @@ internal class MainViewModel(
         stopListeningAlong()
         askedForAccess = false
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
     }

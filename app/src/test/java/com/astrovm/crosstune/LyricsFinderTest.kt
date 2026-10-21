@@ -1042,4 +1042,72 @@ class LyricsFinderTest {
         val found = found(MusicMetadata("Twilight Bay City (Remix)", "S.Kiyotaka & Omega Tribe")) as Lyrics.Found
         assertEquals(listOf(LyricLine(16_530, "シルク・グレイの風をすりぬけ"), LyricLine(30_850, "光りはじめた　街は横文字")), found.lines)
     }
+
+    @Test
+    fun wordsKnowHowLongTheRecordingTheyAreTimedForLasts() {
+        val timed = Lyrics.Found("Words", lengthMs = 295_000)
+        // As long as the one playing, give or take.
+        assertTrue(timed.timedFor(297_900))
+        assertFalse(timed.timedFor(308_600))
+        // With either length unknown there's no telling they aren't.
+        assertTrue(timed.timedFor(null))
+        assertTrue(Lyrics.Found("Words").timedFor(308_600))
+    }
+
+    private val twoTakes = "[${lasting(answer("Song", "Band", "", synced = "[00:01.00] First take one\n[00:10.00] First take two"), 295.0)}]"
+
+    @Test
+    fun wordsKeptForAnotherTakeOfTheSongAreLookedUpAgain() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, twoTakes)
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val file = File.createTempFile("lyrics", ".json").apply { delete() }
+        fun finder() = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        fun look(lengthMs: Long?) = runBlocking { finder().firstLook(MusicMetadata("Song", "Band", lengthMs = lengthMs)).lyrics }
+        // LRCLIB says how long the recording lasts, and it's kept with the words.
+        val first = look(null) as Lyrics.Found
+        assertEquals(295_000L, first.lengthMs)
+        // They show again for a song as long, with no lookup.
+        val asked = fake.requestedUrls.size
+        assertEquals(first, look(296_000))
+        assertEquals(asked, fake.requestedUrls.size)
+        // For a longer one they're another take's, so it's asked about again.
+        look(308_600)
+        assertTrue(fake.requestedUrls.size > asked)
+    }
+
+    @Test
+    fun ofSeveralRecordingsOnNetEaseTheOneAsLongAsTheSongPlayingIsTaken() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, twoTakes)
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(
+                    request,
+                    """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":295000},{"id":2,"name":"Song","artists":[{"name":"Band"}],"duration":308500}]}}"""
+                )
+                url.encodedPath == "/api/song/lyric" -> {
+                    val take = if (url.queryParameter("id") == "2") "Long" else "Short"
+                    FakeSpotify.html(request, """{"lrc":{"lyric":${quote("[00:02.000]$take one\n[00:12.000]$take two")}}}""")
+                }
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        // LRCLIB's words are timed for a recording 13 seconds shorter than this one, so NetEase's own take of it is taken.
+        val long = found(MusicMetadata("Song", "Band", lengthMs = 308_600)) as Lyrics.Found
+        assertEquals(listOf(LyricLine(2_000, "Long one"), LyricLine(12_000, "Long two")), long.lines)
+        assertEquals(308_500L, long.lengthMs)
+        // As long as LRCLIB's, they stay.
+        val short = found(MusicMetadata("Song", "Band", lengthMs = 295_400)) as Lyrics.Found
+        assertEquals(listOf(LyricLine(1_000, "First take one"), LyricLine(10_000, "First take two")), short.lines)
+        // With no length to go by, there's no telling LRCLIB's aren't right.
+        assertEquals(295_000L, (found(MusicMetadata("Song", "Band")) as Lyrics.Found).lengthMs)
+        // Nothing as long anywhere: LRCLIB's stay, as the best there is.
+        val none = found(MusicMetadata("Song", "Band", lengthMs = 340_000)) as Lyrics.Found
+        assertEquals(295_000L, none.lengthMs)
+    }
 }

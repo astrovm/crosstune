@@ -166,6 +166,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -224,6 +225,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // Putting the words in time: a line tapped is the one being sung. Only while something says where the song is.
     var syncingAsked by rememberSaveable(song) { mutableStateOf(false) }
     val syncing = syncingAsked && state.lyricLines.isNotEmpty() && state.following != null
+    // Words timed for another take of the song are likely off, so putting them in time is offered once, as soon as there's a clock.
+    var offered by rememberSaveable(song) { mutableStateOf(false) }
+    LaunchedEffect(state.lyricsOffTake, state.following != null) {
+        if (state.lyricsOffTake && state.following != null && !offered) {
+            offered = true
+            syncingAsked = true
+        }
+    }
     BackHandler(enabled = syncing) { syncingAsked = false }
     val onlyVisuals = visualsOnly && state.visuals
     BackHandler(enabled = onlyVisuals) { visualsOnly = false }
@@ -1420,6 +1429,9 @@ internal fun Learning.helpFor(index: Int): LineHelp? {
 }
 
 
+/** How far the arrows on the strip move all the words. */
+private const val NUDGE_MS = 500L
+
 /**
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
  * Reset puts them back as they were found, once any line was moved.
@@ -1434,6 +1446,10 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
+                AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+            }
+            IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
             if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
             IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
         }

@@ -110,4 +110,35 @@ class LyricsSyncTest {
         store.save(song, lines, listOf(SyncPoint(10_000, 9_000)))
         assertEquals(listOf(SyncPoint(10_000, 9_000)), store.load(song, lines))
     }
+
+    /** A line the words have at [lineMs], heard [shiftMs] later. */
+    private fun heardLater(lineMs: Long, shiftMs: Long) = SyncPoint(lineMs, lineMs + shiftMs)
+
+    @Test
+    fun aLineHeardFarFromWhereTheOnesAroundItAgreeIsASlipOfTheFinger() {
+        val steady = listOf(heardLater(10_000, 10_400), heardLater(20_000, 10_500), heardLater(30_000, 10_300), heardLater(40_000, 10_450))
+        assertEquals(steady, LyricsSync.withoutSlips(steady))
+        // Two can't outvote one, and no lines is no slip.
+        assertEquals(steady.take(2), LyricsSync.withoutSlips(steady.take(2)))
+        assertEquals(emptyList<SyncPoint>(), LyricsSync.withoutSlips(emptyList()))
+        // In the middle, first and last: the others agree it's far off.
+        assertEquals(listOf(steady[0], steady[2], steady[3]), LyricsSync.withoutSlips(listOf(steady[0], heardLater(20_000, 4_900), steady[2], steady[3])))
+        assertEquals(steady.drop(1), LyricsSync.withoutSlips(listOf(heardLater(10_000, 3_000)) + steady.drop(1)))
+        assertEquals(steady.dropLast(1), LyricsSync.withoutSlips(steady.dropLast(1) + heardLater(40_000, 20_000)))
+        // A little off is only a little off, and the lines around one that disagree have no say.
+        val little = listOf(steady[0], heardLater(20_000, 12_000), steady[2], steady[3])
+        assertEquals(little, LyricsSync.withoutSlips(little))
+        val unsure = listOf(heardLater(10_000, 10_400), heardLater(20_000, 4_900), heardLater(30_000, 15_000), heardLater(40_000, 10_450))
+        assertEquals(unsure, LyricsSync.withoutSlips(unsure))
+    }
+
+    @Test
+    fun aSlipIsLeftOutWhenALineIsPutInTimeAndWhenTheLinesAreKept() {
+        val points = listOf(heardLater(10_000, 10_400), heardLater(30_000, 10_300), heardLater(40_000, 10_500))
+        assertEquals(points, LyricsSync.with(points, heardLater(20_000, 4_900)))
+        assertEquals(listOf(points[0], heardLater(20_000, 10_350), points[1], points[2]), LyricsSync.with(points, heardLater(20_000, 10_350)))
+        val store = LyricsSyncStore(prefs)
+        store.save(song, lines, listOf(heardLater(10_000, 10_400), heardLater(20_000, 4_900), heardLater(30_000, 10_300), heardLater(40_000, 10_500)))
+        assertEquals(points, store.load(song, lines))
+    }
 }

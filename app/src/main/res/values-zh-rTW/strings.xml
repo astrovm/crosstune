@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">正在唱</string>
     <string name="lyrics_sync_reset">重設</string>
     <string name="lyrics_sync_done">完成</string>
+    <string name="lyrics_sync_earlier">提前半秒</string>
+    <string name="lyrics_sync_later">延後半秒</string>
     <string name="lyrics_listen_along">一起聽</string>
     <string name="lyrics_stop_listening">停止收聽</string>
     <string name="visuals_show">顯示視覺效果</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">譯</string>
     <string name="card_type_new">新類型</string>
     <string name="card_type_name">名稱</string>
+    <string name="card_type_edit">編輯卡片</string>
     <string name="card_type_delete">刪除類型</string>
     <string name="card_type_reset">還原預設</string>
     <string name="practice_bigger">放大</string>

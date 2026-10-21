@@ -63,6 +63,8 @@ internal data class UiState(
     val lyricLines: List<LyricLine> = emptyList(),
     /** Whether the user put any of [lyricLines] in time by hand. */
     val lyricsSynced: Boolean = false,
+    /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
+    val lyricsOffTake: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
     val following: Following? = null,
     /** Whether the music app playing the song shown can go on to its next song, or back to the one before. */

@@ -1180,6 +1180,75 @@ class ListeningTest {
         assertEquals(listOf(35_000L), phone.seeks)
     }
 
+    private val demoLines = "[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"
+
+    /** Demo's words timed for a take [takeSeconds] long, found while the music app plays it [playingMs] long, 5 seconds in. */
+    private fun demoWordsTimedFor(takeSeconds: Int, playingMs: Long?): FakePlayback {
+        val synced = """[{"trackName":"Demo","artistName":"Band","duration":$takeSeconds,"syncedLyrics":"$demoLines"}]"""
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") synced else "{}") }
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 5_000, SystemClock.elapsedRealtime())
+            playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true, durationMs = playingMs)
+        }
+        MainActivity.playbackFactory = { phone }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        return phone
+    }
+
+    @Test
+    fun wordsAreNudgedHalfASecondAtATimeWhilePuttingThemInTime() {
+        demoWordsTimedFor(takeSeconds = 308, playingMs = 308_000)
+        val demo = MusicMetadata("Demo", "Band")
+        val found = SyncedLyrics.parse(demoLines)
+        fun kept() = LyricsSyncStore(prefs()).load(demo, found)
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        // With nothing tapped yet, the first nudge puts the first line in time, half a second on.
+        click(string(R.string.lyrics_sync_later))
+        assertEquals(listOf(SyncPoint(0, 500)), kept())
+        click(string(R.string.lyrics_sync_later))
+        click(string(R.string.lyrics_sync_earlier))
+        assertEquals(listOf(SyncPoint(0, 500)), kept())
+        // Once a line is tapped, a nudge moves from there.
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        click(string(R.string.lyrics_sync_earlier))
+        assertEquals(listOf(SyncPoint(10_000, 4_500)), kept())
+    }
+
+    @Test
+    fun wordsTimedForALongerTakeThanThePlayingOneOfferToPutThemInTime() {
+        demoWordsTimedFor(takeSeconds = 295, playingMs = 308_000)
+        // Off by 13 seconds, so the timing is offered without being asked for, once.
+        waitForText(string(R.string.lyrics_sync_hint))
+        click(string(R.string.lyrics_sync_done))
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_sync_hint)) }
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.lyrics_sync_hint)))
+    }
+
+    @Test
+    fun wordsTimedForTheTakePlayingOrOneNotKnownAreNotOffered() {
+        demoWordsTimedFor(takeSeconds = 308, playingMs = 309_000)
+        Thread.sleep(500)
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.lyrics_sync_hint)))
+    }
+
+    @Test
+    fun wordsWithNoLengthToCompareAreNotOffered() {
+        demoWordsTimedFor(takeSeconds = 295, playingMs = null)
+        Thread.sleep(500)
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.lyrics_sync_hint)))
+    }
+
     @Test
     fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
         // YouTube plays the song's video, which opens with 45 seconds before the song.

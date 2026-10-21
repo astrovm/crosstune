@@ -239,6 +239,8 @@ internal data class ScreenActions(
     val onSkipSong: (next: Boolean) -> Unit = {},
     /** The line of the timed words being sung right now, as the user taps it, to put the words in time. */
     val onSyncLine: (Int) -> Unit = {},
+    /** All the words moved by this many milliseconds in the song, later when it's positive. */
+    val onNudgeSync: (Long) -> Unit = {},
     /** The words back in time as they were found. */
     val onResetSync: () -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},

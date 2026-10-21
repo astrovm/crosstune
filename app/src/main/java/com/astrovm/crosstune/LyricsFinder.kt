@@ -87,8 +87,17 @@ internal class LyricsFinder(
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
-        /** The words themselves, and their [lines] with when each is sung, when the service has them timed. */
-        data class Found(val words: String, val lines: List<LyricLine> = emptyList()) : Lyrics
+        /**
+         * The words themselves, and their [lines] with when each is sung, when the service has them
+         * timed. [lengthMs] is how long the recording they're timed for lasts, when the service says.
+         */
+        data class Found(val words: String, val lines: List<LyricLine> = emptyList(), val lengthMs: Long? = null) : Lyrics {
+            /** Whether they're timed for a recording as long as [playingMs], or there's no telling they aren't. */
+            fun timedFor(playingMs: Long?): Boolean {
+                val timedFor = lengthMs ?: return true
+                return playingMs == null || abs(timedFor - playingMs) <= SAME_LENGTH_MS
+            }
+        }
 
         /** The service answered, and holds none for this song. */
         data object None : Lyrics
@@ -117,7 +126,9 @@ internal class LyricsFinder(
     suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) } }
+        cache?.get(cacheKey(metadata))?.let { kept ->
+            fromCache(kept)?.takeIf { (words, _) -> fits(words, metadata) }?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) }
+        }
         val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
         cache?.let { cache ->
@@ -154,7 +165,8 @@ internal class LyricsFinder(
                 val last = words.indexOfLast { it.text.isNotBlank() }
                 if (last >= 0) words[last] = words[last].copy(text = Readings.asJapanWrites(words[last].text))
                 line.copy(text = Readings.asJapanWrites(line.text), words = words)
-            }
+            },
+            found.lengthMs
         )
     }
 
@@ -253,6 +265,7 @@ internal class LyricsFinder(
         JSONObject()
             .put("words", found.words)
             .apply { if (provisional) put("provisional", true) }
+            .apply { found.lengthMs?.let { put("length", it) } }
             .put("lines", JSONArray().apply { found.lines.forEach { put(lineToCache(it)) } })
             .toString()
     }
@@ -276,7 +289,7 @@ internal class LyricsFinder(
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> lineFromCache(list.getJSONArray(index)) }
             }
-            Lyrics.Found(json.getString("words"), lines) to json.optBoolean("provisional")
+            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }) to json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }
@@ -311,11 +324,15 @@ internal class LyricsFinder(
         val romaji = first is Lyrics.Found && isRomaji(first.words)
         // Words timed badly are no better than untimed ones: both give way to words timed well.
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
-        if (first is Lyrics.Found && !romaji && !untimed) return first
+        // Words timed for a recording that isn't as long as the one playing are another take's, so
+        // they give way to words from somewhere else that are timed for one that is.
+        val otherTake = first is Lyrics.Found && !fits(first, metadata)
+        if (first is Lyrics.Found && !romaji && !untimed && !otherTake) return first
         val answers = mutableListOf(first)
-        // Romaji is only bettered by words in Japanese, and untimed words by timed ones.
+        // Romaji is only bettered by words in Japanese, untimed words by timed ones, and another take's by this one's.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
-            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) >= WELL_TIMED)
+            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) >= WELL_TIMED) &&
+                (!otherTake || (it.lengthMs != null && fits(it, metadata)))
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
@@ -408,8 +425,14 @@ internal class LyricsFinder(
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
         val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return null }
-        return Lyrics.Found(words, lines)
+        return Lyrics.Found(words, lines, song.lengthMs())
     }
+
+    /**
+     * Whether [found] is timed for a recording as long as the one playing, or either length isn't
+     * known, so there's no telling it isn't.
+     */
+    private fun fits(found: Lyrics.Found, metadata: MusicMetadata) = found.timedFor(metadata.lengthMs)
 
     /** A recording in the iTunes Store: its [id], and how long it lasts, when that's given. */
     private data class Recording(val id: Long, val lengthMs: Long?)
@@ -479,7 +502,7 @@ internal class LyricsFinder(
             val result = (fromNetEaseOnce(search.toString()) as? JSONObject)?.optJSONObject("result")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
-            val id = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.firstOrNull { song ->
+            val matching = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.filter { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
                 // An artist only written in another script there, say パイパー for Piper, counts when
                 // the recording lasts as long as the store's, or the music app's.
@@ -496,7 +519,13 @@ internal class LyricsFinder(
                     artists.any { name ->
                         listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
                     }
-            }?.optLong("id") ?: return@withTimeoutOrNull Lyrics.None
+            }
+            // Of the same song, the recording as long as the one playing is the one timed for it.
+            val wanted = lengthMs ?: metadata.lengthMs
+            val chosen = matching.firstOrNull { song -> wanted != null && abs(song.optLong("duration") - wanted) <= SAME_LENGTH_MS } ?: matching.firstOrNull()
+                ?: return@withTimeoutOrNull Lyrics.None
+            val id = chosen.optLong("id")
+            val recordingMs = chosen.optLong("duration").takeIf { it > 0 }
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
                 .addQueryParameter("lv", "1")
@@ -506,7 +535,7 @@ internal class LyricsFinder(
             val answer = fromNetEaseOnce(lyric.toString()) as? JSONObject
             val byWord = answer?.optJSONObject("yrc")?.optString("lyric").orEmpty()
             val lrc = answer?.optJSONObject("lrc")?.optString("lyric").orEmpty()
-            netEaseWordByWord(byWord) ?: netEaseWords(lrc) ?: Lyrics.None
+            (netEaseWordByWord(byWord) ?: netEaseWords(lrc))?.copy(lengthMs = recordingMs) ?: Lyrics.None
         } catch (_: IOException) {
             Lyrics.Unavailable
         } catch (_: JSONException) {
@@ -693,7 +722,7 @@ internal class LyricsFinder(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val TIMEOUT_MS = 5_000L
         const val TOTAL_TIMEOUT_MS = 30_000L
         const val LRCLIB_TIMEOUT_MS = 12_000L
@@ -724,7 +753,7 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters.
          */
-        const val CACHE_VERSION = 8
+        const val CACHE_VERSION = 9
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

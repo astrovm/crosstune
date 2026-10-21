@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">지금 부르는 중</string>
     <string name="lyrics_sync_reset">초기화</string>
     <string name="lyrics_sync_done">완료</string>
+    <string name="lyrics_sync_earlier">0.5초 빠르게</string>
+    <string name="lyrics_sync_later">0.5초 늦게</string>
     <string name="lyrics_listen_along">함께 듣기</string>
     <string name="lyrics_stop_listening">듣기 중지</string>
     <string name="visuals_show">비주얼 표시</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">번역하기</string>
     <string name="card_type_new">새 유형</string>
     <string name="card_type_name">이름</string>
+    <string name="card_type_edit">카드 편집</string>
     <string name="card_type_delete">유형 삭제</string>
     <string name="card_type_reset">기본값으로 되돌리기</string>
     <string name="practice_bigger">크게</string>

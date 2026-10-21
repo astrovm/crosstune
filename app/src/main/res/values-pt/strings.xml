@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">Tocando agora</string>
     <string name="lyrics_sync_reset">Redefinir</string>
     <string name="lyrics_sync_done">Concluído</string>
+    <string name="lyrics_sync_earlier">Meio segundo antes</string>
+    <string name="lyrics_sync_later">Meio segundo depois</string>
     <string name="lyrics_listen_along">Ouvir junto</string>
     <string name="lyrics_stop_listening">Parar de ouvir</string>
     <string name="visuals_show">Mostrar visuais</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">Traduzir</string>
     <string name="card_type_new">Novo tipo</string>
     <string name="card_type_name">Nome</string>
+    <string name="card_type_edit">Editar cartão</string>
     <string name="card_type_delete">Excluir tipo</string>
     <string name="card_type_reset">Restaurar padrão</string>
     <string name="practice_bigger">Maior</string>
