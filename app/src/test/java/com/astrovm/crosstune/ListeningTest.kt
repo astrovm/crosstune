@@ -2647,6 +2647,14 @@ class ListeningTest {
         composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
         composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
         assertTrue(shown("食べる"))
+        // Held on the words, it also goes, and the line does not open to study.
+        learnMenu()
+        composeRule.onNodeWithText("夜空に星が").performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
+        composeRule.onNodeWithTag(STUDY_LINE_TAG).assertDoesNotExist()
+        assertTrue(shown("食べる"))
     }
 
     @Test
@@ -2941,6 +2949,8 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(described(string(R.string.lyrics_translation_failed)))
 
+        // The card covers the words, so it goes away before one can be held.
+        click(string(R.string.lyrics_learn))
         composeRule.onNodeWithText("Night sky").performTouchInput { longClick() }
         composeRule.waitForIdle()
         val line = composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
@@ -3054,7 +3064,9 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))
 
-        // With nothing to follow, a line tapped opens to study, its words looked up as the lines are translated.
+        // The card covers the line. Once it is out of the way, a tap opens the line to study,
+        // its words looked up as the lines are translated.
+        click(string(R.string.lyrics_learn))
         composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.lyrics_repeat_line)))

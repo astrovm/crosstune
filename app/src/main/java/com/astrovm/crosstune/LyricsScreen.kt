@@ -347,14 +347,19 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 }
             }
         }
-        // A tap on the words, or anywhere else outside the card, puts the menu away. The card and
-        // the bar are drawn over this, so they still take their own taps.
+        // A touch on the words, or anywhere else outside the card, puts the menu away. A tap and a
+        // hold both do. The card and the bar are drawn over this, so they still take their own touches.
         if (barMenu != null) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .testTag("lyrics-menu-scrim")
-                    .pointerInput(barMenu) { detectTapGestures { barMenu = null } }
+                    .pointerInput(barMenu) {
+                        detectTapGestures(
+                            onTap = { barMenu = null },
+                            onLongPress = { barMenu = null },
+                        )
+                    }
             )
         }
         AnimatedVisibility(
