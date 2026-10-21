@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">拉丁字母</string>
     <string name="practice_front">正面</string>
     <string name="practice_back">背面</string>
+    <string name="floating_shared">与歌词共享设置</string>
+    <string name="floating_overlay_size">悬浮窗大小</string>
 </resources>

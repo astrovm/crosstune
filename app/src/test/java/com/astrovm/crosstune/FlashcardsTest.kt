@@ -24,6 +24,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -137,13 +138,15 @@ class FlashcardsTest {
 
     /** Taps what [label] says, on the front's row, or on the back's, which comes after it. */
     private fun tag(label: String, back: Boolean = false) {
-        composeRule.onAllNodes(hasContentDescription(label)).let { if (back) it.onLast() else it.onFirst() }.performClick()
+        click(string(if (back) R.string.practice_back else R.string.practice_front))
+        composeRule.onAllNodes(hasContentDescription(label)).onFirst().performClick()
         composeRule.waitForIdle()
     }
 
     /** Opens a kind of card in the list, to set its sides; the switch beside its name is another tap. */
     private fun openKind(name: String) {
-        composeRule.onNode(hasText(name)).performClick()
+        // The trailing chevron is part of the same target as the name.
+        composeRule.onNode(hasText(name)).performTouchInput { click(Offset(width - 4f, centerY)) }
         composeRule.waitForIdle()
     }
 
@@ -290,7 +293,6 @@ class FlashcardsTest {
         assertTrue(readingShown("よる"))
         assertFalse(described(string(R.string.practice_fix_reading)))
         click(string(R.string.practice_card_options))
-        openKind(string(R.string.card_type_read))
         click(string(R.string.practice_fix_reading))
         // Each kanji, with its reading to change.
         assertTrue(shown("夜") && shown("空"))
@@ -299,7 +301,7 @@ class FlashcardsTest {
         composeRule.onNode(hasText(string(R.string.save_button))).assertIsNotEnabled()
         composeRule.onNode(hasText("night") and hasSetTextAction()).performTextReplacement("よ")
         click(string(R.string.save_button))
-        inEditor()
+        assertTrue(shown(string(R.string.card_type_new)))
         click(string(R.string.practice_card_options))
         // On the card now, and kept, in kana and romaji too.
         waitUntil { readingShown("よ") }
@@ -310,19 +312,18 @@ class FlashcardsTest {
         assertTrue(kept.readByHand)
         // Cancel and Back return to the menu without changing the saved reading.
         click(string(R.string.practice_card_options))
-        openKind(string(R.string.card_type_read))
         click(string(R.string.practice_fix_reading))
         composeRule.onNode(hasText("そら") and hasSetTextAction()).performTextReplacement("から")
         click(string(R.string.cancel_button))
         assertEquals("よのそら", savedLine("夜の空").reading)
-        inEditor()
+        assertTrue(shown(string(R.string.card_type_new)))
         click(string(R.string.practice_fix_reading))
         click(string(R.string.back_button))
-        inEditor()
+        assertTrue(shown(string(R.string.card_type_new)))
         click(string(R.string.practice_fix_reading))
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
-        inEditor()
+        assertTrue(shown(string(R.string.card_type_new)))
         assertEquals("よのそら", savedLine("夜の空").reading)
         click(string(R.string.practice_card_options))
         // A line with no kanji has nothing to put right.
@@ -331,7 +332,6 @@ class FlashcardsTest {
         click(string(R.string.practice_show))
         assertFalse(described(string(R.string.practice_fix_reading)))
         click(string(R.string.practice_card_options))
-        openKind(string(R.string.card_type_read))
         assertFalse(shown(string(R.string.practice_fix_reading)))
     }
 
@@ -402,9 +402,10 @@ class FlashcardsTest {
         openKind(string(R.string.card_type_read))
         // The back first: the words as written, then in kana, then in Latin letters, where nothing else is spelled that way.
         tag(string(R.string.lyrics_display_original), back = true)
-        tag(string(R.string.lyrics_display_kana))
+        click(string(R.string.lyrics_display_latin))
         // The front in kana, with what it means and its Latin letters as a keyboard spells them.
         tag(string(R.string.lyrics_display_original))
+        click(string(R.string.lyrics_display_kana))
         assertTrue(onCard("とうきょうへ"))
         eye(string(R.string.lyrics_translation))
         assertTrue(onCard("To Tokyo"))
@@ -483,7 +484,7 @@ class FlashcardsTest {
         openKind(string(R.string.card_type_read))
         // Each side has four rows: words, readings, Latin letters and meaning.
         val rows = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)) }
-        assertEquals(8, rows().fetchSemanticsNodes().size)
+        assertEquals(4, rows().fetchSemanticsNodes().size)
         fun step(row: Int, label: Int) = composeRule.runOnIdle {
             rows()[row].fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == string(label) }.action()
         }.also { composeRule.waitForIdle() }
@@ -492,21 +493,22 @@ class FlashcardsTest {
         assertEquals(1.15f, read().front.wordsScale, 0.001f)
         step(1, R.string.practice_bigger)
         assertEquals(0.55f * 1.15f, read().front.readingScale, 0.001f)
-        step(5, R.string.practice_smaller)
+        click(string(R.string.practice_back))
+        step(1, R.string.practice_smaller)
         assertEquals(0.55f / 1.15f, read().back.readingScale, 0.001f)
         // Smaller than the least stays at the least.
-        step(5, R.string.practice_smaller)
-        step(5, R.string.practice_smaller)
+        step(1, R.string.practice_smaller)
+        step(1, R.string.practice_smaller)
         assertEquals(MIN_READING_SCALE, read().back.readingScale, 0f)
-        step(6, R.string.practice_bigger)
+        step(2, R.string.practice_bigger)
         assertEquals(1.15f, read().back.wordsScale, 0.001f)
         // The meaning has a size of its own, apart from the words.
-        step(7, R.string.practice_bigger)
+        step(3, R.string.practice_bigger)
         assertEquals(1.15f, read().back.translationScale, 0.001f)
         assertEquals(1.15f, read().back.wordsScale, 0.001f)
         assertEquals(1f, read().front.translationScale, 0f)
         // Two fingers pulling apart make the back's words bigger, and it's kept once they let go.
-        rows()[4].performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
+        rows()[0].performTouchInput { pinch(Offset(centerX - 40f, centerY), Offset(centerX - 90f, centerY), Offset(centerX + 40f, centerY), Offset(centerX + 90f, centerY)) }
         composeRule.waitForIdle()
         assertTrue(read().back.wordsScale > 1.5f)
         assertEquals(read().back.wordsScale, loadCardTypes(prefs()).first { it.id == READ_TYPE }.options.back.wordsScale, 0f)
@@ -578,6 +580,22 @@ class FlashcardsTest {
     }
 
     @Test
+    fun theEditorsSoundPreviewPlaysWithoutTurningTheCard() {
+        saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","start":5000,"end":9000,"app":"${app.packageName}"}""")
+        appHas("Other", atMs = 0)
+        launch()
+        practiseAll(1)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        val seeks = phone.seeks.size
+        click(string(R.string.lyrics_play))
+        waitUntil { phone.seeks.size > seeks }
+        assertFalse(practice().turned)
+        assertFalse(model().uiState.cardTypes.first().options.front.sound)
+    }
+
+    @Test
     fun aSidePlaysTheLineOnlyWhenItHasItsSound() {
         saved("""{"text":"One","translation":"Uno","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"${app.packageName}"}""")
         appHas("Other", atMs = 0)
@@ -634,6 +652,11 @@ class FlashcardsTest {
         openKind("Mine")
         click(string(R.string.card_type_delete))
         assertEquals(listOf(READ_TYPE, HEAR_TYPE, TRANSLATE_TYPE), model().uiState.cardTypes.map { it.id })
+        click(string(R.string.undo_button))
+        assertEquals("Mine", model().uiState.cardTypes.last().name)
+        openKind("Mine")
+        click(string(R.string.card_type_delete))
+        click(string(R.string.floating_close))
         listOf(R.string.card_type_translate, R.string.card_type_hear, R.string.card_type_read).forEach {
             openKind(string(it))
             assertFalse(described(string(R.string.card_type_delete)))
@@ -661,6 +684,8 @@ class FlashcardsTest {
         assertEquals(TRANSLATE_IT, model().uiState.cardTypes[2])
         assertFalse(described(string(R.string.card_type_reset)))
         composeRule.onNode(hasSetTextAction()).assertTextContains(string(R.string.card_type_translate))
+        click(string(R.string.undo_button))
+        assertEquals("Mine", model().uiState.cardTypes[2].name)
     }
 
     @Test

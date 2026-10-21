@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Латиница</string>
     <string name="practice_front">Лицевая сторона</string>
     <string name="practice_back">Обратная сторона</string>
+    <string name="floating_shared">Общие настройки с текстом песни</string>
+    <string name="floating_overlay_size">Размер плавающего окна</string>
 </resources>

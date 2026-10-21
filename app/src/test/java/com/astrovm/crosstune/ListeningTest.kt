@@ -1971,7 +1971,7 @@ class ListeningTest {
         assertTrue(shown(percent.format(sizeShare(0f, 0f..FloatingOptions.MAX_BACKGROUND))))
 
         // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
-        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
+        composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_overlay_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
         composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_background))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
         composeRule.waitForIdle()
         assertEquals(0.5f, controllerModel().uiState.floating.background, 0.01f)

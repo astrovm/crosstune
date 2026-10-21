@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Łacinka</string>
     <string name="practice_front">Przód</string>
     <string name="practice_back">Tył</string>
+    <string name="floating_shared">Wspólne z tekstem piosenki</string>
+    <string name="floating_overlay_size">Rozmiar pływającego okna</string>
 </resources>

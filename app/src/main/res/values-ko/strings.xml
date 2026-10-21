@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">라틴 문자</string>
     <string name="practice_front">앞면</string>
     <string name="practice_back">뒷면</string>
+    <string name="floating_shared">가사와 설정 공유</string>
+    <string name="floating_overlay_size">플로팅 창 크기</string>
 </resources>

@@ -397,4 +397,6 @@
     <string name="lyrics_display_latin">ラテン字</string>
     <string name="practice_front">表</string>
     <string name="practice_back">裏</string>
+    <string name="floating_shared">歌詞と設定を共有</string>
+    <string name="floating_overlay_size">フローティングウィンドウのサイズ</string>
 </resources>

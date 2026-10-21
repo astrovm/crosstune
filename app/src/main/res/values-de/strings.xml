@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Lateinisch</string>
     <string name="practice_front">Vorderseite</string>
     <string name="practice_back">Rückseite</string>
+    <string name="floating_shared">Mit dem Liedtext geteilt</string>
+    <string name="floating_overlay_size">Größe des schwebenden Fensters</string>
 </resources>

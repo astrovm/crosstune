@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Latijn</string>
     <string name="practice_front">Voorkant</string>
     <string name="practice_back">Achterkant</string>
+    <string name="floating_shared">Gedeeld met songtekst</string>
+    <string name="floating_overlay_size">Grootte zwevend venster</string>
 </resources>

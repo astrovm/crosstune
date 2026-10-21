@@ -397,4 +397,6 @@
     <string name="lyrics_display_latin">Latino</string>
     <string name="practice_front">Fronte</string>
     <string name="practice_back">Retro</string>
+    <string name="floating_shared">Condiviso con il testo</string>
+    <string name="floating_overlay_size">Dimensione finestra mobile</string>
 </resources>

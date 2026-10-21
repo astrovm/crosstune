@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Latin</string>
     <string name="practice_front">Ön</string>
     <string name="practice_back">Arka</string>
+    <string name="floating_shared">Şarkı sözleriyle ortak</string>
+    <string name="floating_overlay_size">Kayan pencere boyutu</string>
 </resources>

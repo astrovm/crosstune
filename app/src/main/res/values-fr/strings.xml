@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Latin</string>
     <string name="practice_front">Recto</string>
     <string name="practice_back">Verso</string>
+    <string name="floating_shared">Partagé avec les paroles</string>
+    <string name="floating_overlay_size">Taille de la fenêtre flottante</string>
 </resources>

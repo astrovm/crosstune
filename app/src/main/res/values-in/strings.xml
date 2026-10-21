@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">Latin</string>
     <string name="practice_front">Depan</string>
     <string name="practice_back">Belakang</string>
+    <string name="floating_shared">Dibagikan dengan lirik</string>
+    <string name="floating_overlay_size">Ukuran jendela mengambang</string>
 </resources>

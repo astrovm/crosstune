@@ -396,4 +396,6 @@
     <string name="lyrics_display_latin">लैटिन</string>
     <string name="practice_front">सामने</string>
     <string name="practice_back">पीछे</string>
+    <string name="floating_shared">गीत के बोल के साथ साझा</string>
+    <string name="floating_overlay_size">फ़्लोटिंग विंडो का आकार</string>
 </resources>

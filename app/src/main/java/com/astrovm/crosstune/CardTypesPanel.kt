@@ -76,14 +76,14 @@ internal fun CardType.title(): String = when {
  * line reads, and each side's layers, open over it, and going back closes them one at a time.
  */
 @Composable
-internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Boolean, actions: ScreenActions, onClose: () -> Unit, onPreview: (CardPreview?) -> Unit = {}) {
+internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Boolean, actions: ScreenActions, onClose: () -> Unit, onPreview: (CardPreview?) -> Unit = {}, canPlay: Boolean = line.timed) {
     var editing by remember { mutableStateOf<String?>(null) }
     var fixing by remember { mutableStateOf(false) }
     BackHandler { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
-    val change = { list: List<CardType>, save: Boolean -> actions.onCardTypesChange(list, save) }
     val type = types.firstOrNull { it.id == editing }
     var undo by remember { mutableStateOf<List<CardType>?>(null) }
     var undoMessage by remember { mutableStateOf(R.string.history_removed) }
+    val change = { list: List<CardType>, save: Boolean -> undo = null; actions.onCardTypesChange(list, save) }
     LaunchedEffect(type?.id) { if (type == null) onPreview(null) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.42f
     Surface(
@@ -146,15 +146,15 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                     Text(stringResource(R.string.card_type_new))
                 }
             } else {
-                CardTypeEditor(line, type, actions, onPreview, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
+                CardTypeEditor(line, type, actions, onPreview, canPlay, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
+                    change(types.filterNot { it.id == type.id }, true)
                     undo = types
                     undoMessage = R.string.history_removed
-                    change(types.filterNot { it.id == type.id }, true)
                     editing = null
                 }, preset = DEFAULT_CARD_TYPES.firstOrNull { it.id == type.id }, onReset = { preset ->
+                    change(types.map { if (it.id == type.id) preset else it }, true)
                     undo = types
                     undoMessage = R.string.card_type_reset
-                    change(types.map { if (it.id == type.id) preset else it }, true)
                 })
             }
         }
@@ -172,7 +172,7 @@ internal data class CardPreview(val type: CardType, val back: Boolean)
 
 /** One kind of card: its name, and what its front and its back show, a row for each layer. */
 @Composable
-private fun CardTypeEditor(line: SavedLine, type: CardType, actions: ScreenActions, onPreview: (CardPreview?) -> Unit, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, preset: CardType?, onReset: (CardType) -> Unit) {
+private fun CardTypeEditor(line: SavedLine, type: CardType, actions: ScreenActions, onPreview: (CardPreview?) -> Unit, canPlay: Boolean, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, preset: CardType?, onReset: (CardType) -> Unit) {
     val title = type.title()
     var back by remember(type.id) { mutableStateOf(false) }
     LaunchedEffect(type, back) { onPreview(CardPreview(type, back)) }
@@ -198,7 +198,7 @@ private fun CardTypeEditor(line: SavedLine, type: CardType, actions: ScreenActio
         }
     }
     SideRows(if (back) R.string.practice_back else R.string.practice_front, line, script, if (back) type.options.back else type.options.front,
-        onPlay = actions.onReplayLine, canPlay = line.timed) {
+        onPlay = actions.onReplayLine, canPlay = canPlay) {
         change(type.copy(options = if (back) type.options.copy(back = it) else type.options.copy(front = it)), true)
     }
 }
@@ -273,8 +273,8 @@ private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, onToggle
 private const val SIZE_STEP = 1.15f
 
 /**
- * A layer of a card's side: an eye to show or hide it, a preview of it on the card's line, as big as
- * it shows, and, if any, its [tag]. Pinched, the preview grows or shrinks within [range], and
+ * A layer of a card's side: an eye, a sample to recognize it, its size and any format control.
+ * Pinching it changes the card preview within [range], and
  * Bigger and Smaller do the same for those who can't pinch.
  */
 @Composable
@@ -285,6 +285,11 @@ private fun LayerRow(
     val name = stringResource(label)
     val bigger = stringResource(R.string.practice_bigger)
     val smaller = stringResource(R.string.practice_smaller)
+    val sizeName = stringResource(when (label) {
+        R.string.lyrics_readings -> R.string.lyrics_reading_size
+        R.string.lyrics_translation -> R.string.lyrics_translation_size
+        else -> R.string.lyrics_words_size
+    })
     var latest by remember(scale) { mutableFloatStateOf(scale) }
     val pinch = rememberTransformableState { zoom, _, _ ->
         latest = (latest * zoom).coerceIn(range)
@@ -312,7 +317,7 @@ private fun LayerRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f).alpha(if (on) 1f else 0.4f)
         )
-        TextButton(onClick = { sizing = !sizing }) {
+        TextButton(onClick = { sizing = !sizing }, modifier = Modifier.semantics { contentDescription = sizeName }) {
             if (label == R.string.visuals_show_words || label == R.string.lyrics_romanized) {
                 AppIcon(R.drawable.ic_link, contentDescription = stringResource(R.string.lyrics_words_size), modifier = Modifier.size(14.dp))
             }

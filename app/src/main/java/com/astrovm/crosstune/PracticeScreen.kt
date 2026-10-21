@@ -120,7 +120,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it })
+                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it }, canPlay = practice.sound != LineSound.NONE)
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
@@ -217,7 +217,7 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        if (preview == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             if (!practice.turned) {
                 Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
             } else {

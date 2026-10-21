@@ -294,11 +294,11 @@ private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: (
         Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
             .verticalScroll(rememberScrollState()).padding(16.dp)) {
             if (words) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!details) Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { if (details) details = false else words = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
                     Text(stringResource(R.string.lyrics_learn), style = MaterialTheme.typography.titleSmall)
-                    AppIcon(R.drawable.ic_link, contentDescription = stringResource(R.string.lyrics_learn), modifier = Modifier.padding(start = 8.dp).size(18.dp))
                 }
+                Text(stringResource(R.string.floating_shared), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 WordsOptions(state.learning, actions.learning, details, { details = it })
             } else {
             TextButton(onClick = { words = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -307,7 +307,7 @@ private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: (
                 AppIcon(R.drawable.ic_chevron_right, contentDescription = null)
             }
             Column {
-                SizeSlider(R.string.floating_text_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
+                SizeSlider(R.string.floating_overlay_size, options.scale, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE, onChange = { value, save ->
                     if (save) actions.onSave() else actions.onChange(options.copy(scale = value), false)
                 })
                 SizeSlider(R.string.floating_background, options.background, 0f..FloatingOptions.MAX_BACKGROUND, onChange = { value, save ->
