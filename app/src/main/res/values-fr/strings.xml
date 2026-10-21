@@ -379,4 +379,9 @@
     <string name="lyrics_only_kana">Kana seulement</string>
     <string name="lyrics_only_latin">Lettres latines seulement</string>
     <string name="lyrics_from_romaji">Écrit en japonais par ChatGPT</string>
+    <string name="lyrics_reading_options">Lectures</string>
+    <string name="lyrics_readings_off">Désactivé</string>
+    <string name="lyrics_display_original">Original</string>
+    <string name="lyrics_display_kana">Kana</string>
+    <string name="lyrics_display_latin">Latin</string>
 </resources>

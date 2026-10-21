@@ -2162,6 +2162,10 @@ class ListeningTest {
 
     private fun studyMenu() = click(string(R.string.lyrics_study))
 
+    private fun readingOptions() = click(string(R.string.lyrics_reading_options))
+
+    private fun displayOptions() = click(string(R.string.back_button))
+
     /** Opens what the song's about, from the song at the top, at [tab]. */
     private fun aboutSong(tab: Int? = null) {
         click(string(R.string.lyrics_about_song))
@@ -2592,6 +2596,37 @@ class ListeningTest {
     }
 
     @Test
+    fun lyricsDisplayKeepsReadingDetailsOneTapAwayAndWordsClearOfThePalette() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        assertTrue(described(string(R.string.lyrics_reading_options)))
+        val palette = composeRule.onNodeWithTag("lyrics-display-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= palette.top)
+        readingOptions()
+        assertTrue(shown(string(R.string.lyrics_readings)))
+        assertFalse(described(string(R.string.lyrics_words_size)))
+        // Back returns to display settings first, then closes them without leaving the song.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.lyrics_words_size)))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        assertTrue(shown("食べる"))
+        learnMenu()
+        readingOptions()
+        displayOptions()
+        // The icon also closes the palette, and reopening starts on the main page.
+        learnMenu()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        learnMenu()
+        assertTrue(described(string(R.string.lyrics_words_size)))
+    }
+
+    @Test
     fun readingsAreOnFromTheStartAndCanBeMadeBigger() {
         // Kept bigger than they go, from a build that let them, they're as big as they go now.
         prefs().edit().putFloat("reading_scale", 5f).commit()
@@ -2599,6 +2634,7 @@ class ListeningTest {
         waitForText("夜空に星が")
         assertEquals(MAX_READING_SCALE, controllerModel().uiState.learning.readingScale)
         learnMenu()
+        readingOptions()
         val size = hasContentDescription(string(R.string.lyrics_reading_size))
         composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(0.6f) }
         composeRule.waitForIdle()
@@ -2621,9 +2657,11 @@ class ListeningTest {
         assertFalse(shown("夜空に星が"))
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertEquals("KANA", prefs().getString("lyrics_words_as", null))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
         // Only in romaji, it isn't said twice.
+        displayOptions()
         click(string(R.string.lyrics_only_latin))
         waitUntil(TIMEOUT_MS) { !shown("よぞらにほしが") }
         assertEquals(1, composeRule.onAllNodes(hasText("yozora ni hoshi ga")).fetchSemanticsNodes().size)
@@ -2790,8 +2828,10 @@ class ListeningTest {
         // Each line laid out as a whole, the kana after a kanji as written.
         assertTrue(shown("食べる") && readingShown("た"))
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        displayOptions()
         click(string(R.string.lyrics_translation))
         waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
         assertTrue(shown("[食べる]"))
@@ -2808,8 +2848,10 @@ class ListeningTest {
 
         // Switched off, each goes; kept off for the next song.
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_readings))
         click(string(R.string.lyrics_romanized))
+        displayOptions()
         click(string(R.string.lyrics_translation))
         composeRule.waitForIdle()
         assertFalse(readingShown("よぞら"))
@@ -2825,6 +2867,7 @@ class ListeningTest {
         learnMenu()
         // Only with romaji shown.
         assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("tookyoo o") }
         click(string(R.string.lyrics_romaji_typed))
@@ -2832,9 +2875,11 @@ class ListeningTest {
         assertFalse(shown("tookyoo o"))
         assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
         // Only in romaji, too.
+        displayOptions()
         click(string(R.string.lyrics_only_latin))
         waitUntil(TIMEOUT_MS) { !shown("東京を") }
         assertTrue(shown("toukyou wo"))
+        readingOptions()
         assertTrue(shown(string(R.string.lyrics_romaji_typed)))
     }
 
@@ -2843,6 +2888,7 @@ class ListeningTest {
         wordsOf("[00:00.00] 사랑해\\n[00:30.00] 좋아", "사랑해\\n좋아")
         waitForText("사랑해")
         learnMenu()
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
 
@@ -2980,6 +3026,7 @@ class ListeningTest {
         // Hangul reads as it's written, so there are only Latin letters, and no kana.
         assertFalse(shown(string(R.string.lyrics_readings)))
         assertFalse(described(string(R.string.lyrics_only_kana)))
+        readingOptions()
         click(string(R.string.lyrics_romanized))
         waitUntil(TIMEOUT_MS) { shown("saranghae") }
         assertTrue(shown("hanguk"))

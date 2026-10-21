@@ -380,4 +380,9 @@
     <string name="lyrics_only_kana">Solo kana</string>
     <string name="lyrics_only_latin">Solo lettere latine</string>
     <string name="lyrics_from_romaji">Scritto in giapponese da ChatGPT</string>
+    <string name="lyrics_reading_options">Letture</string>
+    <string name="lyrics_readings_off">Disattivate</string>
+    <string name="lyrics_display_original">Originale</string>
+    <string name="lyrics_display_kana">Kana</string>
+    <string name="lyrics_display_latin">Latino</string>
 </resources>

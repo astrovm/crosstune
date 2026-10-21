@@ -380,4 +380,9 @@
     <string name="lyrics_only_kana">かなのみ</string>
     <string name="lyrics_only_latin">ローマ字のみ</string>
     <string name="lyrics_from_romaji">ChatGPTが日本語で表記</string>
+    <string name="lyrics_reading_options">読み方</string>
+    <string name="lyrics_readings_off">オフ</string>
+    <string name="lyrics_display_original">原文</string>
+    <string name="lyrics_display_kana">かな</string>
+    <string name="lyrics_display_latin">ラテン字</string>
 </resources>
