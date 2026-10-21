@@ -718,10 +718,16 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
 internal fun Learning.readingSummary(off: String): String = buildList {
     if (readings && showsAs == WordsAs.WRITTEN && (script == Script.JAPANESE || script == Script.CHINESE)) {
         add(if (script == Script.JAPANESE) "あ" else "拼")
-        add(NumberFormat.getPercentInstance().format(readingScale))
+        add(NumberFormat.getPercentInstance().format(sizeShare(readingScale, MAX_READING_SCALE)))
     }
     if (romanized || showsAs == WordsAs.LATIN) add("Aa")
 }.joinToString(" · ").ifEmpty { off }
+
+/** How far [scale] is toward [largest], so a size slider's end reads 100%. */
+internal fun sizeShare(scale: Float, largest: Float): Float {
+    if (largest <= 0f) return 0f
+    return (scale / largest).coerceIn(0f, 1f)
+}
 
 /** A setting that takes effect as soon as its switch changes. */
 @Composable
@@ -749,6 +755,7 @@ private fun MenuCaption(@StringRes text: Int) {
 /**
  * How big something is, slid within [range] from a small "A" to a big one: the words, from smaller
  * to much bigger than they start, or the readings, from as they start to nearly as big as the words.
+ * The number is how far it is toward the large end, which reads 100%.
  */
 @Composable
 private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit) {
@@ -757,7 +764,7 @@ private fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatin
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIcon(R.drawable.ic_format_size, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
             Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(NumberFormat.getPercentInstance().format(scale), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range.endInclusive)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
         var latest by remember { mutableFloatStateOf(scale) }
         Slider(
