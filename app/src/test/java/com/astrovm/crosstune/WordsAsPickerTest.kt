@@ -55,7 +55,7 @@ class WordsAsPickerTest {
             CompositionLocalProvider(LocalDensity provides Density(1f, fontScale = 2f)) {
                 CrosstuneTheme {
                     Box(Modifier.width(360.dp)) {
-                        LyricsScreen(UiState(lyricsFor = MusicMetadata("Demo", "Band"), lyrics = listOf("One"),
+                        LyricsScreen(UiState(lyricsFor = MusicMetadata("Demo", "Band"), lyrics = "One",
                             lyricLines = listOf(LyricLine(0, "One"))), ScreenActions())
                     }
                 }
@@ -65,7 +65,7 @@ class WordsAsPickerTest {
         val text = compose.onNodeWithText(app.getString(R.string.lyrics_follow_allow)).getBoundsInRoot()
         val action = compose.onNodeWithText(app.getString(R.string.follow_turn_on)).getBoundsInRoot()
         assertTrue("The action should follow the explanation: $text, $action", action.top >= text.bottom)
-        assertTrue("The explanation needs the full width: $text", text.width > 300f)
+        assertTrue("The explanation needs the full width: $text", text.right - text.left > 300.dp)
     }
 
 }
