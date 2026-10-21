@@ -2165,7 +2165,12 @@ class ListeningTest {
         }
     }
 
-    private fun studyMenu() = click(string(R.string.lyrics_study))
+    /** Opens the study card. Tapping its button again closes it, so a second call stays put. */
+    private fun studyMenu() {
+        if (composeRule.onAllNodesWithTag("lyrics-study-options").fetchSemanticsNodes().isEmpty()) {
+            click(string(R.string.lyrics_study))
+        }
+    }
 
     private fun readingOptions() = click(string(R.string.lyrics_reading_options))
 
@@ -2655,6 +2660,39 @@ class ListeningTest {
         composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
         composeRule.onNodeWithTag(STUDY_LINE_TAG).assertDoesNotExist()
         assertTrue(shown("食べる"))
+    }
+
+    @Test
+    fun studyAndVisualsOpenAsCardsClearOfTheWordsAndATouchOutsideClosesThem() {
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitForText("Stars")
+        click(string(R.string.lyrics_study))
+        composeRule.onNodeWithTag("lyrics-study-options").assertExists()
+        assertTrue(shown(string(R.string.practice_song)))
+        val study = composeRule.onNodeWithTag("lyrics-study-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= study.top)
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-study-options").assertDoesNotExist()
+
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        composeRule.onNodeWithTag("lyrics-visuals-options").assertExists()
+        assertTrue(shown(string(R.string.visuals_shade)))
+        assertTrue(shown(string(R.string.visuals_next)))
+        val visuals = composeRule.onNodeWithTag("lyrics-visuals-options").getBoundsInRoot()
+        assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= visuals.top)
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-visuals-options").assertDoesNotExist()
+        assertTrue(shown("Night sky"))
     }
 
     @Test
