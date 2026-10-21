@@ -968,7 +968,7 @@ internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsA
                         WordsAs.WRITTEN -> R.string.lyrics_display_original
                         WordsAs.KANA -> R.string.lyrics_display_kana
                         WordsAs.LATIN -> R.string.lyrics_display_latin
-                    }), style = MaterialTheme.typography.labelSmall)
+                    }), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 // Found in romaji, the words as written are ChatGPT's.
                 if (wordsAs == WordsAs.WRITTEN && fromRomaji) {
