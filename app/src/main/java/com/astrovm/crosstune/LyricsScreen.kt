@@ -21,6 +21,7 @@ import kotlin.math.abs
 import kotlin.math.sign
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
@@ -345,6 +346,16 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
                 }
             }
+        }
+        // A tap on the words, or anywhere else outside the card, puts the menu away. The card and
+        // the bar are drawn over this, so they still take their own taps.
+        if (barMenu != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .testTag("lyrics-menu-scrim")
+                    .pointerInput(barMenu) { detectTapGestures { barMenu = null } }
+            )
         }
         AnimatedVisibility(
             visible = barShown || barMenu == BarMenu.LEARN,

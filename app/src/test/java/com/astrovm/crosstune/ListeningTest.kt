@@ -2632,6 +2632,24 @@ class ListeningTest {
     }
 
     @Test
+    fun tappingOutsideTheLyricsPaletteClosesItEvenFromTheReadingsPage() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        learnMenu()
+        readingOptions()
+        assertTrue(shown(string(R.string.lyrics_readings)))
+        // The top of the scrim is the words, clear of the card.
+        composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
+            down(topCenter)
+            up()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("lyrics-display-options").assertDoesNotExist()
+        composeRule.onNodeWithTag("lyrics-menu-scrim").assertDoesNotExist()
+        assertTrue(shown("食べる"))
+    }
+
+    @Test
     fun readingsAreOnFromTheStartAndCanBeMadeBigger() {
         // Kept bigger than they go, from a build that let them, they're as big as they go now.
         prefs().edit().putFloat("reading_scale", 5f).commit()
