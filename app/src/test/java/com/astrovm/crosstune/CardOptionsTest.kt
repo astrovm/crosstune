@@ -1,0 +1,70 @@
+package com.astrovm.crosstune
+
+import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import kotlin.random.Random
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class CardOptionsTest {
+    private val prefs = ApplicationProvider.getApplicationContext<Application>()
+        .getSharedPreferences("card_options_test", Context.MODE_PRIVATE).also { it.edit().clear().commit() }
+
+    @Test
+    fun existingCardPreferencesKeepTheirMeaningOnTheTwoSides() {
+        assertEquals(CardOptions(), CardOptions.load(prefs))
+        prefs.edit().putString("card_front", "LATIN").putBoolean("card_readings", false)
+            .putBoolean("card_latin", false).putBoolean("card_translation", false)
+            .putBoolean("lyrics_romaji_typed", true).commit()
+        assertEquals(
+            CardOptions(CardSide(wordsAs = WordsAs.LATIN, romajiTyped = true), CardSide(romajiTyped = true)),
+            CardOptions.load(prefs)
+        )
+        prefs.edit().putString("card_front", "unknown").commit()
+        assertEquals(WordsAs.WRITTEN, CardOptions.load(prefs).front.wordsAs)
+        prefs.edit().putString("card_front_words_as", "KANA").putString("card_back_words_as", "unknown").commit()
+        assertEquals(WordsAs.KANA, CardOptions.load(prefs).front.wordsAs)
+        assertEquals(WordsAs.WRITTEN, CardOptions.load(prefs).back.wordsAs)
+    }
+
+    @Test
+    fun bothSidesRoundTripAllLayersAndSizesIndependently() {
+        val random = Random(42)
+        repeat(30) {
+            fun side() = CardSide(
+                words = random.nextBoolean(), wordsAs = WordsAs.entries[random.nextInt(WordsAs.entries.size)],
+                readings = random.nextBoolean(), latin = random.nextBoolean(), translation = random.nextBoolean(),
+                wordsScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
+                readingScale = MIN_READING_SCALE + random.nextFloat() * (MAX_READING_SCALE - MIN_READING_SCALE),
+                romajiTyped = random.nextBoolean()
+            )
+            val options = CardOptions(side(), side())
+            options.save(prefs)
+            assertEquals(options, CardOptions.load(prefs))
+            val front = options.front.copy(words = !options.front.words, romajiTyped = !options.front.romajiTyped)
+            options.copy(front = front).save(prefs)
+            assertEquals(options.back, CardOptions.load(prefs).back)
+            assertEquals(front, CardOptions.load(prefs).front)
+        }
+        assertFalse(prefs.contains("lyrics_words_as"))
+        assertFalse(prefs.contains("lyrics_romaji_typed"))
+    }
+
+    @Test
+    fun invalidSavedSizesStayWithinTheReadableSliderRanges() {
+        prefs.edit().putFloat("card_front_words_scale", -5f).putFloat("card_front_reading_scale", 50f)
+            .putFloat("card_back_words_scale", 50f).putFloat("card_back_reading_scale", -5f).commit()
+        val cards = CardOptions.load(prefs)
+        assertEquals(MIN_WORDS_SCALE, cards.front.wordsScale, 0f)
+        assertEquals(MAX_READING_SCALE, cards.front.readingScale, 0f)
+        assertEquals(MAX_WORDS_SCALE, cards.back.wordsScale, 0f)
+        assertEquals(MIN_READING_SCALE, cards.back.readingScale, 0f)
+        assertTrue(cards.front.words && cards.back.words)
+    }
+}

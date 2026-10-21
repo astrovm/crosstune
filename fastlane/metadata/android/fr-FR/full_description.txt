@@ -15,7 +15,7 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 <li>Un lien illisible ? Ouvrez-le dans l'application d'origine, copiez le texte de recherche ou partagez un lien de recherche.</li>
 <li>Trouvez un morceau en saisissant son nom au lieu d'un lien, et lisez les paroles de tout morceau que vous ouvrez.</li>
 <li>Paroles synchronisées : elles suivent votre app de musique ou écoutent avec vous, flottent au-dessus des autres apps et s'affichent avec des visuels MilkDrop derrière.</li>
-<li>Apprenez les mots avec kana, pinyin, romaji et toute autre écriture en lettres latines, et des traductions pour les langues que vous ne lisez pas encore.</li>
+<li>Apprenez les mots avec kana, pinyin, romaji et toute autre écriture en lettres latines, et des traductions pour les langues que vous ne lisez pas encore. Choisissez ce qui apparaît sur chaque face de vos cartes de révision.</li>
 <li>Connectez-vous avec votre abonnement ChatGPT payant pour traduire des chansons entières, expliquer des lignes, trouver les mots à apprendre et chercher des chansons en les décrivant.</li>
 <li>Couleurs Material You sur Android 12 et versions ultérieures.</li>
 </ul>

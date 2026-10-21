@@ -384,4 +384,6 @@
     <string name="lyrics_display_original">Oryginał</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Łacinka</string>
+    <string name="practice_front">Przód</string>
+    <string name="practice_back">Tył</string>
 </resources>

@@ -384,4 +384,6 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">假名</string>
     <string name="lyrics_display_latin">拉丁字母</string>
+    <string name="practice_front">正面</string>
+    <string name="practice_back">背面</string>
 </resources>

@@ -385,4 +385,6 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">かな</string>
     <string name="lyrics_display_latin">ラテン字</string>
+    <string name="practice_front">表</string>
+    <string name="practice_back">裏</string>
 </resources>

@@ -81,35 +81,67 @@ internal data class SavedLine(
     }
 }
 
-/**
- * What practice cards show: the front as written, in kana or in Latin letters, [front]; on the back,
- * the [readings] over the words, the words in [latin] letters, and their [translation].
- */
-internal data class CardOptions(
-    val front: WordsAs = WordsAs.WRITTEN,
-    val readings: Boolean = true,
-    val latin: Boolean = true,
-    val translation: Boolean = true
+/** The text layers and sizes picked independently for one side of a practice card. */
+internal data class CardSide(
+    val words: Boolean = true,
+    val wordsAs: WordsAs = WordsAs.WRITTEN,
+    val readings: Boolean = false,
+    val latin: Boolean = false,
+    val translation: Boolean = false,
+    val wordsScale: Float = 1f,
+    val readingScale: Float = 0.55f,
+    val romajiTyped: Boolean = false
 ) {
-    fun save(preferences: SharedPreferences) = preferences.edit {
-        putString(KEY_FRONT, front.name)
-        putBoolean(KEY_READINGS, readings)
-        putBoolean(KEY_LATIN, latin)
-        putBoolean(KEY_TRANSLATION, translation)
+    fun save(editor: SharedPreferences.Editor, prefix: String) {
+        editor.putBoolean("${prefix}_words", words)
+            .putString("${prefix}_words_as", wordsAs.name)
+            .putBoolean("${prefix}_readings", readings)
+            .putBoolean("${prefix}_latin", latin)
+            .putBoolean("${prefix}_translation", translation)
+            .putFloat("${prefix}_words_scale", wordsScale)
+            .putFloat("${prefix}_reading_scale", readingScale)
+            .putBoolean("${prefix}_romaji_typed", romajiTyped)
     }
 
     companion object {
-        fun load(preferences: SharedPreferences) = CardOptions(
-            front = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_FRONT, null) } ?: WordsAs.WRITTEN,
-            readings = preferences.getBoolean(KEY_READINGS, true),
-            latin = preferences.getBoolean(KEY_LATIN, true),
-            translation = preferences.getBoolean(KEY_TRANSLATION, true)
+        fun load(preferences: SharedPreferences, prefix: String, defaults: CardSide) = CardSide(
+            words = preferences.getBoolean("${prefix}_words", defaults.words),
+            wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("${prefix}_words_as", defaults.wordsAs.name) } ?: defaults.wordsAs,
+            readings = preferences.getBoolean("${prefix}_readings", defaults.readings),
+            latin = preferences.getBoolean("${prefix}_latin", defaults.latin),
+            translation = preferences.getBoolean("${prefix}_translation", defaults.translation),
+            wordsScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
+            readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
+            romajiTyped = preferences.getBoolean("${prefix}_romaji_typed", defaults.romajiTyped)
         )
+    }
+}
 
-        private const val KEY_FRONT = "card_front"
-        private const val KEY_READINGS = "card_readings"
-        private const val KEY_LATIN = "card_latin"
-        private const val KEY_TRANSLATION = "card_translation"
+/** Each side keeps its own text layers, without changing the lyrics display settings. */
+internal data class CardOptions(
+    val front: CardSide = CardSide(),
+    val back: CardSide = CardSide(readings = true, latin = true, translation = true)
+) {
+    fun save(preferences: SharedPreferences) = preferences.edit {
+        front.save(this, "card_front")
+        back.save(this, "card_back")
+    }
+
+    companion object {
+        fun load(preferences: SharedPreferences): CardOptions {
+            val typed = preferences.getBoolean("lyrics_romaji_typed", false)
+            val front = CardSide(
+                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("card_front", null) } ?: WordsAs.WRITTEN,
+                romajiTyped = typed
+            )
+            val back = CardSide(
+                readings = preferences.getBoolean("card_readings", true),
+                latin = preferences.getBoolean("card_latin", true),
+                translation = preferences.getBoolean("card_translation", true),
+                romajiTyped = typed
+            )
+            return CardOptions(CardSide.load(preferences, "card_front", front), CardSide.load(preferences, "card_back", back))
+        }
     }
 }
 

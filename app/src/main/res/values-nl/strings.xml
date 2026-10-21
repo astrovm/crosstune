@@ -384,4 +384,6 @@
     <string name="lyrics_display_original">Origineel</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latijn</string>
+    <string name="practice_front">Voorkant</string>
+    <string name="practice_back">Achterkant</string>
 </resources>

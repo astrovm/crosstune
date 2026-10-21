@@ -2361,8 +2361,8 @@ internal class MainViewModel(
     }
 
     /** What practice cards show, from now on. */
-    fun setCardOptions(cards: CardOptions) {
-        cards.save(preferences)
+    fun setCardOptions(cards: CardOptions, save: Boolean) {
+        if (save) cards.save(preferences)
         uiState = uiState.copy(cards = cards)
     }
 

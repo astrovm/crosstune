@@ -124,6 +124,12 @@ class FlashcardsTest {
         composeRule.waitForIdle()
     }
 
+    private fun chooseSide(back: Boolean) {
+        val label = string(if (back) R.string.practice_back else R.string.practice_front)
+        composeRule.onNode(hasText(label) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun card() = composeRule.onNodeWithTag(PRACTICE_CARD_TAG)
 
     /** The music app has [song] at [atMs], playing or not, as a video or not. */
@@ -352,67 +358,124 @@ class FlashcardsTest {
     @Test
     fun theCardsShowWhatsPickedForThemAndKeepItSo() {
         saved(
-            """{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,""" +
-                """"ruby":[["東京","とうきょう"],["へ",null]]}""",
+            """{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,"ruby":[["東京","とうきょう"],["へ",null]]}""",
             """{"text":"Moon","translation":"Luna","title":"Other","artist":"Band","box":1}"""
         )
         launch()
         practiseAll(2)
-        waitUntil { practice().line?.text == "東京へ" }
-        click(string(R.string.practice_show))
-        // The romaji only as said, not as typed too.
-        assertTrue(readingShown("とうきょう") && shown("tōkyō e") && shown("To Tokyo"))
-        assertFalse(shown("toukyou he"))
+        assertTrue(shown("東京へ"))
+        assertFalse(readingShown("とうきょう") || shown("To Tokyo") || shown("tōkyō e"))
         click(string(R.string.practice_card_options))
+        composeRule.onNode(hasText(string(R.string.practice_front)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNode()
         val menu = composeRule.onNodeWithTag("practice-card-options").getBoundsInRoot()
-        val cardBounds = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
-        assertTrue(menu.bottom <= cardBounds.top)
-        controller!!.get().onBackPressedDispatcher.onBackPressed()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
-        assertEquals("東京へ", practice().line?.text)
-        click(string(R.string.practice_card_options))
-        assertFalse(shown(string(R.string.lyrics_romaji_typed)))
+        assertTrue(menu.bottom <= card().getBoundsInRoot().top)
+        click(string(R.string.lyrics_only_kana))
+        assertTrue(shown("とうきょうへ"))
+        click(string(R.string.lyrics_translation))
+        assertTrue(shown("To Tokyo"))
         click(string(R.string.lyrics_reading_options))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        click(string(R.string.lyrics_romanized))
+        click(string(R.string.lyrics_romaji_typed))
+        assertTrue(shown("toukyou he"))
+        assertFalse(prefs().getBoolean("lyrics_romaji_typed", false))
+        click(string(R.string.back_button))
+        chooseSide(true)
+        assertTrue(readingShown("とうきょう") && shown("tōkyō e"))
+        assertFalse(shown("toukyou he"))
+        click(string(R.string.lyrics_only_latin))
+        composeRule.onAllNodes(hasText("tōkyō e")).assertCountEquals(1)
+        click(string(R.string.lyrics_reading_options))
+        assertFalse(shown(string(R.string.lyrics_romanized)))
+        click(string(R.string.lyrics_romaji_typed))
+        composeRule.onAllNodes(hasText("toukyou he")).assertCountEquals(1)
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.lyrics_show_as)))
-        click(string(R.string.lyrics_reading_options))
-        click(string(R.string.lyrics_romaji_typed))
-        assertTrue(shown("toukyou he"))
-        assertFalse(shown("tōkyō e"))
-        // Asked in kana, it's answered as written, with no translation or readings when they're off.
-        click(string(R.string.back_button))
-        click(string(R.string.lyrics_only_kana))
-        assertTrue(shown("とうきょうへ") && shown("東京へ"))
-        click(string(R.string.lyrics_translation))
-        click(string(R.string.lyrics_reading_options))
-        click(string(R.string.lyrics_readings))
-        assertFalse(shown("To Tokyo") || readingShown("とうきょう") || described(string(R.string.practice_fix_reading)))
-        // Asked in Latin letters, they're not said again on the back, nor switched off there.
-        click(string(R.string.back_button))
-        click(string(R.string.lyrics_only_latin))
-        composeRule.onAllNodes(hasText("toukyou he")).assertCountEquals(1)
-        assertTrue(shown("東京へ"))
-        assertFalse(shown(string(R.string.lyrics_romanized)))
-        assertEquals(CardOptions(front = WordsAs.LATIN, readings = false, translation = false), CardOptions.load(prefs()))
-        assertTrue(prefs().getBoolean("lyrics_romaji_typed", false))
-        click(string(R.string.lyrics_reading_options))
-        assertFalse(shown(string(R.string.lyrics_romanized)))
-        click(string(R.string.practice_card_options))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
-        // A line in no other script shows as written, with nothing to read in kana or spell otherwise.
+        // Closing the preview returns to the unturned front, with its own settings.
+        assertTrue(shown("とうきょうへ") && shown("toukyou he") && shown("To Tokyo"))
+        click(string(R.string.practice_show))
+        assertFalse(shown("とうきょうへ"))
+        assertTrue(shown("toukyou he"))
+        assertEquals(
+            CardOptions(
+                front = CardSide(wordsAs = WordsAs.KANA, latin = true, translation = true, romajiTyped = true),
+                back = CardSide(wordsAs = WordsAs.LATIN, readings = true, latin = true, translation = true, romajiTyped = true)
+            ), CardOptions.load(prefs())
+        )
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
-        assertTrue(shown("Moon"))
         composeRule.onNodeWithTag("practice-card-options").assertDoesNotExist()
         click(string(R.string.practice_card_options))
-        assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_romaji_typed)))
-        click(string(R.string.lyrics_as_written))
-        click(string(R.string.lyrics_translation))
+        assertFalse(shown(string(R.string.lyrics_only_kana)) || shown(string(R.string.lyrics_reading_options)))
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_show))
-        assertTrue(shown("Luna"))
-        assertEquals(CardOptions(readings = false), CardOptions.load(prefs()))
+        assertTrue(shown("Moon") && shown("Luna"))
+    }
+
+    @Test
+    fun eachSideCanShowOnlyTheTextLayersPickedForIt() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","translation":"Night sky","title":"Demo","artist":"Band","ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        chooseSide(true)
+        click(string(R.string.visuals_show_words))
+        assertFalse(shown("夜の空") || readingShown("よる"))
+        assertTrue(shown("yoru no sora") && shown("Night sky"))
+        click(string(R.string.lyrics_reading_options))
+        assertFalse(shown(string(R.string.lyrics_readings)))
+        click(string(R.string.lyrics_romanized))
+        assertFalse(shown("yoru no sora"))
+        click(string(R.string.back_button))
+        click(string(R.string.practice_card_options))
+        // The answer is translation only; the front still asks the Japanese words alone.
+        assertTrue(shown("夜の空"))
+        assertFalse(shown("Night sky"))
+        click(string(R.string.practice_show))
+        assertTrue(shown("Night sky"))
+        assertFalse(shown("夜の空") || shown("yoru no sora") || readingShown("よる"))
+        click(string(R.string.practice_card_options))
+        composeRule.onNode(hasText(string(R.string.practice_back)) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNode()
+        click(string(R.string.lyrics_translation))
+        assertFalse(shown("Night sky"))
+        chooseSide(false)
+        click(string(R.string.lyrics_reading_options))
+        click(string(R.string.lyrics_readings))
+        assertTrue(readingShown("よる"))
+        assertFalse(model().uiState.cards.back.words)
+        assertFalse(model().uiState.cards.back.translation)
+        assertTrue(model().uiState.cards.front.words && model().uiState.cards.front.readings)
+    }
+
+    @Test
+    fun eachSideKeepsItsOwnWordAndReadingSizes() {
+        saved("""{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","title":"Demo","artist":"Band","ruby":[["夜","よる"],["の",null],["空","そら"]]}""")
+        launch()
+        practiseAll(1)
+        click(string(R.string.practice_card_options))
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_WORDS_SCALE) }
+        click(string(R.string.lyrics_reading_options))
+        click(string(R.string.lyrics_readings))
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_reading_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_READING_SCALE) }
+        chooseSide(true)
+        click(string(R.string.lyrics_reading_options))
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_reading_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_READING_SCALE) }
+        click(string(R.string.lyrics_readings))
+        assertFalse(described(string(R.string.lyrics_reading_size)))
+        click(string(R.string.back_button))
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
+        val kept = CardOptions.load(prefs())
+        assertEquals(MAX_WORDS_SCALE, kept.front.wordsScale, 0f)
+        assertEquals(MAX_READING_SCALE, kept.front.readingScale, 0f)
+        assertEquals(MIN_WORDS_SCALE, kept.back.wordsScale, 0f)
+        assertEquals(MIN_READING_SCALE, kept.back.readingScale, 0f)
+        assertFalse(kept.back.readings)
+        assertEquals(1f, model().uiState.learning.wordsScale, 0f)
+        assertEquals(READING_SCALE, model().uiState.learning.readingScale, 0f)
     }
 
     @Test

@@ -405,4 +405,6 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="practice_front">Front</string>
+    <string name="practice_back">Back</string>
 </resources>
