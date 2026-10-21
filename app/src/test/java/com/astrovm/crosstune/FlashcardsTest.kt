@@ -243,7 +243,7 @@ class FlashcardsTest {
     }
 
     @Test
-    fun aReadingThatIsntHowItsSungIsPutRightByHandOnTheCardsBack() {
+    fun aReadingThatIsntHowItsSungIsPutRightFromTheCardMenu() {
         saved(
             """{"text":"夜の空","reading":"よるのそら","romanized":"yoru no sora","title":"Other","artist":"Band",""" +
                 """"ruby":[["夜","よる"],["の",null],["空","そら"]]}""",
@@ -251,10 +251,14 @@ class FlashcardsTest {
         )
         launch()
         practiseAll(2)
-        // Only once turned, with its reading shown.
-        assertFalse(described(string(R.string.practice_fix_reading)))
+        // Correction stays in the menu, only after the answer is shown.
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_show))
         assertTrue(readingShown("よる"))
+        assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_fix_reading))
         // Each kanji, with its reading to change.
         assertTrue(shown("夜") && shown("空"))
@@ -263,6 +267,8 @@ class FlashcardsTest {
         composeRule.onNode(hasText(string(R.string.save_button))).assertIsNotEnabled()
         composeRule.onNode(hasText("night") and hasSetTextAction()).performTextReplacement("よ")
         click(string(R.string.save_button))
+        assertTrue(shown(string(R.string.lyrics_show_as)))
+        click(string(R.string.practice_card_options))
         // On the card now, and kept, in kana and romaji too.
         waitUntil { readingShown("よ") }
         assertFalse(readingShown("よる"))
@@ -270,16 +276,29 @@ class FlashcardsTest {
         val kept = savedLine("夜の空")
         assertEquals("よのそら", kept.reading)
         assertTrue(kept.readByHand)
-        // Cancelled, nothing changes.
+        // Cancel and Back return to the menu without changing the saved reading.
+        click(string(R.string.practice_card_options))
         click(string(R.string.practice_fix_reading))
         composeRule.onNode(hasText("そら") and hasSetTextAction()).performTextReplacement("から")
         click(string(R.string.cancel_button))
         assertEquals("よのそら", savedLine("夜の空").reading)
+        assertTrue(shown(string(R.string.lyrics_show_as)))
+        click(string(R.string.practice_fix_reading))
+        click(string(R.string.back_button))
+        assertTrue(shown(string(R.string.lyrics_show_as)))
+        click(string(R.string.practice_fix_reading))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.lyrics_show_as)))
+        assertEquals("よのそら", savedLine("夜の空").reading)
+        click(string(R.string.practice_card_options))
         // A line with no kanji has nothing to put right.
         click(string(R.string.practice_good))
         waitUntil { practice().line?.text == "Moon" }
         click(string(R.string.practice_show))
         assertFalse(described(string(R.string.practice_fix_reading)))
+        click(string(R.string.practice_card_options))
+        assertFalse(shown(string(R.string.practice_fix_reading)))
     }
 
     @Test

@@ -113,7 +113,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardOptions(optionLine, state.cards, state.learning.romajiTyped, actions) { optionsOpen = false }
+                    CardOptions(optionLine, state.cards, state.learning.romajiTyped, practice.turned, actions) { optionsOpen = false }
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
@@ -194,7 +194,7 @@ private fun Card(line: SavedLine, practice: Practice, cards: CardOptions, romaji
                 if (practice.turned) {
                     HorizontalDivider()
                     LineSound(line, practice.sound, actions.onReplayLine)
-                    CardBack(line, cards, romajiTyped, actions.onReadCardAs)
+                    CardBack(line, cards, romajiTyped)
                 }
             }
         }
@@ -235,27 +235,17 @@ private fun CardFront(line: SavedLine, shown: String) {
 /**
  * The answer, as [cards] has it: the words as written, when the front showed them otherwise, with how
  * they read over them; in Latin letters, spelled as picked; and what they mean.
- * A reading that isn't how it's sung can be put right, kanji by kanji.
  */
 @Composable
-private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, onReadAs: (List<String>) -> Unit) {
-    var fixing by rememberSaveable(line.text, line.title, line.artist) { mutableStateOf(false) }
+private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold).writing(line.text)
         val ruby = line.ruby ?: line.reading?.takeIf { line.line != null }?.let { listOf(Ruby(line.text, it)) }
         // Asked otherwise, it's answered as written.
         val written = line.shownAs(cards.front, romajiTyped) != line.text
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (cards.readings && ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
-                else if (written) Text(line.text, style = style)
-                else if (cards.readings) line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
-            }
-            if (cards.readings && line.readable.isNotEmpty() && !fixing) {
-                IconButton(onClick = { fixing = true }) { AppIcon(R.drawable.ic_edit, contentDescription = stringResource(R.string.practice_fix_reading)) }
-            }
-        }
-        if (fixing) ReadingFields(line, onSave = { readings -> fixing = false; onReadAs(readings) }, onCancel = { fixing = false })
+        if (cards.readings && ruby != null) RubyLine(ruby, style, scale = CARD_READING_SCALE)
+        else if (written) Text(line.text, style = style)
+        else if (cards.readings) line.reading?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
         // Only as picked, as said or as typed; not again when the front showed it so.
         if (cards.latin && cards.front != WordsAs.LATIN) {
             line.latin(romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -270,9 +260,10 @@ private fun CardBack(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, 
  * or as said, and the translation. It stays open, to pick more. Back closes it.
  */
 @Composable
-private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, actions: ScreenActions, onClose: () -> Unit) {
+private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolean, turned: Boolean, actions: ScreenActions, onClose: () -> Unit) {
     var details by remember { mutableStateOf(false) }
-    BackHandler { if (details) details = false else onClose() }
+    var fixing by remember { mutableStateOf(false) }
+    BackHandler { if (fixing) fixing = false else if (details) details = false else onClose() }
     val japanese = line.reading?.any(Readings::isKana) == true
     val script = if (japanese || cards.front == WordsAs.KANA) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
@@ -283,13 +274,17 @@ private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolea
         modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
     ) {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            if (details) {
+            if (details || fixing) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { details = false }) {
+                    IconButton(onClick = { details = false; fixing = false }) {
                         AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
                     }
-                    Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(if (fixing) R.string.practice_fix_reading else R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
                 }
+            }
+            if (fixing) {
+                ReadingFields(line, onSave = { readings -> actions.onReadCardAs(readings); fixing = false }, onCancel = { fixing = false })
+            } else if (details) {
                 MenuSwitch(R.string.lyrics_readings, cards.readings) { actions.onCardOptionsChange(cards.copy(readings = it)) }
                 if (cards.front != WordsAs.LATIN) MenuSwitch(R.string.lyrics_romanized, cards.latin) { actions.onCardOptionsChange(cards.copy(latin = it)) }
                 if (japanese && (cards.latin || cards.front == WordsAs.LATIN)) MenuSwitch(R.string.lyrics_romaji_typed, romajiTyped, actions.onRomajiTypedChange)
@@ -304,6 +299,13 @@ private fun CardOptions(line: SavedLine, cards: CardOptions, romajiTyped: Boolea
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 MenuSwitch(R.string.lyrics_translation, cards.translation) { actions.onCardOptionsChange(cards.copy(translation = it)) }
+                if (turned && cards.readings && line.readable.isNotEmpty()) {
+                    TextButton(onClick = { fixing = true }, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+                        AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.practice_fix_reading))
+                    }
+                }
             }
         }
     }
