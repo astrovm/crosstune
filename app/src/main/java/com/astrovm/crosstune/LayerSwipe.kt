@@ -1,18 +1,26 @@
 package com.astrovm.crosstune
 
 import android.os.SystemClock
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
 /** A screen a swipe reaches: [go] gets there, and [back], for one that's opened as the finger starts, undoes it. */
@@ -102,14 +110,34 @@ internal class LayerSwipe {
 
 internal val LocalLayerSwipe = compositionLocalOf { LayerSwipe() }
 
-/** A swipe up or down moves a layer: the player, the words, and back. A tap or a slide sideways is left to what's under it. */
+/** How far below the status bar a swipe down has to start to move a layer, about as far as a screen's header goes. */
+private val TOP_ZONE = 96.dp
+
+/**
+ * A swipe up or down moves a layer: the player, the words, and back. A tap or a slide sideways is left to what's under it.
+ * With [downFromTop], a swipe down only counts when it starts at the top of the screen, so scrolling or dragging anything below isn't taken for one.
+ */
 @Composable
-internal fun Modifier.swipeLayers(): Modifier {
+internal fun Modifier.swipeLayers(downFromTop: Boolean = false): Modifier {
     val swipe = LocalLayerSwipe.current
-    return pointerInput(swipe) {
+    val density = LocalDensity.current
+    val zone = WindowInsets.statusBars.getTop(density) + with(density) { TOP_ZONE.toPx() }
+    // Where the finger came down is only known as it does, before the drag that follows.
+    val atTop = remember { BooleanArray(1) }
+    val watching = if (downFromTop) {
+        pointerInput(zone) {
+            awaitEachGesture { atTop[0] = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position.y <= zone }
+        }
+    } else {
+        this
+    }
+    return watching.pointerInput(swipe) {
         detectVerticalDragGestures(
             onDragEnd = { swipe.release() },
             onDragCancel = { swipe.release(0f) }
-        ) { change, amount -> swipe.drag(amount, change.uptimeMillis) }
+        ) { change, amount ->
+            if (downFromTop && amount > 0f && !swipe.swiping && !atTop[0]) return@detectVerticalDragGestures
+            swipe.drag(amount, change.uptimeMillis)
+        }
     }
 }

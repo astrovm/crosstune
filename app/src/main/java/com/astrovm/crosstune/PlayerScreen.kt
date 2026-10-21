@@ -70,8 +70,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
-                // Up for its words, down to put it away.
-                .swipeLayers()
+                // Up for its words, down from the top to put it away.
+                .swipeLayers(downFromTop = true)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

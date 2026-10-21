@@ -2366,10 +2366,14 @@ class ListeningTest {
     }
 
     @Test
-    fun pullingTheWordsDownFromTheirFirstLineClosesThem() {
+    fun theWordsAreClosedByASwipeDownFromTheTopNotByPullingThemDown() {
         wordsOf(null, "Night sky\\nStars")
         waitUntil(TIMEOUT_MS) { shown("Night sky\nStars") }
-        // From the top of the list, a swipe down has nowhere to scroll, and goes on to close them.
+        // Pulled down from the first line, they only scroll, which they can't: they stay.
+        composeRule.onNode(hasText("Night sky\nStars")).performTouchInput { swipeDown() }
+        composeRule.waitForIdle()
+        assertTrue(shown("Night sky\nStars"))
+        // From the top of the screen, it closes them.
         composeRule.onRoot().performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("Night sky\nStars") }
     }
