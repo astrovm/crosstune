@@ -728,15 +728,16 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
 internal fun Learning.readingSummary(off: String): String = buildList {
     if (readings && showsAs == WordsAs.WRITTEN && (script == Script.JAPANESE || script == Script.CHINESE)) {
         add(if (script == Script.JAPANESE) "あ" else "拼")
-        add(NumberFormat.getPercentInstance().format(sizeShare(readingScale, MAX_READING_SCALE)))
+        add(NumberFormat.getPercentInstance().format(sizeShare(readingScale, MIN_READING_SCALE..MAX_READING_SCALE)))
     }
     if (romanized || showsAs == WordsAs.LATIN) add("Aa")
 }.joinToString(" · ").ifEmpty { off }
 
-/** How far [scale] is toward [largest], so a size slider's end reads 100%. */
-internal fun sizeShare(scale: Float, largest: Float): Float {
-    if (largest <= 0f) return 0f
-    return (scale / largest).coerceIn(0f, 1f)
+/** A slider's usable range, labeled from 1% to 100% without shrinking its actual minimum. */
+internal fun sizeShare(scale: Float, range: ClosedFloatingPointRange<Float>): Float {
+    if (range.endInclusive <= range.start) return 0.01f
+    val position = ((scale - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+    return 0.01f + position * 0.99f
 }
 
 /** A setting that takes effect as soon as its switch changes. */
@@ -763,8 +764,7 @@ private fun MenuCaption(@StringRes text: Int) {
 }
 
 /**
- * How big something is, slid within [range]. The number is its share of the large end, which reads
- * 100%. Words stay big enough to read. Readings run from 1% of their largest size up to it.
+ * How big something is, slid within its readable [range], labeled from 1% to 100%.
  */
 @Composable
 internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float, Boolean) -> Unit, @DrawableRes icon: Int = R.drawable.ic_format_size) {
@@ -773,7 +773,7 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(18.dp))
             Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range.endInclusive)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
         var latest by remember { mutableFloatStateOf(scale) }
         Slider(
@@ -1161,7 +1161,7 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
                 AppIcon(R.drawable.ic_shade, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
                 Text(darken, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Text(
-                    NumberFormat.getPercentInstance().format(sizeShare(state.visualsShade, MAX_VISUALS_SHADE)),
+                    NumberFormat.getPercentInstance().format(sizeShare(state.visualsShade, 0f..MAX_VISUALS_SHADE)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1762,17 +1762,14 @@ internal fun readingPlaces(parts: List<Ruby>, words: TextLayoutResult): List<Rea
 internal const val READING_SCALE = 0.45f
 internal const val MAX_READING_SCALE = 0.8f
 
-/** The smallest readings: 1% of [MAX_READING_SCALE], so the slider runs from 1% to 100%. */
-internal const val MIN_READING_SCALE = MAX_READING_SCALE / 100f
+/** Keep the smallest readings at their usual readable size. */
+internal const val MIN_READING_SCALE = READING_SCALE
 
 /** The largest the words can be, beside how they start. The slider reads 100% here. */
 internal const val MAX_WORDS_SCALE = 3f
 
-/**
- * The smallest the words can be: half the size they start at. 1% of [MAX_WORDS_SCALE] is a speck,
- * too small to read, so the floor is higher and its number is that share of the largest.
- */
-internal const val MIN_WORDS_SCALE = 0.5f
+/** The smallest words stay at three quarters of their starting size, labeled 1% on the slider. */
+internal const val MIN_WORDS_SCALE = 0.75f
 
 /** The room between a row's readings and the words under them, beside the words' size. */
 private const val READING_GAP = 0.05f

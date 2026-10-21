@@ -1967,8 +1967,8 @@ class ListeningTest {
         assertFalse(described(string(R.string.floating_close)))
         // Size is a share of its largest, and the band runs from none to full.
         val percent = NumberFormat.getPercentInstance()
-        assertTrue(shown(percent.format(sizeShare(1f, FloatingOptions.MAX_SCALE))))
-        assertTrue(shown(percent.format(sizeShare(0f, FloatingOptions.MAX_BACKGROUND))))
+        assertTrue(shown(percent.format(sizeShare(1f, FloatingOptions.MIN_SCALE..FloatingOptions.MAX_SCALE))))
+        assertTrue(shown(percent.format(sizeShare(0f, 0f..FloatingOptions.MAX_BACKGROUND))))
 
         // Their size, and the band behind them, slid, are kept once let go; each slider named for TalkBack.
         composeRule.onNode(sliders and hasContentDescription(string(R.string.floating_text_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(1.4f) }
@@ -2628,7 +2628,7 @@ class ListeningTest {
         composeRule.onNode(hasContentDescription(string(R.string.lyrics_words_size))).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_WORDS_SCALE) }
         composeRule.waitForIdle()
         assertEquals(MIN_WORDS_SCALE, prefs().getFloat("words_scale", 0f), 0.01f)
-        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_WORDS_SCALE, MAX_WORDS_SCALE))))
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_WORDS_SCALE, MIN_WORDS_SCALE..MAX_WORDS_SCALE))))
         assertTrue(composeRule.onNodeWithText("Sky full of stars").getBoundsInRoot().let { it.bottom - it.top } < big)
     }
 
@@ -2712,14 +2712,14 @@ class ListeningTest {
         assertTrue(shown(string(R.string.visuals_shade)))
         assertTrue(shown(string(R.string.visuals_next)))
         val percent = NumberFormat.getPercentInstance()
-        assertTrue(shown(percent.format(sizeShare(DEFAULT_VISUALS_SHADE, MAX_VISUALS_SHADE))))
+        assertTrue(shown(percent.format(sizeShare(DEFAULT_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
         val shade = hasContentDescription(string(R.string.visuals_shade))
         composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.waitForIdle()
-        assertTrue(shown(percent.format(sizeShare(0f, MAX_VISUALS_SHADE))))
+        assertTrue(shown(percent.format(sizeShare(0f, 0f..MAX_VISUALS_SHADE))))
         composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_VISUALS_SHADE) }
         composeRule.waitForIdle()
-        assertTrue(shown(percent.format(sizeShare(MAX_VISUALS_SHADE, MAX_VISUALS_SHADE))))
+        assertTrue(shown(percent.format(sizeShare(MAX_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
         val visuals = composeRule.onNodeWithTag("lyrics-visuals-options").getBoundsInRoot()
         assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= visuals.top)
         composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {
@@ -2745,12 +2745,12 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(0.6f, controllerModel().uiState.learning.readingScale, 0.01f)
         assertEquals(0.6f, prefs().getFloat("reading_scale", 0f), 0.01f)
-        // The small end is 1% of the largest reading, not the size they start at.
+        // The small end reads 1% while keeping readings at a readable size.
         composeRule.onNode(size).performSemanticsAction(SemanticsActions.SetProgress) { it(MIN_READING_SCALE) }
         composeRule.waitForIdle()
         assertEquals(MIN_READING_SCALE, controllerModel().uiState.learning.readingScale, 0.0001f)
         assertEquals(MIN_READING_SCALE, prefs().getFloat("reading_scale", 0f), 0.0001f)
-        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_READING_SCALE, MAX_READING_SCALE))))
+        assertTrue(shown(NumberFormat.getPercentInstance().format(sizeShare(MIN_READING_SCALE, MIN_READING_SCALE..MAX_READING_SCALE))))
         // Without readings, there's no size to change.
         click(string(R.string.lyrics_readings))
         composeRule.waitForIdle()
