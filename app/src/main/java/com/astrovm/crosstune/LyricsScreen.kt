@@ -952,7 +952,7 @@ internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsA
         if (script == Script.JAPANESE) add(Triple(WordsAs.KANA, "あ", R.string.lyrics_only_kana))
         add(Triple(WordsAs.LATIN, "Aa", R.string.lyrics_only_latin))
     }
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = 8.dp)) {
         choices.forEachIndexed { index, (wordsAs, glyph, label) ->
             val name = stringResource(label)
             SegmentedButton(
@@ -960,7 +960,7 @@ internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsA
                 onClick = { onChange(wordsAs) },
                 shape = SegmentedButtonDefaults.itemShape(index, choices.size),
                 icon = {},
-                modifier = Modifier.semantics { contentDescription = name }
+                modifier = Modifier.fillMaxHeight().semantics { contentDescription = name }
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(glyph)
