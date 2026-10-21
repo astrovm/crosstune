@@ -259,7 +259,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             override suspend fun onPreFling(available: Velocity): Velocity = Velocity(0f, layers.flung(available.y))
         }
     }
-    WithVisuals(state, onlyVisuals, onShowWords = { visualsOnly = false }) { ground ->
+    WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
@@ -391,7 +391,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
  * are either way, so the words coming and going don't start them over.
  */
 @Composable
-private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
+private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -404,7 +404,9 @@ private fun WithVisuals(state: UiState, only: Boolean, onShowWords: () -> Unit, 
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {
-                content(Color.Black.copy(alpha = state.visualsShade))
+                // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
+                val readingShade = if (menuOpen) 0.75f else 0.5f
+                content(Color.Black.copy(alpha = readingShade + (1f - readingShade) * state.visualsShade))
             }
         }
     }

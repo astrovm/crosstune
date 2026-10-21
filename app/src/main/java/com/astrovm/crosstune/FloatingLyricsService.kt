@@ -48,6 +48,7 @@ import kotlin.math.hypot
 internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
+    val learningActions: ScreenActions get() = ScreenActions()
     fun toggleListening()
     /** Plays or pauses the song in the music app the words follow. */
     fun playPause()
@@ -217,7 +218,8 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                             onClose = ::close,
                             onChange = host::update,
                             onSave = { host.update(host.state.floating) },
-                            onEditorAt = { editor = it }
+                            onEditorAt = { editor = it },
+                            learning = host.learningActions
                         ),
                         controls = controls.value,
                         onControls = { controls.value = it }
@@ -454,7 +456,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         private const val CHANNEL = "floating_lyrics"
         private const val NOTIFICATION_ID = 1
 
-        private const val UNLOCK_DP = 40
+        private const val UNLOCK_DP = 48
         private const val UNLOCK_BACKGROUND = 0xCC000000.toInt()
 
         /** The widest the words get, on a big screen, so a line still reads at a glance. */

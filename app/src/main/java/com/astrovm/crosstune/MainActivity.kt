@@ -142,6 +142,16 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }
         }
+        override val learningActions get() = ScreenActions(
+            onWordsAsChange = viewModel::setWordsAs,
+            onReadingsChange = viewModel::setReadings,
+            onRomanizedChange = viewModel::setRomanized,
+            onRomajiTypedChange = viewModel::setRomajiTyped,
+            onTranslationChange = viewModel::setTranslation,
+            onWordsScaleChange = viewModel::setWordsScale,
+            onReadingScaleChange = viewModel::setReadingScale,
+            onTranslationScaleChange = viewModel::setTranslationScale
+        )
         override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {

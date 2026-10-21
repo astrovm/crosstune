@@ -97,6 +97,8 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val practice = state.practice ?: return
     BackHandler(onBack = actions.onStopPractice)
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<CardPreview?>(null) }
+    LaunchedEffect(optionsOpen) { if (!optionsOpen) preview = null }
     val optionLineKey = practice.line?.let { "${it.text}|${it.title}|${it.artist}" }
     // A new card starts clear. The menu stays open only while this one is on screen.
     LaunchedEffect(optionLineKey) { optionsOpen = false }
@@ -118,13 +120,13 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions) { optionsOpen = false }
+                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it })
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cardTypes, actions)
+                    else Card(line, shown, state.cardTypes, actions, preview.takeIf { optionsOpen })
                 }
             }
         }
@@ -170,8 +172,8 @@ private fun CaughtUp() {
  * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions) {
-    val type = types.firstOrNull { it.id == line.cardType } ?: READ_IT
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null) {
+    val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
     val cards = type.options
     val haptics = LocalHapticFeedback.current
     val answer = { grade: Grade ->
@@ -189,13 +191,18 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                 .testTag(PRACTICE_CARD_TAG)
                 // Tapped, it turns: a button with a name for TalkBack, as Show answer is.
                 .then(
-                    if (practice.turned) Modifier
+                    if (practice.turned || preview != null) Modifier
                     else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                 )
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
                 // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
+                if (preview != null) {
+                    val side = if (preview.back) cards.back else cards.front
+                    if (side.sound) LineSound(line, practice.sound, actions.onReplayLine)
+                    CardSideContent(line, side, preview.back)
+                } else {
                 val front = cards.front
                 val plays = front.sound && practice.sound != LineSound.NONE
                 if (plays) LineSound(line, practice.sound, actions.onReplayLine)
@@ -207,11 +214,12 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                     if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
                     CardSideContent(line, cards.back, back = true)
                 }
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             if (!practice.turned) {
-                Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(stringResource(R.string.practice_show)) }
+                Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
             } else {
                 val locale = LocalConfiguration.current.locales[0]
                 // Four, in Anki's colors, each saying when the line's back.
@@ -220,7 +228,7 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                     val (fill, text) = gradeColors(grade, dark)
                     Button(
                         onClick = { answer(grade) },
-                        modifier = Modifier.weight(1f).height(56.dp),
+                        modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
                         contentPadding = GRADE_PADDING
                     ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
@@ -304,7 +312,7 @@ private fun AppLoading(app: String?) {
             }.getOrNull()
         }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(56.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.heightIn(min = 56.dp)) {
         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         known?.let { (label, icon) ->
             Image(icon, contentDescription = null, modifier = Modifier.size(20.dp).clip(CircleShape))

@@ -26,6 +26,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.runtime.LaunchedEffect
+import java.text.NumberFormat
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,19 +76,23 @@ internal fun CardType.title(): String = when {
  * line reads, and each side's layers, open over it, and going back closes them one at a time.
  */
 @Composable
-internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Boolean, actions: ScreenActions, onClose: () -> Unit) {
+internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Boolean, actions: ScreenActions, onClose: () -> Unit, onPreview: (CardPreview?) -> Unit = {}) {
     var editing by remember { mutableStateOf<String?>(null) }
     var fixing by remember { mutableStateOf(false) }
     BackHandler { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
     val change = { list: List<CardType>, save: Boolean -> actions.onCardTypesChange(list, save) }
     val type = types.firstOrNull { it.id == editing }
-    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.6f
+    var undo by remember { mutableStateOf<List<CardType>?>(null) }
+    var undoMessage by remember { mutableStateOf(R.string.history_removed) }
+    LaunchedEffect(type?.id) { if (type == null) onPreview(null) }
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.42f
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
         shadowElevation = 6.dp,
         modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
     ) {
+        Column {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
             if (fixing) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,13 +105,15 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                 types.forEach { kind ->
                     val title = kind.title()
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).heightIn(min = 48.dp).clickable { editing = kind.id }) {
                         Text(
                             title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).clickable { editing = kind.id }.padding(vertical = 12.dp)
+                            modifier = Modifier.weight(1f).padding(vertical = 12.dp)
                         )
                         // The name opens its editor, and this says so.
                         AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp).alpha(0.6f))
                         Spacer(Modifier.width(12.dp))
+                        }
                         // One kind always stays on, so there's always a card.
                         Switch(
                             checked = kind.on, enabled = !(kind.on && last), onCheckedChange = { on -> change(types.map { if (it.id == kind.id) it.copy(on = on) else it }, true) },
@@ -110,6 +124,13 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                                 disabledCheckedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                             )
                         )
+                    }
+                }
+                if (turned && line.readable.isNotEmpty()) {
+                    TextButton(onClick = { fixing = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.practice_fix_reading))
                     }
                 }
                 TextButton(
@@ -125,19 +146,36 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
                     Text(stringResource(R.string.card_type_new))
                 }
             } else {
-                CardTypeEditor(line, type, turned, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
+                CardTypeEditor(line, type, actions, onPreview, change = { value, save -> change(types.map { if (it.id == type.id) value else it }, save) }, onBack = { editing = null }, onDelete = {
+                    undo = types
+                    undoMessage = R.string.history_removed
                     change(types.filterNot { it.id == type.id }, true)
                     editing = null
-                }, preset = DEFAULT_CARD_TYPES.firstOrNull { it.id == type.id }, onFix = { fixing = true })
+                }, preset = DEFAULT_CARD_TYPES.firstOrNull { it.id == type.id }, onReset = { preset ->
+                    undo = types
+                    undoMessage = R.string.card_type_reset
+                    change(types.map { if (it.id == type.id) preset else it }, true)
+                })
             }
+        }
+        undo?.let { previous ->
+            Snackbar(
+                action = { TextButton(onClick = { change(previous, true); undo = null }) { Text(stringResource(R.string.undo_button)) } },
+                dismissAction = { IconButton(onClick = { undo = null }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.floating_close)) } }
+            ) { Text(stringResource(undoMessage)) }
+        }
         }
     }
 }
 
+internal data class CardPreview(val type: CardType, val back: Boolean)
+
 /** One kind of card: its name, and what its front and its back show, a row for each layer. */
 @Composable
-private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, preset: CardType?, onFix: () -> Unit) {
+private fun CardTypeEditor(line: SavedLine, type: CardType, actions: ScreenActions, onPreview: (CardPreview?) -> Unit, change: (CardType, Boolean) -> Unit, onBack: () -> Unit, onDelete: () -> Unit, preset: CardType?, onReset: (CardType) -> Unit) {
     val title = type.title()
+    var back by remember(type.id) { mutableStateOf(false) }
+    LaunchedEffect(type, back) { onPreview(CardPreview(type, back)) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
         OutlinedTextField(
@@ -146,20 +184,22 @@ private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, cha
         )
         if (preset == null) IconButton(onClick = onDelete) { AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.card_type_delete)) }
         // A preset can't go, but it can come back as it was, which only shows once it's been changed.
-        else if (type.name != preset.name || type.options != preset.options) IconButton(onClick = { change(preset.copy(on = type.on), true) }) {
+        else if (type.name != preset.name || type.options != preset.options) IconButton(onClick = { onReset(preset.copy(on = type.on)) }) {
             AppIcon(R.drawable.ic_refresh, contentDescription = stringResource(R.string.card_type_reset))
         }
     }
     val japanese = line.reading?.any(Readings::isKana) == true
     val script = if (japanese) Script.JAPANESE else Readings.displayScriptOf(listOf(line.text))
-    SideRows(R.string.practice_front, line, script, type.options.front) { change(type.copy(options = type.options.copy(front = it)), true) }
-    SideRows(R.string.practice_back, line, script, type.options.back) { change(type.copy(options = type.options.copy(back = it)), true) }
-    if (turned && line.readable.isNotEmpty()) {
-        TextButton(onClick = onFix, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
-            AppIcon(R.drawable.ic_edit, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.practice_fix_reading))
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        listOf(R.string.practice_front, R.string.practice_back).forEachIndexed { index, label ->
+            SegmentedButton(selected = back == (index == 1), onClick = { back = index == 1 }, shape = SegmentedButtonDefaults.itemShape(index, 2)) {
+                Text(stringResource(label))
+            }
         }
+    }
+    SideRows(if (back) R.string.practice_back else R.string.practice_front, line, script, if (back) type.options.back else type.options.front,
+        onPlay = actions.onReplayLine, canPlay = line.timed) {
+        change(type.copy(options = if (back) type.options.copy(back = it) else type.options.copy(front = it)), true)
     }
 }
 
@@ -169,15 +209,14 @@ private fun CardTypeEditor(line: SavedLine, type: CardType, turned: Boolean, cha
  * tapped to spell as typed; and what they mean. Pinching a row makes it bigger or smaller.
  */
 @Composable
-private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, side: CardSide, onChange: (CardSide) -> Unit) {
+private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, side: CardSide, onPlay: () -> Unit, canPlay: Boolean, onChange: (CardSide) -> Unit) {
     val japanese = script == Script.JAPANESE
-    Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
         if (japanese) add(WordsAs.KANA)
         if (script != null) add(WordsAs.LATIN)
     }
-    SoundRow(side.sound) { onChange(side.copy(sound = it)) }
+    SoundRow(side.sound, onPlay, canPlay) { onChange(side.copy(sound = it)) }
     val glyph = { shown: WordsAs -> when (shown) { WordsAs.WRITTEN -> script?.glyph ?: "文"; WordsAs.KANA -> "あ"; WordsAs.LATIN -> "Aa" } }
     LayerRow(R.string.visuals_show_words, side.words, { onChange(side.copy(words = it)) }, line.shownAs(side.wordsAs, side.romajiTyped), side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
         if (wordsAs.size > 1) {
@@ -186,7 +225,21 @@ private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, si
                 WordsAs.KANA -> R.string.lyrics_display_kana
                 WordsAs.LATIN -> R.string.lyrics_display_latin
             })
-            Tag(glyph(side.wordsAs), description, null) { onChange(side.copy(wordsAs = wordsAs[(wordsAs.indexOf(side.wordsAs) + 1) % wordsAs.size])) }
+            var formats by remember { mutableStateOf(false) }
+            Box {
+                Tag(glyph(side.wordsAs), description, null) { formats = true }
+                DropdownMenu(expanded = formats, onDismissRequest = { formats = false }) {
+                    wordsAs.forEach { format ->
+                        val label = when (format) {
+                            WordsAs.WRITTEN -> R.string.lyrics_display_original
+                            WordsAs.KANA -> R.string.lyrics_display_kana
+                            WordsAs.LATIN -> R.string.lyrics_display_latin
+                        }
+                        DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = { onChange(side.copy(wordsAs = format)); formats = false },
+                            leadingIcon = { Text(glyph(format)) }, trailingIcon = { if (side.wordsAs == format) AppIcon(R.drawable.ic_check, contentDescription = null) })
+                    }
+                }
+            }
         }
     }
     // Readings go over the words as written, in Japanese or Chinese.
@@ -203,17 +256,15 @@ private fun SideRows(@StringRes label: Int, line: SavedLine, script: Script?, si
 
 /** The line's sound as a layer of a card's side: an eye to turn it on or off, and the button it makes. */
 @Composable
-private fun SoundRow(on: Boolean, onToggle: (Boolean) -> Unit) {
+private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, onToggle: (Boolean) -> Unit) {
     val name = stringResource(R.string.practice_play)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(48.dp).toggleable(on, role = Role.Switch, onValueChange = onToggle).semantics { contentDescription = name }
         ) { AppIcon(if (on) R.drawable.ic_visibility else R.drawable.ic_visibility_off, contentDescription = null) }
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(32.dp).alpha(if (on) 1f else 0.4f)) {
-            Box(contentAlignment = Alignment.Center) {
-                AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+        IconButton(onClick = onPlay, enabled = canPlay) {
+            AppIcon(R.drawable.ic_play, contentDescription = stringResource(R.string.lyrics_play))
         }
     }
 }
@@ -239,6 +290,8 @@ private fun LayerRow(
         latest = (latest * zoom).coerceIn(range)
         onScale(latest)
     }
+    var sizing by remember { mutableStateOf(false) }
+    Column {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -256,10 +309,18 @@ private fun LayerRow(
         ) { AppIcon(if (on) R.drawable.ic_visibility else R.drawable.ic_visibility_off, contentDescription = null) }
         Text(
             sample?.takeIf { it.isNotBlank() } ?: name, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * latest, lineHeight = TextUnit.Unspecified) },
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f).alpha(if (on) 1f else 0.4f)
         )
+        TextButton(onClick = { sizing = !sizing }) {
+            if (label == R.string.visuals_show_words || label == R.string.lyrics_romanized) {
+                AppIcon(R.drawable.ic_link, contentDescription = stringResource(R.string.lyrics_words_size), modifier = Modifier.size(14.dp))
+            }
+            Text(NumberFormat.getPercentInstance().format(sizeShare(latest, range)))
+        }
         tag()
+    }
+    if (sizing) SizeSlider(label, scale, range, { value, _ -> onScale(value) })
     }
 }
 
