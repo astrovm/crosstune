@@ -10,10 +10,10 @@ import kotlin.math.abs
 internal class VideoTiming {
     private val points = mutableListOf<SyncPoint>()
 
-    fun heard(video: PlaybackClock, song: PlaybackClock): Long? {
+    fun heard(video: PlaybackClock, song: PlaybackClock, expectedLeadMs: Long? = null): Long? {
         if (!video.playing || !song.playing || points.any { abs(it.lineMs - song.positionMs) < 3_000 }) return null
         val lead = video.positionAt(song.atMs) - song.positionMs
-        if (abs(lead) > 60_000) return null
+        if (lead !in 0..60_000 || expectedLeadMs?.let { abs(it - lead) > 8_000 } == true) return null
         points += SyncPoint(song.positionMs, song.positionMs + lead)
         if (points.size > 7) points.removeAt(0)
         return AudioTiming.confirmed(points).singleOrNull()?.let { it.songMs - it.lineMs }

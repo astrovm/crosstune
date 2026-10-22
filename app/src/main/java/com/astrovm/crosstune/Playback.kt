@@ -50,7 +50,9 @@ internal data class Following(
     val canSkipNext: Boolean = false,
     val canSkipPrevious: Boolean = false,
     /** How long what it plays is, when it says; for a video, the video. */
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    /** The player clock is in the lyrics' recording, rather than an uncalibrated video. */
+    val timingKnown: Boolean = true
 )
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */

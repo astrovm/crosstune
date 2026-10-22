@@ -1251,11 +1251,12 @@ class ListeningTest {
 
     private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true): FakePlayback {
         listeningAlong(hearing)
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(song, null)
-            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true)
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
         inRecent("Demo")
@@ -1298,6 +1299,9 @@ class ListeningTest {
         videoWithWords(hearing, permission = false)
         composeRule.waitForIdle()
         assertEquals(0, hearing.listens)
+        assertFalse(controllerModel().uiState.following!!.timingKnown)
+        assertFalse(lit("Demo one"))
+        composeRule.runOnIdle { controllerModel().seekLyrics(10_000) }
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
         allowMicrophone()
         click(string(R.string.lyrics_button))

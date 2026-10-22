@@ -56,6 +56,7 @@ def main():
     parser.add_argument('audio', help='16 kHz mono PCM WAV, kept on this machine')
     parser.add_argument('lyrics', help='LRC for the same song')
     parser.add_argument('--model', required=True, help='local faster-whisper model directory')
+    parser.add_argument('--threads', type=int, default=4, help='CPU threads, default: 4')
     args = parser.parse_args()
     import numpy as np
     from faster_whisper import WhisperModel
@@ -63,7 +64,7 @@ def main():
         if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (16000, 1, 2):
             parser.error('audio must be mono 16-bit PCM WAV at 16 kHz')
         samples = np.frombuffer(audio.readframes(audio.getnframes()), dtype=np.int16).astype(np.float32) / 32768
-    model = WhisperModel(args.model, device='cpu', compute_type='int8', cpu_threads=4, num_workers=1)
+    model = WhisperModel(args.model, device='cpu', compute_type='int8', cpu_threads=args.threads, num_workers=1)
     segments, _ = model.transcribe(samples, language='ja', beam_size=3, word_timestamps=True, condition_on_previous_text=False)
     rows = [{'start': s.start, 'text': s.text, 'avg_logprob': s.avg_logprob, 'no_speech_prob': s.no_speech_prob} for s in segments]
     with open(args.lyrics, encoding='utf8') as file:

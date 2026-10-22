@@ -1431,7 +1431,8 @@ internal class MainViewModel(
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
         appFollowing?.takeIf { it.video && syncPoints.isEmpty() }?.let { app ->
-            heard.clock?.let { clock -> videoTiming.heard(app.clock, clock) }?.let { lead ->
+            val expected = app.durationMs?.let { video -> found?.lengthMs?.let { video - it } }
+            heard.clock?.let { clock -> videoTiming.heard(app.clock, clock, expected) }?.let { lead ->
                 videoLeadMs = lead
                 videoLeadVerified = true
                 videoTimingStore.save(shown, lead)
@@ -1506,7 +1507,7 @@ internal class MainViewModel(
      */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        appFollowing?.takeIf { it.video && !videoLeadVerified }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
+        appFollowing?.takeIf { it.video && !videoLeadVerified && !calibrationAttempted && syncPoints.isEmpty() }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
     }
 
@@ -1528,7 +1529,8 @@ internal class MainViewModel(
      */
     private fun inSong(app: Following?): Following? {
         if (app == null || !app.video) return app
-        val lead = videoLeadMs ?: return uiState.lyricsFor?.let(::heardFollowing) ?: app
+        val lead = videoLeadMs ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
+            else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
         return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
     }
 
@@ -1751,7 +1753,7 @@ internal class MainViewModel(
     /** Moves the music app playing the song to a line of its words. */
     fun seekLyrics(positionMs: Long) {
         val song = uiState.lyricsFor ?: return
-        if (uiState.following?.canSeek != true) return
+        if (uiState.following?.let { it.canSeek && it.timingKnown } != true) return
         playback?.seekTo(song, inApp(positionMs))
     }
 
@@ -1790,6 +1792,7 @@ internal class MainViewModel(
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, points)
         uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
+        keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
     }

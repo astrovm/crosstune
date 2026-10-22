@@ -1309,10 +1309,10 @@ private fun PlainLyrics(words: String, scale: Float) {
  */
 @Composable
 internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): Int {
-    fun sung() = following?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
+    fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
     val active by produceState(sung(), following, lines) {
         value = sung()
-        while (following?.clock?.playing == true) value = withInfiniteAnimationFrameMillis { sung() }
+        while (following?.timingKnown == true && following.clock.playing) value = withInfiniteAnimationFrameMillis { sung() }
     }
     return active
 }
@@ -1358,7 +1358,7 @@ private fun TimedLyrics(
                 // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
                 onSeek = when {
                     syncing -> ({ actions.onSyncLine(index) })
-                    following?.canSeek == true -> ({ actions.onSeekLyrics(line.timeMs) })
+                    following?.canSeek == true && following.timingKnown -> ({ actions.onSeekLyrics(line.timeMs) })
                     else -> null
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,

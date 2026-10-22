@@ -25,6 +25,7 @@ class VideoTimingTest {
         assertEquals(-60_000L, store.load(song))
         store.save(song, 60_000)
         assertEquals(60_000L, store.load(song))
+        store.save(song, Long.MIN_VALUE)
         store.save(song, 60_001)
         store.save(song.copy(recordingId = null), 10_000)
         assertEquals(60_000L, store.load(song))
@@ -44,6 +45,17 @@ class VideoTimingTest {
         repeat(201) { store.save(song.copy(recordingId = "app:$it"), it.toLong()) }
         assertNull(store.load(song.copy(recordingId = "app:0")))
         assertEquals(200L, store.load(song.copy(recordingId = "app:200")))
+    }
+
+    @Test fun anIntroMustAgreeWithTheRecordingsAndCannotBeAReferenceAheadOfTheVideo() {
+        val timing = VideoTiming()
+        val video = PlaybackClock(20_000, 0)
+        val song = PlaybackClock(10_000, 0)
+        assertNull(timing.heard(PlaybackClock(0, 0), song))
+        assertNull(timing.heard(video, song, expectedLeadMs = 30_000))
+        assertNull(timing.heard(video, song, expectedLeadMs = 18_000))
+        assertNull(timing.heard(PlaybackClock(30_000, 10_000), PlaybackClock(20_000, 10_000), expectedLeadMs = 10_000))
+        assertEquals(10_000L, timing.heard(PlaybackClock(40_000, 20_000), PlaybackClock(30_000, 20_000), expectedLeadMs = 2_000))
     }
 
     @Test fun separateMovingHearingsConfirmAnIntroAndSlipsDoNot() {
