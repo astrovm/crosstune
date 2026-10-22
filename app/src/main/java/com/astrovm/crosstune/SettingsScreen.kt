@@ -1548,11 +1548,11 @@ internal fun SettingsScreenPreview() {
             state = UiState(
                 intercepted = setOf(MusicService.SPOTIFY, MusicService.YOUTUBE),
                 rules = mapOf(MusicService.YOUTUBE to Destination.Service(MusicService.YOUTUBE_MUSIC)),
-                destinations = MusicService.entries.map(Destination::Service) +
-                    Destination.Custom("1", "Invidious", "https://yewtu.be/search?q={query}")
+                destinations = MusicService.entries.map(Destination::Service)
             ),
             actions = ScreenActions(),
-            onBack = {}
+            onBack = {},
+            openSource = SOURCES_PAGE
         )
     }
 }
