@@ -11,6 +11,8 @@ import kotlin.coroutines.resume
 
 /** Shizuku, when the user runs it: adb's powers without a computer. Checked on a phone, which runs it. */
 internal class ShizukuShell : Shell {
+    override val root = false
+
     override fun ready(): Boolean = Shizuku.pingBinder() && !Shizuku.isPreV11()
 
     override fun watch(changed: () -> Unit): () -> Unit {

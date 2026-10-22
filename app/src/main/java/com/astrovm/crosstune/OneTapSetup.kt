@@ -7,7 +7,7 @@ import android.os.Build
 /** A shell with adb's powers, which can do what otherwise only the user can in Android's settings. */
 internal interface Shell {
     /** Whether it's root rather than Shizuku. */
-    val root: Boolean get() = false
+    val root: Boolean
 
     /** Whether it can run commands now. */
     fun ready(): Boolean
@@ -49,7 +49,7 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
      * lets it [follow] music apps, use the [microphone], and show [floating] lyrics, with their
      * notification. Each is tried, so one failing leaves the rest done; whether all worked.
      */
-    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean = false, floating: Boolean = false): Boolean {
+    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): Boolean {
         val shell = shell() ?: return false
         if (!shell.allowed()) return false
         return commands(apps, links, follow, microphone, floating).map { shell.run(it) }.all { it }

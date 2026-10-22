@@ -144,6 +144,12 @@ class FixStepsTest {
         composeRule.waitForIdle()
         assertShown(string(R.string.fix_step_turn_off, string(R.string.android_open_supported_links)))
         assertEquals(1, pictures())
+
+        // Xiaomi ticks the choice that's set, rather than a radio button.
+        steps(Need.StopApp(spotify), Phone.XIAOMI)
+        composeRule.waitForIdle()
+        assertShown(string(R.string.fix_step_pick, string(R.string.android_in_your_browser)))
+        assertEquals(1, pictures())
     }
 
     @Test
@@ -176,6 +182,8 @@ class FixStepsTest {
         showSteps(Need.Follow)
         assertShown(turnOn(R.string.android_allow_notification_access), tap(R.string.allow_button))
         assertEquals(2, pictures())
+        click(string(R.string.fix_open_settings))
+        assertEquals(listOf("open follow"), done)
 
         // Samsung lists every app, Crosstune among them.
         steps(Need.Follow, Phone.SAMSUNG)
@@ -191,7 +199,7 @@ class FixStepsTest {
             string(R.string.fix_step_turn_on_then, string(R.string.android_allow_notification_access), string(R.string.allow_button))
         )
         click(string(R.string.follow_help_app_info))
-        assertEquals(listOf("app info"), done)
+        assertEquals(listOf("open follow", "app info"), done)
     }
 
     @Test

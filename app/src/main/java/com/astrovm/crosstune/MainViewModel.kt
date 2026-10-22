@@ -103,7 +103,7 @@ internal class MainViewModel(
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
-    phone: Phone = Phone.OTHER
+    phone: Phone
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -259,8 +259,8 @@ internal class MainViewModel(
     private suspend fun inOneTap(
         setup: OneTapSetup,
         apps: List<String> = emptyList(),
-        links: Boolean = false,
-        follow: Boolean = false,
+        links: Boolean,
+        follow: Boolean,
         microphone: Boolean = false,
         floating: Boolean = false
     ): Boolean {
