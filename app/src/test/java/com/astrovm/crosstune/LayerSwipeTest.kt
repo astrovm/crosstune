@@ -37,6 +37,18 @@ class LayerSwipeTest {
     }
 
     @Test
+    fun whatsDoneOnceThereWaitsForTheSwipeToGetThere() {
+        swipe.up = Layer(Screen.PLAYER, { said += "open" }, back = { said += "close" }, settled = { said += "card" })
+        swipe.drag(-100f, 0)
+        swipe.release(0f)
+        assertEquals(listOf("open", "close"), said)
+        swipe.finish()
+        swipe.drag(-350f, 0)
+        swipe.release(0f)
+        assertEquals(listOf("open", "close", "open", "card"), said)
+    }
+
+    @Test
     fun aSwipeUpLetGoPastAThirdOfTheWayCarriesOn() {
         swipe.drag(-350f, 0)
         swipe.release(0f)

@@ -765,6 +765,12 @@ internal class MainViewModel(
     fun openPlayingNow() {
         val now = uiState.playingNow ?: return
         if (uiState.result?.let { sameSong(it, now.song) } != true) showSong(now.song)
+        if (uiState.player?.song != now.song) openPlayer(now.song, now.following?.appPackage, played = true)
+    }
+
+    /** The player on the song playing now, alone, as a swipe up from the bar opens it before it's let go. */
+    fun peekPlayingNow() {
+        val now = uiState.playingNow ?: return
         openPlayer(now.song, now.following?.appPackage, played = true)
     }
 

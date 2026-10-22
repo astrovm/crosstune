@@ -221,6 +221,7 @@ internal data class ScreenActions(
     val onUpdate: () -> Unit = {},
     /** Opens the player on the song a music app plays now. */
     val onOpenPlayingNow: () -> Unit = {},
+    val onPeekPlayingNow: () -> Unit = {},
     val onPlayingNowPlayPause: () -> Unit = {},
     val onPlayingNowSkip: () -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
@@ -404,7 +405,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     }
     val layers = remember { LayerSwipe() }
     layers.up = when {
-        screen == Screen.MAIN && state.playingNow != null -> Layer(Screen.PLAYER, actions.onOpenPlayingNow, back = actions.onClosePlayer)
+        // The song's card is only made under its player once the swipe gets there, so one let go early leaves the card shown.
+        screen == Screen.MAIN && state.playingNow != null -> Layer(Screen.PLAYER, actions.onPeekPlayingNow, back = actions.onClosePlayer, settled = actions.onOpenPlayingNow)
         screen == Screen.PLAYER && state.player?.song?.artist?.isNotBlank() == true -> Layer(Screen.LYRICS, actions.onPlayerLyrics, back = actions.onDismissLyrics)
         else -> null
     }

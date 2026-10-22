@@ -286,6 +286,25 @@ class ListeningTest {
     }
 
     @Test
+    fun aSwipeUpFromTheBarLetGoEarlyLeavesTheCardShown() {
+        inRecent("Demo")
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        composeRule.onAllNodes(hasText("Demo") and hasClickAction()).onLast().performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Demo" && barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -80f))
+            up()
+        }
+        waitUntil(TIMEOUT_MS) { barShown() && composeRule.onAllNodesWithContentDescription(string(R.string.more_button)).fetchSemanticsNodes().isEmpty() }
+        // The card shown is still the one there was, and the song playing didn't join Recent.
+        assertEquals("Demo", controllerModel().uiState.result?.title)
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata == playing })
+    }
+
+    @Test
     fun aSwipeUpFromTheBarTakenAwayHalfwayGoesBackToo() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
