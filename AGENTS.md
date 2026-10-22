@@ -26,15 +26,15 @@ The most common defect here is a change that works where you tested it and is mi
 
 ## Design
 
-- The content is the screen. Controls never cover it, and a screen's tools stay small, like the lyrics pill.
-- Words cost. Icon, color and state before text. A label, hint or caption has to earn its place.
-- Show state by how it looks, not with a caption. Show what's happening, never what isn't: errors when they happen, never "No errors".
-- Adding is the last resort. Fold new things into what's there (the site keeps its six cards). A redesign that ends with more buttons or more text than it started with has failed.
+- Crosstune needs three things from Android to work: opening links, notification access and the microphone. Missing any is a problem to show and fix, never an extra.
+- Design for someone without Shizuku, root or ADB first. Shizuku only adds a shortcut on top.
+- The content is the screen. Nothing covers the words, the cover art or the visuals, and a screen's tools stay small, like the lyrics pill.
+- Words cost. Icon, color and state before text. A label, hint or caption has to earn its place. Problems are the exception: say them plainly, in words.
+- Show state by how it looks, not with a caption. Show what's wrong, never that things are fine: no "No errors".
 - Fold a feature into the thing it belongs to. Naming a song is the mic in the link field, not a button. What's playing is a bar at the bottom, not a caption.
 - The main action is a filled button with an icon and one word (**Play**, **Open**). Lesser tools are flat, with no tile or box: an icon with at most a short label.
-- Before redesigning a screen, list what's on it and what each thing is for. Count again after.
 - Icon-only is fine with a content description and a touch target of at least 48dp.
-- Check every state on a phone: loading, empty, error, the largest font, and a long language like German.
+- Check every state on a phone: loading, empty, error, missing access, no Shizuku, the largest font, and a long language like German.
 
 ## How it works
 
