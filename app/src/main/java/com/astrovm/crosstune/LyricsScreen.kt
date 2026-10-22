@@ -1059,9 +1059,20 @@ private fun MicrophoneStatus(denied: Boolean, actions: ScreenActions) {
 @Composable
 private fun SyncSource(state: UiState, actions: ScreenActions) {
     val app = state.following?.takeIf { it.app != null }
+    // Not playing anywhere yet, the song's app starts it from here, as Play on its card does, and the words then follow it.
+    val start = (state.resultDestination as? Destination.Service)?.takeIf { state.canPlayFromLyrics }
+    if (start != null) {
+        AppSource(
+            stringResource(R.string.play_in_background, start.label()),
+            start.service.packageName,
+            playing = false,
+            enabled = !state.playingResult,
+            onClick = actions.onPlayResult
+        )
+    }
     AnimatedContent(targetState = app?.app to app?.appPackage, transitionSpec = { swap() }, label = "sync source") { (name, packageName) ->
         if (name != null) {
-            AppSource(name, packageName, playing = state.following?.clock?.playing == true, onPlayPause = actions.onPlayPause)
+            AppSource(stringResource(R.string.lyrics_following_app, name), packageName, playing = state.following?.clock?.playing == true, onClick = actions.onPlayPause)
         } else {
             ListenAlongButton(state.listeningAlong, state.microphone == MicAccess.ALLOWED, actions)
         }
@@ -1069,23 +1080,22 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
 }
 
 /**
- * The music app the words follow, by its icon, or a note when it has none to show. Tapped, it plays
- * or pauses the song there, which a small badge on it shows.
+ * A music app by its icon, or a note when it has none to show: the one the words follow, or the
+ * one to play them in. Tapped, it plays or pauses the song there, which a small badge on it shows.
  */
 @Composable
-private fun AppSource(name: String, packageName: String?, playing: Boolean, onPlayPause: () -> Unit) {
+private fun AppSource(description: String, packageName: String?, playing: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val context = LocalContext.current
     val icon = remember(packageName) {
         packageName?.let { runCatching { context.packageManager.getApplicationIcon(it).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
     }
-    val description = stringResource(R.string.lyrics_following_app, name)
     // Not an IconButton, which clips to a circle and would cut the badge off at its corner.
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
-            .clickable(role = Role.Button, onClick = onPlayPause)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description }
     ) {
         // The badge sits on the icon's corner, inside the button.
