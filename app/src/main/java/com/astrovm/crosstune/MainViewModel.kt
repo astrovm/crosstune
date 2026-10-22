@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import androidx.annotation.VisibleForTesting
@@ -1018,6 +1019,8 @@ internal class MainViewModel(
         // Opened in Crosstune, it plays from here, when its app can be asked to; otherwise the card has the choices.
         if (pendingPlay) {
             pendingPlay = false
+            // Whether its app is on the phone is only known once Android says, which a song from Recent can beat.
+            snapshotFlow { uiState.systemStateKnown }.first { it }
             if (uiState.canPlayResult) return playResult()
         }
         prepareDestination(uiState.resultDestination)

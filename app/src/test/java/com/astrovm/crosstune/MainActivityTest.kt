@@ -675,21 +675,6 @@ class MainActivityTest {
     }
 
     @Test
-    fun beforeSetupALinkShowsOnItsCardWithNoAppToPlayItIn() {
-        freshInstall()
-        val phone = FakePlayback().apply { access = true }
-        MainActivity.playbackFactory = { phone }
-        respondWithTrack("Not Yet", "Artist · Song")
-        val activity = launch(trackLink())
-        waitForText("Not Yet")
-        assertResultShown()
-        assertTextAbsent(string(R.string.picker_title))
-        assertTrue(phone.songsAsked.isEmpty())
-        assertNull(nextStartedActivity())
-        assertFalse(activity.isFinishing)
-    }
-
-    @Test
     fun linksOpenInCrosstuneForNewInstallsAndForWhoeverHadThemAskOrShowTheSongFirst() {
         fun migrated(vararg before: Pair<String, Boolean>): Pair<Boolean, Boolean> {
             prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")
@@ -5320,9 +5305,9 @@ class MainActivityTest {
 
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_step, 2, 2))
-        // Every source's links start on, but the app the user listens in's.
+        // Every source's links start on, the app songs play in's too, as links open in Crosstune.
         assertEquals(
-            MusicService.entries.filter { it.canBeSource && it != MusicService.DEEZER }.toSet(),
+            MusicService.entries.filter { it.canBeSource }.toSet(),
             MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
         )
         assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
@@ -5890,8 +5875,8 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_links_title))
         assertTextAbsent(string(R.string.setup_step, 1, 1))
         assertEquals(Destination.Service(MusicService.SOUNDCLOUD), DestinationStore(prefs()).defaultDestination())
-        // Its own links already open there.
-        assertFalse(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
+        // Links opening in Crosstune, its own come here too.
+        assertTrue(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
         click(string(R.string.back_button))
         assertTextShown(string(R.string.setup_welcome_title))
@@ -5925,15 +5910,24 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupDoesNotOpenTheLinksOfTheAppTheUserListensIn() {
+    fun setupOpensTheLinksOfTheAppSongsPlayInOnlyWhenLinksOpenInCrosstune() {
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
         launch()
         click(string(R.string.setup_get_started))
-        // Crosstune would only hand YouTube Music its own links back.
+        click(string(R.string.target_youtube_music))
+        click(string(R.string.next_button))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+        controller!!.pause().stop().destroy()
+
+        // Opening links in the app, Crosstune would only hand YouTube Music its own links back.
+        freshInstall()
+        prefs().edit().putBoolean("links_in_crosstune", false).commit()
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
+        launch()
+        click(string(R.string.setup_get_started))
         click(string(R.string.target_youtube_music))
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-
         click(string(R.string.next_button))
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
@@ -6133,28 +6127,21 @@ class MainActivityTest {
     }
 
     @Test
-    fun linkOpenedBeforeSetupAsksWhereToGoThenSetupFollows() {
+    fun linkOpenedBeforeSetupShowsOnItsCardWithNoAppToPlayItInThenSetupFollows() {
         freshInstall()
-        fake.handler = { request ->
-            if (request.url.host == "api.deezer.com") {
-                FakeSpotify.html(request,
-                    """{"data":[{"title":"Early","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/1"}]}""")
-            } else {
-                FakeSpotify.html(request, FakeSpotify.trackPage("Early", "Artist · Song"))
-            }
-        }
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        respondWithTrack("Early", "Artist · Song")
         val activity = launch(trackLink())
 
-        waitForText(string(R.string.picker_title))
+        waitForText("Early")
+        assertResultShown()
         assertTextAbsent(string(R.string.setup_welcome_title))
+        assertTextAbsent(string(R.string.picker_title))
         assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.exactMatch)
-        assertEquals(listOf("https://open.spotify.com/track/$TRACK_ID"), fake.requestedUrls)
-        click(string(R.string.open_in_deezer))
-        waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
-        assertEquals("deezer.android.app", opened.`package`)
-        assertEquals("https://www.deezer.com/track/1", opened.dataString)
-        assertEquals(2, fake.requestedUrls.size)
+        assertTrue(phone.songsAsked.isEmpty())
+        assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
         controller!!.pause().stop().destroy()
 
         // History from that link must not be mistaken for an install from before setup existed.
