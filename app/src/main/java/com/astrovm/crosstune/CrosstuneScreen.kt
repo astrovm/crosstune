@@ -353,7 +353,8 @@ internal data class ScreenActions(
     val onPickSong: (MusicMetadata) -> Unit = {},
     /** Closes the list of songs. */
     val onDismissSongSearch: () -> Unit = {},
-    val loadArtwork: suspend (String) -> ImageBitmap? = { null }
+    val loadArtwork: suspend (String) -> ImageBitmap? = { null },
+    val covers: Covers? = null
 )
 
 /** Switches between the main screen and settings; system back returns from settings. */
@@ -432,7 +433,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    CompositionLocalProvider(LocalLayerSwipe provides layers) {
+    CompositionLocalProvider(LocalLayerSwipe provides layers, LocalCovers provides actions.covers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.

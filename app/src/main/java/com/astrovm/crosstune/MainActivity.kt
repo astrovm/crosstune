@@ -555,7 +555,8 @@ class MainActivity : ComponentActivity() {
                         onPlayingNowPlayPause = viewModel::playingNowPlayPause,
                         onPlayingNowSkip = viewModel::playingNowSkip,
                         onSettingsLeft = viewModel::settingsLeft,
-                        loadArtwork = viewModel.artwork::load
+                        loadArtwork = viewModel.artwork::load,
+                        covers = viewModel.artwork
                     )
                 )
             }

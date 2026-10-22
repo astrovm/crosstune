@@ -3152,6 +3152,51 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsOpenedAgainShowAtOnceAsTheyWereLeft() {
+        prefs().edit().putBoolean("lyrics_chords", true).putBoolean("lyrics_translation", true).putString("translate_into", "pt-BR").commit()
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        val chordSites = { request: okhttp3.Request ->
+            when (request.url.host) {
+                "www.ultimate-guitar.com" ->
+                    FakeSpotify.html(request, page("""{"results":[{"song_name":"Demo","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/demo-1"}]}"""))
+                "tabs.ultimate-guitar.com" ->
+                    FakeSpotify.html(request, page("""{"tab_view":{"meta":{"capo":0},"wiki_tab":{"content":"[ch]G[/ch]      [ch]C[/ch]\nWalking down the river road\n[ch]D[/ch]\nSinging to the morning light"}}}"""))
+                else -> null
+            }
+        }
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSites)
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") }
+        val asked = fake.requestedUrls.size
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+
+        // Opened again, they're all there before anything else gets a turn, and nothing's asked again.
+        composeRule.runOnUiThread {
+            controllerModel().showLyrics()
+            val state = controllerModel().uiState
+            assertFalse(state.isLoadingLyrics)
+            assertEquals("Walking down the river road\nSinging to the morning light", state.lyrics)
+            assertEquals(listOf("[Walking down the river road]", "[Singing to the morning light]"), state.learning.translations)
+            assertNotNull(state.chords.sheet)
+        }
+        assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
+        assertTrue(shown("[Singing to the morning light]"))
+        val again = fake.requestedUrls.drop(asked)
+        assertTrue(again.toString(), again.none { "ultimate-guitar" in it || GOOGLE_TRANSLATE_HOST in it || "lrclib" in it })
+
+        // Translated into another language since, the lines are translated again.
+        composeRule.runOnIdle {
+            controllerModel().dismissLyrics()
+            controllerModel().setTranslateInto("de")
+            controllerModel().showLyrics()
+        }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it && "tl=de" in it } }
+        assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
+    }
+
+    @Test
     fun chordsSwitchedOffStopBeingLookedUp() {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")

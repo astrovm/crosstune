@@ -34,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -167,13 +168,23 @@ internal fun SettingSwitch(
     }
 }
 
+/** Covers, and their colors, already worked out, so one shown again is there at once rather than fading in. */
+internal interface Covers {
+    fun cover(url: String): ImageBitmap?
+    fun color(url: String): Color?
+    fun keepColor(url: String, color: Color)
+}
+
+internal val LocalCovers = staticCompositionLocalOf<Covers?> { null }
+
 /**
- * Square cover that fades in once loaded. Until then, or when there's none, a tile with a
- * music note keeps the layout steady.
+ * Square cover that fades in once loaded, or is there at once when it was. Until then, or when
+ * there's none, a tile with a music note keeps the layout steady.
  */
 @Composable
 internal fun CoverArt(url: String?, load: suspend (String) -> ImageBitmap?, size: Dp, modifier: Modifier = Modifier) {
-    val image by produceState<ImageBitmap?>(initialValue = null, url) { value = url?.let { load(it) } }
+    val covers = LocalCovers.current
+    val image by produceState(initialValue = url?.let { covers?.cover(it) }, url) { value = url?.let { load(it) } }
     val alpha by animateFloatAsState(targetValue = if (image != null) 1f else 0f, label = "cover")
     Surface(
         modifier = modifier.size(size),
@@ -211,12 +222,15 @@ internal fun CoverArt(url: String?, load: suspend (String) -> ImageBitmap?, size
  */
 @Composable
 internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): Color? {
-    val color by produceState<Color?>(initialValue = null, url) {
-        value = url?.let { load(it) }?.let { image ->
-            // Off the main thread: scaling a whole cover down takes a frame or two.
-            val pixel = withContext(Dispatchers.Default) { Bitmap.createScaledBitmap(image.asAndroidBitmap(), 1, 1, true).getPixel(0, 0) }
-            val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(pixel, it) }
-            Color.hsv(hsv[0], hsv[1].coerceIn(0.35f, 0.9f), hsv[2].coerceIn(0.55f, 0.95f))
+    val covers = LocalCovers.current
+    val color by produceState(initialValue = url?.let { covers?.color(it) }, url) {
+        value = url?.let { cover ->
+            load(cover)?.let { image ->
+                // Off the main thread: scaling a whole cover down takes a frame or two.
+                val pixel = withContext(Dispatchers.Default) { Bitmap.createScaledBitmap(image.asAndroidBitmap(), 1, 1, true).getPixel(0, 0) }
+                val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(pixel, it) }
+                Color.hsv(hsv[0], hsv[1].coerceIn(0.35f, 0.9f), hsv[2].coerceIn(0.55f, 0.95f))
+            }?.also { covers?.keepColor(cover, it) }
         }
     }
     return color
