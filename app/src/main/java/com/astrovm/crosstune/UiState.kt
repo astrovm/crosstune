@@ -417,7 +417,7 @@ internal data class Learning(
 }
 
 /** What the visuals are asked to do, as the screen has it. */
-internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops, visualsSettings)
+internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops, visualsSettings, hears = microphone == MicAccess.ALLOWED)
 
 /** How the words show: as written, only in kana, for Japanese, or only in Latin letters. */
 internal enum class WordsAs { WRITTEN, KANA, LATIN }

@@ -1584,6 +1584,34 @@ class ListeningTest {
     }
 
     @Test
+    fun visualsWithoutTheMicrophoneAskForItThenStartOverHearingTheMusic() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        assertFalse(shown(string(R.string.fix_mic_title)))
+        click(string(R.string.visuals_options))
+
+        // Taken away meanwhile, they can't hear the music, and their menu offers it first.
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        val deaf = visualsShown().single()
+        click(string(R.string.visuals_options))
+        click(string(R.string.fix_mic_title))
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+
+        // Allowed, they start over, hearing it, and the menu has nothing to fix.
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        controller!!.pause().resume()
+        waitUntil(TIMEOUT_MS) { visualsShown().singleOrNull()?.let { it !== deaf } == true }
+        click(string(R.string.visuals_options))
+        assertFalse(shown(string(R.string.fix_mic_title)))
+    }
+
+    @Test
     fun visualsMoveBehindTheWordsFromTheStart() {
         prefs().edit().remove("visuals").commit()
         demoWords(FakeHearing())

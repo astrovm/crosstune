@@ -606,7 +606,7 @@ private fun LyricsActions(
                 if (state.lyrics.isNotEmpty()) {
                     BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
                 }
-                VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
+                VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
                 // Floating shows the line being sung, which only timed words have.
                 if (state.lyricLines.isNotEmpty()) {
                     IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
@@ -1147,12 +1147,16 @@ private fun BreathingButton(working: Boolean, @DrawableRes icon: Int, @StringRes
     }
 }
 
-/** MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it opens what can be done with them. */
+/**
+ * MilkDrop visuals behind the words, lit while on: off, it turns them on; on, it opens what can be
+ * done with them. On but not let [hears] the music, its dot is red, as things to fix are.
+ */
 @Composable
-private fun VisualsButton(on: Boolean, selected: Boolean = on, onClick: () -> Unit) {
+private fun VisualsButton(on: Boolean, selected: Boolean = on, hears: Boolean = true, onClick: () -> Unit) {
     Box {
         LitButton(selected, R.drawable.ic_visuals, stringResource(if (on) R.string.visuals_options else R.string.visuals_show), onClick)
-        if (on && !selected) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+        val dot = if (hears) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        if (on && (!selected || !hears)) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).background(dot, CircleShape))
     }
 }
 
@@ -1176,6 +1180,14 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
 private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, onOnlyVisuals: () -> Unit, onClose: () -> Unit) {
     if (!open) return
     MenuCard("lyrics-visuals-options") {
+        // Without the microphone they can't hear the music, so they don't move to it.
+        if (!state.visualsPlay.hears) {
+            MenuAction(R.drawable.ic_recognize_off, R.string.fix_mic_title) {
+                onClose()
+                actions.onVisualsChange(true)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        }
         // How dark the ground over them is, from none to nearly black.
         val darken = stringResource(R.string.visuals_shade)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {

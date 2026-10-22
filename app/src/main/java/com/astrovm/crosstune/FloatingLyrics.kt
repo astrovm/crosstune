@@ -257,7 +257,8 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
                 val listening = state.listeningAlong
                 IconToggleButton(checked = listening, onCheckedChange = { actions.onToggleListening() }) {
                     AppIcon(
-                        R.drawable.ic_recognize,
+                        // Crossed out without the microphone, as in the lyrics' bar.
+                        if (state.microphone == MicAccess.ALLOWED) R.drawable.ic_recognize else R.drawable.ic_recognize_off,
                         contentDescription = stringResource(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
                         tint = if (listening) MaterialTheme.colorScheme.primary else LocalContentColor.current
                     )
