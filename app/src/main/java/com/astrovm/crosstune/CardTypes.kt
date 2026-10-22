@@ -38,8 +38,8 @@ internal val READ_IT = CardType(READ_TYPE, null, true, CardOptions())
 /** Hear it: the line plays in front, the words, how they read and what they mean behind; off until it's asked for. */
 internal val HEAR_IT = CardType(HEAR_TYPE, null, false, CardOptions(CardSide(words = false, sound = true), CardSide(readings = true, latin = true, translation = true)))
 
-/** Translate it: what it means in front, the words and how they read behind; off until it's asked for. */
-internal val TRANSLATE_IT = CardType(TRANSLATE_TYPE, null, false, CardOptions(CardSide(words = false, translation = true), CardSide(readings = true, sound = true)))
+/** Translate it: what it means in front, the words and how they read, in kana and in Latin letters, behind; off until it's asked for. */
+internal val TRANSLATE_IT = CardType(TRANSLATE_TYPE, null, false, CardOptions(CardSide(words = false, translation = true), CardSide(readings = true, latin = true, sound = true)))
 
 /** The kinds the app starts with, which stay. */
 internal val DEFAULT_CARD_TYPES = listOf(READ_IT, HEAR_IT, TRANSLATE_IT)

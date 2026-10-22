@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">Звучит сейчас</string>
     <string name="lyrics_sync_reset">Сбросить</string>
     <string name="lyrics_sync_done">Готово</string>
+    <string name="lyrics_sync_earlier">На полсекунды раньше</string>
+    <string name="lyrics_sync_later">На полсекунды позже</string>
     <string name="lyrics_listen_along">Слушать вместе</string>
     <string name="lyrics_stop_listening">Перестать слушать</string>
     <string name="visuals_show">Показать визуализацию</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">Переводить</string>
     <string name="card_type_new">Новый тип</string>
     <string name="card_type_name">Название</string>
+    <string name="card_type_edit">Изменить карточку</string>
     <string name="card_type_delete">Удалить тип</string>
     <string name="card_type_reset">Вернуть по умолчанию</string>
     <string name="practice_bigger">Крупнее</string>
@@ -390,7 +393,6 @@
     <string name="lyrics_only_latin">Только латиница</string>
     <string name="lyrics_from_romaji">Написано по-японски ChatGPT</string>
     <string name="lyrics_reading_options">Чтение</string>
-    <string name="lyrics_readings_off">Выкл.</string>
     <string name="lyrics_display_original">Оригинал</string>
     <string name="lyrics_display_kana">Кана</string>
     <string name="lyrics_display_latin">Латиница</string>

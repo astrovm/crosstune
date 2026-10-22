@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Scaffold
@@ -616,12 +617,13 @@ private fun changeEveryText(ms: Long): String {
  * what it's set to beside it. Also in the visuals' own menu.
  */
 @Composable
-internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp) {
+internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp, @DrawableRes icon: Int? = null) {
     val steps = VisualsSettings.CHANGE_EVERY
     val label = stringResource(R.string.setting_visuals_change)
     val shown = changeEveryText(changeMs)
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
             Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }

@@ -398,6 +398,7 @@ class MainActivity : ComponentActivity() {
                         onSyncLine = viewModel::syncLine,
                         onPlayPause = viewModel::playPause,
                         onSkipSong = viewModel::skipSong,
+                        onNudgeSync = viewModel::nudgeSync,
                         onResetSync = viewModel::resetSync,
                         onReadingsChange = viewModel::setReadings,
                         onRomanizedChange = viewModel::setRomanized,

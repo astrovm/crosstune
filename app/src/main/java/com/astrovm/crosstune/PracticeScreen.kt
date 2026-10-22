@@ -120,13 +120,19 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                 }
                 val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
-                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it }, canPlay = practice.sound != LineSound.NONE)
+                    CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it })
                 }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
                     if (shown.total == 0) CaughtUp()
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cardTypes, actions, preview.takeIf { optionsOpen })
+                    else Card(line, shown, state.cardTypes, actions, preview.takeIf { optionsOpen }, onSide = { side ->
+                        // Edits go to the kind as it is now, not as the preview last saw it.
+                        val open = preview?.takeIf { optionsOpen }
+                        actions.onCardTypesChange(state.cardTypes.map { kind ->
+                            if (kind.id != open?.type?.id) kind else kind.copy(options = if (open.back) kind.options.copy(back = side) else kind.options.copy(front = side))
+                        }, true)
+                    })
                 }
             }
         }
@@ -172,7 +178,7 @@ private fun CaughtUp() {
  * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null) {
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -> Unit = {}) {
     val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
     val cards = type.options
     val haptics = LocalHapticFeedback.current
@@ -200,8 +206,7 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                 // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
                 if (preview != null) {
                     val side = if (preview.back) cards.back else cards.front
-                    if (side.sound) LineSound(line, practice.sound, actions.onReplayLine)
-                    CardSideContent(line, side, preview.back)
+                    CardSideEditor(line, side, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, onChange = onSide)
                 } else {
                 val front = cards.front
                 val plays = front.sound && practice.sound != LineSound.NONE

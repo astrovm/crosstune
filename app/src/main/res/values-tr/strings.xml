@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">Şimdi söyleniyor</string>
     <string name="lyrics_sync_reset">Sıfırla</string>
     <string name="lyrics_sync_done">Bitti</string>
+    <string name="lyrics_sync_earlier">Yarım saniye erken</string>
+    <string name="lyrics_sync_later">Yarım saniye geç</string>
     <string name="lyrics_listen_along">Birlikte dinle</string>
     <string name="lyrics_stop_listening">Dinlemeyi durdur</string>
     <string name="visuals_show">Görselleri göster</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">Çevir</string>
     <string name="card_type_new">Yeni tür</string>
     <string name="card_type_name">Ad</string>
+    <string name="card_type_edit">Kartı düzenle</string>
     <string name="card_type_delete">Türü sil</string>
     <string name="card_type_reset">Varsayılana döndür</string>
     <string name="practice_bigger">Daha büyük</string>
@@ -390,7 +393,6 @@
     <string name="lyrics_only_latin">Sadece Latin harfleri</string>
     <string name="lyrics_from_romaji">ChatGPT tarafından Japonca yazıldı</string>
     <string name="lyrics_reading_options">Okunuşlar</string>
-    <string name="lyrics_readings_off">Kapalı</string>
     <string name="lyrics_display_original">Orijinal</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>

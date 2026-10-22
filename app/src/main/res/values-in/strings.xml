@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">Dinyanyikan sekarang</string>
     <string name="lyrics_sync_reset">Atur ulang</string>
     <string name="lyrics_sync_done">Selesai</string>
+    <string name="lyrics_sync_earlier">Setengah detik lebih awal</string>
+    <string name="lyrics_sync_later">Setengah detik lebih lambat</string>
     <string name="lyrics_listen_along">Dengarkan bersama</string>
     <string name="lyrics_stop_listening">Berhenti mendengarkan</string>
     <string name="visuals_show">Tampilkan visual</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">Terjemahkan</string>
     <string name="card_type_new">Tipe baru</string>
     <string name="card_type_name">Nama</string>
+    <string name="card_type_edit">Ubah kartu</string>
     <string name="card_type_delete">Hapus tipe</string>
     <string name="card_type_reset">Kembalikan ke bawaan</string>
     <string name="practice_bigger">Lebih besar</string>
@@ -390,7 +393,6 @@
     <string name="lyrics_only_latin">Hanya huruf Latin</string>
     <string name="lyrics_from_romaji">Ditulis dalam bahasa Jepang oleh ChatGPT</string>
     <string name="lyrics_reading_options">Bacaan</string>
-    <string name="lyrics_readings_off">Nonaktif</string>
     <string name="lyrics_display_original">Asli</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>

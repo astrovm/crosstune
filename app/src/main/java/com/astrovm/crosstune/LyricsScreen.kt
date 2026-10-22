@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.border
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.text.font.FontStyle
@@ -28,7 +31,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.draw.drawWithCache
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -166,6 +168,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -224,6 +227,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // Putting the words in time: a line tapped is the one being sung. Only while something says where the song is.
     var syncingAsked by rememberSaveable(song) { mutableStateOf(false) }
     val syncing = syncingAsked && state.lyricLines.isNotEmpty() && state.following != null
+    // Words timed for another take of the song are likely off, so putting them in time is offered once, as soon as there's a clock.
+    var offered by rememberSaveable(song) { mutableStateOf(false) }
+    LaunchedEffect(state.lyricsOffTake, state.following != null) {
+        if (state.lyricsOffTake && state.following != null && !offered) {
+            offered = true
+            syncingAsked = true
+        }
+    }
     BackHandler(enabled = syncing) { syncingAsked = false }
     val onlyVisuals = visualsOnly && state.visuals
     BackHandler(enabled = onlyVisuals) { visualsOnly = false }
@@ -243,20 +254,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         delay(BAR_BACK_MS)
         barShown = true
     }
-    val layers = LocalLayerSwipe.current
+    // Scrolling the words only scrolls them: the screen slides away from a swipe down that starts at the top, not from the words.
     val scrolling = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
-                // Pulled back up, the words stay put until the pull is undone.
-                return if (layers.swiping && available.y < 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
+                return Offset.Zero
             }
-
-            // Pulled down past the first line, the words follow the finger back to what's under them.
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
-                if (source == NestedScrollSource.UserInput && available.y > 0f) Offset(0f, layers.drag(available.y)) else Offset.Zero
-
-            override suspend fun onPreFling(available: Velocity): Velocity = Velocity(0f, layers.flung(available.y))
         }
     }
     WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
@@ -265,8 +269,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrolling)
-            // Where there's no list to pull down, e.g. while the words are found, a swipe down does the same.
-            .swipeLayers()
+            .swipeLayers(downFromTop = true)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
@@ -672,8 +675,6 @@ private val Learning.shows get() = translation || (script != null && (readings |
 @Composable
 private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions) {
     if (!open) return
-    var details by remember { mutableStateOf(false) }
-    BackHandler(enabled = details) { details = false }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -682,67 +683,69 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
         modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag("lyrics-display-options")
     ) {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            WordsOptions(learning, actions, details, { details = it })
+            WordsOptions(learning, actions)
         }
     }
 }
 
-/** The same display controls in lyrics and on either side of a practice card. */
+/** The same display controls in the lyrics menu and in the floating lyrics' settings. */
 @Composable
-internal fun WordsOptions(learning: Learning, actions: ScreenActions, details: Boolean, onDetails: (Boolean) -> Unit, words: Boolean = true) {
-    if (details) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onDetails(false) }) {
-                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
-            }
-            Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.titleSmall)
-        }
-        val script = learning.script
-        if (words && (script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN) {
-            ReadingSwitch(R.string.lyrics_readings, learning.readings, actions.onReadingsChange)
-            if (learning.readings) {
-                SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
-            }
-        }
-        if (learning.showsAs != WordsAs.LATIN) ReadingSwitch(R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange)
-        if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
-            ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
-        }
-    } else {
-        val script = learning.script
-        if (words && script != null) {
-            MenuCaption(R.string.lyrics_show_as)
-            WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
-        }
-        SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
-        if (script != null && (learning.showsAs != WordsAs.LATIN || script == Script.JAPANESE)) {
-            val readingLabel = stringResource(R.string.lyrics_reading_options)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onDetails(true) }
-                    .semantics { contentDescription = readingLabel }
-            ) {
-                Text(stringResource(R.string.lyrics_reading_options), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Text(learning.readingSummary(stringResource(R.string.lyrics_readings_off)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                AppIcon(R.drawable.ic_chevron_right, contentDescription = null, modifier = Modifier.size(20.dp))
+internal fun WordsOptions(learning: Learning, actions: ScreenActions) {
+    val script = learning.script
+    if (script != null) {
+        MenuCaption(R.string.lyrics_show_as)
+        WordsAsPicker(script, learning.showsAs, actions.onWordsAsChange, learning.fromRomaji)
+    }
+    // Readings go over words as written, in the scripts that read otherwise; Latin letters, over any that aren't in them.
+    val readings = (script == Script.JAPANESE || script == Script.CHINESE) && learning.showsAs == WordsAs.WRITTEN
+    val latin = script != null && learning.showsAs != WordsAs.LATIN
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        if (readings) {
+            LayerChip(R.string.lyrics_reading_options, R.string.lyrics_readings, learning.readings, actions.onReadingsChange, Modifier.weight(1f)) {
+                Text(if (script == Script.JAPANESE) "あ" else "拼", style = MaterialTheme.typography.titleMedium)
             }
         }
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        ReadingSwitch(R.string.lyrics_translation, learning.translation, actions.onTranslationChange)
-        if (learning.translation) {
-            SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
+        if (latin) {
+            LayerChip(R.string.lyrics_display_latin, R.string.lyrics_romanized, learning.romanized, actions.onRomanizedChange, Modifier.weight(1f)) {
+                Text("Aa", style = MaterialTheme.typography.titleMedium)
+            }
         }
+        LayerChip(R.string.lyrics_translation, R.string.lyrics_translation, learning.translation, actions.onTranslationChange, Modifier.weight(1f)) {
+            AppIcon(R.drawable.ic_translate, contentDescription = null, modifier = Modifier.size(22.dp))
+        }
+    }
+    if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
+        ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
+    }
+    SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+    if (readings && learning.readings) {
+        SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
+    }
+    if (learning.translation) {
+        SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
     }
 }
 
-/** What is switched on, kept short enough to fit beside the way into its settings. */
-internal fun Learning.readingSummary(off: String): String = buildList {
-    if (readings && showsAs == WordsAs.WRITTEN && (script == Script.JAPANESE || script == Script.CHINESE)) {
-        add(if (script == Script.JAPANESE) "あ" else "拼")
-        add(NumberFormat.getPercentInstance().format(sizeShare(readingScale, MIN_READING_SCALE..MAX_READING_SCALE)))
+/** A layer over the words, switched by tapping it and lit while it's on; [name] is what a screen reader calls it. */
+@Composable
+private fun LayerChip(@StringRes label: Int, @StringRes name: Int, on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier, glyph: @Composable () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.medium
+    val description = stringResource(name)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.heightIn(min = 56.dp).clip(shape)
+            .then(if (on) Modifier.background(colors.secondaryContainer) else Modifier.border(1.dp, colors.outlineVariant, shape))
+            .toggleable(on, role = Role.Switch, onValueChange = onChange)
+            .semantics { contentDescription = description }
+            .padding(horizontal = 4.dp, vertical = 8.dp)
+    ) {
+        CompositionLocalProvider(LocalContentColor provides if (on) colors.onSecondaryContainer else colors.onSurfaceVariant) {
+            Box(Modifier.height(24.dp), contentAlignment = Alignment.Center) { glyph() }
+            Text(stringResource(label), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
-    if (romanized || showsAs == WordsAs.LATIN) add("Aa")
-}.joinToString(" · ").ifEmpty { off }
+}
 
 /** A slider's usable range, labeled from 1% to 100% without shrinking its actual minimum. */
 internal fun sizeShare(scale: Float, range: ClosedFloatingPointRange<Float>): Float {
@@ -829,7 +832,7 @@ private fun StudyMenu(open: Boolean, state: UiState, actions: ScreenActions, onC
         }
         // Chords are learned like lines are, so they're switched on here.
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
-        MenuSwitch(R.string.lyrics_chords, state.chords.on, actions.onChordsChange)
+        MenuSwitch(R.string.lyrics_chords, state.chords.on, R.drawable.ic_chords, actions.onChordsChange)
     }
 }
 
@@ -1190,7 +1193,7 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = darken }
             )
         }
-        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp)
+        VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp, icon = R.drawable.ic_timer)
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         MenuAction(R.drawable.ic_skip_next, R.string.visuals_next) {
             onClose()
@@ -1248,11 +1251,12 @@ private fun MenuAction(@DrawableRes icon: Int, @StringRes label: Int, trailing: 
 
 /** A setting in a card, switched as soon as it changes, and the card stays open. */
 @Composable
-internal fun MenuSwitch(@StringRes label: Int, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun MenuSwitch(@StringRes label: Int, on: Boolean, @DrawableRes icon: Int? = null, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(on, role = Role.Switch, onValueChange = onChange)
     ) {
+        if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
         Text(stringResource(label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = on, onCheckedChange = null)
     }
@@ -1420,6 +1424,9 @@ internal fun Learning.helpFor(index: Int): LineHelp? {
 }
 
 
+/** How far the arrows on the strip move all the words. */
+private const val NUDGE_MS = 500L
+
 /**
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
  * Reset puts them back as they were found, once any line was moved.
@@ -1434,6 +1441,10 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
+                AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+            }
+            IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
             if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
             IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
         }

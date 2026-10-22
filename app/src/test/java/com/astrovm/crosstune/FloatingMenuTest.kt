@@ -78,11 +78,9 @@ class FloatingMenuTest {
         assertTrue(compose.onNodeWithText("夜").getUnclippedBoundsInRoot().let { it.bottom - it.top } > before)
         compose.onNodeWithText(app.getString(R.string.lyrics_translation)).performScrollTo().performClick()
         assertTrue(!learning.value.translation)
-        compose.onNodeWithContentDescription(app.getString(R.string.lyrics_reading_options)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_reading_size)).performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
         assertEquals(MAX_READING_SCALE, learning.value.readingScale, 0f)
-        compose.onNodeWithContentDescription(app.getString(R.string.back_button)).performScrollTo().performClick()
         compose.onNodeWithContentDescription(app.getString(R.string.back_button)).performScrollTo().performClick()
         compose.onNodeWithText(app.getString(R.string.floating_overlay_size)).assertExists()
     }

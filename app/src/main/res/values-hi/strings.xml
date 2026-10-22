@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">अभी गाई जा रही</string>
     <string name="lyrics_sync_reset">रीसेट करें</string>
     <string name="lyrics_sync_done">हो गया</string>
+    <string name="lyrics_sync_earlier">आधा सेकंड पहले</string>
+    <string name="lyrics_sync_later">आधा सेकंड बाद</string>
     <string name="lyrics_listen_along">साथ में सुनें</string>
     <string name="lyrics_stop_listening">सुनना बंद करें</string>
     <string name="visuals_show">विज़ुअल दिखाएँ</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">अनुवाद करें</string>
     <string name="card_type_new">नया प्रकार</string>
     <string name="card_type_name">नाम</string>
+    <string name="card_type_edit">कार्ड संपादित करें</string>
     <string name="card_type_delete">प्रकार हटाएँ</string>
     <string name="card_type_reset">डिफ़ॉल्ट पर लौटाएँ</string>
     <string name="practice_bigger">बड़ा</string>
@@ -390,7 +393,6 @@
     <string name="lyrics_only_latin">सिर्फ़ लैटिन अक्षर</string>
     <string name="lyrics_from_romaji">ChatGPT ने जापानी में लिखा</string>
     <string name="lyrics_reading_options">उच्चारण</string>
-    <string name="lyrics_readings_off">बंद</string>
     <string name="lyrics_display_original">मूल</string>
     <string name="lyrics_display_kana">काना</string>
     <string name="lyrics_display_latin">लैटिन</string>

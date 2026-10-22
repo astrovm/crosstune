@@ -221,6 +221,8 @@
     <string name="lyrics_sync_line">Nu gezongen</string>
     <string name="lyrics_sync_reset">Herstellen</string>
     <string name="lyrics_sync_done">Klaar</string>
+    <string name="lyrics_sync_earlier">Een halve seconde eerder</string>
+    <string name="lyrics_sync_later">Een halve seconde later</string>
     <string name="lyrics_listen_along">Meeluisteren</string>
     <string name="lyrics_stop_listening">Stoppen met luisteren</string>
     <string name="visuals_show">Visuals tonen</string>
@@ -326,6 +328,7 @@
     <string name="card_type_translate">Vertalen</string>
     <string name="card_type_new">Nieuw type</string>
     <string name="card_type_name">Naam</string>
+    <string name="card_type_edit">Kaart bewerken</string>
     <string name="card_type_delete">Type verwijderen</string>
     <string name="card_type_reset">Standaard herstellen</string>
     <string name="practice_bigger">Groter</string>
@@ -390,7 +393,6 @@
     <string name="lyrics_only_latin">Alleen Latijnse letters</string>
     <string name="lyrics_from_romaji">In het Japans geschreven door ChatGPT</string>
     <string name="lyrics_reading_options">Lezingen</string>
-    <string name="lyrics_readings_off">Uit</string>
     <string name="lyrics_display_original">Origineel</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latijn</string>

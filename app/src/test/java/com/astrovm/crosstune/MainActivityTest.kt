@@ -3237,6 +3237,10 @@ class MainActivityTest {
         composeRule.onRoot().performTouchInput { swipeDown() }
         waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isEmpty() }
         waitForDescription(playingIn)
+        // Down from the middle of the screen isn't from the top, so the player stays.
+        composeRule.onRoot().performTouchInput { swipeDown(startY = centerY, endY = bottom) }
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasContentDescription(playingIn)).fetchSemanticsNodes().isNotEmpty())
         composeRule.onRoot().performTouchInput { swipeDown() }
         waitForDescription(play)
         assertTrue(composeRule.onAllNodes(hasContentDescription(playingIn)).fetchSemanticsNodes().isEmpty())

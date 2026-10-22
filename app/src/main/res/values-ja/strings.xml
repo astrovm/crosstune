@@ -222,6 +222,8 @@
     <string name="lyrics_sync_line">今歌われている</string>
     <string name="lyrics_sync_reset">リセット</string>
     <string name="lyrics_sync_done">完了</string>
+    <string name="lyrics_sync_earlier">0.5秒早く</string>
+    <string name="lyrics_sync_later">0.5秒遅く</string>
     <string name="lyrics_listen_along">一緒に聞く</string>
     <string name="lyrics_stop_listening">聞くのをやめる</string>
     <string name="visuals_show">ビジュアルを表示</string>
@@ -327,6 +329,7 @@
     <string name="card_type_translate">訳す</string>
     <string name="card_type_new">新しい種類</string>
     <string name="card_type_name">名前</string>
+    <string name="card_type_edit">カードを編集</string>
     <string name="card_type_delete">種類を削除</string>
     <string name="card_type_reset">初期設定に戻す</string>
     <string name="practice_bigger">大きく</string>
@@ -391,7 +394,6 @@
     <string name="lyrics_only_latin">ローマ字のみ</string>
     <string name="lyrics_from_romaji">ChatGPTが日本語で表記</string>
     <string name="lyrics_reading_options">読み方</string>
-    <string name="lyrics_readings_off">オフ</string>
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">かな</string>
     <string name="lyrics_display_latin">ラテン字</string>

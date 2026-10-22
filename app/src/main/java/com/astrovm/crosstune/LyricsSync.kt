@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import kotlin.math.abs
 
 /** A line put in time by hand: the words had it at [lineMs], and the user heard it at [songMs]. */
 internal data class SyncPoint(val lineMs: Long, val songMs: Long)
@@ -38,7 +39,27 @@ internal object LyricsSync {
      * line before it heard later or one after it heard sooner, so the words keep their order.
      */
     fun with(points: List<SyncPoint>, point: SyncPoint): List<SyncPoint> =
-        (points.filterNot { it.lineMs == point.lineMs || (it.lineMs < point.lineMs) != (it.songMs < point.songMs) } + point).sortedBy { it.lineMs }
+        withoutSlips((points.filterNot { it.lineMs == point.lineMs || (it.lineMs < point.lineMs) != (it.songMs < point.songMs) } + point).sortedBy { it.lineMs })
+
+    /**
+     * [points] less those that are off alone: a line heard far from where the lines either side of
+     * it agree it should be is a slip of the finger, and would bend every line between them. The ends
+     * need the next two to agree.
+     */
+    fun withoutSlips(points: List<SyncPoint>): List<SyncPoint> {
+        if (points.size < 3) return points
+        val shifts = points.map { it.songMs - it.lineMs }
+        return points.filterIndexed { index, _ ->
+            val around = if (index == 0) shifts.slice(1..2) else if (index == points.lastIndex) shifts.slice(index - 2 until index) else listOf(shifts[index - 1], shifts[index + 1])
+            abs(around[0] - around[1]) > AGREE_MS || abs(shifts[index] - around.average()) <= SLIP_MS
+        }
+    }
+
+    /** How far apart the lines around one may be heard, and still agree. */
+    private const val AGREE_MS = 1_500L
+
+    /** How far from where they agree a line may be heard before it's a slip. */
+    private const val SLIP_MS = 2_500L
 }
 
 /**
@@ -50,9 +71,9 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
     fun load(song: MusicMetadata, lines: List<LyricLine>): List<SyncPoint> {
         val json = all()?.optJSONObject(keyOf(song))?.takeIf { it.optString("words") == fingerprint(lines) } ?: return emptyList()
         val array = json.optJSONArray("points") ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index ->
+        return LyricsSync.withoutSlips((0 until array.length()).mapNotNull { index ->
             array.optJSONArray(index)?.let { SyncPoint(it.optLong(0), it.optLong(1)) }
-        }.sortedBy { it.lineMs }
+        }.sortedBy { it.lineMs })
     }
 
     fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>) {

@@ -280,7 +280,6 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
 private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
     val options = state.floating
     var words by remember { mutableStateOf(false) }
-    var details by remember { mutableStateOf(false) }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -294,12 +293,12 @@ private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: (
         Column(modifier = Modifier.heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.55f)
             .verticalScroll(rememberScrollState()).padding(16.dp)) {
             if (words) {
-                if (!details) Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { if (details) details = false else words = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { words = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }
                     Text(stringResource(R.string.lyrics_learn), style = MaterialTheme.typography.titleSmall)
                 }
                 Text(stringResource(R.string.floating_shared), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                WordsOptions(state.learning, actions.learning, details, { details = it })
+                WordsOptions(state.learning, actions.learning)
             } else {
             TextButton(onClick = { words = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 AppIcon(R.drawable.ic_translate, contentDescription = null)
