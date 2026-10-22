@@ -650,6 +650,17 @@ class PlaybackTest {
     }
 
     @Test
+    fun theAppPlayingItIsTheOneControlledAsItsTheOneFollowed() {
+        allow()
+        // Spotify, first, is paused on the song, and YouTube Music plays it.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
+        assertEquals("com.google.android.apps.youtube.music", followed().last()!!.appPackage)
+        assertEquals("com.google.android.apps.youtube.music", playback.appFor(song)?.packageName)
+        assertNull(playback.appFor(MusicMetadata("Other", "Band")))
+    }
+
+    @Test
     fun theAppPlayingItIsAskedToPlayOrPause() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))

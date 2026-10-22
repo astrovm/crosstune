@@ -352,6 +352,18 @@ class ListeningTest {
     }
 
     @Test
+    fun theBarPausesAnAppThatDoesntSayWhereItIs() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        // A radio app plays, and never says where it is: the bar shows it playing, so its button pauses it.
+        phone.onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null)
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
+    }
+
+    @Test
     fun theBarForTheSongPlayingPausesSkipsAndOpensItsPlayerAndStaysWhilePaused() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }

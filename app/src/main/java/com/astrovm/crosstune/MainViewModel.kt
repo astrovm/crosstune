@@ -768,10 +768,10 @@ internal class MainViewModel(
         openPlayer(now.song, now.following?.appPackage, played = true)
     }
 
-    /** Pauses the song playing now, or plays it again. */
+    /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
         val now = uiState.playingNow ?: return
-        playback?.playPause(now.song, now.following?.clock?.playing != true)
+        playback?.playPause(now.song, now.following?.clock?.playing == false)
     }
 
     fun playingNowSkip() {
@@ -1076,14 +1076,15 @@ internal class MainViewModel(
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
                 // Seen to play it, or with no way to see, that's that; an app may say yes and not play it.
                 val sees = source?.hasAccess() == true
-                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null } } != null)) return@launch
+                // Played in that app, not another that has it too.
+                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage) } } != null)) return@launch
                 // An app that can't be asked in the background is opened on the song, and, when
                 // Crosstune can see it play there, left again once it does, as practice does.
                 val back = source?.takeIf { exact && sees && it.openSong(app, link) } ?: return@launch run {
                     closePlayer()
                     open(destination, finishAfterOpen = false, tapped = true)
                 }
-                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null } }
+                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage) } }
                 back.comesBack()
             } finally {
                 uiState = uiState.copy(playingResult = false)
@@ -1143,7 +1144,8 @@ internal class MainViewModel(
     fun playerPlayPause() {
         val player = uiState.player ?: return
         val following = player.following ?: return run {
-            viewModelScope.launch { playback?.playSong(player.song, player.app, player.link) }
+            // Still being asked for, a second ask would start it over.
+            if (!uiState.playingResult) viewModelScope.launch { playback?.playSong(player.song, player.app, player.link) }
         }
         playback?.playPause(player.song, !following.clock.playing)
     }
@@ -1191,7 +1193,8 @@ internal class MainViewModel(
             }
         }
         // Already in that app, playing or paused, it's brought forward, not asked for again, which would restart it.
-        val there = uiState.result?.takeIf { tapped }?.let { song ->
+        // Only a song plays: an album or a playlist named as the song playing opens as itself.
+        val there = uiState.result?.takeIf { tapped && it.type == ItemType.TRACK }?.let { song ->
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
