@@ -823,15 +823,16 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
  * A line for what still keeps links from Crosstune: links Android doesn't let it open yet (before
  * Android 12, which can't tell, a reminder), and one for installed apps that still open their own.
  * On the main screen each can be closed, until something else keeps links; settings always shows them.
+ * Where [sourcesMarked], each source not allowed yet is marked on its row, so that line isn't repeated.
  */
 @Composable
-internal fun LinkNotices(state: UiState, actions: ScreenActions, inSettings: Boolean = false) {
+internal fun LinkNotices(state: UiState, actions: ScreenActions, inSettings: Boolean = false, sourcesMarked: Boolean = false) {
     // Notices come and go as things are fixed, so the space they take follows smoothly.
-    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, inSettings) }
+    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, inSettings, sourcesMarked) }
 }
 
 @Composable
-private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean) {
+private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean, sourcesMarked: Boolean) {
     // Nothing is known to be wrong until Android has been asked.
     if (!state.systemStateKnown) return
     val allow = stringResource(R.string.allow_button)
@@ -844,8 +845,7 @@ private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean)
             // Set to open in the browser, no link reaches Crosstune at all.
             if (OWN_LINKS_OFF in keys) {
                 NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
-            } else if (!inSettings) {
-                // Settings marks each service that isn't allowed yet instead.
+            } else if (!sourcesMarked) {
                 NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
             }
         }

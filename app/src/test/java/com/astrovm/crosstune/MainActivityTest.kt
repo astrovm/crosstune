@@ -5040,10 +5040,12 @@ class MainActivityTest {
         click(string(R.string.setup_skip_for_now))
 
         assertTextShown(string(R.string.notice_links_not_allowed))
-        // Settings marks the sources, and each one Android doesn't let Crosstune open yet.
+        // Settings says so too, and the list of sources marks each one Android doesn't let Crosstune open yet.
         click(string(R.string.settings_button))
-        assertMarked(string(R.string.setup_not_allowed))
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.settings_links_title))
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
         assertMarked(string(R.string.setup_not_allowed))
         states = (LinkInterception.HOSTS.values.flatten() + Frontend.SOURCES.flatMap { it.sites }).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
@@ -5472,11 +5474,13 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.setup_done))
         click(string(R.string.setup_skip_for_now))
 
-        // Settings marks the service itself rather than repeating the notice.
+        // Settings says so too, with nothing to close; the list of sources marks the service itself instead.
         click(string(R.string.settings_button))
+        assertTextShown(string(R.string.notice_links_not_allowed))
+        assertTextAbsent(string(R.string.dismiss_button))
+        click(string(R.string.settings_links_title))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
         assertMarked(string(R.string.setup_not_allowed))
-        click(string(R.string.settings_links_title))
         openSource(string(R.string.service_spotify))
         click(string(R.string.allow_button))
         click(string(R.string.open_link_settings_button))
@@ -5494,7 +5498,7 @@ class MainActivityTest {
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.setup_not_allowed))
         click(string(R.string.back_button))
-        assertTextAbsent(string(R.string.setup_not_allowed))
+        assertTextAbsent(string(R.string.notice_links_not_allowed))
         click(string(R.string.back_button))
         assertTextAbsent(string(R.string.notice_links_not_allowed))
     }

@@ -609,7 +609,7 @@ private fun PageRow(label: String, onOpen: () -> Unit) {
 /** The page listing the sources of links. */
 private const val SOURCES_PAGE = "sources"
 
-/** How many sources' links Crosstune opens, opening the list of them; marked when one isn't allowed yet, as the notice above says. */
+/** How many sources' links Crosstune opens, opening the list of them; the notice above says when Android doesn't allow some yet. */
 @Composable
 private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
     Row(
@@ -617,12 +617,6 @@ private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (sources.any { it.notAllowed }) {
-            AppIcon(
-                R.drawable.ic_error, contentDescription = stringResource(R.string.setup_not_allowed),
-                tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
-            )
-        }
         Text(
             stringResource(R.string.visuals_list_summary, sources.count { it.on }, sources.size),
             style = MaterialTheme.typography.bodyMedium,
@@ -633,7 +627,8 @@ private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
 
 /**
  * Every source of links with its switch; tapping one's name opens the rest of its options. What still
- * keeps links from Crosstune is on top, as on the list, so turning one on shows what Android needs next.
+ * keeps links from Crosstune is on top, as on the list, so turning one on shows what Android needs next;
+ * those Android doesn't allow yet are marked on their rows instead.
  */
 @Composable
 private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<SourceSettings>, scroll: ScrollState, onOpen: (String) -> Unit, onBack: () -> Unit) {
@@ -647,7 +642,7 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
         },
         scrollState = scroll
     ) {
-        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
+        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true, sourcesMarked = true) }
         Group(modifier = Modifier.padding(top = 4.dp)) {
             sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
