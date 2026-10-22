@@ -301,7 +301,6 @@
     <string name="lyrics_words_size">Ukuran lirik</string>
     <string name="lyrics_translation_size">Ukuran terjemahan</string>
     <string name="lyrics_show_as">Tampilkan sebagai</string>
-    <string name="lyrics_also_show">Tampilkan juga</string>
     <string name="report_problem">Laporkan masalah</string>
     <string name="report_problem_text">Lirik salah, waktu tidak pas, atau hal lain. Jelaskan masalahnya, lalu kirim.</string>
     <string name="report_by_email">Email</string>

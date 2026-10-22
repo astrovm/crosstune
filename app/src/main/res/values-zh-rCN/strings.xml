@@ -301,7 +301,6 @@
     <string name="lyrics_words_size">歌词大小</string>
     <string name="lyrics_translation_size">翻译大小</string>
     <string name="lyrics_show_as">显示方式</string>
-    <string name="lyrics_also_show">同时显示</string>
     <string name="report_problem">报告问题</string>
     <string name="report_problem_text">歌词错误、时间不准或其他问题。写下问题后发送。</string>
     <string name="report_by_email">电子邮件</string>

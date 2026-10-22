@@ -301,7 +301,6 @@
     <string name="lyrics_words_size">가사 크기</string>
     <string name="lyrics_translation_size">번역 크기</string>
     <string name="lyrics_show_as">표시 방식</string>
-    <string name="lyrics_also_show">함께 표시</string>
     <string name="report_problem">문제 신고</string>
     <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
     <string name="report_by_email">이메일</string>
