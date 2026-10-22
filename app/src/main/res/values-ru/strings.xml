@@ -77,8 +77,8 @@
     <string name="type_artist">Исполнитель</string>
     <string name="type_playlist">Плейлист</string>
 
-    <string name="setting_ask_each_time">Спрашивать, где открыть</string>
-    <string name="show_song_first">Сначала показать трек</string>
+    <string name="setting_play_right_away">Сразу воспроизводить</string>
+    <string name="settings_plays_in_label">Воспроизводить в</string>
     <string name="show_song_short">Показать трек</string>
     <string name="setting_exact_match">Открывать точное совпадение</string>
     <string name="setting_exact_match_description">Иначе ищет.</string>

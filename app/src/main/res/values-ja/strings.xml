@@ -78,8 +78,8 @@
     <string name="type_artist">アーティスト</string>
     <string name="type_playlist">プレイリスト</string>
 
-    <string name="setting_ask_each_time">使うアプリを毎回選ぶ</string>
-    <string name="show_song_first">先に曲を表示</string>
+    <string name="setting_play_right_away">すぐに再生</string>
+    <string name="settings_plays_in_label">再生するアプリ</string>
     <string name="show_song_short">曲を表示</string>
     <string name="setting_exact_match">一致する項目を直接開く</string>
     <string name="setting_exact_match_description">対応していなければ検索します。</string>

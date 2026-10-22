@@ -127,6 +127,7 @@ internal class MainViewModel(
 
     init {
         migrateExistingInstall()
+        migrateLinkMode()
     }
 
     /** The last look at what Android says about apps and links, null until the first one finishes. */
@@ -139,11 +140,11 @@ internal class MainViewModel(
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
         UiState(
-            askEachTime = preferences.getBoolean(KEY_ASK_EACH_TIME, false),
+            linksInCrosstune = preferences.getBoolean(KEY_LINKS_IN_CROSSTUNE, false),
+            playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
             exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
-            showSongFirst = preferences.getBoolean(KEY_SHOW_SONG_FIRST, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
@@ -284,6 +285,20 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_SETUP_COMPLETE, isExistingInstall) }
     }
 
+    /**
+     * Links open in Crosstune from new installs on, and for whoever had them ask or show the song
+     * first, both of which the song's card does now; only from new installs does the song play
+     * right away. Someone who had links open in an app keeps that.
+     */
+    private fun migrateLinkMode() {
+        if (preferences.contains(KEY_LINKS_IN_CROSSTUNE)) return
+        val shownFirst = preferences.getBoolean(KEY_ASK_EACH_TIME, false) || preferences.getBoolean(KEY_SHOW_SONG_FIRST, false)
+        preferences.edit {
+            putBoolean(KEY_LINKS_IN_CROSSTUNE, shownFirst || !preferences.getBoolean(KEY_SETUP_COMPLETE, false))
+            putBoolean(KEY_PLAY_RIGHT_AWAY, !shownFirst)
+        }
+    }
+
     private val effectChannel = Channel<Effect>(Channel.BUFFERED)
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
@@ -366,8 +381,13 @@ internal class MainViewModel(
     }
 
     private var job: Job? = null
-    private var lastRequest: Triple<LinkInput, Boolean, Destination?>? = null
+    private var lastRequest: Request? = null
     private var pendingOpen = false
+    /** A link opened in Crosstune plays as soon as it's found, once. */
+    private var pendingPlay = false
+
+    /** What was last looked up, and how, for Try again. */
+    private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean)
 
     /**
      * The user's choices and which sources Crosstune opens, which are quick to read, so anything
@@ -599,7 +619,7 @@ internal class MainViewModel(
     private fun parse(text: String): LinkInput? {
         MusicLinks.parse(text)?.let { return it }
         val typed = text.trim()
-        (lastRequest?.first as? LinkInput.RecognizedSong)?.takeIf { it.text == typed }?.let { return it }
+        (lastRequest?.input as? LinkInput.RecognizedSong)?.takeIf { it.text == typed }?.let { return it }
         return uiState.history.asSequence().filter { it.link.service == null }
             .map { LinkInput.RecognizedSong(it.link.url, it.metadata) }
             .firstOrNull { it.url == typed || it.text == typed }
@@ -612,15 +632,17 @@ internal class MainViewModel(
     /**
      * Resolves a link from another app and opens it (or offers destinations) as soon as it is
      * ready; in [destination] when the user already chose one, e.g. with a share sheet target.
-     * With [show], it only shows the result, for the user to pick what to do.
+     * With [show], it only shows the result, for the user to pick what to do. Otherwise it goes
+     * where links go: straight to the app, or to the song's card here.
      */
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
         cancelContentWork()
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
+        val here = !show && destination == null && after == AfterLookup.OPEN && uiState.linksInCrosstune
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
-            handingOff = !show,
+            handingOff = !show && !here,
             afterLookup = after,
             leaveSettings = true
         )
@@ -634,7 +656,7 @@ internal class MainViewModel(
         }
         if (input is LinkInput.Link) uiState = uiState.copy(linkText = input.link.url)
         if (input is LinkInput.RecognizedSong) uiState = uiState.copy(linkText = input.text)
-        resolve(input, openWhenReady = !show, destination)
+        resolve(input, openWhenReady = !show && !here, destination, here = here)
     }
 
     /**
@@ -686,8 +708,8 @@ internal class MainViewModel(
     }
 
     fun retry() {
-        val (input, openWhenReady, destination) = lastRequest ?: return
-        resolve(input, openWhenReady, destination)
+        val (input, openWhenReady, destination, here) = lastRequest ?: return
+        resolve(input, openWhenReady, destination, here = here)
     }
 
     /** Whether Try again listens again, since listening failed before a song was found. */
@@ -827,11 +849,13 @@ internal class MainViewModel(
     /**
      * Looks [input] up, and opens it when [openWhenReady]. A video [copied] a moment ago shows
      * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
+     * A link that came [here], as links do, plays as soon as it's found when set to.
      */
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false) {
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false) {
         cancelContentWork()
-        lastRequest = Triple(input, openWhenReady, destination)
+        lastRequest = Request(input, openWhenReady, destination, here)
         pendingOpen = openWhenReady
+        pendingPlay = here && uiState.playsRightAway
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         fun showLoading() {
             uiState = uiState.copy(
@@ -856,7 +880,7 @@ internal class MainViewModel(
         job = viewModelScope.launch {
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
-            val video = link?.takeIf { (copied || openWhenReady && destination == null) && it.mayNotBeMusic }
+            val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
             val music = video?.let { matcher.isMusicVideo(it.id) }
@@ -985,12 +1009,16 @@ internal class MainViewModel(
             uiState = uiState.copy(handingOff = false)
         }
         // Incoming links without a chosen destination must not search the default before asking.
-        val ask = uiState.selectedDestination == null &&
-            (uiState.askEachTime || !uiState.setupComplete || ownService != null)
+        val ask = uiState.selectedDestination == null && (!uiState.setupComplete || ownService != null)
         if (pendingOpen && ask) {
             pendingOpen = false
             uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService, handingOff = false)
             return
+        }
+        // Opened in Crosstune, it plays from here, when its app can be asked to; otherwise the card has the choices.
+        if (pendingPlay) {
+            pendingPlay = false
+            if (uiState.canPlayResult) return playResult()
         }
         prepareDestination(uiState.resultDestination)
         if (!pendingOpen) return
@@ -1057,7 +1085,6 @@ internal class MainViewModel(
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
         val chosen = destination ?: uiState.resultDestination
-        destination?.let(::rememberLastApp)
         pendingOpen = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
@@ -2555,7 +2582,7 @@ internal class MainViewModel(
         cancelTrackWork()
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
-        val finishAfterOpen = lastRequest?.second == true
+        val finishAfterOpen = lastRequest?.openWhenReady == true
         effectChannel.trySend(Effect.Open(link.url, link.service?.packageName, finishAfterOpen))
     }
 
@@ -2734,6 +2761,7 @@ internal class MainViewModel(
         job = null
         lastRequest = null
         pendingOpen = false
+        pendingPlay = false
         retryListens = false
         dismissSongSearch()
         dismissLyrics()
@@ -2756,27 +2784,15 @@ internal class MainViewModel(
     }
 
     fun selectResultDestination(destination: Destination) {
-        rememberLastApp(destination)
         uiState = uiState.copy(selectedDestination = destination)
         prepareResultDestination()
     }
 
-    /**
-     * Asking which app, or showing the song first, there's no default to make; the app picked last
-     * is offered next time instead. It's stored as the default, which is what the Open button,
-     * Recent and the share sheet use, without changing what tapped links do.
-     */
-    private fun rememberLastApp(destination: Destination) {
-        if (uiState.linkMode == LinkMode.OPEN) return
-        destinationStore.setDefault(destination)
-        uiState = uiState.withDestinations()
-    }
-
     fun selectDefault(destination: Destination) {
         destinationStore.setDefault(destination)
-        // Crosstune would only hand the app its own links back, unless a rule sends them elsewhere.
+        // Opening links in the app, Crosstune would only hand it its own links back, unless a rule sends them elsewhere.
         (destination as? Destination.Service)?.service
-            ?.takeIf { interception.isEnabled(it) && destinationStore.rule(it) == null }
+            ?.takeIf { !uiState.linksInCrosstune && interception.isEnabled(it) && destinationStore.rule(it) == null }
             ?.let { interception.setEnabled(it, false) }
         refreshSystemState()
     }
@@ -2863,13 +2879,16 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_ONLY_MUSIC_VIDEOS, enabled) }
     }
 
-    /** What a tapped or shared link does, picked with the default app: open in it, ask, or show here first. */
-    fun setLinkMode(mode: LinkMode) {
-        uiState = uiState.copy(askEachTime = mode == LinkMode.ASK, showSongFirst = mode == LinkMode.SHOW)
-        preferences.edit {
-            putBoolean(KEY_ASK_EACH_TIME, mode == LinkMode.ASK)
-            putBoolean(KEY_SHOW_SONG_FIRST, mode == LinkMode.SHOW)
-        }
+    /** Where tapped and shared links go: straight to [app], or, with none, to Crosstune. */
+    fun setLinksOpenIn(app: Destination?) {
+        uiState = uiState.copy(linksInCrosstune = app == null)
+        preferences.edit { putBoolean(KEY_LINKS_IN_CROSSTUNE, app == null) }
+        app?.let(::selectDefault)
+    }
+
+    fun setPlayRightAway(enabled: Boolean) {
+        uiState = uiState.copy(playRightAway = enabled)
+        preferences.edit { putBoolean(KEY_PLAY_RIGHT_AWAY, enabled) }
     }
 
     fun setShareSheetApps(enabled: Boolean) {
@@ -2920,6 +2939,8 @@ internal class MainViewModel(
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
+        private const val KEY_LINKS_IN_CROSSTUNE = "links_in_crosstune"
+        private const val KEY_PLAY_RIGHT_AWAY = "play_right_away"
         private const val KEY_THEME = "theme"
         const val KEY_PALETTE = "palette"
         private const val KEY_NOT_FOUND = "not_found"

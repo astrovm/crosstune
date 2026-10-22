@@ -77,8 +77,8 @@
     <string name="type_artist">Artis</string>
     <string name="type_playlist">Playlist</string>
 
-    <string name="setting_ask_each_time">Tanya aplikasi yang dipakai</string>
-    <string name="show_song_first">Tampilkan lagunya dulu</string>
+    <string name="setting_play_right_away">Langsung putar</string>
+    <string name="settings_plays_in_label">Putar di</string>
     <string name="show_song_short">Lihat lagu</string>
     <string name="setting_exact_match">Buka yang persis sama</string>
     <string name="setting_exact_match_description">Jika tidak, mencarinya.</string>

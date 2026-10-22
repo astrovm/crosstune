@@ -202,6 +202,12 @@ class MainActivityTest {
     /** Picks from the menu on the current screen, e.g. the default in settings. */
     private fun chooseDefaultHere(label: String) = pickFromDefaultMenu(label)
 
+    /** Links open in Crosstune, on the song's card, without playing right away. */
+    private fun linksShowHere() = prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", false).commit()
+
+    /** Before setup, with links opening in an app, a link asks which one. */
+    private fun linksAskBeforeSetup() = prefs().edit().putBoolean("setup_complete", false).putBoolean("links_in_crosstune", false).commit()
+
     private fun pickFromDefaultMenu(label: String) {
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
         composeRule.waitForIdle()
@@ -476,7 +482,7 @@ class MainActivityTest {
 
     @Test
     fun aNowPlayingSongShowsAndSavesTheCoverFoundForIt() {
-        prefs().edit().putBoolean("show_song_first", true).commit()
+        linksShowHere()
         val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         fake.handler = { request -> FakeSpotify.html(request,
             """{"data":[{"title":"A Song (Remastered)","artist":{"name":"The Example Band"},"album":{"cover_big":"$cover"}}]}""") }
@@ -536,7 +542,7 @@ class MainActivityTest {
 
     @Test
     fun recognizedSongDisplaysWithoutInventingASourceService() {
-        prefs().edit().putBoolean("show_song_first", true).commit()
+        linksShowHere()
         launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
@@ -589,16 +595,20 @@ class MainActivityTest {
     }
 
     @Test
-    fun sharedLinksCanShowTheSongFirstInsteadOfOpeningIt() {
+    fun linksCanOpenInCrosstuneWithoutPlayingRightAway() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         respondWithTrack("Shown First", "Artist · Song")
         launch()
-        // Picked where the default app is, it's what the menu then shows.
+        // Crosstune, first in the menu, is what it then shows, with whether songs play right away and in which app.
         inSettings {
-            chooseDefaultHere(string(R.string.show_song_first))
-            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.show_song_first)))
+            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assertDoesNotExist()
+            chooseDefaultHere(string(R.string.app_name))
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.app_name)))
+            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assert(hasText(string(R.string.target_deezer)))
+            click(string(R.string.setting_play_right_away))
         }
-        assertTrue(prefs().getBoolean("show_song_first", false))
+        assertTrue(prefs().getBoolean("links_in_crosstune", false))
+        assertFalse(prefs().getBoolean("play_right_away", true))
         controller!!.pause().stop().destroy()
 
         val activity = launch(
@@ -630,6 +640,96 @@ class MainActivityTest {
         )
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("deezer.android.app", nextStartedActivity()!!.`package`)
+    }
+
+    @Test
+    fun aLinkOpenedInCrosstunePlaysRightAwayInTheAppPickedOnceItsThere() {
+        val deezer = MusicService.DEEZER.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).commit()
+        respondWithTrack("Right Away", "Artist · Song")
+        // Without the app, there's nothing to play it in, so the card has the choices.
+        launch(trackLink())
+        waitForText("Right Away")
+        assertTrue(phone.songsAsked.isEmpty())
+        assertNull(nextStartedActivity())
+        controller!!.pause().stop().destroy()
+
+        shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
+        val activity = launch(trackLink())
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("Right Away", "Artist") to deezer, phone.songsAsked.single())
+        // Crosstune stays, in its player.
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isNotEmpty())
+        assertFalse(activity.isFinishing)
+        assertNull(nextStartedActivity())
+
+        // Picking the app from the card plays nothing by itself.
+        phone.songsAsked.clear()
+        click(string(R.string.dismiss_button))
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForResult()
+        assertTrue(phone.songsAsked.isEmpty())
+    }
+
+    @Test
+    fun beforeSetupALinkShowsOnItsCardWithNoAppToPlayItIn() {
+        freshInstall()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        respondWithTrack("Not Yet", "Artist · Song")
+        val activity = launch(trackLink())
+        waitForText("Not Yet")
+        assertResultShown()
+        assertTextAbsent(string(R.string.picker_title))
+        assertTrue(phone.songsAsked.isEmpty())
+        assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun linksOpenInCrosstuneForNewInstallsAndForWhoeverHadThemAskOrShowTheSongFirst() {
+        fun migrated(vararg before: Pair<String, Boolean>): Pair<Boolean, Boolean> {
+            prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")
+                .apply { before.forEach { (key, on) -> putBoolean(key, on) } }.commit()
+            launch()
+            controller!!.pause().stop().destroy()
+            return prefs().getBoolean("links_in_crosstune", false) to prefs().getBoolean("play_right_away", false)
+        }
+        assertEquals(true to true, migrated("setup_complete" to false))
+        // Links opening in an app keep doing so.
+        assertEquals(false to true, migrated("setup_complete" to true))
+        assertEquals(true to false, migrated("setup_complete" to true, "ask_each_time" to true))
+        assertEquals(true to false, migrated("setup_complete" to true, "show_song_first" to true))
+        // Once moved over, it's what was picked.
+        prefs().edit().putBoolean("links_in_crosstune", false).putBoolean("show_song_first", true).commit()
+        launch()
+        assertFalse(prefs().getBoolean("links_in_crosstune", true))
+    }
+
+    @Test
+    fun anAppPickedForLinksTakesThemFromCrosstuneAgain() {
+        prefs().edit().putString("default_target", "DEEZER").commit()
+        linksShowHere()
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
+        respondWithTrack("Back To Apps", "Artist · Song")
+        launch()
+        inSettings {
+            chooseDefaultHere(string(R.string.target_youtube_music))
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube_music)))
+            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assertDoesNotExist()
+        }
+        assertFalse(prefs().getBoolean("links_in_crosstune", true))
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        // The app's own links go straight to it again.
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+        controller!!.pause().stop().destroy()
+
+        val activity = launch(trackLink())
+        waitUntil { activity.isFinishing }
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
     }
 
     @Test
@@ -1842,7 +1942,8 @@ class MainActivityTest {
 
     @Test
     fun aShareSheetTargetOpensTheLinkInItsAppWithoutAsking() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("ask_each_time", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        linksAskBeforeSetup()
         respondWithTrack("Direct", "Artist · Song")
         launch(
             Intent(Intent.ACTION_SEND).apply {
@@ -4137,30 +4238,10 @@ class MainActivityTest {
     }
 
     @Test
-    fun askEachTimeOffersDestinationsForIncomingLinks() {
-        respondWithTrack("Pick Me", "Artist · Song")
-        launch()
-        inSettings { chooseDefaultHere(string(R.string.setting_ask_each_time)) }
-        assertTrue(prefs().getBoolean("ask_each_time", false))
-        controller!!.pause().stop().destroy()
-
-        val activity = launch(trackLink())
-        waitForText(string(R.string.picker_title))
-        assertFalse(activity.isFinishing)
-        assertNull(nextStartedActivity())
-
-        click(string(R.string.open_in_deezer))
-        waitUntil { activity.isFinishing }
-        val opened = nextStartedActivity()!!
-        assertEquals("deezer.android.app", opened.`package`)
-        // Asking each time, the app picked is remembered for next time, while links keep asking.
-        assertEquals("DEEZER", prefs().getString("default_target", null))
-        assertTrue(prefs().getBoolean("ask_each_time", false))
-    }
-
-    @Test
-    fun askingOrShowingFirstFreesTheUsualAppsLinksAndRemembersTheLastAppInstead() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("show_song_first", true).commit()
+    fun openingInCrosstuneFreesTheUsualAppsLinksAndOffersToMakeAnotherAppTheDefault() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        linksShowHere()
+        LinkInterception(app).setEnabled(MusicService.DEEZER, true)
         respondWithTrack("Last One", "Artist · Song")
         launch()
 
@@ -4170,22 +4251,24 @@ class MainActivityTest {
         click(string(R.string.back_button))
         click(string(R.string.back_button))
 
-        // There's no default to make: picking another app for a result just remembers it.
+        // Another app picked for a result can be made the one songs play in, which leaves its links opening here.
         resolveTyped()
         assertResultShown()
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithText(string(R.string.target_deezer)).onLast().performClick()
         composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.make_default_named, string(R.string.target_deezer)))
+        assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
+        click(string(R.string.make_default_named, string(R.string.target_deezer)))
         assertEquals("DEEZER", prefs().getString("default_target", null))
-        assertTrue(prefs().getBoolean("show_song_first", false))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.DEEZER))
+        assertTrue(prefs().getBoolean("links_in_crosstune", false))
     }
 
     @Test
-    fun askEachTimeMatchesOnlyTheChosenDestination() {
-        prefs().edit().putBoolean("ask_each_time", true).putBoolean("exact_match", true)
-            .putString("default_target", "DEEZER").commit()
+    fun thePickerMatchesOnlyTheChosenDestination() {
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        linksAskBeforeSetup()
         fake.handler = { request ->
             if (request.url.host == "itunes.apple.com") {
                 FakeSpotify.html(request,
@@ -4214,7 +4297,7 @@ class MainActivityTest {
 
     @Test
     fun dismissingTheDestinationPickerKeepsTheResult() {
-        prefs().edit().putBoolean("ask_each_time", true).commit()
+        linksAskBeforeSetup()
         respondWithTrack("Stay", "Artist · Song")
         val activity = launch(trackLink())
         waitForText(string(R.string.picker_title))
@@ -4224,15 +4307,12 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.picker_title))
         assertResultShown()
         assertFalse(activity.isFinishing)
-        // Picking an app as the default goes back to opening in it.
-        inSettings { chooseDefaultHere(string(R.string.target_youtube_music)) }
-        assertFalse(prefs().getBoolean("ask_each_time", true))
     }
 
     @Test
     fun dismissingThePickerPreparesTheDisplayedDestinationWithoutOpeningIt() {
-        prefs().edit().putBoolean("ask_each_time", true).putBoolean("exact_match", true)
-            .putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        linksAskBeforeSetup()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 FakeSpotify.html(request,
@@ -4979,8 +5059,8 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
 
-        // Listening in YouTube leaves YouTube's own links alone, but not its frontends'.
-        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        // Links opening in Crosstune, YouTube's own come here too, though it's where songs play, and so do its frontends'.
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
         assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
         assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
         click(string(R.string.setup_skip_for_now))
@@ -5045,6 +5125,14 @@ class MainActivityTest {
         // YouTube Music was asked. The video's own lookup runs alongside, so a music video waits once,
         // and is dropped once it isn't music.
         assertTrue(fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") })
+
+        controller!!.pause().stop().destroy()
+
+        // Opening links in Crosstune, it goes to YouTube all the same, rather than to a card.
+        linksShowHere()
+        val shown = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
+        waitUntil { shown.isFinishing }
+        assertEquals(MusicService.YOUTUBE.packageName, nextStartedActivity()!!.`package`)
     }
 
     @Test
@@ -6377,7 +6465,7 @@ class MainActivityTest {
         val choices = listOf(Destination.Service(MusicService.SPOTIFY), custom, Destination.Service(installed))
         assertEquals(listOf(Destination.Service(installed), Destination.Service(MusicService.SPOTIFY), custom), choices.installedFirst(setOf(installed)))
         respondWithTrack("Picker summary", "Artist · Song")
-        prefs().edit().putBoolean("ask_each_time", true).commit()
+        linksAskBeforeSetup()
         launch(trackLink())
         waitForText(string(R.string.picker_title))
         assertTextShown("Picker summary")
@@ -6515,7 +6603,7 @@ class MainActivityTest {
 
     @Test
     fun aYouTubeSongShowsItsAlbumCoverInsteadOfTheVideoFrame() {
-        prefs().edit().putBoolean("show_song_first", true).commit()
+        linksShowHere()
         val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         fun respond(deezer: String) {
             fake.handler = { request ->
@@ -6702,7 +6790,7 @@ class MainActivityTest {
     fun thePickerWaitsForTheInstalledAppsItListsFirst() {
         val android = QueueDispatcher()
         MainActivity.systemDispatcher = android
-        prefs().edit().putBoolean("ask_each_time", true).commit()
+        linksAskBeforeSetup()
         HistoryStore(prefs()).add(
             HistoryEntry(
                 MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),

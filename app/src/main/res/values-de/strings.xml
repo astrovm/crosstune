@@ -77,8 +77,8 @@
     <string name="type_artist">Künstler</string>
     <string name="type_playlist">Playlist</string>
 
-    <string name="setting_ask_each_time">Nach der App fragen</string>
-    <string name="show_song_first">Zuerst den Song zeigen</string>
+    <string name="setting_play_right_away">Sofort abspielen</string>
+    <string name="settings_plays_in_label">Abspielen in</string>
     <string name="show_song_short">Song zeigen</string>
     <string name="setting_exact_match">Genauen Treffer öffnen</string>
     <string name="setting_exact_match_description">Sonst wird gesucht.</string>

@@ -7,7 +7,7 @@ Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in dein
 <li>Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp und Audiomack und öffnet sie in einem dieser Dienste oder in Amazon Music und Qobuz.</li>
 <li>Playlists und Alben zeigen ihre Songs: Öffne jeden davon in deiner App, kopiere oder teile die Liste oder spiele alles in YouTube Music oder YouTube ab.</li>
 <li>Schicke jeden Dienst woandershin, z. B. YouTube-Links an YouTube Music und alles andere an Apple Music.</li>
-<li>Nach der App fragen: Wähle bei jedem angetippten oder geteilten Link eine App.</li>
+<li>Links in Crosstune öffnen: Der Song läuft in deiner App, während du bleibst.</li>
 <li>Genauen Treffer öffnen: Wo die App es kann, öffnet sich der Song, das Album oder der Künstler selbst statt einer Suche.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
 <li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
