@@ -1255,7 +1255,7 @@ class ListeningTest {
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
         val phone = FakePlayback().apply {
             access = true
-            onThePhone = Heard.Song(song, null)
+            onThePhone = Heard.Song(song.copy(title = "デモ - Demo"), null)
             playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
