@@ -8,6 +8,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +64,12 @@ class AppLanguageTest {
         assertNull(AppLanguage.translationTag("sv"))
         // Each has a flag.
         AppLanguage.translationTags.forEach { assertNotNull(it, AppLanguage.flag(it)) }
+        // Each is a language a song can be told to be in: any variety of it, but Chinese by how it's written.
+        assertEquals("es", AppLanguage.untranslatedTag("es-AR"))
+        assertEquals("en", AppLanguage.untranslatedTag("en-GB"))
+        assertEquals("zh-TW", AppLanguage.untranslatedTag("zh-TW"))
+        assertEquals("zh-CN", AppLanguage.untranslatedTag("zh-CN"))
+        AppLanguage.translationTags.forEach { assertTrue(it, AppLanguage.untranslatedTag(it) in AppLanguage.untranslatedTags) }
         // Each app language has a flag, and lyrics can be translated into it.
         AppLanguage.tags.forEach { assertNotNull(it, AppLanguage.flag(it)); assertNotNull(it, AppLanguage.translationTag(it)) }
         assertEquals("zh-TW", AppLanguage.translationTag("zh-TW"))
