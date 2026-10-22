@@ -63,18 +63,11 @@ android {
                 "proguard-rules.pro"
             )
         }
-        // "Crosstune Debug": what Android Studio runs, so Live Edit works. Its own package, so it never replaces the released app.
+        // "Crosstune Dev": what Android Studio runs, so Live Edit works, and what's tried on a phone.
+        // Its own package, so it installs next to the released app.
         debug {
-            applicationIdSuffix = ".debug"
-        }
-        // "Crosstune Dev": optimized like the release, so what's tried on a phone runs as fast as
-        // what ships, but signed with the debug key, so it installs next to the released app.
-        create("dev") {
-            initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            matchingFallbacks += listOf("release")
         }
     }
 

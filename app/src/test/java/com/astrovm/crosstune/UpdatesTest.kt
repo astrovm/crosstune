@@ -139,8 +139,8 @@ class UpdatesTest {
 
     @Test
     fun onlyTheReleasedAppLooksForUpdates() {
-        // Tests run a debug build, which GitHub doesn't have.
-        assertEquals("com.astrovm.crosstune.debug", app.packageName)
+        // Tests run the dev build, which GitHub doesn't have.
+        assertEquals("com.astrovm.crosstune.dev", app.packageName)
         assertFalse(isRelease(app))
         // Simulate the released package as well as its release flags.
         val release = object : android.content.ContextWrapper(app) {
