@@ -48,6 +48,11 @@ class VideoTimingTest {
     }
 
     @Test fun anIntroMustAgreeWithTheRecordingsAndCannotBeAReferenceAheadOfTheVideo() {
+        val rejected = VideoTiming()
+        repeat(3) {
+            val at = it * 10_000L
+            assertNull(rejected.heard(PlaybackClock(at + 30_000, at), PlaybackClock(at, at), expectedLeadMs = 0))
+        }
         val timing = VideoTiming()
         val video = PlaybackClock(20_000, 0)
         val song = PlaybackClock(10_000, 0)

@@ -10,6 +10,7 @@ class AudioTimingTest {
     @Test fun separateHearingsAgreeBeforeAConstantShiftIsConfirmed() {
         assertTrue(AudioTiming.confirmed(emptyList()).isEmpty())
         assertTrue(AudioTiming.confirmed(points(10_000, 10_000)).isEmpty())
+        assertTrue(AudioTiming.confirmed(listOf(SyncPoint(0, 10_000), SyncPoint(40_000, 50_000))).isEmpty())
         assertEquals(listOf(SyncPoint(0, 10_000)), AudioTiming.confirmed(points(10_000, 10_200, 9_900)))
         assertEquals(listOf(SyncPoint(0, 10_000)), AudioTiming.confirmed(points(10_000, 10_200, 9_900, 40_000)))
         assertTrue(AudioTiming.confirmed(listOf(SyncPoint(0, 1), SyncPoint(100, 101), SyncPoint(200, 201))).isEmpty())
