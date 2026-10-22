@@ -115,6 +115,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import android.app.Activity
+import android.util.LruCache
 import android.view.WindowManager
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
@@ -1419,12 +1420,19 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     }
 }
 
+/** Chords already placed over the lines they were for, so words opened again have theirs on the first frame. */
+private val placedChords = LruCache<Pair<ChordSheet, List<String>>, List<LineChords>>(PLACED_CHORD_SHEETS)
+
+private const val PLACED_CHORD_SHEETS = 8
+
 /** Each of [texts]' chords while they show, worked out away from the screen, again whenever the lines change. */
 @Composable
 private fun rememberChords(chords: ChordsState, texts: List<String>): List<LineChords> {
-    val sheet = chords.sheet?.takeIf { chords.on }
-    val placed by produceState(emptyList<LineChords>(), sheet, texts) {
-        value = sheet?.let { withContext(Dispatchers.Default) { ChordSheets.place(it, texts) } }.orEmpty()
+    val placing = chords.sheet?.takeIf { chords.on }?.let { it to texts }
+    val placed by produceState(remember(placing) { placing?.let { placedChords[it] } }.orEmpty(), placing) {
+        value = placing?.let { key ->
+            placedChords[key] ?: withContext(Dispatchers.Default) { ChordSheets.place(key.first, key.second) }?.also { placedChords.put(key, it) }
+        }.orEmpty()
     }
     return placed
 }

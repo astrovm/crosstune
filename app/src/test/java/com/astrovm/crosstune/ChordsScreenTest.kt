@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
@@ -93,6 +94,27 @@ class ChordsScreenTest {
         val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
         System.getenv("CHORDS_SCREENSHOT")?.let { path -> File(path).outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
         assertTrue(image.width > 0)
+    }
+
+    @Test
+    fun chordsShownAgainAreOverTheWordsOnTheFirstFrame() {
+        var shown by mutableStateOf(true)
+        val state = state(ChordsState(on = true, sheet = sheet))
+        composeRule.setContent { CrosstuneTheme { if (shown) LyricsScreen(state, ScreenActions()) } }
+        assertEquals(listOf("G", "C", "Em", "D", "D7"), chordsOver("Walking down the river road"))
+        shown = false
+        composeRule.waitForIdle()
+
+        composeRule.mainClock.autoAdvance = false
+        composeRule.runOnUiThread {
+            shown = true
+            // Told now, rather than whenever Compose gets round to it, so the next frame is the first.
+            Snapshot.sendApplyNotifications()
+        }
+        composeRule.mainClock.advanceTimeByFrame()
+        val over = composeRule.onAllNodesWithText("Walking down the river road", useUnmergedTree = true).fetchSemanticsNodes()
+            .firstNotNullOfOrNull { it.config.getOrElseNullable(ChordsShown) { null } }
+        assertEquals(listOf("G", "C", "Em", "D", "D7"), over)
     }
 
     @Test
