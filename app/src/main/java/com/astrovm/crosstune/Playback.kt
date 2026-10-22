@@ -244,7 +244,9 @@ internal class MediaSessionPlayback(
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
             .filter { it.packageName != context.packageName && it.plays(song) && !it.elsewhere() }
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
-            .firstNotNullOfOrNull { playing(it)?.metadata }
+            // plays() already checked the session's title and artist. YouTube's video-title
+            // parser can mistake a bilingual title's first half for an artist.
+            .firstNotNullOfOrNull { playing(it)?.metadata?.copy(title = song.title, artist = song.artist) }
     }
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = callbackFlow {

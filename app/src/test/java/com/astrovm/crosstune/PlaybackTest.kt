@@ -117,6 +117,8 @@ class PlaybackTest {
             state = PlaybackState.STATE_PAUSED, duration = 240_000)
         shadowOf(sessions).addController(paused)
         assertEquals("com.google.android.apps.youtube.music:duration:240000", playback.recording(song)?.recordingId)
+        assertEquals(song.title, playback.recording(song)?.title)
+        assertEquals(song.artist, playback.recording(song)?.artist)
         assertNull(playback.recording(song.copy(title = "Another song")))
         assertNull(playback.nowPlaying())
     }
