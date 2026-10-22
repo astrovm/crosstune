@@ -1287,7 +1287,7 @@ internal class MainViewModel(
 
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        val song = current?.let { requested.copy(recordingId = it.recordingId, lengthMs = it.lengthMs, url = it.url) } ?: requested
+        val song = current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return

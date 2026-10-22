@@ -1126,6 +1126,48 @@ class LyricsFinderTest {
     private val twoTakes = "[${lasting(answer("Song", "Band", "", synced = "[00:01.00] First take one\n[00:10.00] First take two"), 295.0)}]"
 
     @Test
+    fun aRecordingsOwnTimedWordsAreNotRetimedByCopiesOfAnotherEdit() {
+        remixTimedEarly(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0),
+            storeSeconds = 318.483
+        )
+        val others = fake.handler
+        val own = SyncedLyrics.parse(early)
+        val page = youTubeMusicPage(*own.map { it.text to it.timeMs }.toTypedArray())
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/youtubei/v1/next" -> FakeSpotify.html(request, """{"tabs":[{"browseEndpoint":{"browseId":"MPLYt_words"}}]}""")
+                "/youtubei/v1/browse" -> FakeSpotify.html(request, page)
+                else -> others(request)
+            }
+        }
+        // Two copies of another edit agree on other times, which would time words found elsewhere, not the video's own.
+        val video = remix.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        assertTrue(runBlocking { withYouTubeMusic().firstLook(video) }.final)
+        val found = runBlocking { withYouTubeMusic().lyricsOf(video) } as Lyrics.Found
+        assertEquals(own.map { it.timeMs to it.text }, found.lines.map { it.timeMs to it.text })
+    }
+
+    @Test
+    fun anotherTakesWordsTimedWordByWordDoNotBeatThisOnesTimedALineAtATime() {
+        val timed = "[00:16.00] 五月雨は緑色\n[00:23.08] 悲しくさせたよ"
+        val byWord = "[16100,2000](16100,900,0)五月雨は(17000,800,0)緑色\n[23200,2000](23200,2000,0)悲しくさせたよ"
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Hatsukoi", "Hiroko Mita", "五月雨は緑色\n悲しくさせたよ", timed), 200.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}],"duration":240000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        assertEquals(listOf(16_000L, 23_080L), (found(hatsukoi.copy(lengthMs = 200_000)) as Lyrics.Found).lines.map { it.timeMs })
+        // Of a take no one knows the length of, they still win.
+        assertEquals(listOf(16_100L, 23_200L), (found(hatsukoi) as Lyrics.Found).lines.map { it.timeMs })
+    }
+
+    @Test
     fun wordsKeptForAnotherTakeOfTheSongAreLookedUpAgain() {
         fake.handler = { request ->
             when (request.url.host) {
@@ -1202,5 +1244,12 @@ class LyricsFinderTest {
         // Nothing as long anywhere: LRCLIB's stay, as the best there is.
         val none = found(MusicMetadata("Song", "Band", lengthMs = 340_000)) as Lyrics.Found
         assertEquals(295_000L, none.lengthMs)
+        // The store knowing it as long as LRCLIB's take doesn't make that the one playing.
+        val others = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search") FakeSpotify.html(request, """{"results":[{"trackId":7,"trackName":"Song","artistName":"Band","trackTimeMillis":295000}]}""")
+            else others(request)
+        }
+        assertEquals(308_500L, (found(MusicMetadata("Song", "Band", lengthMs = 308_600)) as Lyrics.Found).lengthMs)
     }
 }

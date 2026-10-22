@@ -128,13 +128,14 @@ internal class LyricsFinder(
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) } }
-        val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
-        // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
+        val (found, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
+        // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
+        // they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
-            toCache(found, provisional = true)?.let { cache.put(cacheKey(metadata), it) }
+            toCache(found, provisional = !own)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return FirstLook(asJapanWrites(found), final = false)
+        return FirstLook(asJapanWrites(found), final = own)
     }
 
     /**
@@ -239,10 +240,10 @@ internal class LyricsFinder(
      * YouTube Music's words and those from everywhere else, asked for at once; the better of them.
      * YouTube Music only adds words: it not having them doesn't mean the song has none.
      */
-    private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withContext(Answers()) {
+    private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Best = withContext(Answers()) {
         val official = async { fromYouTubeMusic(metadata, timeoutMs) }
         // Words timed word by word beat any timed a line at a time, and only NetEase has them.
-        val byWord = async { fromNetEase(metadata, null, timeoutMs).takeIf { timing(it) == WORD_TIMED } }
+        val byWord = async { (fromNetEase(metadata, null, timeoutMs) as? Lyrics.Found)?.takeIf { timing(it) == WORD_TIMED } }
         val elsewhere = async { anywhere(metadata, timeoutMs) }
         val own = official.await()
         // A word-timed search result isn't better evidence than this recording's own timed lyrics, so
@@ -250,11 +251,17 @@ internal class LyricsFinder(
         if (own != null && RecordingKey.youTubeId(metadata) != null && timing(own) >= WELL_TIMED) {
             byWord.cancel()
             elsewhere.cancel()
-            return@withContext own
+            return@withContext Best(own, own = true)
         }
         val found = own?.let { better(it, elsewhere.await()) } ?: elsewhere.await()
-        byWord.await()?.let { better(it, found) } ?: found
+        val word = byWord.await() ?: return@withContext Best(found)
+        // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
+        if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@withContext Best(found)
+        Best(better(word, found))
     }
+
+    /** What [best] found, and whether it's the recording's own words, timed for it. */
+    private data class Best(val lyrics: Lyrics, val own: Boolean = false)
 
     /**
      * Words found over none, the better timed of two, and [first] among equals; with no words,
@@ -345,7 +352,8 @@ internal class LyricsFinder(
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
         if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
-        val lengthMs = recording?.lengthMs
+        // The recording playing is the one to time them for; the store's may be another take.
+        val lengthMs = metadata.lengthMs ?: recording?.lengthMs
         // Under its own names the artist may still be credited as the music app names them, as
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
         if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
