@@ -1,0 +1,8 @@
+A player for the song you play, with Copy, Share and Open with, and swipes to the lyrics.
+Lyrics keep their timing per recording, and video intros line up by listening.
+Lyrics timed for another take offer a fix, with nudge arrows.
+Lyrics show faster.
+Make lyrics bigger or smaller, and report wrong words or timing, from their menu.
+Reading correction moved to the practice card's menu.
+50 new visuals, 4 gone. Tap the visuals button for options.
+Patched YouTube and YouTube Music work too.
