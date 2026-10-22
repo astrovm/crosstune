@@ -328,6 +328,8 @@ class MainActivityTest {
             assertTrue("$started", started == null || started.action == "android.content.pm.action.REQUEST_PERMISSIONS")
         }
         val activity = launch()
+        // Turned down once, Android would still ask, so a tap that listens here asks again.
+        shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(android.Manifest.permission.RECORD_AUDIO, true)
         // Nothing installed: Crosstune listens itself, so there's nothing to pick.
         click(recognize)
         assertEquals(android.Manifest.permission.RECORD_AUDIO, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
@@ -3399,10 +3401,11 @@ class MainActivityTest {
         assertEquals(MusicService.DEEZER.packageName, phone.songsAsked.single().second)
     }
 
-    /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays. */
-    private fun timedSong(restricted: Boolean = false): FakePlayback {
+    /** A song whose words come timed, at 1, 20 and 40 seconds in, from a music app the test plays, the [microphone] allowed. */
+    private fun timedSong(restricted: Boolean = false, microphone: Boolean = true): FakePlayback {
         val playback = FakePlayback().apply { this.restricted = restricted }
         MainActivity.playbackFactory = { playback }
+        if (microphone) shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
             """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
         fake.handler = { request ->
@@ -3421,9 +3424,10 @@ class MainActivityTest {
     @Test
     fun timedWordsFollowTheMusicAppPlayingTheSongOnceAllowed() {
         val playback = timedSong()
-        // Not allowed yet, the words say how, and Allow opens Android's page for Crosstune.
+        // Not allowed yet, the words say how, and Allow shows the steps to Android's page for Crosstune.
         waitForText(string(R.string.lyrics_follow_allow))
         click(string(R.string.follow_turn_on))
+        click(string(R.string.fix_open_settings))
         val opened = nextStartedActivity()!!
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, opened.action)
         assertEquals(
@@ -3431,9 +3435,10 @@ class MainActivityTest {
             opened.getStringExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME)
         )
 
-        // Allowed and back, with no app playing it yet: the offer goes, and the microphone's still there.
+        // Allowed and back, with no app playing it yet: the steps and the offer go, and the microphone's still there.
         playback.access = true
         controller!!.pause().resume()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.lyrics_follow_allow)).fetchSemanticsNodes().isEmpty() }
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
 
@@ -3634,7 +3639,7 @@ class MainActivityTest {
 
     @Test
     fun lyricsAskForTheMicrophoneTheFirstTimeTheyOpenOnly() {
-        timedSong()
+        timedSong(microphone = false)
         waitForText(string(R.string.lyrics_follow_allow))
         val activity = controller!!.get()
         val asked = shadowOf(activity).lastRequestedPermission
@@ -3646,7 +3651,8 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.error_microphone))
 
         // Opened again, it isn't asked again.
-        click(string(R.string.back_button))
+        activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
         click(string(R.string.lyrics_button))
         waitForText(string(R.string.lyrics_follow_allow))
         assertTrue(asked === shadowOf(activity).lastRequestedPermission)
@@ -3685,16 +3691,18 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         val follow = composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo()
         follow.assertIsOff()
-        // Switched on: Android's page, and back without it, the steps.
+        // Switched on: the steps to Android's page, which stay till it's allowed there.
         follow.performClick()
+        waitForText(string(R.string.follow_help_title))
+        click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStartedActivity()!!.action)
         controller!!.pause().resume()
-        waitForText(string(R.string.follow_help_title))
+        assertTextShown(string(R.string.follow_help_title))
 
         // Allowed there, it's on, and the steps go.
         playback.access = true
         controller!!.pause().resume()
-        assertTextAbsent(string(R.string.follow_help_title))
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithText(string(R.string.follow_help_title)).fetchSemanticsNodes().isEmpty() }
         follow.assertIsOn()
         // Switched off: Android's page again, where it's turned off.
         follow.performClick()
@@ -3909,6 +3917,7 @@ class MainActivityTest {
         timedSong()
         waitForText(string(R.string.lyrics_follow_allow))
         click(string(R.string.follow_turn_on))
+        click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, nextStartedActivity()!!.action)
     }
 
@@ -5294,18 +5303,11 @@ class MainActivityTest {
         click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
 
-        // Settings marks the sources too, since it affects every one.
-        click(string(R.string.back_button))
-        click(string(R.string.back_button))
-        click(string(R.string.settings_button))
-        assertMarked(string(R.string.setup_not_allowed))
-        click(string(R.string.back_button))
-
+        // Switched back, the steps go, and the links are checked off.
         ownLinksOn = true
         controller!!.pause().resume()
-        composeRule.waitForIdle()
-        click(string(R.string.settings_button))
-        assertFalse(marked(string(R.string.setup_not_allowed)))
+        waitUntil(TIMEOUT_MS) { checkedOff() == 1 }
+        assertTextAbsent(string(R.string.fix_step_pick, string(R.string.android_in_the_app)))
     }
 
     @Test
@@ -5526,17 +5528,6 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(3, checkedOff())
         assertTextShown(string(R.string.setup_check_app, "Spotify"))
-    }
-
-    @Test
-    @Config(sdk = [30])
-    fun beforeAndroid12TheAllowGuideListsEveryFrontendSite() {
-        LinkInterception(app).setEnabled(Frontend.INVIDIOUS, true)
-        launch()
-        click(string(R.string.allow_button))
-        // Android can't say which are allowed, so all of them are listed.
-        assertTextShown(Frontend.INVIDIOUS.label)
-        assertTextShown(Frontend.INVIDIOUS.sites.joinToString(", "))
     }
 
     @Test

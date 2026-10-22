@@ -646,14 +646,18 @@ class ListeningTest {
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, settings.action)
         assertEquals("package:${app.packageName}", settings.dataString)
 
-        // Allowed, it listens right away.
+        // Tapped again later, Android won't ask, so the steps to its page show instead.
         controller!!.pause().stop().destroy()
         val next = launch()
         recognize()
-        val again = shadowOf(next).lastRequestedPermission
+        waitForText(string(R.string.fix_mic_title))
+        assertNull(shadowOf(next).lastRequestedPermission)
+
+        // Allowed there, the steps go, and it listens right away.
         allowMicrophone()
-        next.onRequestPermissionsResult(again.requestCode, again.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
-        composeRule.waitForIdle()
+        controller!!.pause().resume()
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.fix_mic_title)) }
+        recognize()
         waitForText(string(R.string.listening_text))
         assertEquals(1, microphone.opened)
     }
