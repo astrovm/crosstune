@@ -26,6 +26,8 @@ The most common defect here is a change that works where you tested it and is mi
 
 ## Design
 
+- Crosstune needs three things from Android to work: opening links, notification access and the microphone. Missing any is a problem to show and fix, never an extra.
+- Design for someone without Shizuku, root or ADB first. Shizuku only adds a shortcut on top.
 - The content is the screen. Controls never cover it, and a screen's tools stay small, like the lyrics pill.
 - Words cost. Icon, color and state before text. A label, hint or caption has to earn its place.
 - Show state by how it looks, not with a caption. Show what's happening, never what isn't: errors when they happen, never "No errors".
