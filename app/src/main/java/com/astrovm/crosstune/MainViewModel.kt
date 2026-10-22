@@ -138,8 +138,8 @@ internal class MainViewModel(
         val japanese: List<String>?,
         val syncPoints: List<SyncPoint>,
         val learning: Learning,
-        /** What the translations were made for, see [translatedFor]. */
-        val translatedFor: String,
+        /** What the words were worked out with, see [madeWith]. */
+        val madeWith: String,
         val chords: ChordsState
     )
 
@@ -1435,22 +1435,23 @@ internal class MainViewModel(
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
-            translatedFor(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh()
+            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh()
         )
     }
 
-    /** Shows [song]'s words as they were left, when they're kept, and says whether they were. */
+    /**
+     * Shows [song]'s words as they were left, when they're kept and were worked out as they would
+     * be now, and says whether they were.
+     */
     private fun showKept(song: MusicMetadata): Boolean {
-        val kept = kept[RecordingKey.of(song)] ?: return false
+        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() } ?: return false
         found = kept.found
         foundLines = kept.foundLines
         japanese = kept.japanese
         syncPoints = kept.syncPoints
-        // Translated into another language than now, or otherwise, the lines are translated again.
-        val translations = kept.learning.translations.takeIf { kept.translatedFor == translatedFor() }.orEmpty()
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
-            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, translations = translations, fromRomaji = kept.learning.fromRomaji),
+            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, translations = kept.learning.translations, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
         uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
@@ -1462,8 +1463,13 @@ internal class MainViewModel(
         return true
     }
 
-    /** What the words' translations are made for: the language, those left untranslated, and who translates. */
-    private fun translatedFor() = listOf(translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt() && uiState.learning.chatGptTranslation).toString()
+    /**
+     * What a song's words are worked out with: the language they're translated into, those left
+     * untranslated, and, signed in, ChatGPT and its model, which translate them, put their readings
+     * right and write romaji in Japanese.
+     */
+    private fun madeWith() =
+        listOf(translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
