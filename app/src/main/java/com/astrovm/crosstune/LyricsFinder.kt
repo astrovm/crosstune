@@ -206,6 +206,7 @@ internal class LyricsFinder(
         val lengthMs = withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs
         val timings = TimingEvidence.independent(copiesNamed(metadata, bare, timeoutMs)
             .filter { copy -> lengthMs == null || copy.lengthMs()?.let { abs(it - lengthMs) <= SAME_TAKE_LENGTH_MS } != false }
+            .distinctBy { copy -> copy.synced().filter { it.text.isNotBlank() }.map { it.timeMs } }
             .mapNotNull { timedAs(it) })
         if (!wellTimed) return timings.firstOrNull { BorrowedTimings.agrees(rough, it) }?.let { Lyrics.Found(found.words, it) } ?: found
         // Well timed, the words are kept unless two copies agree with each other, and neither with them.
@@ -244,7 +245,13 @@ internal class LyricsFinder(
         // Words timed word by word beat any timed a line at a time, and only NetEase has them.
         val byWord = async { fromNetEase(metadata, null, timeoutMs).takeIf { timing(it) == WORD_TIMED } }
         val elsewhere = anywhere(metadata, timeoutMs)
-        val found = official.await()?.let { better(it, elsewhere) } ?: elsewhere
+        val own = official.await()
+        // A word-timed search result isn't better evidence than this recording's own timed lyrics.
+        if (own != null && RecordingKey.youTubeId(metadata) != null && timing(own) >= WELL_TIMED) {
+            byWord.await()
+            return@withContext own
+        }
+        val found = own?.let { better(it, elsewhere) } ?: elsewhere
         byWord.await()?.let { better(it, found) } ?: found
     }
 

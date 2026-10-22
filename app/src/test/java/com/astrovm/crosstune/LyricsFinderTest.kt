@@ -797,6 +797,13 @@ class LyricsFinderTest {
     private val timedOnLrclib = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:10.00] Second")
 
     @Test
+    fun anExactRecordingsOwnTimedLyricsBeatSearchResults() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
+        val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        assertEquals("Own first\nOwn second", (runBlocking { withYouTubeMusic().lyricsOf(known) } as Lyrics.Found).words)
+    }
+
+    @Test
     fun exactPlayingVideoIsUsedInsteadOfASearchMatch() {
         everywhere("[]", youTubeMusicPage("First" to 12_000, "Second" to 15_500))
         val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
