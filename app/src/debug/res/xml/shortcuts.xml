@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The debug build's copy of main/res/xml/shortcuts.xml, pointing at its own package. Keep the two in sync. -->
+<!-- The dev build's copy of main/res/xml/shortcuts.xml, pointing at its own package. Keep the two in sync. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:enabled="true"
@@ -10,7 +10,7 @@
         <intent
             android:action="com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
             android:targetClass="com.astrovm.crosstune.PasteFromClipboard"
-            android:targetPackage="com.astrovm.crosstune.debug" />
+            android:targetPackage="com.astrovm.crosstune.dev" />
     </shortcut>
 
     <!-- Share sheet targets that open a shared link in one app; AppShortcuts publishes them. -->

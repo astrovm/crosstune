@@ -9,8 +9,7 @@ Clone with `git clone --recurse-submodules`, or run `git submodule update --init
 You need the Android SDK and JDK 17 or newer. When building from the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
 
 ```bash
-./gradlew :app:assembleDebug   # APK in app/build/outputs/apk/debug/
-./gradlew :app:assembleDev     # "Crosstune Dev", installs next to the released app
+./gradlew :app:assembleDebug   # "Crosstune Dev", installs next to the released app; APK in app/build/outputs/apk/debug/
 ./gradlew :app:ci              # the same checks CI runs
 ```
 

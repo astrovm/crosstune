@@ -78,7 +78,7 @@ internal class UpdateChecker(
 /** Whether this copy looks for a newer Crosstune: a release installed from a file. */
 internal fun looksForUpdates(context: Context): Boolean = isRelease(context) && installedFromAFile(context)
 
-/** Whether this is the released Crosstune, not Crosstune Dev or a debug build, which GitHub doesn't have. */
+/** Whether this is the released Crosstune, not Crosstune Dev, which GitHub doesn't have. */
 internal fun isRelease(context: Context): Boolean =
     context.packageName == RELEASE_PACKAGE && context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0
 

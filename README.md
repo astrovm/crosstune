@@ -98,7 +98,7 @@ Release APKs are signed with this certificate. Its SHA-256 fingerprint is also l
 Clone with `git clone --recurse-submodules`, and use the Android SDK and JDK 17 or newer.
 
 ```bash
-./gradlew :app:assembleDev   # "Crosstune Dev", installs next to the released app
+./gradlew :app:assembleDebug   # "Crosstune Dev", installs next to the released app
 ./gradlew :app:ci            # the checks CI runs
 ```
 
