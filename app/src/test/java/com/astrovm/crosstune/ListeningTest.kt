@@ -1273,14 +1273,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         val song = controllerModel().uiState.lyricsFor!!
         assertEquals("video:demo", song.recordingId)
-        for (index in 0..2) {
-            composeRule.runOnIdle {
-                val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
-                hearing.song("Demo", position / 1000.0)
-            }
-            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
-        }
+        hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
@@ -1293,6 +1286,54 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(3, hearing.listens)
         assertFalse(controllerModel().uiState.listeningAlong)
+    }
+
+    /** The song heard at [hearings], 10 seconds apart, while the video, 10 seconds ahead of it, plays. */
+    private fun hearIntro(phone: FakePlayback, hearing: FakeHearing, hearings: IntRange) {
+        for (index in hearings) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", position / 1000.0)
+            }
+            if (index < hearings.last) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+    }
+
+    @Test
+    fun oneHearingDoesNotLineAVideoUpBeforeItsIntroIsConfirmed() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearIntro(phone, hearing, 0..0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        // The video says where it is again, as it does as it plays: one hearing still isn't enough to go by.
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(13_000, SystemClock.elapsedRealtime())) }
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun linesKeptBeforeAVideosIntroIsConfirmedStartWhereTheSongDoesOnceItIs() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
+        assertEquals(0L, controllerModel().uiState.savedLines.single().leadMs)
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.single().leadMs in 9_000..11_000 }
+        assertEquals(controllerModel().uiState.savedLines, SavedLinesStore(prefs()).load())
+    }
+
+    @Test
+    fun linesKeptBeforeAnIntroWasKnownStartWhereTheSongDoesOnceItsRemembered() {
+        val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
+        VideoTimingStore(prefs()).save(song, 10_000)
+        // Kept from the video by a version that didn't know its intro.
+        SavedLinesStore(prefs()).toggle(SavedLine("Demo two", title = "Demo", artist = "Band", startMs = 10_000, endMs = 40_000))
+        val hearing = FakeHearing()
+        videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().leadMs == 10_000L }
     }
 
     @Test

@@ -1436,6 +1436,7 @@ internal class MainViewModel(
                 videoLeadMs = lead
                 videoLeadVerified = true
                 videoTimingStore.save(shown, lead)
+                leadSavedLines(shown, app.appPackage, lead)
                 if (autoCalibrating) stopListeningAlong()
             }
         }
@@ -1573,10 +1574,11 @@ internal class MainViewModel(
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) {
-                    videoLeadMs = videoTimingStore.load(song)
+                    videoLeadMs = videoTimingStore.load(song)?.also { leadSavedLines(song, playing.appPackage, it) }
                     videoLeadVerified = videoLeadMs != null
                 }
-                if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
+                // Once it's being listened for, only an intro heard to agree in several places lines the video up.
+                if (playing?.video == true && videoLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) })
                 if (playing?.video == true && playing.clock.playing && videoLeadMs == null && syncPoints.isEmpty() && !calibrationAttempted && mayCalibrateVideo()) {
                     calibrationAttempted = true
@@ -1981,6 +1983,15 @@ internal class MainViewModel(
             saved to saved.copy(translation = now)
         }
         if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+    }
+
+    /**
+     * Lines of [song] kept from the video [app] plays, before its intro was known, start where the song
+     * does in it now that it is, so practice plays them, not the intro.
+     */
+    private fun leadSavedLines(song: MusicMetadata, app: String?, lead: Long) {
+        val off = uiState.savedLines.filter { it.isOf(song) && it.timed && it.app == app && it.leadMs != lead }
+        if (off.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(off.map { it to it.copy(leadMs = lead) }))
     }
 
     /**
