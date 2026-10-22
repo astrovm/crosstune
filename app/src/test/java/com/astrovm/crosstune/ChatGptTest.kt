@@ -418,6 +418,8 @@ class ChatGptTest {
         val asked = openAi.asked.single()
         assertEquals(JSONArray(listOf("Hola amigo", "Ciao")).toString(), asked.getJSONArray("input").getJSONObject(0).getString("content"))
         assertTrue(asked.getString("instructions").contains("into English"))
+        // Lines in the same language, from anywhere, are left alone.
+        assertTrue(asked.getString("instructions").contains("already in English, from anywhere"))
         // Read again, nothing is asked; a new line is, alone.
         assertEquals(listOf("Hello, friend"), runBlocking { tutor.translate(listOf("Hola amigo"), "en") })
         answering("[\"Goodbye\"]")
@@ -428,6 +430,19 @@ class ChatGptTest {
     }
 
     @Test
+    fun aLineAlreadyInTheLanguageComesBackEmptyAndIsNoneButChineseGoesByHowItsWritten() {
+        val tutor = tutor()
+        answering("[\"Hello\", \"\"]")
+        assertEquals(listOf("Hello", null), runBlocking { tutor.translate(listOf("Hola", "Good night, mate"), "en-US") })
+        answering("[\"故事里的小黄花\"]")
+        assertEquals(listOf("故事里的小黄花"), runBlocking { tutor.translate(listOf("故事的小黃花"), "zh-CN") })
+        assertTrue(openAi.asked.last().getString("instructions").contains("already in Simplified Chinese"))
+        answering("[\"故事的小黃花\"]")
+        runBlocking { tutor.translate(listOf("故事的小黄花"), "zh-TW") }
+        assertTrue(openAi.asked.last().getString("instructions").contains("already in Traditional Chinese"))
+    }
+
+    @Test
     fun aTranslationThatDoesntFitTheLinesIsNone() {
         val tutor = tutor()
         listOf("[\"Just one\"]", "No JSON at all", "] backwards [", "[{\"a\": }]").forEach { text ->
@@ -435,6 +450,7 @@ class ChatGptTest {
             assertNull(runBlocking { tutor.translate(listOf("Uno", "Dos"), "pt-BR") })
         }
         assertTrue(openAi.asked.last().getString("instructions").contains("into Portuguese (Brazil)"))
+        assertTrue(openAi.asked.last().getString("instructions").contains("already in Portuguese, from anywhere"))
         openAi.reply = { 429 to "" }
         assertNull(runBlocking { tutor.translate(listOf("Uno"), "en") })
         // Nothing to translate asks nothing.

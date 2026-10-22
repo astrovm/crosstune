@@ -3285,6 +3285,25 @@ class ListeningTest {
     }
 
     @Test
+    fun aSongAlreadyInTheLanguageItWouldBeTranslatedIntoIsntWhateverItsVariety() {
+        MainActivity.lyricsLanguageFactory = { LyricsLanguage { "es" } }
+        prefs().edit().putBoolean("lyrics_translation", true).putString("translate_into", "es-AR").commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitForText("Stars")
+        composeRule.waitForIdle()
+        assertFalse(shown("[Stars]"))
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { GOOGLE_TRANSLATE_HOST in it || "api.mymemory.translated.net" in it })
+    }
+
+    @Test
+    fun aSongInTraditionalChineseIsStillTranslatedIntoSimplified() {
+        MainActivity.lyricsLanguageFactory = { LyricsLanguage { "zh-TW" } }
+        prefs().edit().putBoolean("lyrics_translation", true).putString("translate_into", "zh-CN").commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars")
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
+    }
+
+    @Test
     fun aSongWhoseLanguageCantBeToldIsTranslated() {
         MainActivity.lyricsLanguageFactory = { LyricsLanguage { null } }
         prefs().edit().putBoolean("lyrics_translation", true).putStringSet("untranslated_languages", setOf("en")).commit()

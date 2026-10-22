@@ -26,18 +26,20 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val known = words.associateWith { this.lines.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val kept = known.filterValues { it != null }.mapValues { it.value!! }
-        // A line already in [language] comes back as it was, and is no use under itself.
-        fun shown(all: Map<String, String>) = lines.map { line -> all[line]?.takeUnless { it.equals(line.trim(), ignoreCase = true) } }
+        // A line already in [language] comes back empty, or as it was, and is no use under itself.
+        fun shown(all: Map<String, String>) = lines.map { line -> all[line]?.takeUnless { it.isBlank() || it.equals(line.trim(), ignoreCase = true) } }
         val found = if (missing.isEmpty()) {
             emptyMap()
         } else {
             val name = nameOf(language)
             // Tried on real songs: thinking less, the first line comes in 1.5 s rather than 5, as good.
+            // Said first, and as empty rather than repeated: told after, or to repeat it, lines in another
+            // variety came back "put right" into this one, and repeating lyrics can cut the answer off.
             val reply = chatGpt.ask(
                 "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " +
-                    "Translate them as one song, so each line reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
-                    "Reply with only a JSON array of strings, the same length and in the same order, one translation for each line. " +
-                    "A line already in $name stays as it is.",
+                    "A line already in ${sameAs(language)}, from anywhere and however it's spelled, isn't translated: its string is empty. " +
+                    "Translate only the others, as one song, so each reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
+                    "Reply with only a JSON array of strings, the same length and in the same order.",
                 JSONArray(missing).toString(),
                 effort = "low"
             ) { text ->
@@ -470,6 +472,13 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
 
     /** [language] as ChatGPT is told it, e.g. "Portuguese (Brazil)" for "pt-BR". */
     private fun nameOf(language: String): String = Locale.forLanguageTag(language).getDisplayName(Locale.ENGLISH)
+
+    /** What a line already in [language] is in: any variety of it, e.g. Spanish for "es-AR", but Chinese by how it's written. */
+    private fun sameAs(language: String): String = when (language) {
+        "zh-CN" -> "Simplified Chinese"
+        "zh-TW" -> "Traditional Chinese"
+        else -> Locale.forLanguageTag(language).getDisplayLanguage(Locale.ENGLISH)
+    }
 }
 
 /** A word or phrase worth learning from a song, [word] as it's written there, how it reads, and what it [meaning]s there. */

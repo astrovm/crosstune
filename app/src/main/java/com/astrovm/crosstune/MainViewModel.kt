@@ -2344,12 +2344,14 @@ internal class MainViewModel(
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
                 uiState = uiState.copy(learning = uiState.learning.copy(translating = true, translationFailed = false))
-                // A song in a language the user reads needs none, line by line.
-                if (learning.untranslated.isNotEmpty() && lyricsLanguage?.of(lines) in learning.untranslated) {
+                val language = translateInto()
+                // A song in a language the user reads needs none, line by line, and nor does one already in
+                // the language it'd be translated into, in whatever variety: a Spanish song into Argentina's.
+                val sung = lyricsLanguage?.of(lines)
+                if (sung != null && (sung in learning.untranslated || sung == AppLanguage.untranslatedTag(language))) {
                     uiState = uiState.copy(learning = uiState.learning.copy(translations = lines.map { null }, translating = false))
                     return@launch
                 }
-                val language = translateInto()
                 // ChatGPT, signed in, translates the song as a whole; the usual way when it can't.
                 val translated = (
                     if (usesChatGpt() && learning.chatGptTranslation) {
