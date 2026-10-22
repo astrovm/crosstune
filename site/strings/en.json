@@ -69,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 20, 2026",
+  "updated": "Last updated: October 22, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -184,6 +184,10 @@
     [
       "p",
       "For privacy questions, contact {email}. If you email the developer, the email service processes your address and message so the developer can respond. Please don't include sensitive information you don't need to share."
+    ],
+    [
+      "p",
+      "Report a problem, from the lyrics or from Settings, opens a GitHub issue or an email already filled in with the Crosstune and Android versions and, for a song, its title and artist, whether its lyrics are timed or put in time by hand, and the app Crosstune follows. You can change it first. Nothing is sent unless you send it yourself, and GitHub or your email service handles it under its own privacy policy."
     ],
     [
       "p",

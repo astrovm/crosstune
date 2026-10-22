@@ -6,6 +6,16 @@ import org.junit.Test
 class RecordingKeyTest {
     private val song = MusicMetadata("Demo", "Band")
 
+    @Test fun anAppThatGivesNoLinkLeavesTheOneTheSongWasOpenedBy() {
+        val opened = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val played = RecordingKey.asPlayed(opened, song.copy(lengthMs = 200_000, recordingId = "music:duration:200000"))
+        assertEquals("abcdefghijk", RecordingKey.youTubeId(played))
+        assertEquals(200_000L, played.lengthMs)
+        assertEquals("music:duration:200000", played.recordingId)
+        // One the app gives is the one it plays.
+        assertEquals("https://example.com/other", RecordingKey.asPlayed(opened, song.copy(url = "https://example.com/other", recordingId = "music:other")).url)
+    }
+
     @Test fun recordingsAndLengthsKeepTheirOwnWords() {
         val keys = listOf(song, song.copy(lengthMs = 100_000), song.copy(lengthMs = 101_000),
             song.copy(recordingId = "player:one"), song.copy(recordingId = "player:two"),

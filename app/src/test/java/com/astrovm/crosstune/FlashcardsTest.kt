@@ -694,11 +694,11 @@ class FlashcardsTest {
         launch()
         click(practiceDue(2))
         click(string(R.string.practice_all_songs))
-        // Both cards of the line are in the one session, the one due longest first.
-        assertTrue(onCard(string(R.string.card_type_translate)))
+        // Both cards of the line are in the one session, the one practised before ahead of the new one.
+        assertTrue(onCard(string(R.string.card_type_read)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
-        assertTrue(onCard(string(R.string.card_type_read)))
+        assertTrue(onCard(string(R.string.card_type_translate)))
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 2)) }

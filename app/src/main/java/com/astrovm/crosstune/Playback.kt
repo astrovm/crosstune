@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
 import androidx.annotation.MainThread
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -134,9 +135,8 @@ internal class MediaSessionPlayback(
                 trySend(followed?.let(::following))
             }
         }
-        // The app playing it, among all that are: one that is playing it beats one paused on it.
         fun pick(controllers: List<MediaController>) {
-            val playing = controllers.filter { it.plays(song) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+            val playing = appFor(song, controllers)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 followed = playing
@@ -168,20 +168,28 @@ internal class MediaSessionPlayback(
         }
     }.distinctUntilChanged()
 
+    /**
+     * The app playing [song], among all that have it: one playing it beats one paused on it. It's the
+     * one followed, so it's the one moved, played, paused and skipped too.
+     */
+    @VisibleForTesting
+    internal fun appFor(song: MusicMetadata, controllers: List<MediaController> = sessions.getActiveSessions(listener)): MediaController? =
+        controllers.filter { it.plays(song) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
+
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
         // Taken back meanwhile, the words just stay where they are.
-        runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.seekTo(positionMs) }
+        runCatching { appFor(song)?.transportControls?.seekTo(positionMs) }
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean) {
         // Taken back meanwhile, the song just keeps on as it was.
-        runCatching { sessions.getActiveSessions(listener).firstOrNull { it.plays(song) }?.transportControls?.run { if (play) play() else pause() } }
+        runCatching { appFor(song)?.transportControls?.run { if (play) play() else pause() } }
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
-            val app = sessions.getActiveSessions(listener).firstOrNull { it.plays(song) } ?: return
+            val app = appFor(song) ?: return
             val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
             app.transportControls.run {
                 if (next) skipToNext() else skipToPrevious()
@@ -320,11 +328,16 @@ internal class MediaSessionPlayback(
         val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
         if (!file.isFile) {
             val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
+            // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
+            val part = File(file.path + ".part")
             val saved = runCatching {
                 file.parentFile?.mkdirs()
-                file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) }
+                part.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) } && part.renameTo(file)
             }.getOrDefault(false)
-            if (!saved) return null
+            if (!saved) {
+                part.delete()
+                return null
+            }
         }
         return file.toURI().toString()
     }

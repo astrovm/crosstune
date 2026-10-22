@@ -301,7 +301,6 @@
     <string name="lyrics_words_size">Tekstgrootte</string>
     <string name="lyrics_translation_size">Vertaalgrootte</string>
     <string name="lyrics_show_as">Toon als</string>
-    <string name="lyrics_also_show">Toon ook</string>
     <string name="report_problem">Probleem melden</string>
     <string name="report_problem_text">Verkeerde tekst, slechte timing of iets anders. Zeg wat er mis is en stuur het.</string>
     <string name="report_by_email">E-mail</string>

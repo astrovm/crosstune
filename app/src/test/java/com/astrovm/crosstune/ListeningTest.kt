@@ -286,6 +286,25 @@ class ListeningTest {
     }
 
     @Test
+    fun aSwipeUpFromTheBarLetGoEarlyLeavesTheCardShown() {
+        inRecent("Demo")
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
+        launch()
+        composeRule.onAllNodes(hasText("Demo") and hasClickAction()).onLast().performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Demo" && barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -80f))
+            up()
+        }
+        waitUntil(TIMEOUT_MS) { barShown() && composeRule.onAllNodesWithContentDescription(string(R.string.more_button)).fetchSemanticsNodes().isEmpty() }
+        // The card shown is still the one there was, and the song playing didn't join Recent.
+        assertEquals("Demo", controllerModel().uiState.result?.title)
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata == playing })
+    }
+
+    @Test
     fun aSwipeUpFromTheBarTakenAwayHalfwayGoesBackToo() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
@@ -349,6 +368,18 @@ class ListeningTest {
         click("First Test Song")
         // The song's player opens, so the bar has nothing left to offer.
         waitUntil(TIMEOUT_MS) { !barShown() }
+    }
+
+    @Test
+    fun theBarPausesAnAppThatDoesntSayWhereItIs() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        // A radio app plays, and never says where it is: the bar shows it playing, so its button pauses it.
+        phone.onThePhone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null)
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        click(string(R.string.lyrics_pause))
+        assertEquals(listOf(false), phone.plays)
     }
 
     @Test
@@ -1273,14 +1304,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         val song = controllerModel().uiState.lyricsFor!!
         assertEquals("video:demo", song.recordingId)
-        for (index in 0..2) {
-            composeRule.runOnIdle {
-                val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
-                hearing.song("Demo", position / 1000.0)
-            }
-            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
-        }
+        hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
@@ -1293,6 +1317,54 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(3, hearing.listens)
         assertFalse(controllerModel().uiState.listeningAlong)
+    }
+
+    /** The song heard at [hearings], 10 seconds apart, while the video, 10 seconds ahead of it, plays. */
+    private fun hearIntro(phone: FakePlayback, hearing: FakeHearing, hearings: IntRange) {
+        for (index in hearings) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", position / 1000.0)
+            }
+            if (index < hearings.last) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+    }
+
+    @Test
+    fun oneHearingDoesNotLineAVideoUpBeforeItsIntroIsConfirmed() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearIntro(phone, hearing, 0..0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        // The video says where it is again, as it does as it plays: one hearing still isn't enough to go by.
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(13_000, SystemClock.elapsedRealtime())) }
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun linesKeptBeforeAVideosIntroIsConfirmedStartWhereTheSongDoesOnceItIs() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
+        assertEquals(0L, controllerModel().uiState.savedLines.single().leadMs)
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.single().leadMs in 9_000..11_000 }
+        assertEquals(controllerModel().uiState.savedLines, SavedLinesStore(prefs()).load())
+    }
+
+    @Test
+    fun linesKeptBeforeAnIntroWasKnownStartWhereTheSongDoesOnceItsRemembered() {
+        val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
+        VideoTimingStore(prefs()).save(song, 10_000)
+        // Kept from the video by a version that didn't know its intro.
+        SavedLinesStore(prefs()).toggle(SavedLine("Demo two", title = "Demo", artist = "Band", startMs = 10_000, endMs = 40_000))
+        val hearing = FakeHearing()
+        videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().leadMs == 10_000L }
     }
 
     @Test
@@ -2585,29 +2657,30 @@ class ListeningTest {
         waitForText("[Stars]")
         studyMenu()
         click(string(R.string.practice_song))
-        // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
+        // The one practised before first, the line on its face, its meaning to think of; with how far along it is.
         waitForDescription(string(R.string.practice_progress, 0, 2))
-        assertFalse(shown("[Night sky]") || shown(string(R.string.practice_good)))
+        assertFalse(shown("[Stars]") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
         controllerModel().gradePractice(Grade.GOOD)
-        assertEquals(0L, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.due)
+        assertEquals(1L, SavedLinesStore(prefs()).load().first { it.text == "Stars" }.due)
         // Tapped, the card turns.
-        composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
-        waitForText("[Night sky]")
+        composeRule.onNode(hasText("Stars") and androidx.compose.ui.test.hasClickAction()).performClick()
+        waitForText("[Stars]")
         assertFalse(shown(string(R.string.practice_show)))
         val before = System.currentTimeMillis()
-        click(string(R.string.practice_good))
-        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
-        assertEquals(1, good.step)
-        assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
-        // Known once before, it asks the same, and known again, it's back later.
-        waitForDescription(string(R.string.practice_progress, 1, 2))
-        assertTrue(shown("Stars") && !shown("[Stars]"))
-        click(string(R.string.practice_show))
+        // Known once before and known again, it's back later.
         click(string(R.string.practice_good))
         val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
         assertEquals(3, again.interval)
         assertTrue(again.due >= before + 3 * DAY_MS)
+        // The new one asks the same, and known, it's back in ten minutes.
+        waitForDescription(string(R.string.practice_progress, 1, 2))
+        assertTrue(shown("Night sky") && !shown("[Night sky]"))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
+        assertEquals(1, good.step)
+        assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
         waitForText(string(R.string.practice_done, 2))
     }
 

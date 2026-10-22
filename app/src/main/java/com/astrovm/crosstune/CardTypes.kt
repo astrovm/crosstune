@@ -23,9 +23,9 @@ internal data class CardType(val id: String, val name: String?, val on: Boolean,
     /** Whether the line plays in front, as the question. */
     val hears: Boolean get() = options.front.sound
 
-    /** Whether [line] has something to ask with: this kind's front plays a line that can be, or shows a layer it has. */
+    /** Whether [line] has something to ask with: this kind's front plays a line that can be, or shows a layer it has. A front with nothing on shows the words. */
     fun fits(line: SavedLine): Boolean = (hears && line.timed) || options.front.run {
-        words || (translation && line.translation != null) || (latin && line.romanized != null) || (readings && line.reading != null)
+        words || (bare && !sound) || (translation && line.translation != null) || (latin && line.romanized != null) || (readings && line.reading != null)
     }
 
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("on", on)

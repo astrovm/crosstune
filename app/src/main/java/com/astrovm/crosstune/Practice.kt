@@ -13,11 +13,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * The cards due at [now], at most [max], each song's together, in the order they're sung, so the
  * music app goes from one song to the next once, and only forward in each. The song due longest
- * comes first. A line has a card in the session for each of the [types] that's due.
+ * comes first. A line has a card in the session for each of the [types] that's due. Cards practised
+ * before come ahead of new ones, so a kind just turned on doesn't push back the ones that are due.
  */
 internal fun sessionOf(lines: List<SavedLine>, now: Long, max: Int = SESSION_SIZE, types: List<CardType> = DEFAULT_CARD_TYPES): List<SavedLine> =
     lines.flatMap { it.cardsDue(now, types) }
-        .sortedBy { it.due }
+        .sortedWith(compareBy({ it.due == 0L }, { it.due }))
         .take(max)
         .groupBy { it.title to it.artist }
         .values

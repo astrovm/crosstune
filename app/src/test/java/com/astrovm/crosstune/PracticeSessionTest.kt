@@ -39,6 +39,18 @@ class PracticeSessionTest {
     }
 
     @Test
+    fun cardsPractisedBeforeComeAheadOfNewOnes() {
+        val learnt = (1..SESSION_SIZE).map { line("Learnt $it", due = it.toLong(), start = it * 1_000L) }
+        val translating = DEFAULT_CARD_TYPES.map { if (it.id == TRANSLATE_TYPE) it.copy(on = true) else it }
+        // Translate it just turned on makes a new card of every line, and none pushes back one that's due.
+        val session = sessionOf(learnt + line("Just saved", "B", start = 1_000), now = 100, types = translating)
+        assertEquals(learnt.map { it.text }, session.map { it.text })
+        assertTrue(session.all { it.cardType == READ_TYPE })
+        // With room left, new ones fill it.
+        assertEquals(listOf(READ_TYPE, TRANSLATE_TYPE, READ_TYPE), sessionOf(learnt.take(2), now = 100, max = 3, types = translating).map { it.cardType })
+    }
+
+    @Test
     fun aCardMissedComesBackAfterTheRestOfItsSong() {
         val queue = listOf(line("A1", "A"), line("A2", "A"), line("A3", "A"), line("B1", "B"))
         assertEquals(listOf("A2", "A3", "A1", "B1"), missedAgain(queue).map { it.text })

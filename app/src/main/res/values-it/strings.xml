@@ -302,7 +302,6 @@
     <string name="lyrics_words_size">Dimensione del testo</string>
     <string name="lyrics_translation_size">Dimensione della traduzione</string>
     <string name="lyrics_show_as">Mostra come</string>
-    <string name="lyrics_also_show">Mostra anche</string>
     <string name="report_problem">Segnala un problema</string>
     <string name="report_problem_text">Testo sbagliato, tempi sballati o altro. Scrivi cosa non va e invialo.</string>
     <string name="report_by_email">Email</string>

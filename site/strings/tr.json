@@ -69,7 +69,7 @@
   "privacy_link": "Gizlilik politikası",
   "language_label": "Dil",
   "privacy_title": "Crosstune Gizlilik Politikası",
-  "updated": "Son güncelleme: 20 Ekim 2026",
+  "updated": "Son güncelleme: 22 Ekim 2026",
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Gizlilikle ilgili sorularınız için {email} adresine yazın. Geliştiriciye e-posta gönderirseniz, geliştiricinin yanıt verebilmesi için e-posta servisi adresinizi ve mesajınızı işler. Lütfen paylaşmanız gerekmeyen hassas bilgileri eklemeyin."
+    ],
+    [
+      "p",
+      "Sözlerden ya da Ayarlar'dan Sorun bildir'e dokunmak, Crosstune ve Android sürümleriyle, bir şarkı için de adı ve sanatçısıyla, sözlerinin zamanlı olup olmadığı ya da elle zamanlandığı bilgisiyle ve Crosstune'un izlediği uygulamayla önceden doldurulmuş bir GitHub sorunu ya da e-posta açar. Göndermeden önce değiştirebilirsiniz. Siz kendiniz göndermedikçe hiçbir şey gönderilmez; GitHub ya da e-posta servisiniz bunu kendi gizlilik politikasına göre işler."
     ],
     [
       "p",

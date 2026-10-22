@@ -1,6 +1,6 @@
 Abrí cualquier link. Reconocé cualquier canción. Seguí cada palabra.
 
-Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. Tocá el link y la misma canción se abre en tu app favorita. De Spotify a YouTube Music, de Apple Music a Deezer, de TIDAL a Spotify: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
+Te llega un link de un servicio de música y abrís la misma canción en tu app favorita. De Spotify a YouTube Music, de Apple Music a Deezer: combinalos como quieras. Funciona con canciones, álbumes, artistas y playlists.
 
 <b>Características</b>
 <ul>
@@ -8,13 +8,13 @@ Alguien te pasa un link de un servicio de música, pero vos escuchás en otro. T
 <li>Las playlists y los álbumes muestran sus canciones: abrí cualquiera en tu app, copiá o compartí la lista, o reproducila entera en YouTube Music o YouTube.</li>
 <li>Mandá cada servicio a un lugar distinto, por ejemplo los links de YouTube a YouTube Music y todo lo demás a Apple Music.</li>
 <li>Preguntar qué app usar: elegí una app cada vez que tocás o compartís un link.</li>
-<li>Abrir la coincidencia exacta: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud y Audiomack pueden abrir la canción, el álbum o el artista en sí, en vez de una búsqueda, Bandcamp y Qobuz la canción o el álbum, y YouTube la canción.</li>
+<li>Abrir la coincidencia exacta: donde la app lo permite, se abre la canción, el álbum o el artista en sí, en vez de una búsqueda.</li>
 <li>Agregá otras apps y sitios que tengan página de búsqueda.</li>
-<li>Pegá con un toque, buscá y volvé a abrir links recientes, o abrí un link copiado desde el widget de la pantalla de inicio, el mosaico de Configuración rápida o manteniendo apretado el ícono de la app.</li>
+<li>Pegá con un toque, buscá y reabrí links recientes, o abrí un link copiado desde el widget, el mosaico de Configuración rápida o manteniendo apretado el ícono.</li>
 <li>Reconoce una canción que suena cerca: Crosstune escucha por su cuenta, o abre Shazam o la búsqueda de canciones de Google. También abre links de Shazam y canciones compartidas desde Now Playing del Pixel.</li>
 <li>¿No se puede leer un link? Abrilo en la app de la que viene, copiá el texto de búsqueda o compartí un link de búsqueda.</li>
-<li>Encontrá una canción escribiendo su nombre en lugar de un link, y leé la letra de cualquier canción que abras.</li>
-<li>Letras sincronizadas: siguen tu app de música o escuchan junto con vos, flotan sobre otras apps y se ven con visuales de MilkDrop detrás.</li>
+<li>Encontrá una canción escribiendo su nombre en lugar de un link. Reproducir te deja en Crosstune: una barra abajo muestra lo que suena, el reproductor tiene un menú con Copiar, Compartir y Abrir con, y deslizás entre el reproductor y la letra. Leé la letra de cualquier canción que abras.</li>
+<li>Letras sincronizadas: siguen tu app de música o escuchan junto con vos, flotan sobre otras apps y se ven con visuales de MilkDrop detrás. ¿Letra o tiempos mal? Reportalo desde su menú: se abre un issue de GitHub o un email con la canción, el tiempo y las versiones de la app y Android ya completados.</li>
 <li>Aprendé las palabras con kana, pinyin, romaji y cualquier otra escritura en letras latinas, y traducciones para los idiomas que todavía no leés. Elegí qué mostrar en cada lado de las tarjetas de práctica. Hacé varios tipos de tarjeta de una misma línea, cada uno con su propio calendario.</li>
 <li>Iniciá sesión con tu plan pago de ChatGPT para traducir canciones enteras, explicar líneas, encontrar palabras que vale la pena aprender y buscar canciones describiéndolas.</li>
 <li>Colores de Material You en Android 12 y posteriores.</li>

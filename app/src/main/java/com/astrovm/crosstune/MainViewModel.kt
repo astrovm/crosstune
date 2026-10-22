@@ -765,13 +765,19 @@ internal class MainViewModel(
     fun openPlayingNow() {
         val now = uiState.playingNow ?: return
         if (uiState.result?.let { sameSong(it, now.song) } != true) showSong(now.song)
+        if (uiState.player?.song != now.song) openPlayer(now.song, now.following?.appPackage, played = true)
+    }
+
+    /** The player on the song playing now, alone, as a swipe up from the bar opens it before it's let go. */
+    fun peekPlayingNow() {
+        val now = uiState.playingNow ?: return
         openPlayer(now.song, now.following?.appPackage, played = true)
     }
 
-    /** Pauses the song playing now, or plays it again. */
+    /** Pauses the song playing now, or plays it again: as its button shows, playing when its app doesn't say where it is. */
     fun playingNowPlayPause() {
         val now = uiState.playingNow ?: return
-        playback?.playPause(now.song, now.following?.clock?.playing != true)
+        playback?.playPause(now.song, now.following?.clock?.playing == false)
     }
 
     fun playingNowSkip() {
@@ -1076,14 +1082,15 @@ internal class MainViewModel(
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
                 // Seen to play it, or with no way to see, that's that; an app may say yes and not play it.
                 val sees = source?.hasAccess() == true
-                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null } } != null)) return@launch
+                // Played in that app, not another that has it too.
+                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage) } } != null)) return@launch
                 // An app that can't be asked in the background is opened on the song, and, when
                 // Crosstune can see it play there, left again once it does, as practice does.
                 val back = source?.takeIf { exact && sees && it.openSong(app, link) } ?: return@launch run {
                     closePlayer()
                     open(destination, finishAfterOpen = false, tapped = true)
                 }
-                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null } }
+                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage) } }
                 back.comesBack()
             } finally {
                 uiState = uiState.copy(playingResult = false)
@@ -1143,7 +1150,8 @@ internal class MainViewModel(
     fun playerPlayPause() {
         val player = uiState.player ?: return
         val following = player.following ?: return run {
-            viewModelScope.launch { playback?.playSong(player.song, player.app, player.link) }
+            // Still being asked for, a second ask would start it over.
+            if (!uiState.playingResult) viewModelScope.launch { playback?.playSong(player.song, player.app, player.link) }
         }
         playback?.playPause(player.song, !following.clock.playing)
     }
@@ -1191,7 +1199,8 @@ internal class MainViewModel(
             }
         }
         // Already in that app, playing or paused, it's brought forward, not asked for again, which would restart it.
-        val there = uiState.result?.takeIf { tapped }?.let { song ->
+        // Only a song plays: an album or a playlist named as the song playing opens as itself.
+        val there = uiState.result?.takeIf { tapped && it.type == ItemType.TRACK }?.let { song ->
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
@@ -1287,7 +1296,7 @@ internal class MainViewModel(
 
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        val song = current?.let { requested.copy(recordingId = it.recordingId, lengthMs = it.lengthMs, url = it.url) } ?: requested
+        val song = current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return
@@ -1436,6 +1445,7 @@ internal class MainViewModel(
                 videoLeadMs = lead
                 videoLeadVerified = true
                 videoTimingStore.save(shown, lead)
+                leadSavedLines(shown, app.appPackage, lead)
                 if (autoCalibrating) stopListeningAlong()
             }
         }
@@ -1573,10 +1583,11 @@ internal class MainViewModel(
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
                 appFollowing = playing
                 if (playing?.video == true && videoLeadMs == null) {
-                    videoLeadMs = videoTimingStore.load(song)
+                    videoLeadMs = videoTimingStore.load(song)?.also { leadSavedLines(song, playing.appPackage, it) }
                     videoLeadVerified = videoLeadMs != null
                 }
-                if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
+                // Once it's being listened for, only an intro heard to agree in several places lines the video up.
+                if (playing?.video == true && videoLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) })
                 if (playing?.video == true && playing.clock.playing && videoLeadMs == null && syncPoints.isEmpty() && !calibrationAttempted && mayCalibrateVideo()) {
                     calibrationAttempted = true
@@ -1981,6 +1992,15 @@ internal class MainViewModel(
             saved to saved.copy(translation = now)
         }
         if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
+    }
+
+    /**
+     * Lines of [song] kept from the video [app] plays, before its intro was known, start where the song
+     * does in it now that it is, so practice plays them, not the intro.
+     */
+    private fun leadSavedLines(song: MusicMetadata, app: String?, lead: Long) {
+        val off = uiState.savedLines.filter { it.isOf(song) && it.timed && it.app == app && it.leadMs != lead }
+        if (off.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(off.map { it to it.copy(leadMs = lead) }))
     }
 
     /**

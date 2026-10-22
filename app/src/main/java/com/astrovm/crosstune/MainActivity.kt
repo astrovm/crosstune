@@ -529,6 +529,7 @@ class MainActivity : ComponentActivity() {
                         onDismissNotices = viewModel::dismissNotices,
                         onUpdate = viewModel::openUpdate,
                         onOpenPlayingNow = viewModel::openPlayingNow,
+                        onPeekPlayingNow = viewModel::peekPlayingNow,
                         onPlayingNowPlayPause = viewModel::playingNowPlayPause,
                         onPlayingNowSkip = viewModel::playingNowSkip,
                         onSettingsLeft = viewModel::settingsLeft,

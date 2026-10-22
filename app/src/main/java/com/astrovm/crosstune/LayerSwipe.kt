@@ -22,8 +22,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
-/** A screen a swipe reaches: [go] gets there, and [back], for one that's opened as the finger starts, undoes it. */
-internal class Layer(val to: Screen, val go: () -> Unit, val back: (() -> Unit)? = null)
+/**
+ * A screen a swipe reaches: [go] gets there, and [back], for one that's opened as the finger starts,
+ * undoes it; [settled] is what's done only once it's let go there.
+ */
+internal class Layer(val to: Screen, val go: () -> Unit, val back: (() -> Unit)? = null, val settled: (() -> Unit)? = null)
 
 /**
  * A swipe up or down between layers (the bar, the player, the words) under way. The screens follow
@@ -82,6 +85,7 @@ internal class LayerSwipe {
         val carry = toward >= flick || (toward > -flick && fraction >= COMMIT)
         // Down is only done once it's let go, up was opened as it started and is closed again if it goes back.
         if (carry && started.back == null) started.go()
+        if (carry) started.settled?.invoke()
         if (!carry) started.back?.invoke()
         carryOn = carry
     }

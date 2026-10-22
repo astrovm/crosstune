@@ -32,9 +32,10 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 - **Recent.** Search your recent songs, and swipe one away to remove it.
 - **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek. Whatever is playing waits in a bar on the home screen. Swipe up for the player, up again for the words, and down to go back.
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
-- **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
+- **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there, make the words bigger or smaller, and fix the timing by tapping the line you hear or nudging it half a second at a time. Lyrics timed for another take offer the fix themselves. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Recording timing.** Lyrics and corrections stay with their recording. With microphone access already allowed, video lyrics briefly listen for an intro offset and remember it after three agreeing audio fingerprints.
+- **Report a problem.** Wrong words or timing? From the lyrics menu it opens a GitHub issue or an email, filled in with the song, the timing details, and the app and Android versions. Nothing goes out until you send it.
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word.

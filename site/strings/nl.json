@@ -69,7 +69,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 20 oktober 2026",
+  "updated": "Laatst bijgewerkt: 22 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Voor vragen over privacy kun je mailen naar {email}. Als je de ontwikkelaar mailt, verwerkt de e-maildienst je adres en bericht zodat de ontwikkelaar kan antwoorden. Stuur liever geen gevoelige informatie mee die je niet hoeft te delen."
+    ],
+    [
+      "p",
+      "Probleem melden, vanuit de tekst of de instellingen, opent een GitHub-issue of een e-mail die al is ingevuld met de versies van Crosstune en Android en, bij een nummer, de titel en artiest, of de tekst getimed is of met de hand op tijd is gezet, en de app die Crosstune volgt. Je kunt het eerst aanpassen. Er wordt niets verstuurd tenzij je het zelf verstuurt, en GitHub of je e-maildienst verwerkt het volgens het eigen privacybeleid."
     ],
     [
       "p",

@@ -640,6 +640,24 @@ class PlaybackTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aCoverThatCouldntBeKeptIsntTakenForOneTheNextTime() {
+        allow()
+        sounding()
+        val controller = player("com.google.android.apps.youtube.music", "YouTube Music", "Moon Song", "Some Singer", album = "Best Of")
+        val gone = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { recycle() }
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, gone).build())
+        shadowOf(sessions).addController(controller)
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+        // Given whole the next time, it's kept whole.
+        val shown = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, shown).build())
+        val cover = playback.nowPlaying()?.metadata?.artworkUrl!!
+        val loaded = runBlocking { ArtworkLoader(FakeSpotify().client(), Dispatchers.Unconfined, File(app.cacheDir, ARTWORK_DIR)).load(cover) }
+        assertEquals(8, loaded?.width)
+    }
+
+    @Test
     fun aLineTappedMovesTheAppThere() {
         allow()
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
@@ -647,6 +665,17 @@ class PlaybackTest {
         playback.seekTo(song, 61_000)
         // Nothing playing it, nothing to move.
         playback.seekTo(MusicMetadata("Other", "Band"), 1_000)
+    }
+
+    @Test
+    fun theAppPlayingItIsTheOneControlledAsItsTheOneFollowed() {
+        allow()
+        // Spotify, first, is paused on the song, and YouTube Music plays it.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
+        assertEquals("com.google.android.apps.youtube.music", followed().last()!!.appPackage)
+        assertEquals("com.google.android.apps.youtube.music", playback.appFor(song)?.packageName)
+        assertNull(playback.appFor(MusicMetadata("Other", "Band")))
     }
 
     @Test

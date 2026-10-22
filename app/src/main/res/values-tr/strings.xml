@@ -301,9 +301,8 @@
     <string name="lyrics_words_size">Söz boyutu</string>
     <string name="lyrics_translation_size">Çeviri boyutu</string>
     <string name="lyrics_show_as">Şöyle göster</string>
-    <string name="lyrics_also_show">Ayrıca göster</string>
     <string name="report_problem">Sorun bildir</string>
-    <string name="report_problem_text">Yanlış sözler, kötü zamanlama ya da başka bir şey. Sorunu yazın ve gönderin.</string>
+    <string name="report_problem_text">Yanlış sözler, kötü zamanlama ya da başka bir şey. Sorunu yaz ve gönder.</string>
     <string name="report_by_email">E-posta</string>
     <string name="send_feedback">Geri bildirim gönder</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>

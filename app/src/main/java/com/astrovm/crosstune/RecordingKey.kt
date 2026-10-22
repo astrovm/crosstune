@@ -15,6 +15,13 @@ internal object RecordingKey {
         return link.takeIf { it.type == ItemType.TRACK && it.service in setOf(MusicService.YOUTUBE, MusicService.YOUTUBE_MUSIC) }?.id
     }
 
+    /**
+     * [song] as the app [playing] it has it: its recording and its length, and its link, or the one it
+     * was opened by when the app gives none, as YouTube Music doesn't.
+     */
+    fun asPlayed(song: MusicMetadata, playing: MusicMetadata): MusicMetadata =
+        song.copy(recordingId = playing.recordingId, lengthMs = playing.lengthMs, url = playing.url ?: song.url)
+
     /** Android players can omit the ID, as YouTube Music does; their duration still separates edits. */
     fun playing(app: String, id: String?, durationMs: Long?): String? =
         id?.takeIf { it.isNotBlank() }?.let { "$app:$it" }

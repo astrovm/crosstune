@@ -3155,6 +3155,67 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongPlayingInAnotherAppIsntTakenForItPlayingWhereItWasAsked() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        // Spotify plays it already.
+        phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true, appPackage = MusicService.SPOTIFY.packageName)
+        launch()
+        resolveTyped(link)
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitUntil { phone.songsAsked.size == 1 }
+        // YouTube Music never plays it, so it's opened there, Spotify playing it or not.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(youTubeMusic to link, phone.opened.single())
+    }
+
+    @Test
+    fun thePlayersPlayDoesntAskAgainWhileTheSongIsStillBeingAskedFor() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitUntil { phone.songsAsked.size == 1 }
+        // The app is still loading it: asked again, it would start over.
+        click(string(R.string.lyrics_play))
+        assertEquals(1, phone.songsAsked.size)
+    }
+
+    @Test
+    fun anAlbumNamedAsTheSongItsAppPlaysOpensAsItself() {
+        val spotify = MusicService.SPOTIFY.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        collectionWithSongs(title = "Album", type = "album")
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        // Spotify plays a song of the album's name.
+        phone.playing.value = Following(PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true, appPackage = spotify)
+        launch()
+        resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
+        val button = hasContentDescription(string(R.string.open_in_spotify)) and isEnabled()
+        waitUntil { composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(button).performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(Intent.ACTION_VIEW, nextStartedActivity()!!.action)
+    }
+
+    @Test
     fun aSongAlreadyInItsAppIsBroughtForwardNotStartedAgainOnOpen() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
