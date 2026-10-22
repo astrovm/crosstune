@@ -702,6 +702,13 @@ class MainActivityTest {
         respondWithTrack("Back To Apps", "Artist · Song")
         launch()
         inSettings {
+            // The app songs play in is picked under it, and links keep opening here.
+            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).performClick()
+            composeRule.waitForIdle()
+            composeRule.onAllNodesWithText(string(R.string.target_youtube)).onLast().performClick()
+            composeRule.waitForIdle()
+            assertEquals("YOUTUBE", prefs().getString("default_target", null))
+            assertTrue(prefs().getBoolean("links_in_crosstune", false))
             chooseDefaultHere(string(R.string.target_youtube_music))
             composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube_music)))
             composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assertDoesNotExist()
