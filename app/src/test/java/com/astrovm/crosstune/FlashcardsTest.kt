@@ -1045,8 +1045,21 @@ class FlashcardsTest {
         click(string(R.string.save_button))
         waitUntil { !shown("Other") }
         assertEquals(listOf("Moon", "Stars"), SavedLinesStore(prefs()).load().map { it.text })
-        // None due, there's nothing to practise of every song.
-        composeRule.onNode(hasText(string(R.string.practice_all_songs)) and hasClickAction()).assertIsNotEnabled()
+        // None due, every song's says it's all caught up, and the kinds of card can still be set there.
+        click(string(R.string.practice_all_songs))
+        waitUntil { shown(string(R.string.practice_caught_up)) }
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        // A side being set shows on a line kept, in place of the check.
+        waitUntil { onCard("Moon") }
+        assertFalse(shown(string(R.string.practice_caught_up)))
+        eye(string(R.string.lyrics_translation), back = true)
+        assertFalse(model().uiState.cardTypes.first { it.id == READ_TYPE }.options.back.translation)
+        pressBack()
+        pressBack()
+        assertTrue(shown(string(R.string.practice_caught_up)))
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
         // None left, it's back to the main screen, with nothing to practise.
         click(string(R.string.choose_lines))
         line("Moon").performClick()

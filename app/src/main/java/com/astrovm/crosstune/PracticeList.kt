@@ -30,7 +30,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -76,9 +75,8 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
             }
         }
     ) {
-        // All of them practises what's due, so with none due there's nothing to.
-        val due = songs.sumOf { it.due }
-        PracticeRow(stringResource(R.string.practice_all_songs), due, onClick = actions.onStartPractice, enabled = due > 0) {
+        // All of them practises what's due; with none, it says so, and the kinds of card can still be set there.
+        PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice) {
             AppIcon(R.drawable.ic_school, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(24.dp))
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -127,7 +125,6 @@ private fun PracticeRow(
     onClick: () -> Unit,
     below: String? = null,
     edit: (() -> Unit)? = null,
-    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     leading: @Composable () -> Unit
 ) {
@@ -136,9 +133,8 @@ private fun PracticeRow(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = 4.dp)
-            .alpha(if (enabled) 1f else 0.38f)
     ) {
         leading()
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {

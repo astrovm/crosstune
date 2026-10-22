@@ -204,6 +204,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var studying by rememberSaveable(song) { mutableStateOf<Int?>(null) }
     // The sheet about the whole song, open at what it means, its words to know, or its artist.
     var songTab by rememberSaveable(song) { mutableStateOf<SongTab?>(null) }
+    // A problem with the words being reported.
+    var reporting by rememberSaveable(song) { mutableStateOf(false) }
     val openTab = { tab: SongTab ->
         songTab = tab
         if (tab == SongTab.MEANING) actions.onExplainSong()
@@ -295,10 +297,11 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            // Signed in with ChatGPT, the song opens to what it's about; otherwise it holds only where to report a problem.
+            // Signed in with ChatGPT, the song opens to what it's about; otherwise a problem to report is all there'd be, so that's what's offered.
             LyricsHeader(
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious,
-                onAbout = { if (state.chatGpt.email != null) openTab(SongTab.MEANING) else songTab = SongTab.MEANING }
+                onAbout = if (state.chatGpt.email != null) ({ openTab(SongTab.MEANING) }) else null,
+                onReport = { reporting = true }
             )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
@@ -377,7 +380,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     }
     }
-    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onDismiss = { songTab = null }) }
+    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }) }
+    if (reporting) {
+        ReportDialog(
+            Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
+            onDismiss = { reporting = false }
+        )
+    }
     choosing?.let { practise -> ChooseLinesSheet(state, actions, practise, onDismiss = { choosing = null }) }
     studying?.let { line ->
         LineSheet(line, state, actions) {
@@ -458,7 +467,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
  * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: () -> Unit) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: (() -> Unit)?, onReport: () -> Unit) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
     var skippedNext by remember { mutableStateOf<Boolean?>(null) }
@@ -503,7 +512,7 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     if (skips.isNotEmpty()) customActions = skips
                 }
                 // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
-                .clickable(onClickLabel = about, onClick = onAbout)
+                .then(if (onAbout != null) Modifier.clickable(onClickLabel = about, onClick = onAbout) else Modifier)
                 .pointerInput(rtl) {
                     // Toward the start of the line, as reading goes, is on to the next song.
                     fun next(offset: Float) = (offset < 0f) != rtl
@@ -554,7 +563,8 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                 }
             }
         }
-        IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
+        if (onAbout != null) IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
+        else IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
     }
 }
 
@@ -2075,12 +2085,11 @@ private fun Examples(asking: Asking<List<Example>>) {
 /**
  * All about the song, as ChatGPT finds it, a [tab] at a time: what it means, with how hard its words
  * are and what it covers or samples, and questions about it; its words most worth learning; and its
- * artist. Songs like it are a tap away from any. Signed out of ChatGPT, it holds only where to
- * report a problem with the song's words.
+ * artist. Songs like it are a tap away from any, and so is reporting a problem with its words.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onDismiss: () -> Unit) {
+private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onReport: () -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -2103,20 +2112,13 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
                 }
             }
             // Wrong words, or out of time, said where they can be put right.
-            var reporting by rememberSaveable { mutableStateOf(false) }
             TextButton(
-                onClick = { reporting = true },
+                onClick = onReport,
                 modifier = Modifier.align(Alignment.Start).heightIn(min = 48.dp),
                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
             ) {
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(stringResource(R.string.report_problem), modifier = Modifier.padding(start = 8.dp))
-            }
-            if (reporting) {
-                ReportDialog(
-                    Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
-                    onDismiss = { reporting = false }
-                )
             }
         }
     }

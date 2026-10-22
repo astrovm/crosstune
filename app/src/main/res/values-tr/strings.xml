@@ -35,7 +35,6 @@
     <string name="custom_template_hint">Şarkı adının geleceği yere {query} yazın, ör. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Bir ad ve {query} içeren bir URL girin.</string>
     <string name="settings_advanced_title">Gelişmiş</string>
-    <string name="settings_listening_title">Tanıma ve sözler</string>
     <string name="settings_appearance_title">Görünüm</string>
     <string name="chatgpt_use_plan">Ücretli ChatGPT planını kullan</string>
     <string name="chatgpt_continue">ChatGPT ile devam et</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">Bunu bir daha gösterme</string>
     <string name="settings_visuals_title">Görseller</string>
     <string name="setting_skip_heavy_visuals">Ağır görselleri atla</string>
-    <string name="setting_skip_heavy_visuals_description">Bu telefon için fazla yavaş olanlar, üstlerindeki sözleri takılttırır</string>
+    <string name="setting_skip_heavy_visuals_description">Bu telefon için fazla yavaş olanlar, üstlerindeki sözleri takılttırır.</string>
     <string name="setting_visuals_change">Değiştirme sıklığı</string>
     <string name="visuals_change_never">Asla</string>
     <string name="setting_visuals_list">Hangi görseller</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">Sorun bildir</string>
     <string name="report_problem_text">Yanlış sözler, kötü zamanlama ya da başka bir şey. Sorunu yaz ve gönder.</string>
     <string name="report_by_email">E-posta</string>
-    <string name="send_feedback">Geri bildirim gönder</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>
     <string name="setting_untranslated">Çevirme</string>
+    <string name="untranslated_none">Hiçbiri</string>
     <string name="translate_into_app_language">Uygulama dili</string>
     <string name="setting_translation_server">Çeviriler</string>
     <string name="lyrics_study_line">Bu satırı çalış</string>

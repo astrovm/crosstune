@@ -35,7 +35,7 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 - **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there, make the words bigger or smaller, and fix the timing by tapping the line you hear or nudging it half a second at a time. Lyrics timed for another take offer the fix themselves. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Recording timing.** Lyrics and corrections stay with their recording. With microphone access already allowed, video lyrics briefly listen for an intro offset and remember it after three agreeing audio fingerprints.
-- **Report a problem.** Wrong words or timing? From the lyrics menu it opens a GitHub issue or an email, filled in with the song, the timing details, and the app and Android versions. Nothing goes out until you send it.
+- **Report a problem.** Wrong words or timing? From the lyrics or **Settings**, it opens a GitHub issue or an email, filled in with the song, the timing details, and the app and Android versions. Nothing goes out until you send it.
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word.

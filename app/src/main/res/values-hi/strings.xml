@@ -35,7 +35,6 @@
     <string name="custom_template_hint">गाने के नाम की जगह {query} लिखें, जैसे https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">कोई नाम और {query} वाला URL डालें।</string>
     <string name="settings_advanced_title">उन्नत</string>
-    <string name="settings_listening_title">पहचान और बोल</string>
     <string name="settings_appearance_title">दिखावट</string>
     <string name="chatgpt_use_plan">अपना पेड ChatGPT प्लान इस्तेमाल करें</string>
     <string name="chatgpt_continue">ChatGPT के साथ जारी रखें</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">इसे फिर न दिखाएँ</string>
     <string name="settings_visuals_title">विज़ुअल</string>
     <string name="setting_skip_heavy_visuals">भारी विज़ुअल छोड़ें</string>
-    <string name="setting_skip_heavy_visuals_description">इस फ़ोन के लिए बहुत धीमे, जिनसे ऊपर के बोल अटकते हैं</string>
+    <string name="setting_skip_heavy_visuals_description">इस फ़ोन के लिए बहुत धीमे, जिनसे ऊपर के बोल अटकते हैं।</string>
     <string name="setting_visuals_change">हर इतने में बदलें</string>
     <string name="visuals_change_never">कभी नहीं</string>
     <string name="setting_visuals_list">कौन से विज़ुअल</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">समस्या की रिपोर्ट करें</string>
     <string name="report_problem_text">गलत बोल, गलत टाइमिंग या कुछ और। बताएं क्या गलत है और भेजें।</string>
     <string name="report_by_email">ईमेल</string>
-    <string name="send_feedback">प्रतिक्रिया भेजें</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>
     <string name="setting_untranslated">अनुवाद न करें</string>
+    <string name="untranslated_none">कोई नहीं</string>
     <string name="translate_into_app_language">ऐप की भाषा</string>
     <string name="setting_translation_server">अनुवाद यहां से</string>
     <string name="lyrics_study_line">यह लाइन सीखें</string>

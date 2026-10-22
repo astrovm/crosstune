@@ -36,7 +36,6 @@
     <string name="custom_template_hint">曲名を入れる場所に {query} を書きます（例: https://example.com/search?q={query}）</string>
     <string name="custom_template_invalid">名前と、{query} を含む URL を入力してください。</string>
     <string name="settings_advanced_title">詳細設定</string>
-    <string name="settings_listening_title">曲の認識と歌詞</string>
     <string name="settings_appearance_title">表示</string>
     <string name="chatgpt_use_plan">ChatGPT の有料プランを使う</string>
     <string name="chatgpt_continue">ChatGPT で続行</string>
@@ -233,7 +232,7 @@
     <string name="visuals_drop">これを表示しない</string>
     <string name="settings_visuals_title">ビジュアル</string>
     <string name="setting_skip_heavy_visuals">重いビジュアルをスキップ</string>
-    <string name="setting_skip_heavy_visuals_description">この端末では遅すぎて、上の歌詞がカクつくもの</string>
+    <string name="setting_skip_heavy_visuals_description">この端末では遅すぎて、上の歌詞がカクつくもの。</string>
     <string name="setting_visuals_change">切り替え間隔</string>
     <string name="visuals_change_never">しない</string>
     <string name="setting_visuals_list">表示するビジュアル</string>
@@ -305,7 +304,6 @@
     <string name="report_problem">問題を報告</string>
     <string name="report_problem_text">歌詞の間違い、タイミングのずれなど。問題を書いて送信してください。</string>
     <string name="report_by_email">メール</string>
-    <string name="send_feedback">フィードバックを送信</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>
@@ -314,6 +312,7 @@
     <string name="lyrics_capo">カポ %1$d</string>
     <string name="setting_translate_into">翻訳先</string>
     <string name="setting_untranslated">翻訳しない</string>
+    <string name="untranslated_none">なし</string>
     <string name="translate_into_app_language">アプリの言語</string>
     <string name="setting_translation_server">翻訳の提供元</string>
     <string name="lyrics_study_line">この行を学ぶ</string>

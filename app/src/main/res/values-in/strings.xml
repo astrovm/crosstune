@@ -35,7 +35,6 @@
     <string name="custom_template_hint">Tulis {query} di tempat judul lagu, misalnya https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Masukkan nama dan URL yang berisi {query}.</string>
     <string name="settings_advanced_title">Lanjutan</string>
-    <string name="settings_listening_title">Pengenalan dan lirik</string>
     <string name="settings_appearance_title">Tampilan</string>
     <string name="chatgpt_use_plan">Gunakan paket ChatGPT berbayar Anda</string>
     <string name="chatgpt_continue">Lanjutkan dengan ChatGPT</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">Jangan tampilkan ini</string>
     <string name="settings_visuals_title">Visual</string>
     <string name="setting_skip_heavy_visuals">Lewati visual berat</string>
-    <string name="setting_skip_heavy_visuals_description">Yang terlalu lambat untuk ponsel ini, yang membuat lirik di atasnya tersendat</string>
+    <string name="setting_skip_heavy_visuals_description">Yang terlalu lambat untuk ponsel ini, yang membuat lirik di atasnya tersendat.</string>
     <string name="setting_visuals_change">Ganti setiap</string>
     <string name="visuals_change_never">Tidak pernah</string>
     <string name="setting_visuals_list">Visual mana</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">Laporkan masalah</string>
     <string name="report_problem_text">Lirik salah, waktu tidak pas, atau hal lain. Jelaskan masalahnya, lalu kirim.</string>
     <string name="report_by_email">Email</string>
-    <string name="send_feedback">Kirim masukan</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_translation">Terjemahan</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Terjemahkan ke</string>
     <string name="setting_untranslated">Jangan terjemahkan</string>
+    <string name="untranslated_none">Tidak ada</string>
     <string name="translate_into_app_language">Bahasa aplikasi</string>
     <string name="setting_translation_server">Terjemahan dari</string>
     <string name="lyrics_study_line">Pelajari baris ini</string>
