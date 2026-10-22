@@ -107,17 +107,23 @@ private val LEADING = setOf(Control.RADIO, Control.RADIO_ON, Control.BOX, Contro
 
 @Composable
 private fun ControlFor(control: Control) {
-    when (control) {
-        Control.RADIO, Control.RADIO_ON -> RadioButton(selected = control == Control.RADIO_ON, onClick = null)
-        Control.BOX -> Checkbox(checked = false, onCheckedChange = null)
+    if (control == Control.RADIO || control == Control.RADIO_ON) {
+        RadioButton(selected = control == Control.RADIO_ON, onClick = null)
+    } else if (control == Control.BOX) {
+        Checkbox(checked = false, onCheckedChange = null)
+    } else if (control == Control.CIRCLE) {
         // Xiaomi ticks a link with a filled circle; one not ticked is just its outline.
-        Control.CIRCLE -> Box(Modifier.size(20.dp).border(2.dp, MaterialTheme.colorScheme.outline, CircleShape))
-        Control.TICK -> AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Control.SWITCH, Control.SWITCH_ON -> Switch(checked = control == Control.SWITCH_ON, onCheckedChange = null)
-        Control.CHEVRON -> AppIcon(R.drawable.ic_chevron_right, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Control.PLUS -> Text("+", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-        Control.MENU -> AppIcon(R.drawable.ic_more_vert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        Control.NONE -> Unit
+        Box(Modifier.size(20.dp).border(2.dp, MaterialTheme.colorScheme.outline, CircleShape))
+    } else if (control == Control.TICK) {
+        AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+    } else if (control == Control.SWITCH || control == Control.SWITCH_ON) {
+        Switch(checked = control == Control.SWITCH_ON, onCheckedChange = null)
+    } else if (control == Control.CHEVRON) {
+        AppIcon(R.drawable.ic_chevron_right, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else if (control == Control.PLUS) {
+        Text("+", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+    } else if (control == Control.MENU) {
+        AppIcon(R.drawable.ic_more_vert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
     }
 }
 
