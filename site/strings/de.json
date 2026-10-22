@@ -69,7 +69,7 @@
   "privacy_link": "Datenschutzerklärung",
   "language_label": "Sprache",
   "privacy_title": "Datenschutzerklärung von Crosstune",
-  "updated": "Zuletzt aktualisiert: 20. Oktober 2026",
+  "updated": "Zuletzt aktualisiert: 22. Oktober 2026",
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Bei Fragen zum Datenschutz schreib an {email}. Wenn du dem Entwickler eine E-Mail schickst, verarbeitet der E-Mail-Dienst deine Adresse und Nachricht, damit der Entwickler antworten kann. Bitte schick keine sensiblen Informationen mit, die du nicht teilen musst."
+    ],
+    [
+      "p",
+      "Problem melden, im Songtext oder in den Einstellungen, öffnet ein GitHub-Issue oder eine E-Mail, schon ausgefüllt mit den Versionen von Crosstune und Android und, bei einem Song, mit Titel und Interpret, ob der Songtext zeitlich synchronisiert oder von Hand abgestimmt ist, und der App, der Crosstune folgt. Du kannst alles vorher ändern. Es wird nichts gesendet, solange du es nicht selbst abschickst, und GitHub oder dein E-Mail-Dienst verarbeitet es nach seiner eigenen Datenschutzerklärung."
     ],
     [
       "p",

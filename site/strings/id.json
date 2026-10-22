@@ -69,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 20 Oktober 2026",
+  "updated": "Terakhir diperbarui: 22 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Untuk pertanyaan seputar privasi, hubungi {email}. Jika kamu mengirim email ke developer, layanan email akan memproses alamat dan pesanmu agar developer bisa membalas. Jangan sertakan informasi sensitif yang tidak perlu kamu bagikan."
+    ],
+    [
+      "p",
+      "Laporkan masalah, dari lirik atau dari Pengaturan, membuka isu GitHub atau email yang sudah terisi versi Crosstune dan Android dan, untuk sebuah lagu, judul dan artisnya, apakah liriknya bertanda waktu atau diatur waktunya secara manual, serta aplikasi yang diikuti Crosstune. Kamu bisa mengubahnya dulu. Tidak ada yang terkirim kecuali kamu sendiri yang mengirimnya, dan GitHub atau layanan emailmu memprosesnya sesuai kebijakan privasinya sendiri."
     ],
     [
       "p",

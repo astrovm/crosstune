@@ -69,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 20 octobre 2026",
+  "updated": "Dernière mise à jour : 22 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Pour toute question sur la confidentialité, écrivez à {email}. Si vous envoyez un e-mail au développeur, le service de messagerie traite votre adresse et votre message pour que le développeur puisse répondre. Merci de ne pas inclure d'informations sensibles que vous n'avez pas besoin de partager."
+    ],
+    [
+      "p",
+      "Signaler un problème, depuis les paroles ou les Réglages, ouvre un ticket GitHub ou un e-mail déjà rempli avec les versions de Crosstune et d'Android et, pour un morceau, son titre et son artiste, si ses paroles sont synchronisées ou calées à la main, et l'app que Crosstune suit. Vous pouvez le modifier avant. Rien n'est envoyé si vous ne l'envoyez pas vous-même, et GitHub ou votre service de messagerie le traite selon sa propre politique de confidentialité."
     ],
     [
       "p",

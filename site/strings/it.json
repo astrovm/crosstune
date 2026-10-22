@@ -69,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 20 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 22 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -184,6 +184,10 @@
     [
       "p",
       "Per domande sulla privacy, scrivi a {email}. Se mandi un'email allo sviluppatore, il servizio email tratta il tuo indirizzo e il tuo messaggio così che lo sviluppatore possa rispondere. Non includere informazioni sensibili che non hai bisogno di condividere."
+    ],
+    [
+      "p",
+      "Segnala un problema, dal testo o dalle Impostazioni, apre una issue di GitHub o un'email già compilata con le versioni di Crosstune e di Android e, per un brano, il suo titolo e artista, se il testo è a tempo o messo a tempo a mano, e l'app che Crosstune segue. Puoi modificarla prima. Non viene inviato nulla se non lo invii tu, e GitHub o il tuo servizio email la tratta secondo la propria informativa sulla privacy."
     ],
     [
       "p",
