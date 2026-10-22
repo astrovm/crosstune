@@ -1,6 +1,6 @@
 Ouvrez n'importe quel lien. Reconnaissez n'importe quelle chanson. Suivez chaque mot.
 
-Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un autre. Appuyez sur le lien et le même morceau s'ouvre dans votre application préférée. De Spotify à YouTube Music, d'Apple Music à Deezer, de TIDAL à Spotify : combinez-les comme vous voulez. Fonctionne avec les titres, albums, artistes et playlists.
+Recevez un lien d'un service de musique et ouvrez le même morceau dans votre application préférée. De Spotify à YouTube Music ou d'Apple Music à Deezer : choisissez librement. Fonctionne avec les titres, albums, artistes et playlists.
 
 <b>Fonctionnalités</b>
 <ul>
@@ -10,7 +10,7 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 <li>Demander quelle application utiliser : choisissez une application chaque fois que vous appuyez sur un lien ou le partagez.</li>
 <li>Ouvrir le résultat exact : Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud et Audiomack peuvent ouvrir directement le titre, l'album ou l'artiste au lieu d'une recherche, Bandcamp et Qobuz le titre ou l'album, et YouTube le titre.</li>
 <li>Ajoutez d'autres applications et sites dotés d'une page de recherche.</li>
-<li>Collez d'un seul geste, recherchez et rouvrez vos liens récents, ou ouvrez un lien copié depuis le widget de l'écran d'accueil, la tuile des réglages rapides ou en appuyant longuement sur l'icône de l'application.</li>
+<li>Collez, recherchez et rouvrez vos liens récents. Ouvrez un lien copié depuis le widget, les réglages rapides ou un appui long sur l'icône.</li>
 <li>Reconnaît un titre qui passe autour de vous : Crosstune écoute lui-même, ou ouvre Shazam ou la recherche de titres de Google. Ouvre aussi les liens Shazam et les titres partagés depuis Now Playing sur Pixel.</li>
 <li>Un lien illisible ? Ouvrez-le dans l'application d'origine, copiez le texte de recherche ou partagez un lien de recherche.</li>
 <li>Trouvez un morceau en saisissant son nom au lieu d'un lien, et lisez les paroles de tout morceau que vous ouvrez.</li>
@@ -21,4 +21,4 @@ Quelqu'un vous envoie un lien d'un service de musique, mais vous écoutez sur un
 </ul>
 
 <b>Confidentialité</b>
-Aucun compte, aucune statistique d'utilisation, aucune publicité. L'historique reste sur votre appareil. Pour afficher le titre, l'artiste et la pochette d'un lien, Crosstune interroge uniquement le service d'où provient le lien. Avec l'option « Ouvrir le résultat exact » activée, le titre et l'artiste sont aussi envoyés à la recherche d'Apple, de Deezer, de YouTube Music, de YouTube ou de Bandcamp. « Tout lire » envoie les titres et les artistes des morceaux à la recherche de YouTube Music, et les vidéos trouvées à YouTube. Pour reconnaître un titre, Crosstune n'utilise le micro que pendant l'écoute et n'envoie à Shazam qu'une empreinte du son, jamais l'audio. Saisir le nom d'un morceau l'envoie à la recherche de chansons de Deezer et d'Apple, et demander les paroles ou les accords envoie le titre et l'artiste à des sites de paroles et d'accords (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Les traductions vont à MyMemory. Connecté avec ChatGPT, les fonctions d'IA envoient à OpenAI le titre, l'artiste et les paroles de la chanson, et vos questions.
+Aucun compte, aucune statistique d'utilisation, aucune publicité. L'historique reste sur votre appareil. Pour afficher le titre, l'artiste et la pochette d'un lien, Crosstune interroge uniquement le service d'où provient le lien. Avec l'option « Ouvrir le résultat exact » activée, le titre et l'artiste sont aussi envoyés à la recherche d'Apple, de Deezer, de YouTube Music, de YouTube ou de Bandcamp. « Tout lire » envoie les titres et les artistes des morceaux à la recherche de YouTube Music, et les vidéos trouvées à YouTube. Pour reconnaître un titre, Crosstune n'utilise le micro que pendant l'écoute et n'envoie à Shazam qu'une empreinte du son, jamais l'audio. Saisir le nom d'un morceau l'envoie à la recherche de chansons de Deezer et d'Apple, et demander les paroles ou les accords envoie le titre et l'artiste à des sites de paroles et d'accords (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Les traductions vont à MyMemory. Connecté avec ChatGPT, les fonctions d'IA envoient à OpenAI le titre, l'artiste et les paroles de la chanson, et vos questions. Si le micro est déjà autorisé, les paroles d’une vidéo peuvent écouter brièvement pour corriger et mémoriser le décalage de l’introduction de cet enregistrement.

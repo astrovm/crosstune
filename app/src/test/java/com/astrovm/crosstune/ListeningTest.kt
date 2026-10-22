@@ -1249,6 +1249,78 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true): FakePlayback {
+        listeningAlong(hearing)
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
+        val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song.copy(title = "デモ - Demo"), null)
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+        }
+        MainActivity.playbackFactory = { phone }
+        inRecent("Demo")
+        if (permission) allowMicrophone()
+        launch()
+        openWordsFromRecent("Demo")
+        return phone
+    }
+
+    @Test
+    fun videoIntrosAreConfirmedAutomaticallyAndRememberedForTheRecording() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        assertEquals("video:demo", song.recordingId)
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", position / 1000.0)
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
+        assertFalse(controllerModel().uiState.lyricsOffTake)
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.canSeek == true)
+        composeRule.onNodeWithText("Demo two").performClick()
+        assertTrue(phone.seeks.last() in 19_000..21_000)
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        click(string(R.string.lyrics_button))
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        assertFalse(controllerModel().uiState.listeningAlong)
+    }
+
+    @Test
+    fun automaticVideoCalibrationNeedsPermissionAndStopsAfterFiveFailedAttempts() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, permission = false)
+        composeRule.waitForIdle()
+        assertEquals(0, hearing.listens)
+        assertFalse(controllerModel().uiState.following!!.timingKnown)
+        assertFalse(lit("Demo one"))
+        composeRule.runOnIdle {
+            controllerModel().seekLyrics(10_000)
+            controllerModel().repeatLine(1)
+        }
+        assertTrue(phone.seeks.isEmpty())
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        allowMicrophone()
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        repeat(5) { index ->
+            hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+            if (index < 4) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        assertEquals(5, hearing.listens)
+        assertNull(VideoTimingStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
+    }
+
     @Test
     fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
         // YouTube plays the song's video, which opens with 45 seconds before the song.

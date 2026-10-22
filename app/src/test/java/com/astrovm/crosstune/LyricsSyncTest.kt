@@ -94,6 +94,18 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun correctionsBelongToOneRecordingOnly() {
+        val store = LyricsSyncStore(prefs)
+        val one = song.copy(recordingId = "player:one", lengthMs = 200_000)
+        val points = listOf(SyncPoint(10_000, 12_000))
+        store.save(one, lines, points)
+        assertEquals(points, store.load(one, lines))
+        assertEquals(emptyList<SyncPoint>(), store.load(one.copy(recordingId = "player:two"), lines))
+        assertEquals(emptyList<SyncPoint>(), store.load(one.copy(lengthMs = 250_000), lines))
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
+    }
+
+    @Test
     fun onlyTheLatestSongsAreKept() {
         val store = LyricsSyncStore(prefs)
         repeat(201) { store.save(MusicMetadata("Song $it", "Band"), lines, listOf(SyncPoint(10_000, 11_000 + it.toLong()))) }

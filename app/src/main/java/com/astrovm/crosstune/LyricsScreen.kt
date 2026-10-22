@@ -230,7 +230,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // Words timed for another take of the song are likely off, so putting them in time is offered once, as soon as there's a clock.
     var offered by rememberSaveable(song) { mutableStateOf(false) }
     LaunchedEffect(state.lyricsOffTake, state.following != null) {
-        if (state.lyricsOffTake && state.following != null && !offered) {
+        if (state.lyricsOffTake && state.following?.timingKnown == true && !offered) {
             offered = true
             syncingAsked = true
         }
@@ -1309,10 +1309,10 @@ private fun PlainLyrics(words: String, scale: Float) {
  */
 @Composable
 internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): Int {
-    fun sung() = following?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
+    fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
     val active by produceState(sung(), following, lines) {
         value = sung()
-        while (following?.clock?.playing == true) value = withInfiniteAnimationFrameMillis { sung() }
+        while (following?.timingKnown == true && following.clock.playing) value = withInfiniteAnimationFrameMillis { sung() }
     }
     return active
 }
@@ -1358,7 +1358,7 @@ private fun TimedLyrics(
                 // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
                 onSeek = when {
                     syncing -> ({ actions.onSyncLine(index) })
-                    following?.canSeek == true -> ({ actions.onSeekLyrics(line.timeMs) })
+                    following?.canSeek == true && following.timingKnown -> ({ actions.onSeekLyrics(line.timeMs) })
                     else -> null
                 },
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
@@ -1918,7 +1918,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     LineAction(R.string.lyrics_explain_line, R.drawable.ic_info) { actions.onExplainLine(index) }
                 }
                 // Only a music app the words follow, and that can be moved, can play a line again.
-                if (state.following?.canSeek == true && index < state.lyricLines.size) {
+                if (state.following?.let { it.canSeek && it.timingKnown } == true && index < state.lyricLines.size) {
                     val repeating = state.repeating == index
                     LineAction(
                         if (repeating) R.string.lyrics_stop_repeating else R.string.lyrics_repeat_line, R.drawable.ic_repeat_one, selected = repeating,

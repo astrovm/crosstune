@@ -116,7 +116,8 @@ class MainActivity : ComponentActivity() {
                     sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300)),
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-                    ).takeIf { checksForUpdates(applicationContext) }
+                    ).takeIf { checksForUpdates(applicationContext) },
+                    mayCalibrateVideo = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
                 )
             }
         }

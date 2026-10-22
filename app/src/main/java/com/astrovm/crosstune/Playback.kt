@@ -50,7 +50,9 @@ internal data class Following(
     val canSkipNext: Boolean = false,
     val canSkipPrevious: Boolean = false,
     /** How long what it plays is, when it says; for a video, the video. */
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    /** The player clock is in the lyrics' recording, rather than an uncalibrated video. */
+    val timingKnown: Boolean = true
 )
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
@@ -88,6 +90,9 @@ internal interface PlaybackSource {
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
+
+    /** The matching recording, including one paused in its music app. */
+    fun recording(song: MusicMetadata): MusicMetadata?
 
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
@@ -234,6 +239,16 @@ internal class MediaSessionPlayback(
             .firstNotNullOfOrNull(::playing)
     }
 
+    override fun recording(song: MusicMetadata): MusicMetadata? {
+        if (!hasAccess()) return null
+        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+            .filter { it.packageName != context.packageName && it.plays(song) && !it.elsewhere() }
+            .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            // plays() already checked the session's title and artist. YouTube's video-title
+            // parser can mistake a bilingual title's first half for an artist.
+            .firstNotNullOfOrNull { playing(it)?.metadata?.copy(title = song.title, artist = song.artist) }
+    }
+
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = callbackFlow {
         var watched: List<MediaController> = emptyList()
         fun update() { trySend(nowPlaying()) }
@@ -287,7 +302,14 @@ internal class MediaSessionPlayback(
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         val clock = following(controller)?.takeIf { !it.video }?.clock
-        return Heard.Song(named.copy(artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+        val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+        val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+        val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }
+        return Heard.Song(named.copy(
+            artworkUrl = artwork,
+            url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
+            recordingId = RecordingKey.playing(controller.packageName, id, duration)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
     }
 
     /**
@@ -349,6 +371,8 @@ internal class MediaSessionPlayback(
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
+        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), playing.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (title.isBlank()) return false

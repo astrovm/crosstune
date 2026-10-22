@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.graphics.Bitmap
 import okhttp3.Interceptor
+import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -15,6 +16,7 @@ import okio.buffer
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 
 /**
  * In-memory stand-in for Spotify's web endpoints so tests never touch the network.
@@ -48,9 +50,12 @@ class FakeSpotify : Interceptor {
         return handler(request)
     }
 
-    fun client(): OkHttpClient = OkHttpClient.Builder().addInterceptor(this).build()
+    fun client(): OkHttpClient = OkHttpClient.Builder().dispatcher(Dispatcher(requestThreads)).addInterceptor(this).build()
 
     companion object {
+        // Each test can make several clients. Reuse their threads instead of leaving thousands
+        // idle for OkHttp's keep-alive period while the rest of the suite starts.
+        private val requestThreads = Executors.newCachedThreadPool { task -> Thread(task, "Fake HTTP").apply { isDaemon = true } }
         private val HTML = "text/html; charset=utf-8".toMediaType()
 
         /**

@@ -19,7 +19,9 @@ internal data class MusicMetadata(
     /** How many songs a playlist has, when its service says and lists fewer of them. */
     val trackCount: Int? = null,
     /** How long a song lasts, when its service or the app playing it says, to tell its versions apart. */
-    val lengthMs: Long? = null
+    val lengthMs: Long? = null,
+    /** The playing app's recording, when it identifies it; a duration-based identity when it doesn't. */
+    val recordingId: String? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
