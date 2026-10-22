@@ -328,11 +328,16 @@ internal class MediaSessionPlayback(
         val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
         if (!file.isFile) {
             val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
+            // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
+            val part = File(file.path + ".part")
             val saved = runCatching {
                 file.parentFile?.mkdirs()
-                file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) }
+                part.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) } && part.renameTo(file)
             }.getOrDefault(false)
-            if (!saved) return null
+            if (!saved) {
+                part.delete()
+                return null
+            }
         }
         return file.toURI().toString()
     }
