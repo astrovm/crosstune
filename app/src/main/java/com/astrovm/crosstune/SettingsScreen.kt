@@ -108,13 +108,13 @@ internal fun SettingsScreen(
     onOpenSource: (String?) -> Unit = {}
 ) {
     val sources = sourceSettings(state, actions)
-    // Kept out here, so the list is where it was on coming back from a page.
+    // Kept out here, so a list is where it was on coming back from a page.
     val listScroll = rememberScrollState()
-    // A source's page slides in over the list, and back out the other way.
-    // The visuals' list and the advanced settings too.
+    val sourcesScroll = rememberScrollState()
+    // A page slides in over the one it opens from, and back out the other way.
     AnimatedContent(
-        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || sources.any { it.key == key } },
-        transitionSpec = { slide(forward = targetState != null) },
+        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || key == SOURCES_PAGE || sources.any { it.key == key } },
+        transitionSpec = { slide(forward = depth(targetState) > depth(initialState)) },
         label = "source"
     ) { key ->
         val item = sources.firstOrNull { it.key == key }
@@ -122,12 +122,21 @@ internal fun SettingsScreen(
             VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
         } else if (key == ADVANCED_PAGE) {
             AdvancedPage(state, actions, onBack = { onOpenSource(null) })
+        } else if (key == SOURCES_PAGE) {
+            SourcesPage(state, actions, sources, sourcesScroll, onOpen = onOpenSource, onBack = { onOpenSource(null) })
         } else if (item != null) {
-            SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(null) })
+            SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(SOURCES_PAGE) })
         } else {
             SettingsList(state, actions, sources, listScroll, onBack, onOpenSource)
         }
     }
+}
+
+/** How deep a page is: the list, a page it opens, or a source's own page, opened from the sources'. */
+private fun depth(key: String?) = when (key) {
+    null -> 0
+    VISUALS_PAGE, ADVANCED_PAGE, SOURCES_PAGE -> 1
+    else -> 2
 }
 
 @Composable
@@ -139,7 +148,6 @@ private fun SettingsList(
     onBack: () -> Unit,
     onOpenSource: (String?) -> Unit
 ) {
-    var addingCustom by rememberSaveable { mutableStateOf(false) }
     val openWebPage = rememberWebOpener()
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
@@ -155,6 +163,7 @@ private fun SettingsList(
     ) {
         Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
 
+        // How songs come in and go out: where links open, whose links Crosstune opens, and what names a song playing nearby.
         // "Open links in" says what this is, also when it's set to ask or show first.
         Spacer(Modifier.height(16.dp))
         Group {
@@ -168,73 +177,18 @@ private fun SettingsList(
                 label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
-        }
-
-        SectionHeader(title = stringResource(R.string.settings_links_title))
-        Group {
-            sources.forEachIndexed { index, item ->
-                if (index > 0) GroupDivider()
-                SourceSummaryRow(item, state.installed, onOpen = { onOpenSource(item.key) })
-            }
-        }
-
-
-        SectionHeader(
-            title = stringResource(R.string.settings_custom_title)
-        )
-        Group {
-            state.destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
-                Row(
-                    modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Like every other app and site, it's shown with its icon: its first letter.
-                    DestinationIcon(custom, state.installed)
-                    Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
-                        Text(custom.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            custom.template,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(onClick = { actions.onRemoveCustom(custom) }) {
-                        AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.remove_button))
-                    }
-                }
-                GroupDivider()
-            }
-            AnimatedContent(targetState = addingCustom, transitionSpec = { swap() }, label = "add") { adding ->
-                if (adding) {
-                    AddCustomDestinationForm(
-                        onAdd = { name, template ->
-                            actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
-                        },
-                        onCancel = { addingCustom = false }
-                    )
-                } else {
-                    TextButton(
-                        onClick = { addingCustom = true },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(stringResource(R.string.add_custom_destination_button), modifier = Modifier.padding(start = 8.dp))
-                    }
-                }
-            }
-        }
-
-        // What happens around a song once it's found: naming one playing nearby, and its words.
-        SectionHeader(stringResource(R.string.settings_listening_title))
-        Group {
+            GroupDivider()
+            SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
             // Which app names a song playing nearby, when there's more than one.
             if (actions.recognizers.size > 1) {
-                RecognizerRow(actions)
                 GroupDivider()
+                RecognizerRow(actions)
             }
-            // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
+        }
+
+        // What the words are translated into, and whether they follow the music app.
+        SectionHeader(stringResource(R.string.lyrics_button))
+        Group {
             TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
             GroupDivider()
             UntranslatedRow(state.learning.untranslated, actions.onUntranslatedChange)
@@ -244,6 +198,7 @@ private fun SettingsList(
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
                 GroupDivider()
             }
+            // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
             SettingSwitch(
                 label = stringResource(R.string.setting_lyrics_follow),
                 description = stringResource(R.string.setting_lyrics_follow_description),
@@ -330,7 +285,7 @@ private fun SettingsList(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = stringResource(R.string.send_feedback), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
@@ -576,7 +531,6 @@ private fun RecognizerRow(actions: ScreenActions) {
     }
 }
 
-/** What happens when the app a song goes to doesn't have it: ask, open it where it's from, or search anyway. */
 /** The page listing the visuals. */
 private const val VISUALS_PAGE = "visuals"
 
@@ -652,12 +606,63 @@ private fun PageRow(label: String, onOpen: () -> Unit) {
     }
 }
 
+/** The page listing the sources of links. */
+private const val SOURCES_PAGE = "sources"
+
+/** How many sources' links Crosstune opens, opening the list of them; marked when one isn't allowed yet, as the notice above says. */
+@Composable
+private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (sources.any { it.notAllowed }) {
+            AppIcon(
+                R.drawable.ic_error, contentDescription = stringResource(R.string.setup_not_allowed),
+                tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
+            )
+        }
+        Text(
+            stringResource(R.string.visuals_list_summary, sources.count { it.on }, sources.size),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/**
+ * Every source of links with its switch; tapping one's name opens the rest of its options. What still
+ * keeps links from Crosstune is on top, as on the list, so turning one on shows what Android needs next.
+ */
+@Composable
+private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<SourceSettings>, scroll: ScrollState, onOpen: (String) -> Unit, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    Page(
+        title = stringResource(R.string.settings_links_title),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        },
+        scrollState = scroll
+    ) {
+        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
+        Group(modifier = Modifier.padding(top = 4.dp)) {
+            sources.forEachIndexed { index, item ->
+                if (index > 0) GroupDivider()
+                SourceSummaryRow(item, state.installed, onOpen = { onOpen(item.key) })
+            }
+        }
+    }
+}
+
 /** The page of advanced settings. */
 private const val ADVANCED_PAGE = "advanced"
 
 /**
  * What few change: whether a link opens the exact match, and what's done when there's none; tracking
- * dropped from links; the music apps in the share sheet; and heavy visuals skipped.
+ * dropped from links; the music apps in the share sheet; and other apps and sites to open songs in.
  */
 @Composable
 private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
@@ -701,21 +706,64 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
                 onCheckedChange = actions.onShareSheetAppsChange
             )
         }
-        SectionHeader(stringResource(R.string.settings_visuals_title))
-        Group {
-            SettingSwitch(
-                label = stringResource(R.string.setting_skip_heavy_visuals),
-                description = stringResource(R.string.setting_skip_heavy_visuals_description),
-                checked = state.visualsSettings.skipHeavy,
-                onCheckedChange = actions.onSkipHeavyVisualsChange
-            )
+        SectionHeader(stringResource(R.string.settings_custom_title))
+        CustomDestinations(state.destinations, state.installed, actions)
+    }
+}
+
+/** Apps and sites added by hand, each opened by a search link, with a way to add another. */
+@Composable
+private fun CustomDestinations(destinations: List<Destination>, installed: Set<MusicService>, actions: ScreenActions) {
+    var addingCustom by rememberSaveable { mutableStateOf(false) }
+    Group {
+        destinations.filterIsInstance<Destination.Custom>().forEach { custom ->
+            Row(
+                modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Like every other app and site, it's shown with its icon: its first letter.
+                DestinationIcon(custom, installed)
+                Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                    Text(custom.name, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        custom.template,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                IconButton(onClick = { actions.onRemoveCustom(custom) }) {
+                    AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.remove_button))
+                }
+            }
+            GroupDivider()
+        }
+        AnimatedContent(targetState = addingCustom, transitionSpec = { swap() }, label = "add") { adding ->
+            if (adding) {
+                AddCustomDestinationForm(
+                    onAdd = { name, template ->
+                        actions.onAddCustom(name, template).also { added -> if (added) addingCustom = false }
+                    },
+                    onCancel = { addingCustom = false }
+                )
+            } else {
+                TextButton(
+                    onClick = { addingCustom = true },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    AppIcon(R.drawable.ic_add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.add_custom_destination_button), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
         }
     }
 }
 
 /**
- * Every visual by kind, each with a still and switched on or off; those too heavy for this phone say so,
- * and can be switched on anyway. The last one on stays on. Tapped, they play one at a time, to swipe through.
+ * Whether heavy visuals are skipped, then every visual by kind, each with a still and switched on or off;
+ * those too heavy for this phone say so, and can be switched on anyway. The last one on stays on. Tapped,
+ * they play one at a time, to swipe through.
  */
 @Composable
 private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
@@ -742,6 +790,14 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
         },
         scrollState = scroll
     ) {
+        Group(modifier = Modifier.padding(top = 8.dp)) {
+            SettingSwitch(
+                label = stringResource(R.string.setting_skip_heavy_visuals),
+                description = stringResource(R.string.setting_skip_heavy_visuals_description),
+                checked = settings.skipHeavy,
+                onCheckedChange = actions.onSkipHeavyVisualsChange
+            )
+        }
         kinds.forEach { (kind, inKind) ->
             SectionHeader(
                 stringResource(kindName(kind)),
@@ -914,6 +970,7 @@ private fun FpsBadge(fps: Int, modifier: Modifier) {
     }
 }
 
+/** What happens when the app a song goes to doesn't have it: ask, open it where it's from, or search anyway. */
 @Composable
 private fun NotFoundRow(action: NotFoundAction, onSelect: (NotFoundAction) -> Unit) = ChoiceRow(
     stringResource(R.string.setting_not_found),
@@ -1084,6 +1141,8 @@ private fun TranslateIntoRow(into: String?, onSelect: (String?) -> Unit) {
                     DropdownMenuItem(
                         text = { Text(tag?.let(AppLanguage::displayName) ?: appLanguage) },
                         leadingIcon = { LanguageMark(tag) },
+                        trailingIcon = { PickedMark(tag == into) },
+                        modifier = Modifier.semantics { selected = tag == into },
                         onClick = {
                             expanded = false
                             onSelect(tag)
@@ -1107,10 +1166,11 @@ private fun UntranslatedRow(untranslated: Set<String>, onChange: (Set<String>) -
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(R.string.setting_untranslated), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        val none = stringResource(R.string.untranslated_none)
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) },
+                    text = AppLanguage.untranslatedTags.filter { it in untranslated }.joinToString { AppLanguage.displayName(it) }.ifEmpty { none },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -1421,6 +1481,8 @@ private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: Li
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text(defaultLabel) },
+                trailingIcon = { PickedMark(rule == null) },
+                modifier = Modifier.semantics { selected = rule == null },
                 onClick = {
                     expanded = false
                     onChange(null)
@@ -1430,6 +1492,8 @@ private fun RuleMenu(rule: Destination?, fallback: Destination, destinations: Li
                 DropdownMenuItem(
                     text = { Text(destination.label()) },
                     leadingIcon = { DestinationIcon(destination, installed) },
+                    trailingIcon = { PickedMark(destination == rule) },
+                    modifier = Modifier.semantics { selected = destination == rule },
                     onClick = {
                         expanded = false
                         onChange(destination)
@@ -1484,11 +1548,11 @@ internal fun SettingsScreenPreview() {
             state = UiState(
                 intercepted = setOf(MusicService.SPOTIFY, MusicService.YOUTUBE),
                 rules = mapOf(MusicService.YOUTUBE to Destination.Service(MusicService.YOUTUBE_MUSIC)),
-                destinations = MusicService.entries.map(Destination::Service) +
-                    Destination.Custom("1", "Invidious", "https://yewtu.be/search?q={query}")
+                destinations = MusicService.entries.map(Destination::Service)
             ),
             actions = ScreenActions(),
-            onBack = {}
+            onBack = {},
+            openSource = SOURCES_PAGE
         )
     }
 }

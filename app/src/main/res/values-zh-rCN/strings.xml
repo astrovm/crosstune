@@ -35,7 +35,6 @@
     <string name="custom_template_hint">在歌曲名称的位置写上 {query}，例如 https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">请输入名称和包含 {query} 的网址。</string>
     <string name="settings_advanced_title">高级</string>
-    <string name="settings_listening_title">识别与歌词</string>
     <string name="settings_appearance_title">外观</string>
     <string name="chatgpt_use_plan">使用你的 ChatGPT 付费套餐</string>
     <string name="chatgpt_continue">继续使用 ChatGPT</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">不再显示这个</string>
     <string name="settings_visuals_title">视觉效果</string>
     <string name="setting_skip_heavy_visuals">跳过繁重的视觉效果</string>
-    <string name="setting_skip_heavy_visuals_description">在这部手机上太慢、会让上面的歌词卡顿的</string>
+    <string name="setting_skip_heavy_visuals_description">在这部手机上太慢、会让上面的歌词卡顿的。</string>
     <string name="setting_visuals_change">切换间隔</string>
     <string name="visuals_change_never">从不</string>
     <string name="setting_visuals_list">显示哪些视觉效果</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">报告问题</string>
     <string name="report_problem_text">歌词错误、时间不准或其他问题。写下问题后发送。</string>
     <string name="report_by_email">电子邮件</string>
-    <string name="send_feedback">发送反馈</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按输入法拼写罗马字</string>
     <string name="lyrics_translation">翻译</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">变调夹 %1$d</string>
     <string name="setting_translate_into">翻译成</string>
     <string name="setting_untranslated">不翻译</string>
+    <string name="untranslated_none">无</string>
     <string name="translate_into_app_language">应用语言</string>
     <string name="setting_translation_server">翻译来源</string>
     <string name="lyrics_study_line">学习这一行</string>

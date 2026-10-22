@@ -35,7 +35,6 @@
     <string name="custom_template_hint">Escribí {query} donde va el nombre de la canción, por ej. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Ingresá un nombre y una URL que contenga {query}.</string>
     <string name="settings_advanced_title">Avanzado</string>
-    <string name="settings_listening_title">Reconocimiento y letras</string>
     <string name="settings_appearance_title">Apariencia</string>
     <string name="chatgpt_use_plan">Usá tu plan pago de ChatGPT</string>
     <string name="chatgpt_continue">Continuar con ChatGPT</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">No mostrar este</string>
     <string name="settings_visuals_title">Visuales</string>
     <string name="setting_skip_heavy_visuals">Saltar visuales pesados</string>
-    <string name="setting_skip_heavy_visuals_description">Los muy lentos para este teléfono, que hacen trabar la letra encima</string>
+    <string name="setting_skip_heavy_visuals_description">Los muy lentos para este teléfono, que hacen trabar la letra encima.</string>
     <string name="setting_visuals_change">Cambiar cada</string>
     <string name="visuals_change_never">Nunca</string>
     <string name="setting_visuals_list">Qué visuales</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">Reportar un problema</string>
     <string name="report_problem_text">Letra equivocada, mal sincronizada o lo que sea. Contá qué está mal y envialo.</string>
     <string name="report_by_email">Email</string>
-    <string name="send_feedback">Enviar comentarios</string>
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se teclea</string>
     <string name="lyrics_translation">Traducción</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">Cejilla %1$d</string>
     <string name="setting_translate_into">Traducir al</string>
     <string name="setting_untranslated">No traducir</string>
+    <string name="untranslated_none">Ninguno</string>
     <string name="translate_into_app_language">Idioma de la app</string>
     <string name="setting_translation_server">Traducciones de</string>
     <string name="lyrics_study_line">Estudiar esta línea</string>

@@ -35,7 +35,6 @@
     <string name="custom_template_hint">Zet {query} waar de titel van het nummer moet komen, bijv. https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Vul een naam in en een URL met {query}.</string>
     <string name="settings_advanced_title">Geavanceerd</string>
-    <string name="settings_listening_title">Herkenning en songteksten</string>
     <string name="settings_appearance_title">Weergave</string>
     <string name="chatgpt_use_plan">Je betaalde ChatGPT-abonnement gebruiken</string>
     <string name="chatgpt_continue">Doorgaan met ChatGPT</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">Deze niet meer tonen</string>
     <string name="settings_visuals_title">Visuals</string>
     <string name="setting_skip_heavy_visuals">Zware visuals overslaan</string>
-    <string name="setting_skip_heavy_visuals_description">Te traag voor deze telefoon, waardoor de tekst erover hapert</string>
+    <string name="setting_skip_heavy_visuals_description">Te traag voor deze telefoon, waardoor de tekst erover hapert.</string>
     <string name="setting_visuals_change">Wisselen elke</string>
     <string name="visuals_change_never">Nooit</string>
     <string name="setting_visuals_list">Welke visuals</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">Probleem melden</string>
     <string name="report_problem_text">Verkeerde tekst, slechte timing of iets anders. Zeg wat er mis is en stuur het.</string>
     <string name="report_by_email">E-mail</string>
-    <string name="send_feedback">Feedback sturen</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Vertalen naar</string>
     <string name="setting_untranslated">Niet vertalen</string>
+    <string name="untranslated_none">Geen</string>
     <string name="translate_into_app_language">App-taal</string>
     <string name="setting_translation_server">Vertalingen van</string>
     <string name="lyrics_study_line">Deze regel leren</string>

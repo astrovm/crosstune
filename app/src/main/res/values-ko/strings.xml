@@ -35,7 +35,6 @@
     <string name="custom_template_hint">노래 이름이 들어갈 자리에 {query}를 입력하세요. 예: https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">이름과 {query}가 포함된 URL을 입력하세요.</string>
     <string name="settings_advanced_title">고급</string>
-    <string name="settings_listening_title">인식 및 가사</string>
     <string name="settings_appearance_title">화면 표시</string>
     <string name="chatgpt_use_plan">ChatGPT 유료 요금제 사용</string>
     <string name="chatgpt_continue">ChatGPT로 계속하기</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">이것은 표시 안 함</string>
     <string name="settings_visuals_title">비주얼</string>
     <string name="setting_skip_heavy_visuals">무거운 비주얼 건너뛰기</string>
-    <string name="setting_skip_heavy_visuals_description">이 폰에서 너무 느려 위의 가사가 끊기는 것</string>
+    <string name="setting_skip_heavy_visuals_description">이 폰에서 너무 느려 위의 가사가 끊기는 것.</string>
     <string name="setting_visuals_change">바꾸는 간격</string>
     <string name="visuals_change_never">안 함</string>
     <string name="setting_visuals_list">표시할 비주얼</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">문제 신고</string>
     <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
     <string name="report_by_email">이메일</string>
-    <string name="send_feedback">의견 보내기</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">카포 %1$d</string>
     <string name="setting_translate_into">번역할 언어</string>
     <string name="setting_untranslated">번역 안 함</string>
+    <string name="untranslated_none">없음</string>
     <string name="translate_into_app_language">앱 언어</string>
     <string name="setting_translation_server">번역 제공</string>
     <string name="lyrics_study_line">이 줄 공부하기</string>

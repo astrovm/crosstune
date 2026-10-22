@@ -108,31 +108,36 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().widthIn(max = ContentMaxWidth).align(Alignment.TopCenter)) {
+                // All caught up, the kinds of card can still be set, shown on a line kept.
+                val optionLine = practice.line ?: state.savedLines.firstOrNull { it.practisable }.takeIf { practice.total == 0 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
                     IconButton(onClick = actions.onStopPractice) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.floating_close)) }
-                    val line = practice.line
-                    if (practice.total > 0 && line != null) {
-                        Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
+                    if (practice.total > 0 && practice.line != null) Progress(practice, Modifier.weight(1f).padding(start = 8.dp))
+                    else Spacer(Modifier.weight(1f))
+                    if (optionLine != null) {
                         IconButton(onClick = { optionsOpen = !optionsOpen }) {
                             AppIcon(R.drawable.ic_tune, contentDescription = stringResource(R.string.practice_card_options))
                         }
                     }
                 }
-                val optionLine = practice.line
                 if (optionsOpen && optionLine != null) {
                     CardTypesPanel(optionLine, state.cardTypes, practice.turned, actions, onClose = { optionsOpen = false }, onPreview = { preview = it })
                 }
+                val editing = preview.takeIf { optionsOpen }
+                val onSide = { side: CardSide ->
+                    // Edits go to the kind as it is now, not as the preview last saw it.
+                    actions.onCardTypesChange(state.cardTypes.map { kind ->
+                        if (kind.id != editing?.type?.id) kind else kind.copy(options = if (editing.back) kind.options.copy(back = side) else kind.options.copy(front = side))
+                    }, true)
+                }
                 AnimatedContent(targetState = practice, contentKey = ::shownAs, transitionSpec = { slide(forward = true) }, label = "card", modifier = Modifier.weight(1f)) { shown ->
                     val line = shown.line
-                    if (shown.total == 0) CaughtUp()
+                    // Caught up, a side being set shows on the line kept, in place of the check.
+                    if (shown.total == 0) {
+                        if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, actions, editing, onSide) else CaughtUp()
+                    }
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cardTypes, actions, preview.takeIf { optionsOpen }, onSide = { side ->
-                        // Edits go to the kind as it is now, not as the preview last saw it.
-                        val open = preview?.takeIf { optionsOpen }
-                        actions.onCardTypesChange(state.cardTypes.map { kind ->
-                            if (kind.id != open?.type?.id) kind else kind.copy(options = if (open.back) kind.options.copy(back = side) else kind.options.copy(front = side))
-                        }, true)
-                    })
+                    else Card(line, shown, state.cardTypes, actions, editing, onSide)
                 }
             }
         }

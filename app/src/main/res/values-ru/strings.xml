@@ -35,7 +35,6 @@
     <string name="custom_template_hint">Вместо названия песни укажите {query}, например https://example.com/search?q={query}</string>
     <string name="custom_template_invalid">Введите название и URL с {query}.</string>
     <string name="settings_advanced_title">Дополнительно</string>
-    <string name="settings_listening_title">Распознавание и тексты</string>
     <string name="settings_appearance_title">Оформление</string>
     <string name="chatgpt_use_plan">Использовать платный план ChatGPT</string>
     <string name="chatgpt_continue">Продолжить с ChatGPT</string>
@@ -232,7 +231,7 @@
     <string name="visuals_drop">Больше не показывать</string>
     <string name="settings_visuals_title">Визуализации</string>
     <string name="setting_skip_heavy_visuals">Пропускать тяжёлые</string>
-    <string name="setting_skip_heavy_visuals_description">Слишком медленные для этого телефона, из-за них текст поверх дёргается</string>
+    <string name="setting_skip_heavy_visuals_description">Слишком медленные для этого телефона, из-за них текст поверх дёргается.</string>
     <string name="setting_visuals_change">Менять каждые</string>
     <string name="visuals_change_never">Никогда</string>
     <string name="setting_visuals_list">Какие визуализации</string>
@@ -304,7 +303,6 @@
     <string name="report_problem">Сообщить о проблеме</string>
     <string name="report_problem_text">Неверный текст, плохая синхронизация или что-то ещё. Опишите проблему и отправьте.</string>
     <string name="report_by_email">Почта</string>
-    <string name="send_feedback">Отправить отзыв</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>
@@ -313,6 +311,7 @@
     <string name="lyrics_capo">Каподастр %1$d</string>
     <string name="setting_translate_into">Переводить на</string>
     <string name="setting_untranslated">Не переводить</string>
+    <string name="untranslated_none">Нет</string>
     <string name="translate_into_app_language">Язык приложения</string>
     <string name="setting_translation_server">Переводы от</string>
     <string name="lyrics_study_line">Изучить эту строку</string>
