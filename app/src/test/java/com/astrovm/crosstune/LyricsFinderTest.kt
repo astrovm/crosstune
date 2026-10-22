@@ -1132,6 +1132,27 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun wordsNoCopyIsTimedForAreKeptForTheRecordingTheyWereLookedUpFor() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, twoTakes)
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val file = File.createTempFile("lyrics", ".json").apply { delete() }
+        fun finder() = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        fun look() = runBlocking { finder().firstLook(MusicMetadata("Song", "Band", lengthMs = 308_600)).lyrics }
+        // Every copy is timed for a shorter take, so the closest is what that recording gets, and what's kept for it.
+        val first = look() as Lyrics.Found
+        assertEquals(295_000L, first.lengthMs)
+        val asked = fake.requestedUrls.size
+        assertTrue(asked > 0)
+        assertEquals(first, look())
+        assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
     fun ofSeveralRecordingsOnNetEaseTheOneAsLongAsTheSongPlayingIsTaken() {
         fake.handler = { request ->
             val url = request.url

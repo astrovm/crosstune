@@ -126,9 +126,8 @@ internal class LyricsFinder(
     suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
-        cache?.get(cacheKey(metadata))?.let { kept ->
-            fromCache(kept)?.takeIf { (words, _) -> fits(words, metadata) }?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) }
-        }
+        // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) } }
         val found = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Lyrics.Unavailable
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better.
         cache?.let { cache ->
