@@ -41,6 +41,8 @@ internal class FakePlayback : PlaybackSource {
 
     override fun nowPlaying() = onThePhone
 
+    override fun recording(song: MusicMetadata) = onThePhone?.metadata
+
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = songs
 
     override fun seekTo(song: MusicMetadata, positionMs: Long) {

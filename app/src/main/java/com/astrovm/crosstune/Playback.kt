@@ -92,7 +92,7 @@ internal interface PlaybackSource {
     fun nowPlaying(): Heard.Song?
 
     /** The matching recording, including one paused in its music app. */
-    fun recording(song: MusicMetadata): MusicMetadata? = nowPlaying()?.metadata
+    fun recording(song: MusicMetadata): MusicMetadata?
 
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
