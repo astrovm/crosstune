@@ -2657,29 +2657,30 @@ class ListeningTest {
         waitForText("[Stars]")
         studyMenu()
         click(string(R.string.practice_song))
-        // The one due longest first, the line on its face, its meaning to think of; with how far along it is.
+        // The one practised before first, the line on its face, its meaning to think of; with how far along it is.
         waitForDescription(string(R.string.practice_progress, 0, 2))
-        assertFalse(shown("[Night sky]") || shown(string(R.string.practice_good)))
+        assertFalse(shown("[Stars]") || shown(string(R.string.practice_good)))
         // Not turned yet, it can't be said how well it was known.
         controllerModel().gradePractice(Grade.GOOD)
-        assertEquals(0L, SavedLinesStore(prefs()).load().first { it.text == "Night sky" }.due)
+        assertEquals(1L, SavedLinesStore(prefs()).load().first { it.text == "Stars" }.due)
         // Tapped, the card turns.
-        composeRule.onNode(hasText("Night sky") and androidx.compose.ui.test.hasClickAction()).performClick()
-        waitForText("[Night sky]")
+        composeRule.onNode(hasText("Stars") and androidx.compose.ui.test.hasClickAction()).performClick()
+        waitForText("[Stars]")
         assertFalse(shown(string(R.string.practice_show)))
         val before = System.currentTimeMillis()
-        click(string(R.string.practice_good))
-        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
-        assertEquals(1, good.step)
-        assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
-        // Known once before, it asks the same, and known again, it's back later.
-        waitForDescription(string(R.string.practice_progress, 1, 2))
-        assertTrue(shown("Stars") && !shown("[Stars]"))
-        click(string(R.string.practice_show))
+        // Known once before and known again, it's back later.
         click(string(R.string.practice_good))
         val again = SavedLinesStore(prefs()).load().first { it.text == "Stars" }
         assertEquals(3, again.interval)
         assertTrue(again.due >= before + 3 * DAY_MS)
+        // The new one asks the same, and known, it's back in ten minutes.
+        waitForDescription(string(R.string.practice_progress, 1, 2))
+        assertTrue(shown("Night sky") && !shown("[Night sky]"))
+        click(string(R.string.practice_show))
+        click(string(R.string.practice_good))
+        val good = SavedLinesStore(prefs()).load().first { it.text == "Night sky" }
+        assertEquals(1, good.step)
+        assertTrue(good.due >= before + 10 * 60_000L && good.due <= System.currentTimeMillis() + 10 * 60_000L)
         waitForText(string(R.string.practice_done, 2))
     }
 
