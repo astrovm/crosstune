@@ -1,34 +1,9 @@
 package com.astrovm.crosstune
 
-import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LyricsOptionsTest {
-    @Test
-    fun theReadingSummaryDescribesOnlyWhatsVisibleAndKeepsCombinedOptions() {
-        val before = Locale.getDefault()
-        Locale.setDefault(Locale.US)
-        try {
-            val japanese = Learning(script = Script.JAPANESE, readings = true, readingScale = 0.5f)
-            // Percentages describe the usable range, not the physical text scale.
-            assertEquals("あ · 15%", japanese.readingSummary("Off"))
-            assertEquals("あ · 100%", japanese.copy(readingScale = MAX_READING_SCALE).readingSummary("Off"))
-            assertEquals("あ · 15% · Aa", japanese.copy(romanized = true).readingSummary("Off"))
-            assertEquals("Off", japanese.copy(readings = false).readingSummary("Off"))
-            assertEquals("Aa", japanese.copy(readings = false, romanized = true).readingSummary("Off"))
-            assertEquals("Off", japanese.copy(wordsAs = WordsAs.KANA).readingSummary("Off"))
-            assertEquals("Aa", japanese.copy(wordsAs = WordsAs.LATIN).readingSummary("Off"))
-            assertEquals("拼 · 15%", japanese.copy(script = Script.CHINESE).readingSummary("Off"))
-            assertEquals("拼 · 100%", japanese.copy(script = Script.CHINESE, readingScale = MAX_READING_SCALE).readingSummary("Off"))
-            assertEquals("Off", japanese.copy(script = Script.KOREAN).readingSummary("Off"))
-            assertEquals("Off", japanese.copy(script = null).readingSummary("Off"))
-            assertEquals("あ · 1%", japanese.copy(readingScale = MIN_READING_SCALE).readingSummary("Off"))
-
-        } finally {
-            Locale.setDefault(before)
-        }
-    }
     @Test
     fun everyPercentSliderStartsAtOneAndKeepsItsReadableMinimum() {
         assertEquals(0.6f, MIN_WORDS_SCALE, 0f)

@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">Sadece Latin harfleri</string>
     <string name="lyrics_from_romaji">ChatGPT tarafından Japonca yazıldı</string>
     <string name="lyrics_reading_options">Okunuşlar</string>
-    <string name="lyrics_readings_off">Kapalı</string>
     <string name="lyrics_display_original">Orijinal</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>

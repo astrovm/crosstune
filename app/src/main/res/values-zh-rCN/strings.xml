@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">仅拉丁字母</string>
     <string name="lyrics_from_romaji">由 ChatGPT 写成日文</string>
     <string name="lyrics_reading_options">读音</string>
-    <string name="lyrics_readings_off">关闭</string>
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">假名</string>
     <string name="lyrics_display_latin">拉丁字母</string>

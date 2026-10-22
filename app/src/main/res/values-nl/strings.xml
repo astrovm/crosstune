@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">Alleen Latijnse letters</string>
     <string name="lyrics_from_romaji">In het Japans geschreven door ChatGPT</string>
     <string name="lyrics_reading_options">Lezingen</string>
-    <string name="lyrics_readings_off">Uit</string>
     <string name="lyrics_display_original">Origineel</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latijn</string>

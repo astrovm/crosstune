@@ -414,7 +414,6 @@
     <string name="lyrics_only_latin">Only Latin letters</string>
     <string name="lyrics_from_romaji">Written in Japanese by ChatGPT</string>
     <string name="lyrics_reading_options">Readings</string>
-    <string name="lyrics_readings_off">Off</string>
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>

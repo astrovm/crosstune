@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">Только латиница</string>
     <string name="lyrics_from_romaji">Написано по-японски ChatGPT</string>
     <string name="lyrics_reading_options">Чтение</string>
-    <string name="lyrics_readings_off">Выкл.</string>
     <string name="lyrics_display_original">Оригинал</string>
     <string name="lyrics_display_kana">Кана</string>
     <string name="lyrics_display_latin">Латиница</string>

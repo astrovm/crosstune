@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">सिर्फ़ लैटिन अक्षर</string>
     <string name="lyrics_from_romaji">ChatGPT ने जापानी में लिखा</string>
     <string name="lyrics_reading_options">उच्चारण</string>
-    <string name="lyrics_readings_off">बंद</string>
     <string name="lyrics_display_original">मूल</string>
     <string name="lyrics_display_kana">काना</string>
     <string name="lyrics_display_latin">लैटिन</string>

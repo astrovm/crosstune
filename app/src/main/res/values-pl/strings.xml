@@ -393,7 +393,6 @@
     <string name="lyrics_only_latin">Tylko litery łacińskie</string>
     <string name="lyrics_from_romaji">Zapisane po japońsku przez ChatGPT</string>
     <string name="lyrics_reading_options">Odczyt</string>
-    <string name="lyrics_readings_off">Wył.</string>
     <string name="lyrics_display_original">Oryginał</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Łacinka</string>
