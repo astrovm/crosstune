@@ -2261,7 +2261,7 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return
-        if (uiState.following?.canSeek != true) return
+        if (uiState.following?.let { it.canSeek && it.timingKnown } != true) return
         val end = endOf(lines, index) + LINE_TAIL_MS
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)

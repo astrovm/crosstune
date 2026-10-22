@@ -1298,12 +1298,16 @@ class ListeningTest {
     @Test
     fun automaticVideoCalibrationNeedsPermissionAndStopsAfterFiveFailedAttempts() {
         val hearing = FakeHearing()
-        videoWithWords(hearing, permission = false)
+        val phone = videoWithWords(hearing, permission = false)
         composeRule.waitForIdle()
         assertEquals(0, hearing.listens)
         assertFalse(controllerModel().uiState.following!!.timingKnown)
         assertFalse(lit("Demo one"))
-        composeRule.runOnIdle { controllerModel().seekLyrics(10_000) }
+        composeRule.runOnIdle {
+            controllerModel().seekLyrics(10_000)
+            controllerModel().repeatLine(1)
+        }
+        assertTrue(phone.seeks.isEmpty())
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
         allowMicrophone()
         click(string(R.string.lyrics_button))

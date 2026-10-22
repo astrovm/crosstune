@@ -1918,7 +1918,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     LineAction(R.string.lyrics_explain_line, R.drawable.ic_info) { actions.onExplainLine(index) }
                 }
                 // Only a music app the words follow, and that can be moved, can play a line again.
-                if (state.following?.canSeek == true && index < state.lyricLines.size) {
+                if (state.following?.let { it.canSeek && it.timingKnown } == true && index < state.lyricLines.size) {
                     val repeating = state.repeating == index
                     LineAction(
                         if (repeating) R.string.lyrics_stop_repeating else R.string.lyrics_repeat_line, R.drawable.ic_repeat_one, selected = repeating,
