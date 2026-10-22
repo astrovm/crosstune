@@ -174,7 +174,7 @@ internal class LyricsFinder(
      * The song, whatever the case or spacing of its name. Words kept by versions that didn't ask
      * YouTube Music or check timings may be worse than what's there now, so they're asked for again.
      */
-    private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+    private fun cacheKey(metadata: MusicMetadata) = "$CACHE_VERSION\u0000${RecordingKey.of(metadata)}"
 
     /**
      * [found] timed as a well-timed copy of the song on LRCLIB times the same words, which may be
@@ -204,9 +204,9 @@ internal class LyricsFinder(
         }
         if (bare == null || rough.isEmpty()) return found
         val lengthMs = withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs
-        val timings = copiesNamed(metadata, bare, timeoutMs)
+        val timings = TimingEvidence.independent(copiesNamed(metadata, bare, timeoutMs)
             .filter { copy -> lengthMs == null || copy.lengthMs()?.let { abs(it - lengthMs) <= SAME_TAKE_LENGTH_MS } != false }
-            .mapNotNull { timedAs(it) }
+            .mapNotNull { timedAs(it) })
         if (!wellTimed) return timings.firstOrNull { BorrowedTimings.agrees(rough, it) }?.let { Lyrics.Found(found.words, it) } ?: found
         // Well timed, the words are kept unless two copies agree with each other, and neither with them.
         val agreed = timings.firstOrNull { one -> timings.count { BorrowedTimings.agrees(one, it, CLOSE_MS) } >= 2 } ?: return found
@@ -355,10 +355,11 @@ internal class LyricsFinder(
      * doesn't answer in time.
      */
     private suspend fun fromYouTubeMusic(metadata: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
-        val find = youTubeMusicSong ?: return null
+        val find = youTubeMusicSong
+        if (find == null && RecordingKey.youTubeId(metadata) == null) return null
         return withTimeoutOrNull(timeoutMs) {
             try {
-                val videoId = find(metadata) ?: return@withTimeoutOrNull null
+                val videoId = RecordingKey.youTubeId(metadata) ?: find?.invoke(metadata) ?: return@withTimeoutOrNull null
                 val watching = post(YOUTUBE_MUSIC_NEXT_URL, innertube(WEB_CLIENT, WEB_CLIENT_VERSION).put("videoId", videoId))
                 // A song without words has no page for them.
                 val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull null
@@ -420,7 +421,7 @@ internal class LyricsFinder(
         val lengths = named.filter { it.synced().isNotEmpty() }.mapNotNull { it.lengthMs() }
         val takes = lengths.isNotEmpty() && lengths.max() - lengths.min() > SAME_LENGTH_MS
         val lengthMs = metadata.lengthMs ?: if (takes) withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs else null
-        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length) > SAME_LENGTH_MS } ?: true } } ?: named
+        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length) } ?: Long.MAX_VALUE } } ?: named
         val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
@@ -692,7 +693,8 @@ internal class LyricsFinder(
         fun lengthMs(): Long? = (json.opt("duration") as? Number)?.toDouble()?.takeIf { it > 0 }?.let { (it * 1000).toLong() }
 
         /** The words with when each line is sung, empty when it has none timed. */
-        fun synced(): List<LyricLine> = (json.opt("syncedLyrics") as? String)?.let { SyncedLyrics.withPauses(SyncedLyrics.parse(it)) }.orEmpty()
+        fun synced(): List<LyricLine> = (json.opt("syncedLyrics") as? String)?.let { SyncedLyrics.withPauses(SyncedLyrics.parse(it)) }
+            ?.takeIf { TimingEvidence.usable(it, lengthMs()) }.orEmpty()
 
         /**
          * The very song asked about, name for name. A title compared without its edition tag would
@@ -753,7 +755,7 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters.
          */
-        const val CACHE_VERSION = 9
+        const val CACHE_VERSION = 10
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

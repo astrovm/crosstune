@@ -328,6 +328,24 @@ class PlaybackTest {
     }
 
     @Test
+    fun aPlayingRecordingKeepsItsIdAndLink() {
+        allow()
+        sounding()
+        val link = "https://music.youtube.com/watch?v=abcdefghijk"
+        val controller = player("com.google.android.apps.youtube.music", "YouTube Music", "Demo", "Band",
+            art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "video-one", MediaMetadata.METADATA_KEY_MEDIA_URI to link))
+        shadowOf(sessions).addController(controller)
+        assertEquals("com.google.android.apps.youtube.music:video-one", playback.nowPlaying()?.metadata?.recordingId)
+        assertEquals(link, playback.nowPlaying()?.metadata?.url)
+        val other = playback.nowPlaying()!!.metadata.copy(recordingId = "com.google.android.apps.youtube.music:video-two")
+        assertNull(followed(other).last())
+        val uriId = player("com.spotify.music", "Spotify", "Demo", "Band", art = mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "spotify:track:4Z8W4fKeB5YxbusRsdQVPb"))
+        shadowOf(sessions).clearControllers()
+        shadowOf(sessions).addController(uriId)
+        assertEquals("spotify:track:4Z8W4fKeB5YxbusRsdQVPb", playback.nowPlaying()?.metadata?.url)
+    }
+
+    @Test
     fun aSongPlayingSaysHowLongItIs() {
         allow()
         sounding()
@@ -509,7 +527,7 @@ class PlaybackTest {
         for (service in MusicService.entries.filter { it != MusicService.YOUTUBE && it != MusicService.YOUTUBE_MUSIC }) {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(service.packageName, service.name, "River - Road", "The Walkers", duration = 180_000))
-            val song = MusicMetadata("River - Road", "The Walkers", lengthMs = 180_000)
+            val song = MusicMetadata("River - Road", "The Walkers", lengthMs = 180_000, recordingId = "${service.packageName}:duration:180000")
             val heard = playback.nowPlaying()
             assertEquals(service.name, song, heard?.metadata)
             assertEquals(service.name, 42_000L, heard?.offsetMs)

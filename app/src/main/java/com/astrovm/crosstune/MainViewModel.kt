@@ -1278,7 +1278,9 @@ internal class MainViewModel(
         showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
     }
 
-    private fun showLyricsFor(song: MusicMetadata, playing: Boolean = false) {
+    private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
+        val current = playback?.nowPlaying()?.metadata?.takeIf { sameSong(it, requested) && it.recordingId != null }
+        val song = current?.let { requested.copy(recordingId = it.recordingId, lengthMs = it.lengthMs, url = it.url) } ?: requested
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return
@@ -1349,7 +1351,8 @@ internal class MainViewModel(
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
-        SongNames.same(one.title, other.title) && SongNames.sameArtist(one.artist, other.artist)
+        SongNames.same(one.title, other.title) && SongNames.sameArtist(one.artist, other.artist) &&
+            (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =

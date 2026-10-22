@@ -287,7 +287,14 @@ internal class MediaSessionPlayback(
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         val clock = following(controller)?.takeIf { !it.video }?.clock
-        return Heard.Song(named.copy(artworkUrl = artwork), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+        val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+        val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+        val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }
+        return Heard.Song(named.copy(
+            artworkUrl = artwork,
+            url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
+            recordingId = RecordingKey.playing(controller.packageName, id, duration)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
     }
 
     /**
@@ -349,6 +356,8 @@ internal class MediaSessionPlayback(
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
+        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), playing.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (title.isBlank()) return false

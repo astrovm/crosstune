@@ -36,6 +36,35 @@ class LyricsFinderTest {
     private fun words(song: MusicMetadata) = (found(song) as? Lyrics.Found)?.words
 
     @Test
+    fun duplicatedCopiesCannotOutvoteTheCurrentTimings() {
+        val copy = lasting(answer("Asphalt Lady", "S.Kiyotaka & Omega Tribe", "", synced = romaji), 309.0)
+        remixTimedEarly(copy, copy, copy, storeSeconds = 318.483)
+        assertEquals(SyncedLyrics.parse(early), (found(remix) as Lyrics.Found).lines)
+    }
+
+    @Test
+    fun timestampsAfterTheRecordingEndsAreNotTaken() {
+        respond("[${lasting(answer("Song", "Band", "Readable words", synced = "[01:10.00]Too late"), 50.0)}]")
+        val words = found(song) as Lyrics.Found
+        assertEquals("Readable words", words.words)
+        assertTrue(words.lines.isEmpty())
+    }
+
+    @Test
+    fun eachRecordingHasItsOwnLyricsCache() {
+        val file = File.createTempFile("lyrics-recording", ".json").apply { delete(); deleteOnExit() }
+        val finder = LyricsFinder(fake.client(), "test", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        val one = song.copy(recordingId = "app:one", lengthMs = 200_000)
+        respond("[${answer("Song", "Band", "First recording")}]")
+        assertEquals("First recording", (runBlocking { finder.lyricsOf(one) } as Lyrics.Found).words)
+        respond("[${answer("Song", "Band", "Second recording")}]")
+        assertEquals("Second recording", (runBlocking { finder.lyricsOf(one.copy(recordingId = "app:two")) } as Lyrics.Found).words)
+        assertEquals("First recording", (runBlocking { finder.lyricsOf(one) } as Lyrics.Found).words)
+        assertEquals("Second recording", (runBlocking { finder.lyricsOf(one.copy(lengthMs = 250_000)) } as Lyrics.Found).words)
+        file.delete()
+    }
+
+    @Test
     fun aSongGetsItsOwnWords() {
         respond("""[${answer("Dakare Ni Kita Onna", "Kingo Hamada", "夜が灯りを\n投げるBedで")}]""")
         assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで"), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
@@ -766,6 +795,18 @@ class LyricsFinderTest {
 
     private val song = MusicMetadata("Song", "Band")
     private val timedOnLrclib = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:10.00] Second")
+
+    @Test
+    fun exactPlayingVideoIsUsedInsteadOfASearchMatch() {
+        everywhere("[]", youTubeMusicPage("First" to 12_000, "Second" to 15_500))
+        val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        runBlocking { withYouTubeMusic("wrong000000").lyricsOf(known) }
+        assertTrue(fake.requestBodies.any { it.contains("\"videoId\":\"abcdefghijk\"") })
+        assertFalse(fake.requestBodies.any { it.contains("wrong000000") })
+        fake.requestBodies.clear()
+        runBlocking { finder().lyricsOf(known) }
+        assertTrue(fake.requestBodies.any { it.contains("\"videoId\":\"abcdefghijk\"") })
+    }
 
     @Test
     fun youTubeMusicsTimedWordsWin() {

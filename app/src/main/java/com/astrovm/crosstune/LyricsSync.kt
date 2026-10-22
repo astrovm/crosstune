@@ -97,7 +97,7 @@ internal class LyricsSyncStore(private val preferences: SharedPreferences) {
         }
     }
 
-    private fun keyOf(song: MusicMetadata) = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+    private fun keyOf(song: MusicMetadata) = RecordingKey.of(song)
 
     /** Which words these are, timings and all, in a few characters. */
     private fun fingerprint(lines: List<LyricLine>) = lines.joinToString("\n") { "${it.timeMs} ${it.text}" }.hashCode().toString(16)
