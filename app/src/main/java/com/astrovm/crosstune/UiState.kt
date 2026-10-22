@@ -79,8 +79,6 @@ internal data class UiState(
      * one; it stays set while that's paused with Crosstune out of sight.
      */
     val listeningAlong: Boolean = false,
-    /** Set while showing how to let Crosstune see what music apps play, step by step. */
-    val followHelp: Boolean = false,
     /** Light, dark, or as the phone is. */
     val theme: ThemeMode = ThemeMode.SYSTEM,
     /** The app's color: the wallpaper's, or one of the app's own. */
@@ -133,8 +131,9 @@ internal data class UiState(
     val isAskingForSongs: Boolean = false,
     /** How many of [songSearch], from the first, ChatGPT named. */
     val songsFromChatGpt: Int = 0,
+    /** Set when a source was turned on before Android 12, which can't tell whether its links are allowed, until they're opened. */
     val showLinkSettingsHelper: Boolean = false,
-    /** What the main screen's notices were about when the user closed them, by [noticeKeys]. */
+    /** The update notices the user closed, by version. */
     val dismissedNotices: Set<String> = emptySet(),
     /** A newer Crosstune to update to, for a copy installed from a file. */
     val update: Update? = null,
@@ -165,16 +164,26 @@ internal data class UiState(
      * Until then the fields above don't flag anything, so nothing is shown as a problem before it's known.
      */
     val systemStateKnown: Boolean = true,
-    /** Whether setup can be done in one tap, through Shizuku, which the user runs. */
+    /** Whether setup can be done in one tap, through Shizuku or root, which the user runs. */
     val canSetUpInOneTap: Boolean = false,
+    /** Whether that one tap goes through root rather than Shizuku. */
+    val oneTapRoot: Boolean = false,
+    /** Set when Shizuku is installed but stopped, as it is after the phone restarts, so there's no one tap until it's started. */
+    val shizukuStopped: Boolean = false,
     /** Set while setup is being done in one tap. */
     val settingUpInOneTap: Boolean = false,
     /** Set when setup in one tap didn't do it all, left to the user to finish. */
     val oneTapFailed: Boolean = false,
-    /** What's being fixed in one tap after setup, through Shizuku, as during it. */
+    /** What's being fixed in one tap after setup, through Shizuku or root, as during it. */
     val fixingInOneTap: OneTapFix? = null,
-    /** What one tap couldn't fix after setup, left to the steps by hand, which open once. */
-    val fixByHand: OneTapFix? = null,
+    /** The list of things to fix, or the steps of one, while they show. */
+    val fixes: Fixes? = null,
+    /** The kind of phone, whose settings pages the steps show. */
+    val phone: Phone = Phone.OTHER,
+    /** Whether the microphone may be used, which lyrics listen along with. */
+    val microphone: MicAccess = MicAccess.ALLOWED,
+    /** Before Android 12, what a test link showed works, by [Need.key]: Crosstune's links, and other apps' that no longer take them. */
+    val linksTested: Set<String> = emptySet(),
     /** Set while handling a link from another app, which takes priority over setup. */
     val handlingIncomingLink: Boolean = false,
     /**
@@ -226,14 +235,6 @@ internal data class UiState(
     val someLinksNotAllowed: Boolean
         get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
             frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
-
-    /** What keeps links from Crosstune now: each host not allowed, links set to the browser. */
-    val notAllowedKeys: Set<String>
-        get() = buildSet {
-            if (ownLinksOff && interceptsAnything) add(OWN_LINKS_OFF)
-            intercepted.forEach { service -> unapprovedHosts?.get(service).orEmpty().forEach { add("host:$it") } }
-            frontendSources.forEach { frontend -> unapprovedFrontendHosts?.get(frontend).orEmpty().forEach { add("host:$it") } }
-        }
 
     /**
      * Set when the app the result goes to was searched for it and doesn't have it, e.g. a song only on
@@ -455,5 +456,5 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
 internal enum class LinkMode { OPEN, ASK, SHOW }
 
-/** What's fixed in one tap after setup, from where it's found wrong: the links, the apps that take them, or following. */
-internal enum class OneTapFix { LINKS, APPS, FOLLOW }
+/** What's fixed in one tap after setup, from where it's needed: the links, following music apps, or floating lyrics. */
+internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }

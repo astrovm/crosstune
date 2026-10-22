@@ -20,8 +20,10 @@ Needs Android 8.0 or newer.
 Pasting or sharing a link to Crosstune works with no setup. To open links you tap in other apps, the app walks you through it:
 
 1. Pick the app you listen in.
-2. Tap **Fix** on each thing left in the list. Each one checks itself off when you come back.
-3. With [Shizuku](https://shizuku.rikka.app) on Android 12 or newer, tap **Set everything up** instead. It's one tap, and its **Fix** and **Allow** buttons repair things later too.
+2. Tap each thing left in the list. Its steps show Android's page for your phone, a small guide floats over it, and it checks itself off once done.
+3. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Set everything up** instead. It's one tap.
+
+Anything that breaks later shows as **Things to fix** at the bottom of the main screen: **Fix all** with Shizuku or root, or **Fix one by one**.
 
 ## Features
 
@@ -79,7 +81,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org).
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. The visuals use it to move to your music, and record and send nothing.
-- Shizuku is used only to change Android's link and lyrics settings for Crosstune.
+- Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

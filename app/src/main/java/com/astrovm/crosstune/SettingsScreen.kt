@@ -161,7 +161,6 @@ private fun SettingsList(
         },
         scrollState = scroll
     ) {
-        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
 
         // How songs come in and go out: where links open, whose links Crosstune opens, and what names a song playing nearby.
         // "Open links in" says what this is, also when it's set to ask or show first.
@@ -648,7 +647,6 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
         },
         scrollState = scroll
     ) {
-        Column(modifier = Modifier.padding(top = 4.dp)) { LinkNotices(state, actions, inSettings = true) }
         Group(modifier = Modifier.padding(top = 4.dp)) {
             sources.forEachIndexed { index, item ->
                 if (index > 0) GroupDivider()
@@ -1474,7 +1472,7 @@ private fun NotAllowedRow(fixing: Boolean, actions: ScreenActions) {
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.weight(1f)
         )
-        OneTapButton(stringResource(R.string.allow_button), actions.onShowAllowGuide, fixing = fixing)
+        OneTapButton(stringResource(R.string.allow_button), actions.onAllowLinks, fixing = fixing)
     }
 }
 

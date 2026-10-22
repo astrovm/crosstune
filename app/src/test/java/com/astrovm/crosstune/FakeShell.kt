@@ -3,12 +3,13 @@ package com.astrovm.crosstune
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * Shizuku as a test runs it: [ready] or not, the user allowing it or not, once [answer]ed, and each
- * command doing what [does] says and working unless it says otherwise.
+ * Shizuku, or [root], as a test runs it: [ready] or not, the user allowing it or not, once
+ * [answer]ed, and each command doing what [does] says and working unless it says otherwise.
  */
 internal class FakeShell(
     var ready: Boolean = true,
     var allows: Boolean = true,
+    override val root: Boolean = false,
     private val does: (List<String>) -> Boolean = { true }
 ) : Shell {
     val ran = mutableListOf<List<String>>()

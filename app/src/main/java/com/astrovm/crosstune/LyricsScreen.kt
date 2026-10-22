@@ -142,8 +142,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.Color
@@ -1065,7 +1063,7 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
         if (name != null) {
             AppSource(name, packageName, playing = state.following?.clock?.playing == true, onPlayPause = actions.onPlayPause)
         } else {
-            ListenAlongButton(state.listeningAlong, actions)
+            ListenAlongButton(state.listeningAlong, state.microphone == MicAccess.ALLOWED, actions)
         }
     }
 }
@@ -1111,9 +1109,9 @@ private fun AppSource(name: String, packageName: String?, playing: Boolean, onPl
     }
 }
 
-/** The microphone: lit and beating while it listens along, plain while it doesn't. */
+/** The microphone: lit and beating while it listens along, plain while it doesn't, crossed out while it isn't [allowed]. */
 @Composable
-private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
+private fun ListenAlongButton(listening: Boolean, allowed: Boolean, actions: ScreenActions) {
     val transition = rememberInfiniteTransition(label = "listening")
     val pulse by transition.animateFloat(1f, 1.12f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "pulse")
     val background by animateColorAsState(if (listening) MaterialTheme.colorScheme.primary else Color.Transparent, label = "mic background")
@@ -1128,7 +1126,7 @@ private fun ListenAlongButton(listening: Boolean, actions: ScreenActions) {
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp).background(background, CircleShape)) {
             Icon(
-                painterResource(R.drawable.ic_recognize),
+                painterResource(if (allowed) R.drawable.ic_recognize else R.drawable.ic_recognize_off),
                 contentDescription = stringResource(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
                 tint = tint,
                 modifier = Modifier.size(22.dp)
@@ -1826,61 +1824,6 @@ private const val READING_GAP = 0.05f
  * line, like 。 or ー or small kana, with the one before.
  */
 private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
-
-/**
- * The steps to letting Crosstune see what music apps play, each with the page it's done on. For an
- * app installed from a file, Android turns the first try down, and only then offers, in App info,
- * to allow restricted settings, after which the access turns on.
- */
-@Composable
-internal fun FollowHelp(state: UiState, actions: ScreenActions) {
-    AlertDialog(
-        onDismissRequest = actions.onDismissFollowHelp,
-        title = { Text(stringResource(R.string.follow_help_title)) },
-        text = { FollowSteps(state.followRestricted, actions, Modifier.verticalScroll(rememberScrollState())) },
-        confirmButton = {
-            TextButton(onClick = actions.onDismissFollowHelp) { Text(stringResource(R.string.dismiss_button)) }
-        }
-    )
-}
-
-/**
- * The steps to the access, each with the button to the page it's done on: one, to turn it on, for
- * an app from a store; three where Android holds it back, as for an app installed from a file.
- */
-@Composable
-internal fun FollowSteps(restricted: Boolean, actions: ScreenActions, modifier: Modifier = Modifier) {
-    val access = stringResource(R.string.follow_help_access_button)
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = modifier) {
-        if (restricted) {
-            FollowStep(1, stringResource(R.string.follow_help_try), access, actions.onOpenFollowAccess, R.drawable.guide_access_restricted, R.drawable.guide_restricted_close)
-            FollowStep(2, stringResource(R.string.follow_help_restricted), stringResource(R.string.follow_help_app_info), actions.onOpenAppInfo, R.drawable.guide_allow_restricted)
-            FollowStep(3, stringResource(R.string.follow_help_access), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
-        } else {
-            FollowStep(null, stringResource(R.string.follow_help_simple), access, actions.onOpenFollowAccess, R.drawable.guide_access_switch)
-        }
-    }
-}
-
-/** What to do, the button to the page it's done on, and a screenshot of that page with what to tap circled. */
-@Composable
-private fun FollowStep(number: Int?, text: String, button: String, onClick: () -> Unit, @DrawableRes vararg images: Int) {
-    Row {
-        // A step on its own needs no number.
-        if (number != null) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(28.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("$number", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-        }
-        Column(modifier = Modifier.padding(start = if (number != null) 14.dp else 0.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium)
-            FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 10.dp)) { Text(button) }
-            images.forEach { image -> GuideShot(image, Modifier.padding(top = 12.dp)) }
-        }
-    }
-}
 
 /**
  * One line, open to study: what helps read it, its words to tap for their meaning and, signed in, examples, and what can be
