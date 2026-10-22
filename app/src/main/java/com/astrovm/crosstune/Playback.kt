@@ -91,6 +91,9 @@ internal interface PlaybackSource {
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
 
+    /** The matching recording, including one paused in its music app. */
+    fun recording(song: MusicMetadata): MusicMetadata? = nowPlaying()?.metadata
+
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
     fun nowPlayingUpdates(): Flow<Heard.Song?>
@@ -234,6 +237,14 @@ internal class MediaSessionPlayback(
             // The one that last said where it is, over one that said so long ago.
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             .firstNotNullOfOrNull(::playing)
+    }
+
+    override fun recording(song: MusicMetadata): MusicMetadata? {
+        if (!hasAccess()) return null
+        return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+            .filter { it.packageName != context.packageName && it.plays(song) && !it.elsewhere() }
+            .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            .firstNotNullOfOrNull { playing(it)?.metadata }
     }
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = callbackFlow {

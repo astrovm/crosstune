@@ -109,6 +109,19 @@ class PlaybackTest {
     }
 
     @Test
+    fun aPausedRecordingStillIdentifiesTheLyricsCache() {
+        assertNull(playback.recording(song))
+        allow()
+        assertNull(playback.recording(song))
+        val paused = player("com.google.android.apps.youtube.music", "YouTube Music", "ブラインディング - Blinding Lights", song.artist,
+            state = PlaybackState.STATE_PAUSED, duration = 240_000)
+        shadowOf(sessions).addController(paused)
+        assertEquals("com.google.android.apps.youtube.music:duration:240000", playback.recording(song)?.recordingId)
+        assertNull(playback.recording(song.copy(title = "Another song")))
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     fun theOfferedSongTracksPlaybackAndMetadataWithoutReopeningTheApp() {
         allow()
         sounding()

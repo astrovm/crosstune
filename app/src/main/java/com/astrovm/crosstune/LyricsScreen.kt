@@ -230,7 +230,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // Words timed for another take of the song are likely off, so putting them in time is offered once, as soon as there's a clock.
     var offered by rememberSaveable(song) { mutableStateOf(false) }
     LaunchedEffect(state.lyricsOffTake, state.following != null) {
-        if (state.lyricsOffTake && state.following != null && !offered) {
+        if (state.lyricsOffTake && state.following?.timingKnown == true && !offered) {
             offered = true
             syncingAsked = true
         }

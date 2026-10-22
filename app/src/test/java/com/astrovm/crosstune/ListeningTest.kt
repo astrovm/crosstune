@@ -1284,6 +1284,8 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.canSeek == true)
         composeRule.onNodeWithText("Demo two").performClick()
         assertTrue(phone.seeks.last() in 19_000..21_000)
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
