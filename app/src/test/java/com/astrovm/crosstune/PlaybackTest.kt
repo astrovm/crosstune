@@ -550,7 +550,7 @@ class PlaybackTest {
             ShadowMediaSessionManager.reset()
             shadowOf(sessions).addController(player(music, "YouTube Music", title, artist, album = album, duration = 354_000))
             val now = playback.nowPlaying()
-            assertEquals(title, heard, now?.metadata)
+            assertEquals(title, heard.copy(recordingId = "$music:duration:354000"), now?.metadata)
             // Where a video is isn't where its song is.
             assertEquals(title, if (album == null) null else 42_000L, now?.offsetMs)
             assertEquals(title, album == null, followed(heard).last()?.video)

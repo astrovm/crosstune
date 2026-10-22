@@ -1112,10 +1112,13 @@ class LyricsFinderTest {
         // LRCLIB says how long the recording lasts, and it's kept with the words.
         val first = look(null) as Lyrics.Found
         assertEquals(295_000L, first.lengthMs)
-        // They show again for a song as long, with no lookup.
+        // Learning its length gives it a separate cache; further looks at that recording need no lookup.
         val asked = fake.requestedUrls.size
         assertEquals(first, look(296_000))
-        assertEquals(asked, fake.requestedUrls.size)
+        assertTrue(fake.requestedUrls.size > asked)
+        val known = fake.requestedUrls.size
+        assertEquals(first, look(296_000))
+        assertEquals(known, fake.requestedUrls.size)
         // For a longer one they're another take's, so it's asked about again.
         look(308_600)
         assertTrue(fake.requestedUrls.size > asked)

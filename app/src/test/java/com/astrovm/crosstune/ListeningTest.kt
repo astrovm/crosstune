@@ -1249,6 +1249,68 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true): FakePlayback {
+        listeningAlong(hearing)
+        val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null)
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true)
+        }
+        MainActivity.playbackFactory = { phone }
+        inRecent("Demo")
+        if (permission) allowMicrophone()
+        launch()
+        openWordsFromRecent("Demo")
+        return phone
+    }
+
+    @Test
+    fun videoIntrosAreConfirmedAutomaticallyAndRememberedForTheRecording() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        assertEquals("video:demo", song.recordingId)
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", position / 1000.0)
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
+        assertFalse(controllerModel().uiState.lyricsOffTake)
+        composeRule.onNodeWithText("Demo two").performClick()
+        assertTrue(phone.seeks.last() in 19_000..21_000)
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        openWordsFromRecent("Demo")
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        assertFalse(controllerModel().uiState.listeningAlong)
+    }
+
+    @Test
+    fun automaticVideoCalibrationNeedsPermissionAndStopsAfterFiveFailedAttempts() {
+        val hearing = FakeHearing()
+        videoWithWords(hearing, permission = false)
+        composeRule.waitForIdle()
+        assertEquals(0, hearing.listens)
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        allowMicrophone()
+        openWordsFromRecent("Demo")
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        repeat(5) { index ->
+            hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+            if (index < 4) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        assertEquals(5, hearing.listens)
+        assertNull(VideoTimingStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
+    }
+
     @Test
     fun aVideoFollowedIsLinedUpWithItsSongByWhereItWasHeard() {
         // YouTube plays the song's video, which opens with 45 seconds before the song.

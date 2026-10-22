@@ -34,6 +34,7 @@ Pasting or sharing a link to Crosstune works with no setup. To open links you ta
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
 - **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
+- **Recording timing.** Lyrics and corrections stay with their recording. With microphone access already allowed, video lyrics briefly listen for an intro offset and remember it after three agreeing audio fingerprints.
 - **Floating lyrics.** Float them over any app.
 - **MilkDrop visuals.** 152 [projectM](https://github.com/projectM-visualizer/projectm) visuals behind the lyrics, moving to what your phone plays. Pick which show in **Settings** → **Visuals**.
 - **Learn the words.** Kana, pinyin, romaji and any other script in Latin letters under each line, translations, and the meaning of any word.

@@ -421,7 +421,7 @@ internal class LyricsFinder(
         val lengths = named.filter { it.synced().isNotEmpty() }.mapNotNull { it.lengthMs() }
         val takes = lengths.isNotEmpty() && lengths.max() - lengths.min() > SAME_LENGTH_MS
         val lengthMs = metadata.lengthMs ?: if (takes) withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs else null
-        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length) } ?: Long.MAX_VALUE } } ?: named
+        val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length).takeIf { gap -> gap <= SAME_LENGTH_MS } } ?: Long.MAX_VALUE } } ?: named
         val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
