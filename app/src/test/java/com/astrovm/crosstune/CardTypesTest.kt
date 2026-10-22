@@ -78,6 +78,9 @@ class CardTypesTest {
         val readings = CardType("y", null, true, CardOptions(CardSide(words = false, readings = true)))
         assertFalse(readings.fits(meaning))
         assertTrue(readings.fits(line("月", reading = "つき")))
+        // A front with nothing on shows the words, so it asks with them.
+        val nothing = CardType("z", null, true, CardOptions(CardSide(words = false)))
+        assertTrue(nothing.fits(bare))
     }
 
     @Test
