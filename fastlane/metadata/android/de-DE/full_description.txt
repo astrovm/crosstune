@@ -1,6 +1,6 @@
 Öffne jeden Link. Erkenne jeden Song. Folge jedem Wort.
 
-Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem anderen. Tippe auf den Link, und derselbe Song öffnet sich in deiner Lieblings-App. Spotify zu YouTube Music, Apple Music zu Deezer, TIDAL zu Spotify: Kombiniere sie, wie du willst. Funktioniert mit Songs, Alben, Künstlern und Playlists.
+Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in deiner Lieblings-App. Von Spotify zu YouTube Music, von Apple Music zu Deezer: Kombiniere frei. Funktioniert mit Songs, Alben, Künstlern und Playlists.
 
 <b>Funktionen</b>
 <ul>
@@ -8,13 +8,13 @@ Jemand schickt dir einen Link von einem Musikdienst, du hörst aber auf einem an
 <li>Playlists und Alben zeigen ihre Songs: Öffne jeden davon in deiner App, kopiere oder teile die Liste oder spiele alles in YouTube Music oder YouTube ab.</li>
 <li>Schicke jeden Dienst woandershin, z. B. YouTube-Links an YouTube Music und alles andere an Apple Music.</li>
 <li>Nach der App fragen: Wähle bei jedem angetippten oder geteilten Link eine App.</li>
-<li>Genauen Treffer öffnen: Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud und Audiomack können den Song, das Album oder den Künstler selbst öffnen statt einer Suche, Bandcamp und Qobuz den Song oder das Album, YouTube den Song.</li>
+<li>Genauen Treffer öffnen: Wo die App es kann, öffnet sich der Song, das Album oder der Künstler selbst statt einer Suche.</li>
 <li>Füge weitere Apps und Websites mit Suchseite hinzu.</li>
 <li>Mit einem Tipp einfügen, zuletzt genutzte Links durchsuchen und erneut öffnen oder einen kopierten Link über das Startbildschirm-Widget, die Schnelleinstellungen-Kachel oder durch langes Drücken des App-Symbols öffnen.</li>
 <li>Erkennt einen Song in der Nähe: Crosstune hört selbst zu oder öffnet Shazam oder die Songsuche von Google. Öffnet auch Shazam-Links und Songs, die aus Now Playing auf dem Pixel geteilt werden.</li>
 <li>Link nicht lesbar? Öffne ihn in der App, aus der er stammt, kopiere den Suchtext oder teile einen Such-Link.</li>
-<li>Finde einen Song, indem du seinen Namen statt eines Links eintippst, und lies den Songtext jedes Songs, den du öffnest.</li>
-<li>Songtexte im Takt: Sie folgen deiner Musik-App oder hören mit, schweben über anderen Apps und laufen mit MilkDrop-Visuals dahinter.</li>
+<li>Finde einen Song, indem du seinen Namen statt eines Links eintippst. Abspielen lässt dich in Crosstune: Eine Leiste unten zeigt, was läuft, der Player hat ein Menü mit Kopieren, Teilen und Öffnen mit, und du wischst zwischen Player und Songtext. Lies den Songtext jedes Songs, den du öffnest.</li>
+<li>Songtexte im Takt: Sie folgen deiner Musik-App oder hören mit, schweben über anderen Apps und laufen mit MilkDrop-Visuals dahinter. Falsche Wörter oder Timing? Melde es im Songtext-Menü: Es öffnet ein GitHub-Issue oder eine E-Mail, ausgefüllt mit Song, Timing-Details sowie Crosstune- und Android-Version, zum Abschicken.</li>
 <li>Lerne die Wörter mit Kana, Pinyin, Romaji, jeder anderen Schrift in lateinischen Buchstaben und Übersetzungen für die Sprachen, die du noch nicht liest. Wähle für jede Seite deiner Lernkarten aus, was angezeigt wird. Mach aus einer Zeile mehrere Kartenarten, jede mit eigenem Zeitplan.</li>
 <li>Melde dich mit deinem bezahlten ChatGPT-Abo an, um ganze Songs zu übersetzen, Zeilen zu erklären, lernenswerte Wörter zu finden und Songs per Beschreibung zu suchen.</li>
 <li>Material-You-Farben ab Android 12.</li>

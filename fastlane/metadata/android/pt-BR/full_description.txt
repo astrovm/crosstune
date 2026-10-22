@@ -1,6 +1,6 @@
 Abra qualquer link. Descubra qualquer música. Acompanhe cada palavra.
 
-Alguém manda um link de um serviço de música, mas você ouve em outro. Toque no link e a mesma música abre no seu app favorito. Do Spotify para o YouTube Music, do Apple Music para o Deezer, do TIDAL para o Spotify: combine como quiser. Funciona com músicas, álbuns, artistas e playlists.
+Receba um link de um serviço de música e abra a mesma música no seu app favorito. Do Spotify para o YouTube Music, do Apple Music para o Deezer: combine como quiser. Funciona com músicas, álbuns, artistas e playlists.
 
 <b>Recursos</b>
 <ul>
@@ -8,13 +8,13 @@ Alguém manda um link de um serviço de música, mas você ouve em outro. Toque 
 <li>Playlists e álbuns mostram suas músicas: abra qualquer uma no seu app, copie ou compartilhe a lista, ou toque tudo no YouTube Music ou no YouTube.</li>
 <li>Envie cada serviço para um lugar diferente, como links do YouTube para o YouTube Music e todo o resto para o Apple Music.</li>
 <li>Perguntar qual app usar: escolha um app cada vez que tocar em um link ou compartilhá-lo.</li>
-<li>Abrir o resultado exato: o Apple Music, o Deezer, o YouTube Music, o TIDAL, o SoundCloud e o Audiomack podem abrir a própria música, álbum ou artista em vez de uma busca, o Bandcamp e o Qobuz a música ou o álbum, e o YouTube a música.</li>
+<li>Abrir o resultado exato: onde o app permite, abre a própria música, álbum ou artista em vez de uma busca.</li>
 <li>Adicione outros apps e sites que tenham uma página de busca.</li>
 <li>Cole com um toque, pesquise e reabra links recentes, ou abra um link copiado pelo widget da tela inicial, pelo bloco das Configurações rápidas ou mantendo o ícone do app pressionado.</li>
 <li>Reconhece uma música tocando perto: o Crosstune escuta sozinho, ou abre o Shazam ou a busca de músicas do Google. Também abre links do Shazam e músicas compartilhadas pelo Now Playing do Pixel.</li>
 <li>Não consegue ler um link? Abra-o no app de origem, copie o texto da busca ou compartilhe um link de busca.</li>
-<li>Encontre uma música digitando o nome dela em vez de um link, e leia a letra de qualquer música que abrir.</li>
-<li>Letras sincronizadas: seguem o seu app de música ou ouvem junto, flutuam sobre outros apps e aparecem com visuais do MilkDrop por trás.</li>
+<li>Encontre uma música digitando o nome dela em vez de um link. Tocar mantém você no Crosstune: uma barra embaixo mostra o que está tocando, o player tem um menu com Copiar, Compartilhar e Abrir com, e você desliza entre o player e a letra. Leia a letra de qualquer música que abrir.</li>
+<li>Letras sincronizadas: seguem o seu app de música ou ouvem junto, flutuam sobre outros apps e aparecem com visuais do MilkDrop por trás. Letra errada ou fora do tempo? Relate pelo menu da letra: abre uma issue no GitHub ou um e-mail preenchido com a música, os dados do tempo e as versões do app e do Android, para você enviar.</li>
 <li>Aprenda as palavras com kana, pinyin, romaji e qualquer outra escrita em letras latinas, e traduções para os idiomas que você ainda não lê. Escolha o que mostrar em cada lado dos cartões de prática. Faça mais de um tipo de cartão de uma mesma linha, cada um com seu próprio calendário.</li>
 <li>Entre com o seu plano pago do ChatGPT para traduzir músicas inteiras, explicar linhas, encontrar palavras que valem a pena aprender e achar músicas descrevendo-as.</li>
 <li>Cores do Material You no Android 12 e versões mais recentes.</li>
