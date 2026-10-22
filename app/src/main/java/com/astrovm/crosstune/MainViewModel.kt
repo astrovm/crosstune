@@ -1262,6 +1262,7 @@ internal class MainViewModel(
 
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var videoLeadMs: Long? = null
+    private var videoLeadVerified = false
     private var videoTiming = VideoTiming()
     private var autoCalibrating = false
     private var calibrationAttempted = false
@@ -1432,6 +1433,7 @@ internal class MainViewModel(
         appFollowing?.takeIf { it.video && syncPoints.isEmpty() }?.let { app ->
             heard.clock?.let { clock -> videoTiming.heard(app.clock, clock) }?.let { lead ->
                 videoLeadMs = lead
+                videoLeadVerified = true
                 videoTimingStore.save(shown, lead)
                 if (autoCalibrating) stopListeningAlong()
             }
@@ -1504,7 +1506,7 @@ internal class MainViewModel(
      */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        appFollowing?.takeIf { it.video }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
+        appFollowing?.takeIf { it.video && !videoLeadVerified }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
     }
 
@@ -1568,7 +1570,10 @@ internal class MainViewModel(
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
                 appFollowing = playing
-                if (playing?.video == true && videoLeadMs == null) videoLeadMs = videoTimingStore.load(song)
+                if (playing?.video == true && videoLeadMs == null) {
+                    videoLeadMs = videoTimingStore.load(song)
+                    videoLeadVerified = videoLeadMs != null
+                }
                 if (playing?.video == true && videoLeadMs == null) leadOf(playing, song)?.let { videoLeadMs = it }
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) })
                 if (playing?.video == true && playing.clock.playing && videoLeadMs == null && syncPoints.isEmpty() && !calibrationAttempted && mayCalibrateVideo()) {
@@ -1631,6 +1636,7 @@ internal class MainViewModel(
         followJob = null
         appFollowing = null
         videoLeadMs = null
+        videoLeadVerified = false
         uiState = uiState.copy(following = null)
     }
 

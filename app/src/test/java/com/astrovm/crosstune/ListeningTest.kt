@@ -1286,7 +1286,7 @@ class ListeningTest {
         composeRule.onNodeWithText("Demo two").performClick()
         assertTrue(phone.seeks.last() in 19_000..21_000)
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
-        openWordsFromRecent("Demo")
+        click(string(R.string.lyrics_button))
         composeRule.waitForIdle()
         assertEquals(3, hearing.listens)
         assertFalse(controllerModel().uiState.listeningAlong)
@@ -1300,7 +1300,7 @@ class ListeningTest {
         assertEquals(0, hearing.listens)
         composeRule.runOnIdle { controllerModel().dismissLyrics() }
         allowMicrophone()
-        openWordsFromRecent("Demo")
+        click(string(R.string.lyrics_button))
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         repeat(5) { index ->
             hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))

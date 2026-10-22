@@ -12,7 +12,8 @@ internal object AudioTiming {
         val median = shifts[shifts.size / 2]
         val steady = ordered.filter { abs(it.songMs - it.lineMs - median) <= 1_500 }
         if (steady.size >= 3 && steady.last().lineMs - steady.first().lineMs >= 8_000) {
-            return listOf(SyncPoint(steady.first().lineMs, steady.first().lineMs + median))
+            val agreed = steady.map { it.songMs - it.lineMs }.sorted().let { it[it.size / 2] }
+            return listOf(SyncPoint(steady.first().lineMs, steady.first().lineMs + agreed))
         }
         val first = ordered.first()
         val last = ordered.last()
