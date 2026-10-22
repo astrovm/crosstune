@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "Cuando le pedís a Crosstune que reconozca una canción, graba sonido del micrófono solo mientras escucha, hasta 12 segundos, y se detiene en cuanto encuentra la canción. En tu teléfono, convierte el sonido en una huella de sus puntos más fuertes. Solo esa huella va a Shazam, nunca el audio, y la grabación no se guarda. Crosstune no envía tu ubicación. Shazam responde con el título, el artista, la portada y el ID de Apple Music de la canción, y Crosstune la busca como un link pegado. Como otras solicitudes, esta expone tu dirección IP a Shazam, que la procesa según su propia política de privacidad. En Ajustes podés elegir Shazam o la app de Google para reconocer canciones, que escuchan según sus propias políticas de privacidad."
+      "Cuando le pedís a Crosstune que reconozca una canción, graba sonido del micrófono solo mientras escucha, hasta 12 segundos, y se detiene en cuanto encuentra la canción. En tu teléfono, convierte el sonido en una huella de sus puntos más fuertes. Solo esa huella va a Shazam, nunca el audio, y la grabación no se guarda. Crosstune no envía tu ubicación. Shazam responde con el título, el artista, la portada y el ID de Apple Music de la canción, y Crosstune la busca como un link pegado. Como otras solicitudes, esta expone tu dirección IP a Shazam, que la procesa según su propia política de privacidad. Si Crosstune no llega a Shazam, abre en su lugar la app de Shazam o la de Google, si tenés alguna, que escuchan según sus propias políticas de privacidad."
     ],
     [
       "p",

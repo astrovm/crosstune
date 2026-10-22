@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Ayarlar'da şarkı tanımak için bunun yerine Shazam'ı veya Google uygulamasını seçebilirsiniz; bunlar kendi gizlilik politikalarına göre dinler."
+      "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Crosstune Shazam'a ulaşamazsa bunun yerine, yüklüyse Shazam uygulamasını veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler."
     ],
     [
       "p",

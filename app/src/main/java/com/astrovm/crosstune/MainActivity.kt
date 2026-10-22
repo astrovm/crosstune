@@ -59,9 +59,6 @@ class MainActivity : ComponentActivity() {
     /** Apps that name a song playing nearby, looked up again whenever the app comes back. */
     private var recognizers by mutableStateOf(emptyList<SongRecognizer>())
 
-    /** The app picked in Settings for the Recognize button; Crosstune when none is. */
-    private var recognizerPick by mutableStateOf<String?>(null)
-
     private val viewModel: MainViewModel by viewModels {
         viewModelFactory {
             initializer {
@@ -365,6 +362,7 @@ class MainActivity : ComponentActivity() {
                         // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
                         is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
                         is Effect.Show -> show(effect)
+                        Effect.RecognizeElsewhere -> recognizers.firstOrNull { !it.listensHere }?.let { tryStartActivity(it.intent) }
                         is Effect.Share -> {
                             startActivity(shareChooser(effect.url))
                             finish()
@@ -398,17 +396,11 @@ class MainActivity : ComponentActivity() {
                         onResolve = viewModel::resolveTypedInput,
                         onPaste = { viewModel.pasteLink(clipboardText()) },
                         recognizers = recognizers,
-                        recognizer = recognizers.firstOrNull { it.packageName == recognizerPick } ?: recognizers.firstOrNull(),
+                        recognizer = recognizers.firstOrNull(),
                         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
                         onLyricsNow = { withMicrophone(MicrophoneFor.LISTEN_FOR_LYRICS) },
                         onStopListening = viewModel::stopListening,
                         onOpenMicrophoneSettings = { openAppInfo() },
-                        onRecognizerChange = { picked ->
-                            recognizerPick = picked.packageName
-                            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(SongRecognizers.KEY_PICK, picked.packageName).apply()
-                            // The widget's button opens the same app.
-                            lifecycleScope.launch { CrosstuneWidget().updateAll(applicationContext) }
-                        },
                         onClear = viewModel::clear,
                         onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
                         onOpen = { viewModel.openResult() },
@@ -578,7 +570,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         refresh()
         recognizers = SongRecognizers.available(this)
-        recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
         // Its steps left without allowing it, the words don't float later out of the blue.
         if (viewModel.uiState.fixes?.need != Need.Float) floatOnceAllowed = false
         // Let show over other apps, as just asked to, the words float now.

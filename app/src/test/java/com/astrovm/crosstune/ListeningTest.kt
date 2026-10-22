@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasClickAction
 
 import androidx.compose.ui.test.longClick
 
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.captureToImage
@@ -116,8 +117,7 @@ class ListeningTest {
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
         // Visuals are on from the start; the tests about turning them on start with them off.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false)
-            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "sung_readings.json").delete()
@@ -705,24 +705,45 @@ class ListeningTest {
     }
 
     @Test
-    fun whenShazamIsBusyTheOtherAppsAreOffered() {
-        val pm = shadowOf(app.packageManager)
-        pm.installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
-        val tagging = ComponentName(SongRecognizers.SHAZAM, "Tagging")
-        pm.addActivityIfNotPresent(tagging)
-        pm.addIntentFilterForActivity(tagging, IntentFilter(SongRecognizers.SHAZAM_LISTEN).apply { addCategory(Intent.CATEGORY_DEFAULT) })
-        prefs().edit().putString(SongRecognizers.KEY_PICK, app.packageName).commit()
+    fun whenShazamIsBusyAnotherAppListensInstead() {
+        fun install(component: ComponentName, filter: IntentFilter) {
+            val pm = shadowOf(app.packageManager)
+            pm.addActivityIfNotPresent(component)
+            pm.addIntentFilterForActivity(component, filter)
+        }
+        fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
+        fun recognizeBusy(again: Boolean = false) {
+            microphone.play(3.0)
+            if (again) composeRule.onNodeWithContentDescription(string(R.string.retry_button)).performClick() else recognize()
+            waitForText(string(R.string.error_recognition_unavailable))
+        }
         shazamAnswers("", code = 429)
         allowMicrophone()
         launch()
-        microphone.play(3.0)
-        recognize()
-        waitForText(string(R.string.error_recognition_unavailable))
+        // With no other app, it's only said.
+        recognizeBusy()
+        assertNull(shadowOf(app).nextStartedActivity)
         assertTrue(described(string(R.string.retry_button)))
-        // Only the other apps: Crosstune is what just failed.
-        assertTrue(!shown(string(R.string.open_app_button, string(R.string.app_name))))
-        click(string(R.string.open_app_button, "Shazam"))
+
+        // Shazam's app opens straight away, even without its listening shortcut.
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
+        install(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
+        install(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
+        controller!!.pause().resume()
+        recognizeBusy(again = true)
+        assertEquals(Intent.ACTION_MAIN, shadowOf(app).nextStartedActivity.action)
+        assertNull(shadowOf(app).nextStartedActivity)
+
+        // With it, Shazam listens right away.
+        install(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
+        controller!!.pause().resume()
+        recognizeBusy(again = true)
         assertEquals(SongRecognizers.SHAZAM_LISTEN, shadowOf(app).nextStartedActivity.action)
+        // Back from it, the others are still offered. Not Crosstune: it's what just failed.
+        assertTrue(!shown(string(R.string.open_app_button, string(R.string.app_name))))
+        click(string(R.string.open_app_button, "Google"))
+        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, shadowOf(app).nextStartedActivity.action)
     }
 
     @Test

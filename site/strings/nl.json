@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "Als je Crosstune een nummer laat herkennen, neemt het alleen tijdens het luisteren geluid op met de microfoon, maximaal 12 seconden, en stopt het zodra het het nummer vindt. Op je telefoon maakt het van het geluid een vingerafdruk van de luidste punten. Alleen die vingerafdruk gaat naar Shazam, nooit de audio, en de opname wordt niet bewaard. Crosstune stuurt je locatie niet mee. Shazam antwoordt met de titel, artiest, hoes en Apple Music-ID van het nummer, en Crosstune zoekt het nummer daarna op als een geplakte link. Net als andere verzoeken geeft dit verzoek je IP-adres door aan Shazam, dat het verwerkt volgens zijn eigen privacybeleid. In Instellingen kun je in plaats daarvan Shazam of de Google-app kiezen om nummers te herkennen; die luisteren volgens hun eigen privacybeleid."
+      "Als je Crosstune een nummer laat herkennen, neemt het alleen tijdens het luisteren geluid op met de microfoon, maximaal 12 seconden, en stopt het zodra het het nummer vindt. Op je telefoon maakt het van het geluid een vingerafdruk van de luidste punten. Alleen die vingerafdruk gaat naar Shazam, nooit de audio, en de opname wordt niet bewaard. Crosstune stuurt je locatie niet mee. Shazam antwoordt met de titel, artiest, hoes en Apple Music-ID van het nummer, en Crosstune zoekt het nummer daarna op als een geplakte link. Net als andere verzoeken geeft dit verzoek je IP-adres door aan Shazam, dat het verwerkt volgens zijn eigen privacybeleid. Kan Crosstune Shazam niet bereiken, dan opent het in plaats daarvan de Shazam-app of de Google-app, als je er een hebt; die luisteren volgens hun eigen privacybeleid."
     ],
     [
       "p",

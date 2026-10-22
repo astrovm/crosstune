@@ -6,7 +6,6 @@
     <string name="search_button">搜尋</string>
     <string name="paste_button">貼上</string>
     <string name="recognize_button">辨識歌曲</string>
-    <string name="setting_recognizer">歌曲辨識應用程式</string>
     <string name="clear_button">清除</string>
     <string name="loading_text">正在查詢連結…</string>
     <string name="open_in_youtube_music">在 YouTube Music 中開啟</string>

@@ -150,12 +150,11 @@ internal data class ScreenActions(
     val onPaste: () -> Unit = {},
     /** What names a song playing nearby: Crosstune itself first, then Shazam and Google. */
     val recognizers: List<SongRecognizer> = emptyList(),
-    /** The one the Recognize button opens: the user's pick, or else the first there is. */
+    /** The one the Recognize button opens: Crosstune, listening itself. */
     val recognizer: SongRecognizer? = null,
     val onRecognize: (SongRecognizer) -> Unit = {},
     /** Names what's playing and opens its words straight away, as the lyrics tile does. */
     val onLyricsNow: () -> Unit = {},
-    val onRecognizerChange: (SongRecognizer) -> Unit = {},
     val onStopListening: () -> Unit = {},
     /** Android's settings for Crosstune, where the microphone is allowed. */
     val onOpenMicrophoneSettings: () -> Unit = {},

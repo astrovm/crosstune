@@ -13,7 +13,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
-/** The widget's song recognition button, which picks the app at the tap. */
+/** The widget's song recognition button, which starts Crosstune listening. */
 @RunWith(RobolectricTestRunner::class)
 class RecognizeSongActivityTest {
 
@@ -28,59 +28,28 @@ class RecognizeSongActivityTest {
     }
 
     /** Taps the button, and returns what it started, closing either way. */
-    private fun tap(): Intent? {
+    private fun tap(): Intent {
         val activity = Robolectric.buildActivity(RecognizeSongActivity::class.java).create().get()
         assertTrue(activity.isFinishing)
         return shadowOf(activity).nextStartedActivity
     }
 
-    private fun pick(packageName: String) {
-        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
-            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).putString(SongRecognizers.KEY_PICK, packageName).commit()
-    }
-
-    private fun assertListens(started: Intent?) {
-        assertEquals(MainActivity.ACTION_LISTEN, started!!.action)
+    private fun assertListens(started: Intent) {
+        assertEquals(MainActivity.ACTION_LISTEN, started.action)
         assertEquals(MainActivity.LISTEN_ALIAS, started.component!!.className)
+        // It starts from the home screen, outside any task of Crosstune's.
+        assertTrue(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
     }
 
     @Test
-    fun crosstuneListensUnlessAnotherAppIsPicked() {
+    fun crosstuneListensEvenWithOtherAppsOrAnOldPick() {
         assertListens(tap())
         install(SongRecognizers.GOOGLE, "Google", SongRecognizers.GOOGLE_SONG_SEARCH)
         install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
         assertListens(tap())
-
-        // A pick in Settings comes first, from the next tap.
-        pick(SongRecognizers.SHAZAM)
-        val shazam = tap()!!
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, shazam.action)
-        // It's not part of Crosstune's own task.
-        assertTrue(shazam.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-        pick(SongRecognizers.GOOGLE)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, tap()!!.action)
-        pick(app.packageName)
+        // Picked in Settings back when there was a choice, Shazam still isn't opened.
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
+            .putString("song_recognizer", SongRecognizers.SHAZAM).commit()
         assertListens(tap())
-        // One that's gone listens here.
-        pick("missing.recognizer")
-        assertListens(tap())
-    }
-
-    @Test
-    fun aPickFromBeforeCrosstuneCouldListenIsDroppedOnceThenKept() {
-        install(SongRecognizers.SHAZAM, "Shazam", SongRecognizers.SHAZAM_LISTEN)
-        val preferences = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        // An older version saved Shazam, and nothing says it's been dropped.
-        preferences.edit().clear().putString(SongRecognizers.KEY_PICK, SongRecognizers.SHAZAM).commit()
-        assertListens(tap())
-        assertEquals(null, preferences.getString(SongRecognizers.KEY_PICK, null))
-        // Picked again, it's the user's choice and stays.
-        pick(SongRecognizers.SHAZAM)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, tap()!!.action)
-        assertEquals(SongRecognizers.SHAZAM, preferences.getString(SongRecognizers.KEY_PICK, null))
-        // A new install has nothing to drop.
-        preferences.edit().clear().commit()
-        assertListens(tap())
-        assertEquals(true, preferences.getBoolean(SongRecognizers.KEY_PICK_RESET, false))
     }
 }
