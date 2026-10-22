@@ -243,14 +243,16 @@ internal class LyricsFinder(
         val official = async { fromYouTubeMusic(metadata, timeoutMs) }
         // Words timed word by word beat any timed a line at a time, and only NetEase has them.
         val byWord = async { fromNetEase(metadata, null, timeoutMs).takeIf { timing(it) == WORD_TIMED } }
-        val elsewhere = anywhere(metadata, timeoutMs)
+        val elsewhere = async { anywhere(metadata, timeoutMs) }
         val own = official.await()
-        // A word-timed search result isn't better evidence than this recording's own timed lyrics.
+        // A word-timed search result isn't better evidence than this recording's own timed lyrics, so
+        // nothing else is worth waiting for: NetEase alone takes a few seconds.
         if (own != null && RecordingKey.youTubeId(metadata) != null && timing(own) >= WELL_TIMED) {
-            byWord.await()
+            byWord.cancel()
+            elsewhere.cancel()
             return@withContext own
         }
-        val found = own?.let { better(it, elsewhere) } ?: elsewhere
+        val found = own?.let { better(it, elsewhere.await()) } ?: elsewhere.await()
         byWord.await()?.let { better(it, found) } ?: found
     }
 

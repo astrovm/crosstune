@@ -4,6 +4,7 @@ import com.astrovm.crosstune.LyricsFinder.Lyrics
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
 
 /** Runs under Robolectric for the real org.json implementation. */
 @RunWith(RobolectricTestRunner::class)
@@ -801,6 +803,25 @@ class LyricsFinderTest {
         everywhere("[$timedOnLrclib]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
         val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
         assertEquals("Own first\nOwn second", (runBlocking { withYouTubeMusic().lyricsOf(known) } as Lyrics.Found).words)
+    }
+
+    @Test
+    fun anExactRecordingsOwnTimedLyricsAreShownWithoutWaitingForTheOthers() {
+        everywhere("[$timedOnLrclib]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
+        val answers = fake.handler
+        val held = CountDownLatch(1)
+        // LRCLIB and NetEase answer late, as NetEase does: waiting for them would hold the words up.
+        fake.handler = { request ->
+            if (request.url.host in setOf("lrclib.net", "music.163.com")) held.await()
+            answers(request)
+        }
+        val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        try {
+            val first = runBlocking { withTimeout(10_000) { withYouTubeMusic().firstLook(known, timeoutMs = 30_000) } }
+            assertEquals("Own first\nOwn second", (first.lyrics as Lyrics.Found).words)
+        } finally {
+            held.countDown()
+        }
     }
 
     @Test
