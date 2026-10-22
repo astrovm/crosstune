@@ -2096,20 +2096,17 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
             Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
-            // What ChatGPT says needs signing in with it; the way to report a problem doesn't.
-            if (state.chatGpt.email != null) {
-                PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
-                    SongTab.entries.forEach { shown ->
-                        Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })
-                    }
+            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
+                SongTab.entries.forEach { shown ->
+                    Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })
                 }
-                if (tab == SongTab.MEANING) SongMeaning(state, actions)
-                if (tab == SongTab.WORDS) WordsToKnow(state, actions)
-                if (tab == SongTab.ARTIST) AboutArtist(state, actions)
-                OutlinedButton(onClick = { state.lyricsFor?.let(actions.onSongsLike) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
-                }
+            }
+            if (tab == SongTab.MEANING) SongMeaning(state, actions)
+            if (tab == SongTab.WORDS) WordsToKnow(state, actions)
+            if (tab == SongTab.ARTIST) AboutArtist(state, actions)
+            OutlinedButton(onClick = { state.lyricsFor?.let(actions.onSongsLike) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
             }
             // Wrong words, or out of time, said where they can be put right.
             TextButton(
