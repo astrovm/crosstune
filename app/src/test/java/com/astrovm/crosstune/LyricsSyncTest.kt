@@ -148,6 +148,9 @@ class LyricsSyncTest {
     fun aSlipIsLeftOutWhenALineIsPutInTimeAndWhenTheLinesAreKept() {
         val points = listOf(heardLater(10_000, 10_400), heardLater(30_000, 10_300), heardLater(40_000, 10_500))
         assertEquals(points, LyricsSync.with(points, heardLater(20_000, 4_900)))
+        // A slip doesn't take a line it contradicts with it, here the last, which it puts after itself.
+        val stretched = listOf(heardLater(10_000, 0), heardLater(20_000, 0), heardLater(30_000, 2_000))
+        assertEquals(stretched, LyricsSync.with(stretched, heardLater(25_000, 25_000)))
         assertEquals(listOf(points[0], heardLater(20_000, 10_350), points[1], points[2]), LyricsSync.with(points, heardLater(20_000, 10_350)))
         val store = LyricsSyncStore(prefs)
         store.save(song, lines, listOf(heardLater(10_000, 10_400), heardLater(20_000, 4_900), heardLater(30_000, 10_300), heardLater(40_000, 10_500)))

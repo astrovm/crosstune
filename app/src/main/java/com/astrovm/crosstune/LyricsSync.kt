@@ -36,10 +36,13 @@ internal object LyricsSync {
 
     /**
      * [points] with [point] added. One for the same line goes, and so do those it contradicts, i.e. a
-     * line before it heard later or one after it heard sooner, so the words keep their order.
+     * line before it heard later or one after it heard sooner, so the words keep their order. A slip
+     * of the finger changes nothing, rather than taking the lines it contradicts with it.
      */
-    fun with(points: List<SyncPoint>, point: SyncPoint): List<SyncPoint> =
-        withoutSlips((points.filterNot { it.lineMs == point.lineMs || (it.lineMs < point.lineMs) != (it.songMs < point.songMs) } + point).sortedBy { it.lineMs })
+    fun with(points: List<SyncPoint>, point: SyncPoint): List<SyncPoint> {
+        val kept = withoutSlips((points.filterNot { it.lineMs == point.lineMs || (it.lineMs < point.lineMs) != (it.songMs < point.songMs) } + point).sortedBy { it.lineMs })
+        return if (point in kept) kept else points
+    }
 
     /**
      * [points] less those that are off alone: a line heard far from where the lines either side of
