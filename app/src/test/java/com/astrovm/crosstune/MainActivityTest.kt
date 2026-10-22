@@ -5773,6 +5773,59 @@ class MainActivityTest {
         assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
     }
 
+    @Test
+    fun aSourceWhoseLinksAnAppStillOpensIsMarkedLikeOneNotAllowed() {
+        // Like YouTube Create, which verifies YouTube's links though Crosstune doesn't know it.
+        val creator = "com.example.youtube.create"
+        shadowOf(app.packageManager).installPackage(installedApp(creator, "YouTube Create"))
+        installActivity(
+            ComponentName(creator, "$creator.LinkActivity"),
+            IntentFilter(Intent.ACTION_VIEW).apply {
+                addCategory(Intent.CATEGORY_DEFAULT)
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addDataScheme("https")
+                addDataAuthority("youtube.com", null)
+            }
+        )
+        val youtube = MusicService.YOUTUBE.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youtube, "YouTube"))
+        var keeping = setOf(youtube, creator)
+        FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it == app.packageName || it in keeping }) { packageName ->
+            if (packageName == app.packageName) {
+                LinkInterception.HOSTS.getValue(MusicService.YOUTUBE).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
+            } else {
+                mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+            }
+        }
+        LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        launch()
+
+        // Allowed, but two apps still open YouTube's links, so none reach Crosstune: the sources are marked, and YouTube in them.
+        val both = string(R.string.notice_apps_still_open, "YouTube, YouTube Create")
+        click(string(R.string.settings_button))
+        assertTrue(marked(both))
+        click(string(R.string.settings_links_title))
+        assertTrue(marked(both))
+        assertFalse(marked(string(R.string.setup_not_allowed)))
+        // One left, the mark says which.
+        keeping = setOf(creator)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTrue(marked(string(R.string.notice_app_still_opens, "YouTube Create")))
+        // None left, nothing is.
+        keeping = emptySet()
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertFalse(marked(string(R.string.notice_app_still_opens, "YouTube Create")))
+        click(string(R.string.back_button))
+        assertFalse(marked(string(R.string.notice_app_still_opens, "YouTube Create")))
+    }
+
+    /** Whether something is marked with [description]: an icon, whatever else says it in words. */
+    private fun marked(description: String) =
+        composeRule.onAllNodes(hasContentDescription(description), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
     /** Setup as if Spotify were picked and its app installed and claiming the links; returns a way to change its switch. */
     private fun setupWithSpotifyAppInTheWay(): (Boolean) -> Unit {
         val spotify = MusicService.SPOTIFY.packageName

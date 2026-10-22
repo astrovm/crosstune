@@ -609,17 +609,18 @@ private fun PageRow(label: String, onOpen: () -> Unit) {
 /** The page listing the sources of links. */
 private const val SOURCES_PAGE = "sources"
 
-/** How many sources' links Crosstune opens, opening the list of them; marked when one isn't allowed yet, as the notice above says. */
+/** How many sources' links Crosstune opens, opening the list of them; marked when one's links can't reach it yet. */
 @Composable
 private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
+    val trouble = sources.firstNotNullOfOrNull { it.trouble() }
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (sources.any { it.notAllowed }) {
+        if (trouble != null) {
             AppIcon(
-                R.drawable.ic_error, contentDescription = stringResource(R.string.setup_not_allowed),
+                R.drawable.ic_error, contentDescription = trouble,
                 tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(end = 8.dp).size(18.dp)
             )
         }
@@ -1260,6 +1261,8 @@ private class SourceSettings(
     val locked: Boolean,
     val listeningNote: String?,
     val notAllowed: Boolean,
+    /** Installed apps that still open its links themselves, so none of them reach Crosstune. */
+    val keptBy: List<String>,
     val rule: Destination?,
     /** Where its links go without a rule of their own. */
     val fallback: Destination,
@@ -1274,6 +1277,7 @@ private class SourceSettings(
 
 @Composable
 private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceSettings> {
+    val keptBy = { key: String -> state.claimingAppsBySource?.get(key).orEmpty().filterValues { it }.keys.map { it.label }.sorted() }
     val services = MusicService.entries.filter { it.canBeSource }.map { source ->
         val intercepted = source in state.intercepted
         val rule = state.rules[source]
@@ -1293,6 +1297,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
                 null
             },
             notAllowed = intercepted && state.unapprovedHosts?.get(source).orEmpty().isNotEmpty(),
+            keptBy = if (intercepted) keptBy(source.name) else emptyList(),
             rule = rule,
             fallback = state.defaultDestination,
             onToggle = { actions.onInterceptChange(source, it) },
@@ -1310,6 +1315,7 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             locked = false,
             listeningNote = null,
             notAllowed = on && state.unapprovedFrontendHosts?.get(frontend).orEmpty().isNotEmpty(),
+            keptBy = if (on) keptBy(Destination.FRONTEND_PREFIX + frontend.name) else emptyList(),
             rule = state.frontendRules[frontend],
             // Without a rule of its own, its videos go where YouTube's do.
             fallback = state.rules[MusicService.YOUTUBE] ?: state.defaultDestination,
@@ -1321,6 +1327,18 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
         )
     }
     return services + frontends
+}
+
+/**
+ * What keeps a source on from getting its links, if anything: Android not allowing them yet, or apps
+ * that still open them themselves. Either way Crosstune gets none of them until it's fixed.
+ */
+@Composable
+private fun SourceSettings.trouble(): String? = when {
+    notAllowed -> stringResource(R.string.setup_not_allowed)
+    keptBy.size == 1 -> stringResource(R.string.notice_app_still_opens, keptBy.single())
+    keptBy.isNotEmpty() -> stringResource(R.string.notice_apps_still_open, keptBy.joinToString(", "))
+    else -> null
 }
 
 /**
@@ -1356,9 +1374,10 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
             }
             }
             // Marks, not words, so a list of them stays quiet: the notice above says what to do.
-            if (item.notAllowed) {
+            val trouble = item.trouble()
+            if (trouble != null) {
                 AppIcon(
-                    R.drawable.ic_error, contentDescription = stringResource(R.string.setup_not_allowed),
+                    R.drawable.ic_error, contentDescription = trouble,
                     tint = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 8.dp).size(18.dp)
                 )
             } else if (item.locked) {
