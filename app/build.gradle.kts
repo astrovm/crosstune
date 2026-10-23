@@ -303,3 +303,7 @@ afterEvaluate {
         )
     }
 }
+
+// The plugin adds the old libraries Android once shipped, for tests run against android.jar. Ours run on
+// Robolectric with the classpath above, so they're never used, and they set off security alerts.
+configurations.matching { it.name == "pitestTestCompile" }.configureEach { withDependencies { clear() } }
