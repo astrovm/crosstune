@@ -251,10 +251,13 @@ internal object MetadataParsers {
                 '[', '(' -> depth++
                 ']', ')' -> depth = (depth - 1).coerceAtLeast(0)
             }
-            if (depth == 0 && title.startsWith(" - ", at)) return at
+            if (depth == 0 && dashes.any { title.startsWith(it, at) }) return at
         }
         return -1
     }
+
+    /** A hyphen, or the en or em dash some apps write, as NewPipe does "Queen – Bohemian Rhapsody", each as wide. */
+    private val dashes = listOf(" - ", " – ", " — ")
 
     private val youtubeDataRegex = Regex("""var ytInitialData = (\{.*?\});</script>""", RegexOption.DOT_MATCHES_ALL)
 
