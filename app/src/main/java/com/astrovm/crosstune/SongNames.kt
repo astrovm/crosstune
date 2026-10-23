@@ -178,13 +178,14 @@ internal object SongNames {
      * Whether [loanword], a name in katakana, says [latin], as "プラスティック・ラブ" does "Plastic
      * Love". Japanese puts vowels between consonants, reads l as r, v as b, and leaves out an r
      * that ends a sound, so the two are compared by the consonants they're said with, one off.
+     * Said with fewer than [fewest] consonants, a name is too short to tell.
      */
-    fun soundsAlike(latin: String, loanword: String): Boolean {
+    fun soundsAlike(latin: String, loanword: String, fewest: Int = MIN_SOUNDS): Boolean {
         val katakana = bareTitle(loanword)
         if (!katakana.all { it in '゠'..'ヿ' || it.isWhitespace() }) return false
         val said = consonants(Readings.romaji(katakana))
         val written = consonants(bareTitle(latin))
-        if (said.length < MIN_SOUNDS) return false
+        if (said.length < fewest) return false
         return if (said.length < FUZZY_SOUNDS) said == written else distance(said, written) <= 1
     }
 

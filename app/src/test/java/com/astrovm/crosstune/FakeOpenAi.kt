@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.util.concurrent.CopyOnWriteArrayList
 import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.Request
@@ -41,8 +42,8 @@ internal class FakeOpenAi(private val now: () -> Long) {
     /** What ChatGPT streams back to a request with this body; "Hello" by default. */
     var reply: (JSONObject) -> Pair<Int, String> = { 200 to stream("Hel", "lo") }
 
-    /** The requests ChatGPT was asked, as sent. */
-    val asked = mutableListOf<JSONObject>()
+    /** The requests ChatGPT was asked, as sent: from several network threads at once, so none is lost. */
+    val asked: MutableList<JSONObject> = CopyOnWriteArrayList()
 
     /** OpenAI's answer to [request], or null when it isn't for OpenAI. */
     fun answer(request: Request): Response? {

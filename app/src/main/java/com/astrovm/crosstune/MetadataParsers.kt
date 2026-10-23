@@ -218,7 +218,8 @@ internal object MetadataParsers {
         val left = rawTitle.substring(0, separator).trim()
         val right = rawTitle.substring(separator + 3).trim()
         // One song by two names, as YouTube Music titles Japanese ones, "プラスティック・ラブ - Plastic Love": by the channel.
-        if (SongNames.soundsAlike(right, left) || SongNames.soundsAlike(left, right)) return MusicMetadata(rawTitle, author)
+        // Two sounds are enough here, as "アイドル - Idol", since a dash pairing them is already a sign.
+        if (SongNames.soundsAlike(right, left, TWO_NAMES_SOUNDS) || SongNames.soundsAlike(left, right, TWO_NAMES_SOUNDS)) return MusicMetadata(rawTitle, author)
         // "Song - Artist" when the artist is the channel and the left isn't: "Luz - Ciro y los Persas".
         if (author.isNotEmpty() && SongNames.same(right.substringBefore(" - ").trim(), author) && !SongNames.same(left, author)) {
             return MusicMetadata(left, author)
@@ -240,6 +241,8 @@ internal object MetadataParsers {
     }
 
     private fun japanese(letter: Char) = Character.UnicodeScript.of(letter.code) in JAPANESE
+
+    private const val TWO_NAMES_SOUNDS = 2
 
     private val JAPANESE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)
 
