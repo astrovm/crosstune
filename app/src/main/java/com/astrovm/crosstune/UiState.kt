@@ -226,6 +226,11 @@ internal data class UiState(
     val canPlayResult: Boolean
         get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed } && !resultMissing
 
+    /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
+    val canPlayFromLyrics: Boolean
+        get() = canPlayResult && following?.app == null && !isLoadingLyrics &&
+            lyricsFor?.let { it.title == result?.title && it.artist == result?.artist } == true
+
     /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
     val shareSheetEntries: Boolean
         get() = setupComplete && hasDefault && shareSheetApps

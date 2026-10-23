@@ -3515,6 +3515,41 @@ class MainActivityTest {
         composeRule.onNode(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
 
     @Test
+    fun wordsOfASongNotPlayingYetStartItInItsAppThenFollowIt() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val playback = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { playback }
+        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
+            """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.lyrics_button))
+        waitForText("Two")
+
+        // Its app is in the bar, to play it there, and the microphone stays, for a song playing nearby.
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(play).fetchSemanticsNodes().size == 1 }
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_listen_along)).assertExists()
+        composeRule.onNodeWithContentDescription(play).performClick()
+        waitUntil { playback.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to youTubeMusic, playback.songsAsked.single())
+        assertNull(nextStartedActivity())
+
+        // The words stay, and follow it once it plays there.
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "YouTube Music")).fetchSemanticsNodes().isNotEmpty() }
+        assertLit("Two")
+        composeRule.onNodeWithContentDescription(play).assertDoesNotExist()
+    }
+
+    @Test
     fun timedWordsFollowTheMusicAppPlayingTheSongOnceAllowed() {
         val playback = timedSong()
         // Not allowed yet, the words say how, and Allow shows the steps to Android's page for Crosstune.
