@@ -637,7 +637,7 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
         },
         scrollState = rememberScrollState()
     ) {
-        Spacer(Modifier.height(16.dp))
+        SectionHeader(stringResource(R.string.settings_links_section))
         Group {
             NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
             GroupDivider()

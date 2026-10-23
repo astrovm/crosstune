@@ -28,7 +28,7 @@ Anything that breaks later shows as **Things to fix** at the bottom of the main 
 ## Features
 
 - **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify.
-- **Choose where.** Links open in Crosstune, where the song plays in your app right away, or straight in your app. Set one app per service, or add any app or site with a search URL like `https://example.com/search?q={query}`.
+- **Choose where.** Pick your music app once. Links go straight to it, or show in Crosstune first, with the song playing in your app. Set one app per service, or add any app or site with a search URL like `https://example.com/search?q={query}`.
 - **Not on your app?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
 - **Recent.** Search your recent songs, and swipe one away to remove it.
@@ -77,7 +77,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 ## Privacy
 
 - No account, analytics or ads. History stays on your device.
-- A link's service is asked only for its title, artist and cover. With exact match on, the title and artist also go to the search of the app it opens in.
+- A link's service is asked only for its title, artist and cover. To open the song itself, the title and artist also go to the search of the app it opens in. Going straight to the app with **Play right away** off, a search opens there instead, and nothing is sent.
 - Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org).
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. The visuals use it to move to your music, and record and send nothing.

@@ -121,8 +121,8 @@ class MainActivityTest {
         // What Android says about apps and links is read as the screen asks, so each step sees it.
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
-        // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
+        // Most tests exercise the main screen with links going straight to the app as searches; the rest have their own tests.
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -341,7 +341,7 @@ class MainActivityTest {
 
     @Test
     fun recognizedSongMatchesExactTrackInChosenShareSheetApp() {
-        prefs().edit().putBoolean("exact_match", true).commit()
+        prefs().edit().putBoolean("play_right_away", true).commit()
         fake.handler = { request -> FakeSpotify.html(request,
             """{"data":[{"id":123,"title":"A Song","artist":{"name":"Example Band"},"link":"https://www.deezer.com/track/123"}]}""") }
         launch(Intent(Intent.ACTION_SEND).apply {
@@ -411,6 +411,8 @@ class MainActivityTest {
     @Test
     fun aNowPlayingSongShowsAndSavesTheCoverFoundForIt() {
         linksShowHere()
+        // Opening in an app of the user's own, there's nothing to look it up in but its cover.
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
         val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-000000-80-0-0.jpg"
         fake.handler = { request -> FakeSpotify.html(request,
             """{"data":[{"title":"A Song (Remastered)","artist":{"name":"The Example Band"},"album":{"cover_big":"$cover"}}]}""") }
@@ -524,15 +526,13 @@ class MainActivityTest {
 
     @Test
     fun linksCanOpenInCrosstuneWithoutPlayingRightAway() {
-        prefs().edit().putString("default_target", "DEEZER").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         respondWithTrack("Shown First", "Artist · Song")
         launch()
-        // Crosstune, first in the menu, is what it then shows, with whether songs play right away and in which app.
+        // Shown in Crosstune first, songs still play in the music app, right away or not.
         inSettings {
-            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assertDoesNotExist()
-            chooseDefaultHere(string(R.string.app_name))
-            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.app_name)))
-            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assert(hasText(string(R.string.target_deezer)))
+            click(string(R.string.setting_show_in_crosstune_first))
+            composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_deezer)))
             click(string(R.string.setting_play_right_away))
         }
         assertTrue(prefs().getBoolean("links_in_crosstune", false))
@@ -575,7 +575,7 @@ class MainActivityTest {
         val deezer = MusicService.DEEZER.packageName
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
         respondWithTrack("Right Away", "Artist · Song")
         // Without the app, there's nothing to play it in, so the card has the choices.
         launch(trackLink())
@@ -603,7 +603,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun linksOpenInCrosstuneForNewInstallsAndForWhoeverHadThemAskOrShowTheSongFirst() {
+    fun linksGoStraightToTheAppOnNewInstallsAndShowInCrosstuneForWhoeverHadThemAskOrShowTheSongFirst() {
         fun migrated(vararg before: Pair<String, Boolean>): Pair<Boolean, Boolean> {
             prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")
                 .apply { before.forEach { (key, on) -> putBoolean(key, on) } }.commit()
@@ -611,7 +611,7 @@ class MainActivityTest {
             controller!!.pause().stop().destroy()
             return prefs().getBoolean("links_in_crosstune", false) to prefs().getBoolean("play_right_away", false)
         }
-        assertEquals(true to true, migrated("setup_complete" to false))
+        assertEquals(false to true, migrated("setup_complete" to false))
         // Links opening in an app keep doing so.
         assertEquals(false to true, migrated("setup_complete" to true))
         assertEquals(true to false, migrated("setup_complete" to true, "ask_each_time" to true))
@@ -623,23 +623,36 @@ class MainActivityTest {
     }
 
     @Test
-    fun anAppPickedForLinksTakesThemFromCrosstuneAgain() {
+    fun openTheExactMatchSwitchedOffIsNotPlayingRightAwayWhenLinksGoStraightToTheApp() {
+        fun migrated(linksInCrosstune: Boolean, exact: Boolean): Boolean {
+            prefs().edit().putBoolean("links_in_crosstune", linksInCrosstune).putBoolean("play_right_away", true).putBoolean("exact_match", exact).commit()
+            launch()
+            controller!!.pause().stop().destroy()
+            assertFalse(prefs().contains("exact_match"))
+            return prefs().getBoolean("play_right_away", false)
+        }
+        assertFalse(migrated(linksInCrosstune = false, exact = false))
+        assertTrue(migrated(linksInCrosstune = false, exact = true))
+        // Shown in Crosstune, songs were looked up either way.
+        assertTrue(migrated(linksInCrosstune = true, exact = false))
+    }
+
+    @Test
+    fun linksNoLongerShownInCrosstuneFirstGoStraightToTheMusicAppAgain() {
         prefs().edit().putString("default_target", "DEEZER").commit()
         linksShowHere()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
         respondWithTrack("Back To Apps", "Artist · Song")
         launch()
         inSettings {
-            // The app songs play in is picked under it, and links keep opening here.
-            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).performClick()
-            composeRule.waitForIdle()
-            composeRule.onAllNodesWithText(string(R.string.target_youtube)).onLast().performClick()
-            composeRule.waitForIdle()
+            // Another music app, and links keep showing here first, the app's own too.
+            chooseDefaultHere(string(R.string.target_youtube))
             assertEquals("YOUTUBE", prefs().getString("default_target", null))
-            assertTrue(prefs().getBoolean("links_in_crosstune", false))
             chooseDefaultHere(string(R.string.target_youtube_music))
             composeRule.onNodeWithTag(DEFAULT_MENU_TAG).assert(hasText(string(R.string.target_youtube_music)))
-            composeRule.onNodeWithTag(PLAYS_IN_MENU_TAG).assertDoesNotExist()
+            assertTrue(prefs().getBoolean("links_in_crosstune", false))
+            assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+            click(string(R.string.setting_show_in_crosstune_first))
         }
         assertFalse(prefs().getBoolean("links_in_crosstune", true))
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
@@ -700,7 +713,7 @@ class MainActivityTest {
 
     @Test
     fun theShareSheetSharesTheConvertedLinkWithoutCrosstuneInIt() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", false).commit()
         respondWithTrack("Cut To The Feeling", "Carly Rae Jepsen · Song · 2017")
         launch()
         resolveTyped()
@@ -718,7 +731,7 @@ class MainActivityTest {
 
     @Test
     fun aTappedPlaylistShowsItsSongsAndEachOpensInTheDefaultApp() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).putString("not_found", "SEARCH").commit()
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
             {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
         fake.handler = { request ->
@@ -783,7 +796,7 @@ class MainActivityTest {
 
     @Test
     fun aPlaylistsSongsCanBeCopiedSharedOrPlayedAllAtOnceInYouTubeMusic() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         collectionWithSongs()
         val activity = launch()
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
@@ -921,7 +934,7 @@ class MainActivityTest {
 
     @Test
     fun aLongPlaylistPlaysInPartsOfWhatYouTubeTakes() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
         // Holds the song lookups so the progress can be seen.
@@ -1007,7 +1020,7 @@ class MainActivityTest {
 
     @Test
     fun playAllSaysSoWhenNoSongMatchesAndIsOnlyForYouTube() {
-        prefs().edit().putString("default_target", "YOUTUBE").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE").putBoolean("play_right_away", true).commit()
         collectionWithSongs()
         launch()
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
@@ -1121,7 +1134,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOpensASavedSongInTheUsualAppWithoutLoadingItAgain() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", false).commit()
         val url = "https://open.spotify.com/track/$TRACK_ID"
         HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist")))
 
@@ -1155,7 +1168,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOnASongNotThereAsksWhereToPlayIt() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         val url = "https://open.spotify.com/track/$TRACK_ID"
         val missing = mapOf("DEEZER" to PreparedLink("https://www.deezer.com/search/Saved%20Artist", exact = false, matchingEnabled = true))
         HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Saved", "Artist"), missing))
@@ -1198,7 +1211,7 @@ class MainActivityTest {
 
     @Test
     fun aTappedLinkNotThereStaysToSaySo() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         notOnDeezer()
         val activity = launch(trackLink())
 
@@ -1239,7 +1252,7 @@ class MainActivityTest {
 
     @Test
     fun aLookupWithNoAnswerSearchesRatherThanSayingItsNotThereAndIsTriedAgain() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         var deezerUp = false
         fake.handler = { request ->
             when {
@@ -1265,7 +1278,7 @@ class MainActivityTest {
 
     @Test
     fun aSongByNameNotThereIsSearchedForWithItsButton() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
         val activity = launch()
         // A song by name only, e.g. one heard, has nowhere else to open.
@@ -1282,7 +1295,7 @@ class MainActivityTest {
 
     @Test
     fun someonesOwnPlaylistWithoutItsSongsIsNotSearchedForElsewhere() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).putString("not_found", "ORIGINAL").commit()
         var askedForAlbum = false
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
@@ -1305,7 +1318,7 @@ class MainActivityTest {
 
     @Test
     fun aTappedLinkNotThereOpensWhereItsFromWhenSetSo() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).putString("not_found", "ORIGINAL").commit()
         notOnDeezer()
         val activity = launch(trackLink())
 
@@ -1318,7 +1331,7 @@ class MainActivityTest {
 
     @Test
     fun aPlaylistSongNotThereWithNowhereElseToPlayIsSearched() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).putString("not_found", "ORIGINAL").commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).putString("not_found", "ORIGINAL").commit()
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
             {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
         fake.handler = { request ->
@@ -1350,7 +1363,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOpensASavedPlaylistAsAQueueNotASearch() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         collectionWithSongs()
         val url = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
         HistoryStore(prefs()).add(
@@ -1382,7 +1395,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOnAPlaylistKeepsToTheFirst50AndTheirOwnVideos() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         savePlaylist((1..51).map { MusicMetadata("Song $it", "Band") })
         // Every song was found before, so only the playlist is asked of YouTube.
         val found = (1..51).joinToString(",") { """["find|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
@@ -1404,7 +1417,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOnAPlaylistSearchesItsNameWhenNothingCanBeQueued() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         // Nothing found for any song, nothing saved at all, and YouTube refusing the queue each end in a search.
         savePlaylist(listOf(MusicMetadata("Unknown", "Nobody")))
         fake.handler = { request -> FakeSpotify.html(request, """{"contents":{}}""") }
@@ -1414,7 +1427,7 @@ class MainActivityTest {
     @Test
     fun theWidgetsPlayOnAPlaylistWithoutSongsSearchesItsNameWhenSetTo() {
         // Not found as an album, which it might have been, it's searched for, as set.
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).putString("not_found", "SEARCH").commit()
         savePlaylist(emptyList())
         fake.handler = { request -> FakeSpotify.html(request, """{"contents":{}}""") }
         assertEquals("https://music.youtube.com/search?q=Road%20Trip", widgetPlays(savedPlaylistUrl))
@@ -1423,7 +1436,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOnAPlaylistIsOnlyAQueueWhereYouTubeCanMakeOne() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", true).commit()
         savePlaylist(listOf(MusicMetadata("First Song", "Band")))
         fake.handler = { request -> FakeSpotify.html(request, """{"data":[]}""") }
         assertEquals("https://www.deezer.com/search/Road%20Trip", widgetPlays(savedPlaylistUrl))
@@ -1432,7 +1445,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOnAYouTubePlaylistOpensItAsItselfInYouTubeMusic() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         val url = "https://www.youtube.com/playlist?list=PLabc123"
         savePlaylist(listOf(MusicMetadata("First Song", "Band")), MusicLink(MusicService.YOUTUBE, ItemType.PLAYLIST, "PLabc123", url))
         assertEquals("https://music.youtube.com/playlist?list=PLabc123", widgetPlays(url))
@@ -1441,7 +1454,7 @@ class MainActivityTest {
 
     @Test
     fun theWidgetsPlayOpensASavedAlbumAsTheAlbumNotAsAQueue() {
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("exact_match", true).putString("not_found", "SEARCH").commit()
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).putString("not_found", "SEARCH").commit()
         collectionWithSongs(type = "album")
         val url = "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy"
         HistoryStore(prefs()).add(
@@ -1623,7 +1636,7 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(VisualsSettings.NEVER, prefs().getLong("visuals_change_ms", 0))
         // How dark they are is set over them, not here.
-        assertEquals(0, composeRule.onAllNodes(hasContentDescription(string(R.string.visuals_shade))).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodes(hasContentDescription(string(R.string.visuals_brightness))).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -1643,7 +1656,7 @@ class MainActivityTest {
 
     @Test
     fun theTopRowsShareEntrySharesTheConvertedLinkWithoutCrosstune() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", false).commit()
         respondWithTrack("Shared On", "Artist · Song")
         launch(sharedFromTopRow("action:SHARE"))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -1834,7 +1847,7 @@ class MainActivityTest {
 
     @Test
     fun theTopRowsShareEntryFromTheLauncherSharesTheConvertedCopiedLink() {
-        prefs().edit().putString("default_target", "DEEZER").putBoolean("exact_match", false).commit()
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("play_right_away", false).commit()
         respondWithTrack("From Launcher", "Artist · Song")
         app.getSystemService(ClipboardManager::class.java)
             .setPrimaryClip(ClipData.newPlainText("link", "https://open.spotify.com/track/$TRACK_ID"))
@@ -4222,7 +4235,7 @@ class MainActivityTest {
 
     @Test
     fun thePickerMatchesOnlyTheChosenDestination() {
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         linksAskBeforeSetup()
         fake.handler = { request ->
             if (request.url.host == "itunes.apple.com") {
@@ -4266,7 +4279,7 @@ class MainActivityTest {
 
     @Test
     fun dismissingThePickerPreparesTheDisplayedDestinationWithoutOpeningIt() {
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         linksAskBeforeSetup()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
@@ -4290,8 +4303,8 @@ class MainActivityTest {
     }
 
     @Test
-    fun exactMatchingDefaultsToEnabledAndKeepsAnExplicitOptOutAcrossLaunches() {
-        prefs().edit().remove("exact_match").putString("default_target", "DEEZER").commit()
+    fun straightToTheAppWithoutPlayingRightAwayASearchOpensThereAcrossLaunchesAndShownInCrosstuneTheSongIsLookedUp() {
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 FakeSpotify.html(request,
@@ -4308,7 +4321,14 @@ class MainActivityTest {
         assertEquals("https://www.deezer.com/track/1",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
 
-        inAdvancedSettings { click(string(R.string.setting_exact_match)) }
+        inSettings {
+            // Only going straight to the app does turning it off open a search instead.
+            assertTextShown(string(R.string.setting_play_right_away_search))
+            click(string(R.string.setting_show_in_crosstune_first))
+            assertTextAbsent(string(R.string.setting_play_right_away_search))
+            click(string(R.string.setting_show_in_crosstune_first))
+            click(string(R.string.setting_play_right_away))
+        }
         controller!!.pause().stop().destroy()
         fake.requestedUrls.clear()
         val restored = launch()
@@ -4319,11 +4339,18 @@ class MainActivityTest {
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
         // The song comes from Recent, and a search link needs no lookup.
         assertEquals(emptyList<String>(), fake.requestedUrls)
+
+        // Shown in Crosstune first, the song is looked up again, and it's the song itself.
+        inSettings { click(string(R.string.setting_show_in_crosstune_first)) }
+        waitForDestinationReady()
+        click(string(R.string.copy_link_button))
+        assertEquals("https://www.deezer.com/track/1",
+            app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
     }
 
     @Test
     fun trackingIsRemovedFromLinksUntilTurnedOff() {
-        prefs().edit().remove("exact_match").putString("default_target", "APPLE_MUSIC").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "APPLE_MUSIC").commit()
         fake.handler = { request ->
             if (request.url.host == "itunes.apple.com") {
                 FakeSpotify.html(request,
@@ -4407,7 +4434,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun exactMatchOpensDirectLinkAndFallsBackToSearch() {
+    fun playingRightAwayOpensTheSongItselfAndFallsBackToSearch() {
         fake.handler = { request ->
             when (request.url.host) {
                 "itunes.apple.com" -> FakeSpotify.html(
@@ -4419,8 +4446,8 @@ class MainActivityTest {
             }
         }
         launch()
-        inAdvancedSettings { click(string(R.string.setting_exact_match)) }
-        assertTrue(prefs().getBoolean("exact_match", false))
+        inSettings { click(string(R.string.setting_play_right_away)) }
+        assertTrue(prefs().getBoolean("play_right_away", false))
         resolveTyped()
 
         chooseDefault(string(R.string.target_apple_music))
@@ -4467,13 +4494,8 @@ class MainActivityTest {
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
         assertEquals(requestsBeforeReturning, fake.requestedUrls.size)
 
-        inAdvancedSettings {
-            click(string(R.string.setting_exact_match))
-            // Nothing's looked for without it, so nothing's ever not found.
-            composeRule.waitForIdle()
-            assertTextAbsent(string(R.string.setting_not_found))
-        }
-        assertFalse(prefs().getBoolean("exact_match", true))
+        inSettings { click(string(R.string.setting_play_right_away)) }
+        assertFalse(prefs().getBoolean("play_right_away", true))
         click(string(R.string.copy_link_button))
         assertEquals("https://music.apple.com/search?term=Exact%20Artist", clipboard.primaryClip!!.getItemAt(0).text.toString())
     }
@@ -4489,7 +4511,7 @@ class MainActivityTest {
                 FakeSpotify.html(request, FakeSpotify.trackPage("Slow", "Artist · Song"))
             }
         }
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
         val activity = launch()
         resolveTyped()
 
@@ -4518,7 +4540,7 @@ class MainActivityTest {
 
     @Test
     fun youtubeMusicLinksArePreparedOnceAndCachedForRecentLinks() {
-        prefs().edit().putBoolean("exact_match", true).commit()
+        prefs().edit().putBoolean("play_right_away", true).commit()
         fake.handler = { request ->
             if (request.url.host == "music.youtube.com") {
                 val title = if (FakeSpotify.bodyOf(request).contains("Second")) "Second" else "First"
@@ -4568,7 +4590,7 @@ class MainActivityTest {
     @Test
     fun cancellingAnIncomingLinkStaysInCrosstuneAndOpensNothing() {
         val release = CountDownLatch(1)
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
             when (request.url.host) {
                 "api.deezer.com" -> {
@@ -4599,7 +4621,7 @@ class MainActivityTest {
     @Test
     fun aNewIncomingLinkCancelsTheOldMatchWithoutReusingItsUrl() {
         val release = CountDownLatch(1)
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 val first = request.url.queryParameter("q") == "First Artist"
@@ -5014,8 +5036,8 @@ class MainActivityTest {
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
 
-        // Links opening in Crosstune, YouTube's own come here too, though it's where songs play, and so do its frontends'.
-        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        // Links going straight to YouTube, its own stay there, but its frontends' come here, sources of their own.
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
         assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
         assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
         click(string(R.string.setup_skip_for_now))
@@ -5275,9 +5297,9 @@ class MainActivityTest {
 
         click(string(R.string.next_button))
         assertTextShown(string(R.string.setup_step, 2, 2))
-        // Every source's links start on, the app songs play in's too, as links open in Crosstune.
+        // Every source's links start on, but the app songs play in's, as links go straight to it.
         assertEquals(
-            MusicService.entries.filter { it.canBeSource }.toSet(),
+            MusicService.entries.filter { it.canBeSource && it != MusicService.DEEZER }.toSet(),
             MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
         )
         assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
@@ -5421,7 +5443,7 @@ class MainActivityTest {
     @Test
     fun theHandoffShowsASongWithoutAnArtist() {
         val release = CountDownLatch(1)
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").putString("not_found", "SEARCH").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -5845,8 +5867,8 @@ class MainActivityTest {
         assertTextShown(string(R.string.setup_links_title))
         assertTextAbsent(string(R.string.setup_step, 1, 1))
         assertEquals(Destination.Service(MusicService.SOUNDCLOUD), DestinationStore(prefs()).defaultDestination())
-        // Links opening in Crosstune, its own come here too.
-        assertTrue(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
+        // Links going straight to it, its own stay there.
+        assertFalse(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
         click(string(R.string.back_button))
         assertTextShown(string(R.string.setup_welcome_title))
@@ -5882,6 +5904,7 @@ class MainActivityTest {
     @Test
     fun setupOpensTheLinksOfTheAppSongsPlayInOnlyWhenLinksOpenInCrosstune() {
         freshInstall()
+        prefs().edit().putBoolean("links_in_crosstune", true).commit()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
         launch()
         click(string(R.string.setup_get_started))
@@ -5890,9 +5913,8 @@ class MainActivityTest {
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
         controller!!.pause().stop().destroy()
 
-        // Opening links in the app, Crosstune would only hand YouTube Music its own links back.
+        // Going straight to the app, as on a new install, Crosstune would only hand YouTube Music its own links back.
         freshInstall()
-        prefs().edit().putBoolean("links_in_crosstune", false).commit()
         LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
         launch()
         click(string(R.string.setup_get_started))
@@ -6099,6 +6121,7 @@ class MainActivityTest {
     @Test
     fun linkOpenedBeforeSetupShowsOnItsCardWithNoAppToPlayItInThenSetupFollows() {
         freshInstall()
+        prefs().edit().putBoolean("links_in_crosstune", true).commit()
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         respondWithTrack("Early", "Artist · Song")
@@ -6271,7 +6294,7 @@ class MainActivityTest {
                 FakeSpotify.html(request, FakeSpotify.trackPage("Slow", "Artist · Song"))
             }
         }
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         launch()
         resolveTyped()
 
@@ -6366,7 +6389,7 @@ class MainActivityTest {
 
     @Test
     fun historyShortcutsReuseSavedExactLinksAcrossLaunchesAndRespectMatchingPreference() {
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 FakeSpotify.html(request, """{"data":[{"title":"Remember","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
@@ -6386,13 +6409,13 @@ class MainActivityTest {
         assertEquals("", model.uiState.linkText)
         assertNull(model.uiState.result)
 
-        model.setExactMatch(false)
+        model.setPlayRightAway(false)
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
         assertEquals("https://www.deezer.com/search/Remember%20Artist", nextStartedActivity()!!.dataString)
         assertNull(model.uiState.result)
 
-        model.setExactMatch(true)
+        model.setPlayRightAway(true)
         model.selectDefault(Destination.Service(MusicService.SPOTIFY))
         composeRule.waitForIdle()
         click(string(R.string.history_open, "Remember"))
@@ -6653,7 +6676,7 @@ class MainActivityTest {
 
     @Test
     fun aSongAlreadyInRecentOpensItsSavedMatchFromAnotherApp() {
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 FakeSpotify.html(request, """{"data":[{"title":"Again","artist":{"name":"Artist"},"link":"https://www.deezer.com/track/123"}]}""")
@@ -6673,7 +6696,7 @@ class MainActivityTest {
 
     @Test
     fun aSearchPageSavedWhenMatchingFailedIsMatchedAgainWhenTheSongComesBack() {
-        prefs().edit().putBoolean("exact_match", true).putString("default_target", "DEEZER").commit()
+        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
         var deezerDown = true
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
