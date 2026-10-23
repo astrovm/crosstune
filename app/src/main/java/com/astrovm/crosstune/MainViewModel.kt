@@ -1512,10 +1512,7 @@ internal class MainViewModel(
         if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null) return
         foundLines = better.lines
         this.found = better
-        // Timed for another release, they're as far from Shazam's place as learnt for those.
-        placeHeard()
         uiState = uiState.copy(lyricLines = better.lines, lyricsOffTake = timedForAnother(song))
-        keepInTime()
         followSavedLines(song)
     }
 
@@ -1625,7 +1622,7 @@ internal class MainViewModel(
         if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
             clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
         ) {
-            hear(steadied(clock, at), hearing.matchId, gap)
+            heardClock = steadied(clock, at)
             return keepInTime()
         }
         if (heardSong?.let { sameSong(it, song) } != true || !sameSong(song, shown)) {

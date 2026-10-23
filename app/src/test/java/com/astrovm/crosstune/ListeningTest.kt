@@ -1491,13 +1491,14 @@ class ListeningTest {
     }
 
     @Test
-    fun wordsPutInTimeByHandOnAReleaseLinedUpByShazamTeachItsGapForEveryRelease() {
+    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
         val hearing = FakeHearing()
-        val phone = videoWithWords(hearing, video = false)
+        val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         val song = controllerModel().uiState.lyricsFor!!
+        composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
         val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
-        // The release is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
+        // The video is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
         for (index in 0..2) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
@@ -1514,9 +1515,11 @@ class ListeningTest {
         waitForText(string(R.string.lyrics_sync_hint))
         composeRule.onNodeWithText("Demo two").performClick()
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
-        // That's Shazam's gap, for any release it matches to that recording, and this one's lead put right; nothing kept for this release alone.
+        // That's Shazam's gap, for any release it matches to that recording, and this video's lead put right, the line saved from it
+        // too; nothing kept for this release alone.
         assertTrue(ShazamGapStore(prefs()).load(52_000, "longer").toString(), ShazamGapStore(prefs()).load(52_000, "longer")!! in -5_600..-4_400)
         assertTrue(LeadStore(prefs()).load(song)!! in 9_400..10_600)
+        assertTrue(SavedLinesStore(prefs()).load().single().leadMs in 9_400..10_600)
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
         assertFalse(controllerModel().uiState.lyricsOffTake)
         // Another line tapped after stretches the words from the one that moved them, for this release.
@@ -1568,10 +1571,10 @@ class ListeningTest {
         click(string(R.string.lyrics_sync_later))
         waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
-        // Reset puts back the gap learnt before.
+        // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
-        waitUntil(TIMEOUT_MS) { gap() == -10_000L }
-        waitUntil(TIMEOUT_MS) { lit("Start") }
+        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 10_000) }
+        assertEquals(-10_000L, gap())
         // A line tapped too far from Shazam's place to be its gap is kept for these words alone.
         composeRule.onNodeWithText("Late").performClick()
         waitUntil(TIMEOUT_MS) { LyricsSyncStore(prefs()).load(song, lines).isNotEmpty() }
