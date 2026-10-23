@@ -385,6 +385,14 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongNamedWithTheFilmItsOfIsFoundOnYouTubeMusicHoweverItSaysSo() {
+        respond(youTubeMusicPage(youTubeMusicRow("小幸運(我的少女時代電影主題曲)", "田馥甄 • 小幸運 • 4:26", videoId = "xiaoxingyun")))
+        assertEquals("https://music.youtube.com/watch?v=xiaoxingyun", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("小幸運 (電影《我的少女時代》主題曲)", "田馥甄")) })
+        // It's searched for without the film, which YouTube Music finds nothing for when it names it otherwise.
+        assertTrue(fake.requestBodies.first(), fake.requestBodies.first().contains("\"query\":\"小幸運 田馥甄\""))
+    }
+
+    @Test
     fun youTubeMusicMatchesSongsAlbumsAndArtists() {
         respond(
             youTubeMusicPage(

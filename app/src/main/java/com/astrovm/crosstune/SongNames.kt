@@ -30,14 +30,17 @@ internal object SongNames {
 
     /**
      * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in
-     * it, or a whole "Album Version" or "Original". "Live", "Acoustic" or "Remix" are other
-     * recordings, so they stay.
+     * it, a whole "Album Version" or "Original", or what film or show it's the song of,
+     * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*)\s*[)\]]?$""",
+        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
+
+    /** The song a film or show opens, ends or plays it in, in Chinese, Japanese or English, or its soundtrack, as K-pop says. */
+    private const val TIE_IN = """主[題题][曲歌]|挿入歌|插曲|片[頭头尾]曲|\bOST\b|\btheme\s+song\b"""
 
     /** A letter of a tag: none of a bracket, nor the dash before another part of the name, "Band - Song - Remastered". */
     private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
