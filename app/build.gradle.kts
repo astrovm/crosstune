@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlinx.kover")
     id("androidx.baselineprofile")
+    id("pl.droidsonroids.pitest")
 }
 
 // projectM comes as a submodule. A checkout without it, like GitHub's own code scanning, still
@@ -184,6 +185,8 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
 
+    pitest(project(":pitest-changed-lines"))
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
@@ -248,6 +251,12 @@ val robolectricDeps = tasks.register("robolectricDeps") {
     }
 }
 
+// Robolectric's Android 16 runtime reaches into JDK internals.
+val robolectricJvmArgs = listOf(
+    "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+    "--add-opens=java.base/java.io=ALL-UNNAMED",
+)
+
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     dependsOn(robolectricDeps)
@@ -258,13 +267,39 @@ tasks.withType<Test>().configureEach {
     // the tests take about half the time.
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
     maxParallelForks = if (Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
-    // Robolectric's Android 16 runtime reaches into JDK internals.
-    jvmArgs(
-        "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
-        "--add-opens=java.base/java.io=ALL-UNNAMED",
-    )
+    jvmArgs(robolectricJvmArgs)
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
+pitest {
+    pitestVersion.set("1.30.1")
+    targetClasses.set(providers.gradleProperty("mutateClasses").map { it.split(",") }.orElse(listOf("com.astrovm.crosstune.*")))
+    providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
+    providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
+    // The store's screenshots aren't tests of what the app does, and take long to draw.
+    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*"))
+    threads.set(2)
+    // A fresh test process takes some seconds to start Robolectric, more than PIT allows a test by default.
+    timeoutConstInMillis.set(30_000)
+    outputFormats.set(listOf("XML", "HTML"))
+    timestampedReports.set(false)
+    verbose.set(providers.gradleProperty("mutateVerbose").map { it.toBoolean() }.orElse(false))
+    // Each mutant's tests run on Robolectric, with the Android runtimes the test task is told of.
+    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
+}
+
+// After the plugin's own setup, which gives the tests only what they compile against.
+afterEvaluate {
+    tasks.withType<pl.droidsonroids.gradle.pitest.PitestTask>().configureEach {
+        dependsOn(robolectricDeps)
+        // What the unit tests run with, like the app's resources, which Robolectric reads. The app's own
+        // classes come from the folders PIT mutates, not the jar the tests get, or PIT finds nothing to mutate.
+        additionalClasspath.setFrom(
+            mutableCodePaths,
+            tasks.named<Test>("testDebugUnitTest").map { test -> test.classpath.filter { "runtime_app_classes_jar" !in it.path } },
+        )
     }
 }
