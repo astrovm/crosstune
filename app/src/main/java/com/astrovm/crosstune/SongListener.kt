@@ -186,9 +186,6 @@ internal class PlayedSound(
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val sleep: (Long) -> Unit = Thread::sleep
 ) : Microphone {
-    /** Whether the phone has shared its sound before. */
-    private var shares = preferences?.getBoolean(KEY_SHARES, false) == true
-
     override fun open(): Recording? {
         val sound = tap() ?: return null
         val step = sound.rateHz.toDouble() / ShazamSignature.SAMPLE_RATE
@@ -196,7 +193,7 @@ internal class PlayedSound(
         var last: IntArray? = null
         var lastAt = now()
         // Once the phone has shared its sound, silence is just a quiet moment, like a video's start.
-        var heardAny = shares
+        var heardAny = preferences?.getBoolean(KEY_SHARES, false) == true
         var waited = 0L
         // What's new and not yet made 16 kHz, and how far into it the next sample made starts.
         val fresh = ArrayList<Int>()
@@ -224,10 +221,9 @@ internal class PlayedSound(
                     val readAt = now()
                     if (read > 0) {
                         val samples = IntArray(read) { (window[it].toInt() and 0xFF) - 128 }
-                        if (samples.any { abs(it) > QUIET }) {
+                        if (!heardAny && samples.any { abs(it) > QUIET }) {
                             heardAny = true
-                            if (!shares) preferences?.edit { putBoolean(KEY_SHARES, true) }
-                            shares = true
+                            preferences?.edit { putBoolean(KEY_SHARES, true) }
                         }
                         // The first read is what played before listening started.
                         last?.let { before ->
