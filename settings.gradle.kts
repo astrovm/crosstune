@@ -20,3 +20,5 @@ dependencyResolutionManagement {
 rootProject.name = "Crosstune"
 include(":app")
 include(":baselineprofile")
+include(":pitest-changed-lines")
+project(":pitest-changed-lines").projectDir = file("tools/pitest-changed-lines")
