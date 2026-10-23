@@ -1631,6 +1631,20 @@ class ListeningTest {
     }
 
     @Test
+    fun listeningByItselfStopsOnceTheAppPlaysTheSongNoMore() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // The video ended, and the app is on its way to the next one.
+        composeRule.runOnIdle { phone.playing.value = null }
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        // What it was listening for when it stopped isn't followed by more listening.
+        hearing.next.trySend(Heard.Nothing)
+        composeRule.waitForIdle()
+        assertEquals(1, hearing.listens)
+    }
+
+    @Test
     fun aReleaseNotHeardAfterFiveTriesIsOfferedToPutInTimeByHand() {
         val hearing = FakeHearing()
         videoWithWords(hearing, video = false)

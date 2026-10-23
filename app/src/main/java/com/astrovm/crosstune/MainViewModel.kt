@@ -1808,6 +1808,9 @@ internal class MainViewModel(
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) hear(left)
                 appFollowing = playing
+                // Listening by itself only lines up what the app plays: once it plays this no more, there's
+                // nothing for it, and the microphone would hear the room, as between two songs.
+                if (playing == null && autoCalibrating) stopListeningAlong()
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
                     appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
                     appLeadVerified = appLeadMs != null
