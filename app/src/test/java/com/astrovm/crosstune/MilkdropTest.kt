@@ -54,6 +54,7 @@ class MilkdropTest {
     /** Hears [sound] each time, until closed. */
     private class FakeTap(var sound: ByteArray = byteArrayOf()) : SoundTap {
         var closed = false
+        override val rateHz = 48_000
 
         override fun read(into: ByteArray): Int {
             sound.copyInto(into)

@@ -27,6 +27,7 @@ import org.json.JSONObject
 import java.io.Closeable
 import java.io.IOException
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.min
 
 /** What listening found. */
@@ -169,24 +170,124 @@ private fun micRecord(): AudioRecord {
     return AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimum, rate * 2))
 }
 
+/**
+ * The sound the phone itself plays, through the visuals' [tap], for a song an app on the phone
+ * plays: heard through headphones too, and nothing else in the room, unlike the microphone. Each
+ * read is the last moment of sound, so reads close together overlap, and only what's new is kept.
+ */
+internal class PlayedSound(
+    private val tap: () -> SoundTap?,
+    private val now: () -> Long = SystemClock::elapsedRealtime,
+    private val sleep: (Long) -> Unit = Thread::sleep
+) : Microphone {
+    override fun open(): Recording? {
+        val sound = tap() ?: return null
+        val step = sound.rateHz.toDouble() / ShazamSignature.SAMPLE_RATE
+        val window = ByteArray(OutputMixTap.SAMPLES)
+        var last: IntArray? = null
+        var lastAt = now()
+        var heardAny = false
+        var waited = 0L
+        // What's new and not yet made 16 kHz, and how far into it the next sample made starts.
+        val fresh = ArrayList<Int>()
+        var from = 0.0
+        val ready = ArrayDeque<Short>()
+
+        fun take(samples: IntArray, start: Int) {
+            for (index in start until samples.size) fresh += samples[index]
+            while (from + step <= fresh.size) {
+                ready += (fresh.subList(from.toInt(), (from + step).toInt()).average() * 256).toInt().toShort()
+                from += step
+            }
+            val used = from.toInt()
+            fresh.subList(0, used).clear()
+            from -= used
+        }
+
+        return object : Recording {
+            override fun read(buffer: ShortArray, offset: Int, count: Int): Int {
+                // Silence is held back until there's sound: a phone that won't share its sound gives
+                // only silence, and the microphone hears instead.
+                while (ready.isEmpty() || !heardAny) {
+                    if (!heardAny && waited >= SILENT_MS) return 0
+                    val read = sound.read(window)
+                    val readAt = now()
+                    if (read > 0) {
+                        val samples = IntArray(read) { (window[it].toInt() and 0xFF) - 128 }
+                        if (samples.any { abs(it) > QUIET }) heardAny = true
+                        // The first read is what played before listening started.
+                        last?.let { before ->
+                            val expected = ((readAt - lastAt) * sound.rateHz / 1000).toInt()
+                            val new = newIn(before, samples, expected)
+                            // Reads too far apart to overlap missed some sound, kept as silence so what's heard stays in time.
+                            if (new == read && expected > read) take(IntArray(expected - read), 0)
+                            take(samples, read - new)
+                        }
+                        last = samples
+                        lastAt = readAt
+                    }
+                    if (ready.isEmpty() || !heardAny) {
+                        sleep(POLL_MS)
+                        waited += POLL_MS
+                    }
+                }
+                val count = min(count, ready.size)
+                repeat(count) { buffer[offset + it] = ready.removeFirst() }
+                return count
+            }
+
+            override fun close() = sound.close()
+        }
+    }
+
+    /**
+     * How many of [now]'s samples weren't in [before]: where its start matches the end of [before],
+     * the match nearest [expected] by the clock, which a stretch of silence can only be taken at.
+     */
+    private fun newIn(before: IntArray, now: IntArray, expected: Int): Int {
+        val size = now.size
+        val guess = expected.coerceIn(0, size)
+        if (before.size != size || now.all { abs(it) <= QUIET } || before.all { abs(it) <= QUIET }) return guess
+        // All of it new always matches, so one is always found.
+        return (0..size).asSequence().flatMap { sequenceOf(guess - it, guess + it) }
+            .first { shift -> shift in 0..size && (0 until size - shift).all { before[shift + it] == now[it] } }
+    }
+
+    companion object {
+        /** How long only silence means the phone won't share its sound. */
+        const val SILENT_MS = 2_000L
+        /** A little more often than a read lasts, so they overlap. */
+        const val POLL_MS = 5L
+        /** Off by this much from silence is still silence. */
+        private const val QUIET = 1
+    }
+}
+
 /** Something that hears what's playing nearby and names it. */
+// Only Kotlin calls it, so no Java copy of listenToPlaying, which nothing would run.
+@JvmDefaultWithoutCompatibility
 internal fun interface SongHearing {
     suspend fun listen(): Heard
+
+    /** What an app on the phone plays, heard rather than as the app says, to tell how far the app is from the words. */
+    suspend fun listenToPlaying(): Heard = listen()
 }
 
 /**
  * Names the song an app on the phone is playing straight from that app, which is instant and exact,
- * and only listens with [hearing] when none is: the microphone hears the phone's own speaker
- * poorly, and nothing at all through headphones. An app that can't say where in the song it is, as
- * for a video, is still listened to for that, and named as the app does when nothing's heard.
+ * and only listens with [hearing] when none is. An app that can't say where in the song it is, as
+ * for a video, is still listened to for that, through [played], the phone's own sound, which the
+ * microphone hears poorly, and not at all through headphones; with the microphone only when the
+ * phone won't share its sound. Nothing heard, it's named as the app does.
  */
-internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing) : SongHearing {
+internal class PlayingFirst(private val playback: PlaybackSource, private val hearing: SongHearing, private val played: SongHearing = hearing) : SongHearing {
     override suspend fun listen(): Heard {
         val playing = playback.nowPlaying() ?: return hearing.listen()
         if (playing.clock != null) return playing
-        val heard = hearing.listen()
-        return heard as? Heard.Song ?: playing
+        return listenToPlaying() as? Heard.Song ?: playing
     }
+
+    override suspend fun listenToPlaying(): Heard = played.listen().let { if (it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
 }
 
 /**

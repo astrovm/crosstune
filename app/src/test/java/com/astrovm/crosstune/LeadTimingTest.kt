@@ -11,15 +11,15 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
-class VideoTimingTest {
+class LeadTimingTest {
     private val prefs = ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("video-test", Context.MODE_PRIVATE).apply { edit().clear().commit() }
     private val song = MusicMetadata("Demo", "Band", recordingId = "app:video")
 
     @Test fun recordingsKeepTheirOwnConfirmedIntro() {
-        val store = VideoTimingStore(prefs)
+        val store = LeadStore(prefs)
         assertNull(store.load(song))
         store.save(song, 10_000)
-        assertEquals(10_000L, VideoTimingStore(prefs).load(song))
+        assertEquals(10_000L, LeadStore(prefs).load(song))
         assertNull(store.load(song.copy(recordingId = "app:other")))
         store.save(song, -60_000)
         assertEquals(-60_000L, store.load(song))
@@ -41,30 +41,48 @@ class VideoTimingTest {
     }
 
     @Test fun theOldestOfManyRecordingsIsForgotten() {
-        val store = VideoTimingStore(prefs)
+        val store = LeadStore(prefs)
         repeat(201) { store.save(song.copy(recordingId = "app:$it"), it.toLong()) }
         assertNull(store.load(song.copy(recordingId = "app:0")))
         assertEquals(200L, store.load(song.copy(recordingId = "app:200")))
     }
 
     @Test fun anIntroMustAgreeWithTheRecordingsAndCannotBeAReferenceAheadOfTheVideo() {
-        val rejected = VideoTiming()
+        val rejected = LeadTiming()
         repeat(3) {
             val at = it * 10_000L
-            assertNull(rejected.heard(PlaybackClock(at + 30_000, at), PlaybackClock(at, at), expectedLeadMs = 0))
+            assertNull(rejected.heard(PlaybackClock(at + 30_000, at), PlaybackClock(at, at), extraMs = 0))
         }
-        val timing = VideoTiming()
+        val timing = LeadTiming()
         val video = PlaybackClock(20_000, 0)
         val song = PlaybackClock(10_000, 0)
         assertNull(timing.heard(PlaybackClock(0, 0), song))
-        assertNull(timing.heard(video, song, expectedLeadMs = 30_000))
-        assertNull(timing.heard(video, song, expectedLeadMs = 18_000))
-        assertNull(timing.heard(PlaybackClock(30_000, 10_000), PlaybackClock(20_000, 10_000), expectedLeadMs = 10_000))
-        assertEquals(10_000L, timing.heard(PlaybackClock(40_000, 20_000), PlaybackClock(30_000, 20_000), expectedLeadMs = 2_000))
+        assertNull(timing.heard(video, song, extraMs = 30_000))
+        assertNull(timing.heard(video, song, extraMs = 18_000))
+        assertNull(timing.heard(PlaybackClock(30_000, 10_000), PlaybackClock(20_000, 10_000), extraMs = 10_000))
+        assertEquals(10_000L, timing.heard(PlaybackClock(40_000, 20_000), PlaybackClock(30_000, 20_000), extraMs = 2_000))
+    }
+
+    @Test fun aLeadFitsInHowMuchLongerOrShorterTheReleaseIs() {
+        fun confirmed(lead: Long, extraMs: Long?): Long? {
+            val timing = LeadTiming()
+            return (0..2).map { timing.heard(PlaybackClock(it * 10_000L + lead, 0), PlaybackClock(it * 10_000L, 0), extraMs) }.last()
+        }
+        // Twelve seconds longer: an intro, an outro, or some of each.
+        assertEquals(12_000L, confirmed(12_000, 12_000))
+        assertEquals(0L, confirmed(0, 12_000))
+        assertEquals(5_000L, confirmed(5_000, 12_000))
+        assertNull(confirmed(25_000, 12_000))
+        // Twenty seconds shorter, its intro cut: it's behind the words.
+        assertEquals(-15_000L, confirmed(-15_000, -20_000))
+        assertNull(confirmed(-30_000, -20_000))
+        // Lengths not known, only a video's intro is believed, and never more than a minute.
+        assertNull(confirmed(-5_000, null))
+        assertNull(confirmed(70_000, 100_000))
     }
 
     @Test fun separateMovingHearingsConfirmAnIntroAndSlipsDoNot() {
-        val timing = VideoTiming()
+        val timing = LeadTiming()
         fun heard(position: Long, lead: Long = 10_000, videoPlaying: Boolean = true, songPlaying: Boolean = true) =
             timing.heard(PlaybackClock(position + lead, position, playing = videoPlaying), PlaybackClock(position, position, playing = songPlaying))
         assertNull(heard(0, videoPlaying = false))

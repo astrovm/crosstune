@@ -92,7 +92,9 @@ class MainActivity : ComponentActivity() {
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR)),
-                    PlayingFirst(playback, hearingFactory?.invoke() ?: SongListener(microphoneFactory(), Shazam(client))),
+                    hearingFactory?.invoke().let { hearing ->
+                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(PlayedSound(soundTapFactory), Shazam(client)))
+                    },
                     systemDispatcher,
                     listenAlongPauseMs,
                     quietPauseMs = quietPauseMs,
@@ -113,7 +115,7 @@ class MainActivity : ComponentActivity() {
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
-                    mayCalibrateVideo = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory()
                 )

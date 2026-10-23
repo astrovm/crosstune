@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Lyrics can also listen along: right after Crosstune recognizes a song, or when you tap the microphone in the lyrics. While the lyrics are on screen, Crosstune keeps listening the same way, sending Shazam a new fingerprint every few seconds, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app. While the lyrics float over your other apps, it goes on listening until you close them. When microphone access is already allowed, video lyrics can briefly listen to correct and remember the intro timing for that recording."
+      "Lyrics can also listen along: right after Crosstune recognizes a song, or when you tap the microphone in the lyrics. While the lyrics are on screen, Crosstune keeps listening the same way, sending Shazam a new fingerprint every few seconds, never audio, to stay in time with the song and to catch the next one. Listening stops as soon as you close the lyrics, turn it off, or leave the app. While the lyrics float over your other apps, it goes on listening until you close them. When microphone access is already allowed, lyrics can briefly listen to correct and remember the intro timing for that recording. They hear the sound your phone plays, through headphones too, and use the microphone only if your phone won't share it."
     ],
     [
       "h2",
