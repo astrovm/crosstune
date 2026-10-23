@@ -72,7 +72,9 @@ class LeadTimingTest {
         prefs.edit().putString("shazam_gaps", "{\"plastic love\\u0000mariya takeuchi\\u0000294\\u0000403191606\":\"wrong\"}").commit()
         assertNull(store.load(294_000, "403191606"))
         repeat(201) { store.save(song, 294_000, "$it", it.toLong()) }
+        // Only the oldest goes, keeping two hundred.
         assertNull(store.load(294_000, "0"))
+        assertEquals(1L, store.load(294_000, "1"))
         assertEquals(200L, store.load(294_000, "200"))
     }
 

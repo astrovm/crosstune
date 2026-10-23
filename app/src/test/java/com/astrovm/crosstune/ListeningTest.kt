@@ -1429,6 +1429,46 @@ class ListeningTest {
     }
 
     @Test
+    fun hearingsShazamMatchedToAnotherRecordingDoNotAddUpToItsGap() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false, durationMs = 52_000)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Three agreeing hearings, but the last matched to another recording, which has a gap of its own.
+        for ((index, match) in listOf("longer", "longer", "other").withIndex()) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", (position + 20_000) / 1000.0, matchId = match)
+            }
+            waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        assertNull(ShazamGapStore(prefs()).load(52_000, "other"))
+        assertNull(ShazamGapStore(prefs()).load(52_000, "longer"))
+        assertTrue(controllerModel().uiState.listeningAlong)
+    }
+
+    @Test
+    fun listeningAlongAskedForGoesOnOnceShazamsGapIsLearnt() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false, durationMs = 52_000, permission = false)
+        allowMicrophone()
+        composeRule.runOnIdle { controllerModel().listenAlong() }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                // Learnt, it asks what's playing nearby, not the app, which would answer at once, again and again, with no pause between.
+                if (index == 2) phone.onThePhone = null
+                hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
+            }
+            waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        assertNotNull(ShazamGapStore(prefs()).load(52_000, "longer"))
+        assertTrue(controllerModel().uiState.listeningAlong)
+    }
+
+    @Test
     fun anotherReleaseShazamMatchesToARecordingWithAKnownGapIsLinedUpByIt() {
         // Learnt on the release the words are timed for, which names it its own way: Shazam's recording is twenty seconds ahead of them.
         ShazamGapStore(prefs()).save(MusicMetadata("デモ - Demo", "Band"), 52_000, "longer", -20_000)
