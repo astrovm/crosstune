@@ -1,10 +1,12 @@
 package com.astrovm.crosstune
 
 import android.annotation.SuppressLint
+import android.content.SharedPreferences
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.SystemClock
+import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -179,6 +181,8 @@ private fun micRecord(): AudioRecord {
  */
 internal class PlayedSound(
     private val tap: () -> SoundTap?,
+    /** Where it's kept that the phone shares its sound, so even the first listen after Crosstune starts knows. */
+    private val preferences: SharedPreferences? = null,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val sleep: (Long) -> Unit = Thread::sleep
 ) : Microphone {
@@ -188,7 +192,8 @@ internal class PlayedSound(
         val window = ByteArray(OutputMixTap.SAMPLES)
         var last: IntArray? = null
         var lastAt = now()
-        var heardAny = false
+        // Once the phone has shared its sound, silence is just a quiet moment, like a video's start.
+        var heardAny = preferences?.getBoolean(KEY_SHARES, false) == true
         var waited = 0L
         // What's new and not yet made 16 kHz, and how far into it the next sample made starts.
         val fresh = ArrayList<Int>()
@@ -216,7 +221,10 @@ internal class PlayedSound(
                     val readAt = now()
                     if (read > 0) {
                         val samples = IntArray(read) { (window[it].toInt() and 0xFF) - 128 }
-                        if (samples.any { abs(it) > QUIET }) heardAny = true
+                        if (!heardAny && samples.any { abs(it) > QUIET }) {
+                            heardAny = true
+                            preferences?.edit { putBoolean(KEY_SHARES, true) }
+                        }
                         // The first read is what played before listening started.
                         last?.let { before ->
                             val expected = ((readAt - lastAt) * sound.rateHz / 1000).toInt()
@@ -258,6 +266,7 @@ internal class PlayedSound(
     companion object {
         /** How long only silence means the phone won't share its sound. */
         const val SILENT_MS = 2_000L
+        const val KEY_SHARES = "sound_shared"
         /** A little more often than a read lasts, so they overlap. */
         const val POLL_MS = 5L
         /** Off by this much from silence is still silence. */
