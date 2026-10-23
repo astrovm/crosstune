@@ -1573,7 +1573,7 @@ class ListeningTest {
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
         // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
-        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 10_000) }
+        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 6_000) }
         assertEquals(-10_000L, gap())
         // A line tapped too far from Shazam's place to be its gap is kept for these words alone.
         composeRule.onNodeWithText("Late").performClick()
