@@ -117,7 +117,7 @@ class ListeningTest {
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
         // Visuals are on from the start; the tests about turning them on start with them off.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "sung_readings.json").delete()
@@ -1681,9 +1681,9 @@ class ListeningTest {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
-        // How dark they're shaded, kept once let go.
+        // How bright they are, kept once let go: turned down, they're shaded more.
         click(string(R.string.visuals_options))
-        composeRule.onNode(hasContentDescription(string(R.string.visuals_shade))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
+        composeRule.onNode(hasContentDescription(string(R.string.visuals_brightness))).performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
         composeRule.waitForIdle()
         assertEquals(0.7f, prefs().getFloat("visuals_shade", 0f), 0.01f)
         // On to the next, with the menu closing.
@@ -3019,17 +3019,20 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         click(string(R.string.visuals_options))
         composeRule.onNodeWithTag("lyrics-visuals-options").assertExists()
-        assertTrue(shown(string(R.string.visuals_shade)))
+        assertTrue(shown(string(R.string.visuals_brightness)))
         assertTrue(shown(string(R.string.visuals_next)))
         val percent = NumberFormat.getPercentInstance()
         assertTrue(shown(percent.format(sizeShare(DEFAULT_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
-        val shade = hasContentDescription(string(R.string.visuals_shade))
-        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
+        // All the way down is the darkest they get, counted as phones count brightness, from 100%.
+        val brightness = hasContentDescription(string(R.string.visuals_brightness))
+        composeRule.onNode(brightness).performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         composeRule.waitForIdle()
+        assertEquals(MAX_VISUALS_SHADE, prefs().getFloat("visuals_shade", 0f), 0.01f)
         assertTrue(shown(percent.format(sizeShare(0f, 0f..MAX_VISUALS_SHADE))))
-        composeRule.onNode(shade).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_VISUALS_SHADE) }
+        composeRule.onNode(brightness).performSemanticsAction(SemanticsActions.SetProgress) { it(MAX_VISUALS_SHADE) }
         composeRule.waitForIdle()
-        assertTrue(shown(percent.format(sizeShare(MAX_VISUALS_SHADE, 0f..MAX_VISUALS_SHADE))))
+        assertEquals(0f, prefs().getFloat("visuals_shade", 1f), 0.01f)
+        assertTrue(shown(percent.format(1f)))
         val visuals = composeRule.onNodeWithTag("lyrics-visuals-options").getBoundsInRoot()
         assertTrue(composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].getBoundsInRoot().bottom <= visuals.top)
         composeRule.onNodeWithTag("lyrics-menu-scrim").performTouchInput {

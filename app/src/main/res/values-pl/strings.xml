@@ -209,7 +209,7 @@
     <string name="visuals_show">Pokaż wizualizacje</string>
     <string name="visuals_hide">Ukryj wizualizacje</string>
     <string name="visuals_next">Następna wizualizacja</string>
-    <string name="visuals_shade">Przyciemnienie wizualizacji</string>
+    <string name="visuals_brightness">Jasność</string>
     <string name="visuals_drop">Nie pokazuj tego</string>
     <string name="settings_visuals_title">Wizualizacje</string>
     <string name="setting_skip_heavy_visuals">Pomijaj ciężkie wizualizacje</string>

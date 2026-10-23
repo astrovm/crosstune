@@ -155,7 +155,7 @@
     <string name="visuals_show">Show visuals</string>
     <string name="visuals_hide">Hide visuals</string>
     <string name="visuals_next">Next visual</string>
-    <string name="visuals_shade">Darkness over the visuals</string>
+    <string name="visuals_brightness">Brightness</string>
     <string name="visuals_drop">Don\'t show this one</string>
     <string name="settings_visuals_title">Visuals</string>
     <string name="setting_skip_heavy_visuals">Skip heavy visuals</string>

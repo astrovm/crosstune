@@ -209,7 +209,7 @@
     <string name="visuals_show">Показать визуализацию</string>
     <string name="visuals_hide">Скрыть визуализацию</string>
     <string name="visuals_next">Следующая визуализация</string>
-    <string name="visuals_shade">Затемнение визуализации</string>
+    <string name="visuals_brightness">Яркость</string>
     <string name="visuals_drop">Больше не показывать</string>
     <string name="settings_visuals_title">Визуализации</string>
     <string name="setting_skip_heavy_visuals">Пропускать тяжёлые</string>

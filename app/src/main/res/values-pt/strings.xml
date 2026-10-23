@@ -209,7 +209,7 @@
     <string name="visuals_show">Mostrar visuais</string>
     <string name="visuals_hide">Ocultar visuais</string>
     <string name="visuals_next">Próximo visual</string>
-    <string name="visuals_shade">Escurecimento dos visuais</string>
+    <string name="visuals_brightness">Brilho</string>
     <string name="visuals_drop">Não mostrar este</string>
     <string name="settings_visuals_title">Visuais</string>
     <string name="setting_skip_heavy_visuals">Pular visuais pesados</string>

@@ -209,7 +209,7 @@
     <string name="visuals_show">Afficher les visuels</string>
     <string name="visuals_hide">Masquer les visuels</string>
     <string name="visuals_next">Visuel suivant</string>
-    <string name="visuals_shade">Assombrissement des visuels</string>
+    <string name="visuals_brightness">Luminosité</string>
     <string name="visuals_drop">Ne plus afficher celui-ci</string>
     <string name="settings_visuals_title">Visuels</string>
     <string name="setting_skip_heavy_visuals">Ignorer les visuels lourds</string>

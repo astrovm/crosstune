@@ -209,7 +209,7 @@
     <string name="visuals_show">顯示視覺效果</string>
     <string name="visuals_hide">隱藏視覺效果</string>
     <string name="visuals_next">下一個視覺效果</string>
-    <string name="visuals_shade">視覺效果暗度</string>
+    <string name="visuals_brightness">亮度</string>
     <string name="visuals_drop">不再顯示這個</string>
     <string name="settings_visuals_title">視覺效果</string>
     <string name="setting_skip_heavy_visuals">略過繁重的視覺效果</string>

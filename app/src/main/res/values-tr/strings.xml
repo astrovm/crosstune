@@ -209,7 +209,7 @@
     <string name="visuals_show">Görselleri göster</string>
     <string name="visuals_hide">Görselleri gizle</string>
     <string name="visuals_next">Sonraki görsel</string>
-    <string name="visuals_shade">Görsellerin kararması</string>
+    <string name="visuals_brightness">Parlaklık</string>
     <string name="visuals_drop">Bunu bir daha gösterme</string>
     <string name="settings_visuals_title">Görseller</string>
     <string name="setting_skip_heavy_visuals">Ağır görselleri atla</string>
