@@ -534,7 +534,8 @@ class MainActivity : ComponentActivity() {
                         onOpenFix = ::openFix,
                         onTryLink = ::tryLink,
                         onOpenShizuku = { packageManager.getLaunchIntentForPackage(OneTapSetup.SHIZUKU_PACKAGE)?.let(::tryStartActivity) },
-                        onLinkModeChange = viewModel::setLinkMode,
+                        onLinksOpenIn = viewModel::setLinksOpenIn,
+                        onPlayRightAwayChange = viewModel::setPlayRightAway,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
                         onShareSheetAppsChange = viewModel::setShareSheetApps,
@@ -773,7 +774,7 @@ class MainActivity : ComponentActivity() {
             // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
             Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
                 intent.dataString,
-                show = viewModel.uiState.showSongFirst || intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
+                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
             )
             ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
             Intent.ACTION_SEND -> {
@@ -782,10 +783,7 @@ class MainActivity : ComponentActivity() {
                     .mapNotNull { intent.getCharSequenceExtra(it)?.toString() }
                 resolveShared(shared.firstOrNull { it.isNotBlank() } ?: shared.firstOrNull() ?: return, fromClipboard = false)
             }
-            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(
-                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString(),
-                show = viewModel.uiState.showSongFirst
-            )
+            Intent.ACTION_PROCESS_TEXT -> viewModel.resolveIncoming(intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString())
             ACTION_PASTE_FROM_CLIPBOARD -> pendingClipboardRead = intent.component?.className == PASTE_ALIAS
             ACTION_LISTEN -> if (intent.component?.className == LISTEN_ALIAS) {
                 withMicrophone(if (intent.getBooleanExtra(EXTRA_LYRICS, false)) MicrophoneFor.LISTEN_FOR_LYRICS else MicrophoneFor.LISTEN)
@@ -830,7 +828,7 @@ class MainActivity : ComponentActivity() {
         val chosen = AppShortcuts.chosenDestination(intent)
         val action = AppShortcuts.chosenAction(intent)
         intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.let { getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(it) }
-        val show = action == AppShortcuts.ShareAction.SHOW || chosen == null && action == null && viewModel.uiState.showSongFirst
+        val show = action == AppShortcuts.ShareAction.SHOW
         val after = if (action == AppShortcuts.ShareAction.SHARE) AfterLookup.SHARE else AfterLookup.OPEN
         if (fromClipboard) viewModel.resolveClipboard(text, chosen, show, after) else viewModel.resolveIncoming(text, chosen, show, after)
     }

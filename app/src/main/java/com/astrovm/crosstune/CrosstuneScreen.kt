@@ -138,6 +138,7 @@ internal const val RESULT_TAG = "result"
 internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
+internal const val PLAYS_IN_MENU_TAG = "plays_in"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
 /** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
@@ -202,7 +203,9 @@ internal data class ScreenActions(
     /** Before Android 12, a link that shows whether links reach Crosstune. */
     val onTryLink: (Need) -> Unit = {},
     val onOpenShizuku: () -> Unit = {},
-    val onLinkModeChange: (LinkMode) -> Unit = {},
+    /** Where tapped and shared links go: an app, or null for Crosstune. */
+    val onLinksOpenIn: (Destination?) -> Unit = {},
+    val onPlayRightAwayChange: (Boolean) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
@@ -898,32 +901,28 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
 }
 
 /**
- * "Open links in   YouTube Music ▾": what tapped and shared links do, in settings. Opening in an
- * app is the usual; asking which app, or showing the song here first, sit at the top of the menu.
+ * "Open links in   Crosstune ▾": where tapped and shared links go, in settings, Crosstune first
+ * and then the apps. With no [onCrosstune], it's only the apps, for which one plays them.
  */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
     selected: Destination,
-    mode: LinkMode,
     onSelect: (Destination) -> Unit,
-    onMode: (LinkMode) -> Unit,
     label: String,
-    modifier: Modifier = Modifier,
-    installed: Set<MusicService> = emptySet()
+    modifier: Modifier,
+    installed: Set<MusicService>,
+    inCrosstune: Boolean = false,
+    onCrosstune: (() -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val modeLabels = mapOf(
-        LinkMode.ASK to stringResource(R.string.setting_ask_each_time),
-        LinkMode.SHOW to stringResource(R.string.show_song_first)
-    )
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
-            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
-                if (mode == LinkMode.OPEN) DestinationIcon(selected, installed, size = 20.dp) else ModeIcon(mode, size = 20.dp)
+            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(if (onCrosstune == null) PLAYS_IN_MENU_TAG else DEFAULT_MENU_TAG)) {
+                if (inCrosstune) AppLogo(size = 20.dp) else DestinationIcon(selected, installed, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(modeLabels[mode] ?: selected.label())
+                Text(if (inCrosstune) stringResource(R.string.app_name) else selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
@@ -935,19 +934,18 @@ internal fun DefaultDestinationMenu(
             }
             var all by remember(expanded) { mutableStateOf(false) }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                modeLabels.forEach { (itemMode, itemLabel) ->
-                    MenuChoice(itemLabel, mode == itemMode, icon = { ModeIcon(itemMode) }) {
+                if (onCrosstune != null) {
+                    MenuChoice(stringResource(R.string.app_name), inCrosstune, icon = { AppLogo(size = 24.dp) }) {
                         expanded = false
-                        onMode(itemMode)
+                        onCrosstune()
                     }
+                    HorizontalDivider()
                 }
-                HorizontalDivider()
                 val short = destinations.shortList(installed, selected).takeUnless { all }
                 (short ?: destinations.installedFirst(installed)).forEach { destination ->
-                    MenuChoice(destination.label(), mode == LinkMode.OPEN && destination == selected, icon = { DestinationIcon(destination, installed) }) {
+                    MenuChoice(destination.label(), !inCrosstune && destination == selected, icon = { DestinationIcon(destination, installed) }) {
                         expanded = false
                         onSelect(destination)
-                        onMode(LinkMode.OPEN)
                     }
                 }
                 if (short != null) MoreChoice { all = true }
@@ -1041,20 +1039,6 @@ private fun MenuChoice(text: String, isSelected: Boolean, icon: @Composable () -
         // The color alone doesn't tell TalkBack which one is chosen.
         modifier = Modifier.semantics { this.selected = isSelected }
     )
-}
-
-/** Asking shows a grid of apps; showing first, Crosstune's own logo. */
-@Composable
-private fun ModeIcon(mode: LinkMode, size: Dp = 32.dp) {
-    Surface(modifier = Modifier.size(size), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
-        Box(contentAlignment = Alignment.Center) {
-            if (mode == LinkMode.ASK) {
-                AppIcon(R.drawable.ic_ask, contentDescription = null, modifier = Modifier.size(size * 0.6f))
-            } else {
-                AppLogo(size = size * 0.7f)
-            }
-        }
-    }
 }
 
 @Composable
@@ -1259,7 +1243,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         // Where it opens, picked for just this result.
         DestinationChip(state, actions)
         // A song its app has, or may, can be asked to play, staying here; while it's asked, once is enough.
-        val canPlay = result.type == ItemType.TRACK && destination is Destination.Service && destination.service in state.installed && !state.resultMissing
+        val canPlay = state.canPlayResult
         // Side by side, until the words are too big for half the width; then one above the other.
         val stacked = canPlay && LocalDensity.current.fontScale > STACK_BUTTONS_FROM
         val press = rememberPress()
@@ -1324,8 +1308,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
         }
         // A later part shows its own, down by its button.
         QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
-        // Asking or showing first, the app picked last is remembered instead.
-        if (destination != state.defaultDestination && state.linkMode == LinkMode.OPEN) {
+        if (destination != state.defaultDestination) {
             TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text(stringResource(R.string.make_default_named, destination.label()))
             }

@@ -32,14 +32,15 @@ internal data class UiState(
     val frontendSources: Set<Frontend> = emptySet(),
     /** Each one's sites Android doesn't let Crosstune open yet; null before Android 12. */
     val unapprovedFrontendHosts: Map<Frontend, List<String>>? = null,
-    val askEachTime: Boolean = false,
+    /** Whether tapped and shared links open in Crosstune, on the song's card, rather than straight in an app. */
+    val linksInCrosstune: Boolean = false,
+    /** Opening in Crosstune, whether the song plays as soon as it's found, in the default app, staying in Crosstune's player. */
+    val playRightAway: Boolean = true,
     val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
     val shareSheetApps: Boolean = true,
-    /** Whether a tapped or shared link shows here first instead of opening; see [linkMode]. */
-    val showSongFirst: Boolean = false,
     /** While Play all matches a collection's songs: how many have been looked up, out of how many. */
     val queueProgress: Pair<Int, Int>? = null,
     /** Where in the list the songs Play all is matching start, so a later part shows its progress by itself. */
@@ -217,8 +218,13 @@ internal data class UiState(
             resultDestination.matchService.let { it == MusicService.YOUTUBE_MUSIC || it == MusicService.YOUTUBE } &&
             link?.youtubePlaylistOn(resultDestination.matchService) == null
 
-    val linkMode: LinkMode
-        get() = if (showSongFirst) LinkMode.SHOW else if (askEachTime) LinkMode.ASK else LinkMode.OPEN
+    /** Whether a tapped or shared link plays as soon as it's found: once there's an app picked to play it in. */
+    val playsRightAway: Boolean
+        get() = linksInCrosstune && playRightAway && hasDefault
+
+    /** Whether the song's app, installed and with the song, or maybe with it, can be asked to play it while Crosstune stays open. */
+    val canPlayResult: Boolean
+        get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed } && !resultMissing
 
     /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
     val shareSheetEntries: Boolean
@@ -452,9 +458,6 @@ internal data class NotFoundOffer(val song: MusicMetadata, val destination: Dest
 
 /** The app's look: as the phone is set, or always light or dark. */
 internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
-
-/** What a tapped or shared link does: opens in the default app, asks which app, or shows here first. */
-internal enum class LinkMode { OPEN, ASK, SHOW }
 
 /** What's fixed in one tap after setup, from where it's needed: the links, following music apps, or floating lyrics. */
 internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }

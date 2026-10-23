@@ -77,8 +77,8 @@
     <string name="type_artist">Sanatçı</string>
     <string name="type_playlist">Çalma listesi</string>
 
-    <string name="setting_ask_each_time">Hangi uygulamanın kullanılacağını sor</string>
-    <string name="show_song_first">Önce şarkıyı göster</string>
+    <string name="setting_play_right_away">Hemen oynat</string>
+    <string name="settings_plays_in_label">Şurada oynat</string>
     <string name="show_song_short">Şarkıyı göster</string>
     <string name="setting_exact_match">Tam eşleşmeyi aç</string>
     <string name="setting_exact_match_description">Desteklemiyorsa arar.</string>

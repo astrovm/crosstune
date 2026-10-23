@@ -7,7 +7,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp ve Audiomack bağlantılarını okur; bunları bu servislerin herhangi birinde ya da Amazon Music ve Qobuz'da açar.</li>
 <li>Çalma listeleri ve albümler şarkılarını gösterir: istediğiniz şarkıyı uygulamanızda açın, listeyi kopyalayın veya paylaşın ya da hepsini YouTube Music veya YouTube'da çalın.</li>
 <li>Her servisi farklı bir yere yönlendirin; örneğin YouTube bağlantılarını YouTube Music'e, diğer hepsini Apple Music'e.</li>
-<li>Hangi uygulamanın kullanılacağını sor: bir bağlantıya dokunduğunuzda veya paylaştığınızda uygulamayı her seferinde siz seçin.</li>
+<li>Bağlantıları Crosstune'da açın: siz buradayken şarkı uygulamanızda çalar.</li>
 <li>Tam eşleşmeyi aç: uygulama destekliyorsa arama yerine doğrudan şarkı, albüm veya sanatçı açılır.</li>
 <li>Arama sayfası olan diğer uygulamaları ve siteleri ekleyin.</li>
 <li>Tek dokunuşla yapıştırın, son bağlantılarda arayıp yeniden açın veya kopyalanan bir bağlantıyı ana ekran widget'ından, Hızlı Ayarlar kutucuğundan ya da uygulama simgesine uzun basarak açın.</li>

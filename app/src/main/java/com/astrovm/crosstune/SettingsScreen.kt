@@ -163,19 +163,37 @@ private fun SettingsList(
     ) {
 
         // How songs come in and go out: where links open, whose links Crosstune opens, and what names a song playing nearby.
-        // "Open links in" says what this is, also when it's set to ask or show first.
         Spacer(Modifier.height(16.dp))
         Group {
             DefaultDestinationMenu(
                 destinations = state.destinations,
                 selected = state.defaultDestination,
-                mode = state.linkMode,
-                onSelect = actions.onTargetChange,
-                onMode = actions.onLinkModeChange,
+                onSelect = actions.onLinksOpenIn,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                inCrosstune = state.linksInCrosstune,
+                onCrosstune = { actions.onLinksOpenIn(null) }
             )
+            // Opened in Crosstune, the song can play from there, in the app picked here.
+            if (state.linksInCrosstune) {
+                GroupDivider()
+                SettingSwitch(
+                    label = stringResource(R.string.setting_play_right_away),
+                    description = null,
+                    checked = state.playRightAway,
+                    onCheckedChange = actions.onPlayRightAwayChange
+                )
+                GroupDivider()
+                DefaultDestinationMenu(
+                    destinations = state.destinations,
+                    selected = state.defaultDestination,
+                    onSelect = actions.onTargetChange,
+                    installed = state.installed,
+                    label = stringResource(R.string.settings_plays_in_label),
+                    modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+                )
+            }
             GroupDivider()
             SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
             // Which app names a song playing nearby, when there's more than one.

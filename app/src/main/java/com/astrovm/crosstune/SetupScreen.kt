@@ -266,8 +266,8 @@ private fun ChoiceRow(
 
 /** The service the user listens in, whose links already open where they should. */
 internal fun UiState.listeningService(): MusicService? =
-    // Asking or showing first, links don't go to one app by themselves, so none is the one listened in.
-    if (hasDefault && linkMode == LinkMode.OPEN) (defaultDestination as? Destination.Service)?.service else null
+    // Opening in Crosstune, links don't go to one app by themselves, so none is the one listened in.
+    if (hasDefault && !linksInCrosstune) (defaultDestination as? Destination.Service)?.service else null
 
 @Composable
 private fun DestinationStep(state: UiState, actions: ScreenActions) {

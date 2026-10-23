@@ -77,8 +77,8 @@
     <string name="type_artist">艺人</string>
     <string name="type_playlist">播放列表</string>
 
-    <string name="setting_ask_each_time">询问使用哪个应用</string>
-    <string name="show_song_first">先显示歌曲</string>
+    <string name="setting_play_right_away">立即播放</string>
+    <string name="settings_plays_in_label">用以下应用播放</string>
     <string name="show_song_short">查看歌曲</string>
     <string name="setting_exact_match">打开精确匹配</string>
     <string name="setting_exact_match_description">否则进行搜索。</string>

@@ -77,8 +77,8 @@
     <string name="type_artist">कलाकार</string>
     <string name="type_playlist">प्लेलिस्ट</string>
 
-    <string name="setting_ask_each_time">हर बार ऐप्लिकेशन पूछें</string>
-    <string name="show_song_first">पहले गाना दिखाएं</string>
+    <string name="setting_play_right_away">तुरंत चलाएं</string>
+    <string name="settings_plays_in_label">गाना इसमें चलाएं</string>
     <string name="show_song_short">गाना देखें</string>
     <string name="setting_exact_match">सटीक मैच खोलें</string>
     <string name="setting_exact_match_description">वरना खोजता है।</string>

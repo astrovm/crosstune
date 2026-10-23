@@ -77,8 +77,8 @@
     <string name="type_artist">아티스트</string>
     <string name="type_playlist">플레이리스트</string>
 
-    <string name="setting_ask_each_time">사용할 앱 매번 묻기</string>
-    <string name="show_song_first">노래 먼저 보기</string>
+    <string name="setting_play_right_away">바로 재생</string>
+    <string name="settings_plays_in_label">재생할 앱</string>
     <string name="show_song_short">노래 보기</string>
     <string name="setting_exact_match">정확한 항목 열기</string>
     <string name="setting_exact_match_description">아니면 검색해요.</string>

@@ -77,8 +77,8 @@
     <string name="type_artist">Wykonawca</string>
     <string name="type_playlist">Playlista</string>
 
-    <string name="setting_ask_each_time">Pytaj, której aplikacji użyć</string>
-    <string name="show_song_first">Najpierw pokaż utwór</string>
+    <string name="setting_play_right_away">Odtwarzaj od razu</string>
+    <string name="settings_plays_in_label">Odtwarzaj w</string>
     <string name="show_song_short">Pokaż utwór</string>
     <string name="setting_exact_match">Otwieraj dokładne dopasowanie</string>
     <string name="setting_exact_match_description">W przeciwnym razie wyszukuje.</string>
