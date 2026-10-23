@@ -381,6 +381,30 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun whatNetEaseFillsASongsQuietPartsWithIsLeftOut() {
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        // Its name in the intro, the artist's notes over two lines in a solo, and a dash at the end.
+        val filler = listOf("♪三田寛子 - 初恋", "五月雨は緑色", "【セルフライナーノーツ：上京後に", "書いた曲。】", "【A】悲しくさせたよ", "【Chorus】", "-")
+        val sung = listOf("五月雨は緑色", "【A】悲しくさせたよ")
+        japaneseSong(netEase = netEase, lyric = filler.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n"))
+        assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
+        japaneseSong(netEase = netEase, lyric = filler.joinToString("\n"))
+        assertEquals(Lyrics.Found(sung.joinToString("\n")), found(hatsukoi))
+        val byWord = filler.mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, netEase(""))
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+            }
+        }
+        assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
+        // A note never closed may be words after all, so it's left be.
+        japaneseSong(netEase = netEase, lyric = listOf("五月雨は緑色", "【open", "悲しくさせたよ").joinToString("\n"))
+        assertEquals(Lyrics.Found("五月雨は緑色\n【open\n悲しくさせたよ"), found(hatsukoi))
+    }
+
+    @Test
     fun wordsNetEaseTimesWordByWordBeatOnesTimedALineAtATime() {
         val timed = "[00:16.00] 五月雨は緑色\n[00:23.08] 悲しくさせたよ"
         val byWord = "{\"t\":0,\"c\":[{\"tx\":\"作词: \"}]}\n[00:00.000] 作曲 : 村下孝蔵\n[16100,2000](16100,900,0)五月雨は(17000,800,0)緑色\n[23200,2000](23200,2000,0)悲しくさせたよ"
