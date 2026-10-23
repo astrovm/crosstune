@@ -1552,7 +1552,8 @@ internal class MainViewModel(
         var quiet = 0
         var calibrationTries = 0
         while (isActive) {
-            if (autoCalibrating && calibrationTries++ >= 5) {
+            // A video's long intro isn't the song: what's heard there, before the song may have started, is no try.
+            if (autoCalibrating && !songMayNotHaveStarted() && calibrationTries++ >= 5) {
                 stopListeningAlong()
                 return@launch
             }
@@ -1637,6 +1638,13 @@ internal class MainViewModel(
             hear(steadied(heardClock, heard.clock ?: return), hearing.matchId, gap)
         }
         keepInTime()
+    }
+
+    /** Whether the video playing may still be before its song: it isn't yet as far in as it's longer than the song. */
+    private fun songMayNotHaveStarted(): Boolean {
+        val app = appFollowing?.takeIf { it.video } ?: return false
+        val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } } ?: return false
+        return app.clock.positionAt(now()) < extra
     }
 
     /**

@@ -21,20 +21,21 @@ class LeadTimingTest {
         store.save(song, 10_000)
         assertEquals(10_000L, LeadStore(prefs).load(song))
         assertNull(store.load(song.copy(recordingId = "app:other")))
-        store.save(song, -60_000)
-        assertEquals(-60_000L, store.load(song))
-        store.save(song, 60_000)
-        assertEquals(60_000L, store.load(song))
+        // A story told before the song may take minutes, but not more than five.
+        store.save(song, -300_000)
+        assertEquals(-300_000L, store.load(song))
+        store.save(song, 300_000)
+        assertEquals(300_000L, store.load(song))
         store.save(song, Long.MIN_VALUE)
-        store.save(song, 60_001)
+        store.save(song, 300_001)
         store.save(song.copy(recordingId = null), 10_000)
-        assertEquals(60_000L, store.load(song))
+        assertEquals(300_000L, store.load(song))
         assertNull(store.load(song.copy(recordingId = null)))
         prefs.edit().putString("video_timing", "invalid").commit()
         assertNull(store.load(song))
         store.save(song, 100)
         assertEquals(100L, store.load(song))
-        prefs.edit().putString("video_timing", "{\"${RecordingKey.of(song).replace("\u0000", "\\u0000")}\":60001}").commit()
+        prefs.edit().putString("video_timing", "{\"${RecordingKey.of(song).replace("\u0000", "\\u0000")}\":300001}").commit()
         assertNull(store.load(song))
         prefs.edit().putString("video_timing", "{\"${RecordingKey.of(song).replace("\u0000", "\\u0000")}\":\"wrong\"}").commit()
         assertNull(store.load(song))
@@ -86,8 +87,9 @@ class LeadTimingTest {
         assertEquals(-36_800L, confirmed(-36_800, -60_000L..60_000L))
         assertEquals(20_000L, confirmed(20_000, -60_000L..60_000L))
         assertNull(confirmed(-36_800, 0L..60_000L))
-        // Never more than a minute, whatever may be.
-        assertNull(confirmed(-61_000, -120_000L..120_000L))
+        // Never more than five minutes, whatever may be.
+        assertEquals(-299_000L, confirmed(-299_000, -400_000L..400_000L))
+        assertNull(confirmed(-301_000, -400_000L..400_000L))
     }
 
     @Test fun anIntroMustAgreeWithTheRecordingsAndCannotBeAReferenceAheadOfTheVideo() {
@@ -119,9 +121,16 @@ class LeadTimingTest {
         // Twenty seconds shorter, its intro cut: it's behind the words.
         assertEquals(-15_000L, confirmed(-15_000, -20_000))
         assertNull(confirmed(-30_000, -20_000))
-        // Lengths not known, only a video's intro is believed, and never more than a minute.
+        // A video telling a story first, a minute and a half longer: its song starts well into it.
+        assertEquals(70_000L, confirmed(70_000, 100_000))
+        // Lengths not known, only a video's intro of up to a minute is believed, or one a hair behind,
+        // as NewJeans' Hype Boy video is.
+        assertEquals(60_000L, confirmed(60_000, null))
+        assertNull(confirmed(61_000, null))
+        assertEquals(-700L, confirmed(-700, null))
+        assertEquals(-2_000L, confirmed(-2_000, null))
+        assertNull(confirmed(-2_001, null))
         assertNull(confirmed(-5_000, null))
-        assertNull(confirmed(70_000, 100_000))
     }
 
     @Test fun separateMovingHearingsConfirmAnIntroAndSlipsDoNot() {
