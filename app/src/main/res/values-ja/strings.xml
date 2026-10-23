@@ -21,7 +21,9 @@
     <string name="settings_button">設定</string>
     <string name="settings_title">設定</string>
     <string name="settings_where_you_listen">聴いているアプリ</string>
-    <string name="settings_default_label">リンクを開くアプリ</string>
+    <string name="settings_links_section">リンク</string>
+    <string name="settings_default_label">音楽アプリ</string>
+    <string name="setting_show_in_crosstune_first">先に Crosstune で表示</string>
     <string name="settings_about_title">アプリ情報</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="rule_opens_in">%1$s で開く</string>
@@ -78,10 +80,8 @@
     <string name="type_playlist">プレイリスト</string>
 
     <string name="setting_play_right_away">すぐに再生</string>
-    <string name="settings_plays_in_label">再生するアプリ</string>
     <string name="show_song_short">曲を表示</string>
-    <string name="setting_exact_match">一致する項目を直接開く</string>
-    <string name="setting_exact_match_description">対応していなければ検索します。</string>
+    <string name="setting_play_right_away_search">対応していなければ検索します。</string>
     <string name="setting_not_found">曲が見つからないとき</string>
     <string name="not_found_ask">確認する</string>
     <string name="not_found_original">元のアプリで開く</string>
@@ -210,7 +210,7 @@
     <string name="visuals_show">ビジュアルを表示</string>
     <string name="visuals_hide">ビジュアルを非表示</string>
     <string name="visuals_next">次のビジュアル</string>
-    <string name="visuals_shade">ビジュアルの暗さ</string>
+    <string name="visuals_brightness">明るさ</string>
     <string name="visuals_drop">これを表示しない</string>
     <string name="settings_visuals_title">ビジュアル</string>
     <string name="setting_skip_heavy_visuals">重いビジュアルをスキップ</string>

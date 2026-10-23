@@ -20,7 +20,9 @@
     <string name="settings_button">Ayarlar</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_where_you_listen">Dinlediğin yer</string>
-    <string name="settings_default_label">Bağlantıları şurada aç</string>
+    <string name="settings_links_section">Bağlantılar</string>
+    <string name="settings_default_label">Müzik uygulaması</string>
+    <string name="setting_show_in_crosstune_first">Önce Crosstune\'da göster</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Çalma listesi</string>
 
     <string name="setting_play_right_away">Hemen oynat</string>
-    <string name="settings_plays_in_label">Şurada oynat</string>
     <string name="show_song_short">Şarkıyı göster</string>
-    <string name="setting_exact_match">Tam eşleşmeyi aç</string>
-    <string name="setting_exact_match_description">Desteklemiyorsa arar.</string>
+    <string name="setting_play_right_away_search">Desteklemiyorsa arar.</string>
     <string name="setting_not_found">Bir şarkı bulunamadığında</string>
     <string name="not_found_ask">Bana sor</string>
     <string name="not_found_original">Geldiği yerde aç</string>
@@ -209,7 +209,7 @@
     <string name="visuals_show">Görselleri göster</string>
     <string name="visuals_hide">Görselleri gizle</string>
     <string name="visuals_next">Sonraki görsel</string>
-    <string name="visuals_shade">Görsellerin kararması</string>
+    <string name="visuals_brightness">Parlaklık</string>
     <string name="visuals_drop">Bunu bir daha gösterme</string>
     <string name="settings_visuals_title">Görseller</string>
     <string name="setting_skip_heavy_visuals">Ağır görselleri atla</string>

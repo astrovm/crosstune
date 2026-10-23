@@ -20,7 +20,9 @@
     <string name="settings_button">Настройки</string>
     <string name="settings_title">Настройки</string>
     <string name="settings_where_you_listen">Здесь вы слушаете</string>
-    <string name="settings_default_label">Открывать ссылки в</string>
+    <string name="settings_links_section">Ссылки</string>
+    <string name="settings_default_label">Музыкальное приложение</string>
+    <string name="setting_show_in_crosstune_first">Сначала показывать в Crosstune</string>
     <string name="settings_about_title">О приложении</string>
     <string name="settings_links_title">Открывать ссылки из</string>
     <string name="rule_opens_in">Откроется в: %1$s</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Плейлист</string>
 
     <string name="setting_play_right_away">Сразу воспроизводить</string>
-    <string name="settings_plays_in_label">Воспроизводить в</string>
     <string name="show_song_short">Показать трек</string>
-    <string name="setting_exact_match">Открывать точное совпадение</string>
-    <string name="setting_exact_match_description">Иначе ищет.</string>
+    <string name="setting_play_right_away_search">Иначе ищет.</string>
     <string name="setting_not_found">Если песня не найдена</string>
     <string name="not_found_ask">Спрашивать</string>
     <string name="not_found_original">Открывать там, откуда она</string>
@@ -209,7 +209,7 @@
     <string name="visuals_show">Показать визуализацию</string>
     <string name="visuals_hide">Скрыть визуализацию</string>
     <string name="visuals_next">Следующая визуализация</string>
-    <string name="visuals_shade">Затемнение визуализации</string>
+    <string name="visuals_brightness">Яркость</string>
     <string name="visuals_drop">Больше не показывать</string>
     <string name="settings_visuals_title">Визуализации</string>
     <string name="setting_skip_heavy_visuals">Пропускать тяжёлые</string>

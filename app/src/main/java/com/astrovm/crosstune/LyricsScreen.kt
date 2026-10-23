@@ -1184,7 +1184,7 @@ private fun LitButton(on: Boolean, icon: Int, description: String, onClick: () -
 }
 
 /**
- * What can be done with the visuals while they're on: how dark the ground over them is, how long
+ * What can be done with the visuals while they're on: how bright they are under the words, how long
  * each shows, from swapping fast to staying on one, the next, never this one again, them alone, or off.
  */
 @Composable
@@ -1199,14 +1199,14 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
         }
-        // How dark the ground over them is, from none to nearly black.
-        val darken = stringResource(R.string.visuals_shade)
+        // How bright they show, counted down from all the way to nearly black, as phones count their screens'.
+        val brightness = stringResource(R.string.visuals_brightness)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(R.drawable.ic_shade, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
-                Text(darken, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(brightness, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Text(
-                    NumberFormat.getPercentInstance().format(sizeShare(state.visualsShade, 0f..MAX_VISUALS_SHADE)),
+                    NumberFormat.getPercentInstance().format(sizeShare(MAX_VISUALS_SHADE - state.visualsShade, 0f..MAX_VISUALS_SHADE)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1214,14 +1214,14 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
             // Where it was let go is kept, even before the menu has caught up with it.
             var latest by remember { mutableFloatStateOf(state.visualsShade) }
             Slider(
-                value = state.visualsShade,
+                value = MAX_VISUALS_SHADE - state.visualsShade,
                 onValueChange = {
-                    latest = it
-                    actions.onVisualsShadeChange(it, false)
+                    latest = MAX_VISUALS_SHADE - it
+                    actions.onVisualsShadeChange(latest, false)
                 },
                 onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
                 valueRange = 0f..MAX_VISUALS_SHADE,
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = darken }
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = brightness }
             )
         }
         VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp, icon = R.drawable.ic_timer)

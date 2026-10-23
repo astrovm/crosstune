@@ -34,9 +34,11 @@ internal data class UiState(
     val unapprovedFrontendHosts: Map<Frontend, List<String>>? = null,
     /** Whether tapped and shared links open in Crosstune, on the song's card, rather than straight in an app. */
     val linksInCrosstune: Boolean = false,
-    /** Opening in Crosstune, whether the song plays as soon as it's found, in the default app, staying in Crosstune's player. */
+    /**
+     * Opening in Crosstune, whether the song plays as soon as it's found, in the default app, staying
+     * in Crosstune's player; opening straight in an app, whether the song itself opens there, or a search.
+     */
     val playRightAway: Boolean = true,
-    val exactMatch: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
@@ -217,6 +219,13 @@ internal data class UiState(
         get() = result?.tracks.orEmpty().isNotEmpty() &&
             resultDestination.matchService.let { it == MusicService.YOUTUBE_MUSIC || it == MusicService.YOUTUBE } &&
             link?.youtubePlaylistOn(resultDestination.matchService) == null
+
+    /**
+     * Whether songs are looked up in the app they open in, to open the song itself: unless links open
+     * straight in an app and don't play right away, when a search opens instead, so nothing starts playing.
+     */
+    val exactMatch: Boolean
+        get() = linksInCrosstune || playRightAway
 
     /** Whether a tapped or shared link plays as soon as it's found: once there's an app picked to play it in. */
     val playsRightAway: Boolean

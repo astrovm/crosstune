@@ -20,7 +20,9 @@
     <string name="settings_button">Configuración</string>
     <string name="settings_title">Configuración</string>
     <string name="settings_where_you_listen">Donde escuchás</string>
-    <string name="settings_default_label">Abrir links en</string>
+    <string name="settings_links_section">Links</string>
+    <string name="settings_default_label">App de música</string>
+    <string name="setting_show_in_crosstune_first">Mostrar primero en Crosstune</string>
     <string name="settings_about_title">Acerca de</string>
     <string name="settings_links_title">Abrir links de</string>
     <string name="rule_opens_in">Se abre en: %1$s</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_play_right_away">Reproducir al instante</string>
-    <string name="settings_plays_in_label">Reproducir en</string>
     <string name="show_song_short">Ver canción</string>
-    <string name="setting_exact_match">Abrir la coincidencia exacta</string>
-    <string name="setting_exact_match_description">Si no, la busca.</string>
+    <string name="setting_play_right_away_search">Si no, la busca.</string>
     <string name="setting_not_found">Cuando no se encuentra una canción</string>
     <string name="not_found_ask">Preguntarme</string>
     <string name="not_found_original">Abrirla donde está</string>
@@ -209,7 +209,7 @@
     <string name="visuals_show">Mostrar visuales</string>
     <string name="visuals_hide">Ocultar visuales</string>
     <string name="visuals_next">Siguiente visual</string>
-    <string name="visuals_shade">Oscuridad sobre los visuales</string>
+    <string name="visuals_brightness">Brillo</string>
     <string name="visuals_drop">No mostrar este</string>
     <string name="settings_visuals_title">Visuales</string>
     <string name="setting_skip_heavy_visuals">Saltar visuales pesados</string>

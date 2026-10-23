@@ -152,6 +152,7 @@ internal class MainViewModel(
     init {
         migrateExistingInstall()
         migrateLinkMode()
+        migrateExactMatch()
     }
 
     /** The last look at what Android says about apps and links, null until the first one finishes. */
@@ -166,7 +167,6 @@ internal class MainViewModel(
         UiState(
             linksInCrosstune = preferences.getBoolean(KEY_LINKS_IN_CROSSTUNE, false),
             playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
-            exactMatch = preferences.getBoolean(KEY_EXACT_MATCH, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
@@ -310,16 +310,29 @@ internal class MainViewModel(
     }
 
     /**
-     * Links open in Crosstune from new installs on, and for whoever had them ask or show the song
-     * first, both of which the song's card does now; only from new installs does the song play
-     * right away. Someone who had links open in an app keeps that.
+     * Links show in Crosstune first for whoever had them ask or show the song first, both of which
+     * the song's card does now, and they wait for Play there. Everyone else's go straight to the app.
      */
     private fun migrateLinkMode() {
         if (preferences.contains(KEY_LINKS_IN_CROSSTUNE)) return
         val shownFirst = preferences.getBoolean(KEY_ASK_EACH_TIME, false) || preferences.getBoolean(KEY_SHOW_SONG_FIRST, false)
         preferences.edit {
-            putBoolean(KEY_LINKS_IN_CROSSTUNE, shownFirst || !preferences.getBoolean(KEY_SETUP_COMPLETE, false))
+            putBoolean(KEY_LINKS_IN_CROSSTUNE, shownFirst)
             putBoolean(KEY_PLAY_RIGHT_AWAY, !shownFirst)
+        }
+    }
+
+    /**
+     * Open the exact match was a setting of its own. Turned off, links opening straight in an app
+     * opened a search there, which is what not playing right away does now; songs opening in
+     * Crosstune are always looked up.
+     */
+    private fun migrateExactMatch() {
+        if (!preferences.contains(KEY_EXACT_MATCH)) return
+        val searched = !preferences.getBoolean(KEY_EXACT_MATCH, true) && !preferences.getBoolean(KEY_LINKS_IN_CROSSTUNE, false)
+        preferences.edit {
+            if (searched) putBoolean(KEY_PLAY_RIGHT_AWAY, false)
+            remove(KEY_EXACT_MATCH)
         }
     }
 
@@ -2941,12 +2954,6 @@ internal class MainViewModel(
         refreshSystemState()
     }
 
-    fun setExactMatch(enabled: Boolean) {
-        uiState = uiState.copy(exactMatch = enabled, destinationUrls = emptyMap())
-        preferences.edit { putBoolean(KEY_EXACT_MATCH, enabled) }
-        prepareResultDestination()
-    }
-
     /** A frontend's video goes back to its site, in a browser; any other to the YouTube app. */
     private suspend fun openAsIs(video: MusicLink) {
         pendingOpen = false
@@ -2959,16 +2966,29 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_ONLY_MUSIC_VIDEOS, enabled) }
     }
 
-    /** Where tapped and shared links go: straight to [app], or, with none, to Crosstune. */
-    fun setLinksOpenIn(app: Destination?) {
-        uiState = uiState.copy(linksInCrosstune = app == null)
-        preferences.edit { putBoolean(KEY_LINKS_IN_CROSSTUNE, app == null) }
-        app?.let(::selectDefault)
+    /** Whether tapped and shared links show in Crosstune first, or go straight to the music app. */
+    fun setShowInCrosstuneFirst(enabled: Boolean) {
+        lookUpAsNow(uiState.copy(linksInCrosstune = enabled))
+        preferences.edit { putBoolean(KEY_LINKS_IN_CROSSTUNE, enabled) }
+        // Straight to the app, Crosstune would only hand it its own links back; shown here first, they come here too.
+        val app = (uiState.defaultDestination as? Destination.Service)?.service
+        if (!enabled) selectDefault(uiState.defaultDestination)
+        else if (app?.canBeSource == true) setIntercepted(app, true)
     }
 
     fun setPlayRightAway(enabled: Boolean) {
-        uiState = uiState.copy(playRightAway = enabled)
+        lookUpAsNow(uiState.copy(playRightAway = enabled))
         preferences.edit { putBoolean(KEY_PLAY_RIGHT_AWAY, enabled) }
+    }
+
+    /** Takes [state], and prepares the song shown again when that changes whether it opens itself or a search. */
+    private fun lookUpAsNow(state: UiState) {
+        val exact = uiState.exactMatch
+        uiState = state
+        if (state.exactMatch != exact) {
+            uiState = uiState.copy(destinationUrls = emptyMap())
+            prepareResultDestination()
+        }
     }
 
     fun setShareSheetApps(enabled: Boolean) {

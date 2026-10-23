@@ -20,7 +20,9 @@
     <string name="settings_button">सेटिंग</string>
     <string name="settings_title">सेटिंग</string>
     <string name="settings_where_you_listen">जहां आप सुनते हैं</string>
-    <string name="settings_default_label">लिंक इसमें खोलें</string>
+    <string name="settings_links_section">लिंक</string>
+    <string name="settings_default_label">म्यूज़िक ऐप</string>
+    <string name="setting_show_in_crosstune_first">पहले Crosstune में दिखाएं</string>
     <string name="settings_about_title">जानकारी</string>
     <string name="settings_links_title">इनके लिंक खोलें</string>
     <string name="rule_opens_in">%1$s में खुलेगा</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">प्लेलिस्ट</string>
 
     <string name="setting_play_right_away">तुरंत चलाएं</string>
-    <string name="settings_plays_in_label">गाना इसमें चलाएं</string>
     <string name="show_song_short">गाना देखें</string>
-    <string name="setting_exact_match">सटीक मैच खोलें</string>
-    <string name="setting_exact_match_description">वरना खोजता है।</string>
+    <string name="setting_play_right_away_search">वरना खोजता है।</string>
     <string name="setting_not_found">जब कोई गाना न मिले</string>
     <string name="not_found_ask">मुझसे पूछें</string>
     <string name="not_found_original">जहाँ से आया वहीं खोलें</string>
@@ -209,7 +209,7 @@
     <string name="visuals_show">विज़ुअल दिखाएँ</string>
     <string name="visuals_hide">विज़ुअल छिपाएँ</string>
     <string name="visuals_next">अगला विज़ुअल</string>
-    <string name="visuals_shade">विज़ुअल पर अंधेरा</string>
+    <string name="visuals_brightness">चमक</string>
     <string name="visuals_drop">इसे फिर न दिखाएँ</string>
     <string name="settings_visuals_title">विज़ुअल</string>
     <string name="setting_skip_heavy_visuals">भारी विज़ुअल छोड़ें</string>
