@@ -264,6 +264,8 @@ internal class PlayedSound(
 }
 
 /** Something that hears what's playing nearby and names it. */
+// Only Kotlin calls it, so no Java copy of listenToPlaying, which nothing would run.
+@JvmDefaultWithoutCompatibility
 internal fun interface SongHearing {
     suspend fun listen(): Heard
 
