@@ -47,6 +47,49 @@ class LeadTimingTest {
         assertEquals(200L, store.load(song.copy(recordingId = "app:200")))
     }
 
+    @Test fun shazamsGapIsKeptForEachRecordingItMatchesAndTheWordsItWasLearntFor() {
+        val store = ShazamGapStore(prefs)
+        val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
+        assertNull(store.load(294_000, "403191606"))
+        assertFalse(store.knows(song, 294_000))
+        store.save(song, 294_000, "403191606", -36_800)
+        // Whatever another release names the song, the recording Shazam matched is the same.
+        assertEquals(-36_800L, ShazamGapStore(prefs).load(294_400, "403191606"))
+        assertTrue(store.knows(song, 294_000))
+        assertTrue(store.knows(MusicMetadata("PLASTIC LOVE", "Mariya Takeuchi"), 294_400))
+        // Another recording Shazam matches, or words timed for another release, have gaps of their own.
+        assertNull(store.load(294_000, "1"))
+        assertNull(store.load(309_000, "403191606"))
+        assertFalse(store.knows(song, 309_000))
+        assertFalse(store.knows(MusicMetadata("Plastic Love", "Cindy Zhang"), 294_000))
+        store.save(song, 294_000, "403191606", -36_000)
+        assertEquals(-36_000L, store.load(294_000, "403191606"))
+        prefs.edit().putString("shazam_gaps", "invalid").commit()
+        assertNull(store.load(294_000, "403191606"))
+        assertFalse(store.knows(song, 294_000))
+        store.save(song, 294_000, "403191606", 100)
+        assertEquals(100L, store.load(294_000, "403191606"))
+        prefs.edit().putString("shazam_gaps", "{\"plastic love\\u0000mariya takeuchi\\u0000294\\u0000403191606\":\"wrong\"}").commit()
+        assertNull(store.load(294_000, "403191606"))
+        repeat(201) { store.save(song, 294_000, "$it", it.toLong()) }
+        // Only the oldest goes, keeping two hundred.
+        assertNull(store.load(294_000, "0"))
+        assertEquals(1L, store.load(294_000, "1"))
+        assertEquals(200L, store.load(294_000, "200"))
+    }
+
+    @Test fun aGapCanBeAheadOrBehindButOnlyAsFarAsItMayBe() {
+        fun confirmed(gap: Long, possible: LongRange): Long? {
+            val timing = LeadTiming()
+            return (0..2).map { timing.heard(PlaybackClock(40_000 + it * 10_000L + gap, 0), PlaybackClock(40_000 + it * 10_000L, 0), possible) }.last()
+        }
+        assertEquals(-36_800L, confirmed(-36_800, -60_000L..60_000L))
+        assertEquals(20_000L, confirmed(20_000, -60_000L..60_000L))
+        assertNull(confirmed(-36_800, 0L..60_000L))
+        // Never more than a minute, whatever may be.
+        assertNull(confirmed(-61_000, -120_000L..120_000L))
+    }
+
     @Test fun anIntroMustAgreeWithTheRecordingsAndCannotBeAReferenceAheadOfTheVideo() {
         val rejected = LeadTiming()
         repeat(3) {

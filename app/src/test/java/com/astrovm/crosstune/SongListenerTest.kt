@@ -88,14 +88,26 @@ class SongListenerTest {
     @Test
     fun aMatchNamesTheSongAndItsAppleMusicId() {
         answer(MATCH)
-        assertEquals(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg"), "1109658204"), heard())
+        assertEquals(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg"), "1109658204", matchId = "238534"), heard())
         // Without Apple Music, or a cover, it's still the song.
         answer("""{"matches":[{"id":"1"}],"track":{"title":"Demo","subtitle":"Band","hub":{"actions":[{"type":"uri","uri":"https://example.com"},"x"]}}}""")
-        assertEquals(Heard.Song(MusicMetadata("Demo", "Band"), null), heard())
+        assertEquals(Heard.Song(MusicMetadata("Demo", "Band"), null, matchId = "1"), heard())
         answer("""{"matches":[{"id":"1"}],"track":{"title":"Demo","images":{},"hub":{"actions":[{"type":"applemusicplay","id":""}]}}}""")
-        assertEquals(Heard.Song(MusicMetadata("Demo", ""), null), heard())
+        assertEquals(Heard.Song(MusicMetadata("Demo", ""), null, matchId = "1"), heard())
         answer("""{"matches":[{"id":"1"}],"track":{"title":"Demo"}}""")
-        assertEquals(Heard.Song(MusicMetadata("Demo", ""), null), heard())
+        assertEquals(Heard.Song(MusicMetadata("Demo", ""), null, matchId = "1"), heard())
+    }
+
+    @Test
+    fun theRecordingShazamMatchedIsKept() {
+        fun matched(matches: String): String? {
+            answer("""{"matches":$matches,"track":{"title":"Demo"}}""")
+            return (heard() as Heard.Song).matchId
+        }
+        assertEquals("403191606", matched("""[{"id":"403191606","offset":66.8},{"id":"1","offset":30.0}]"""))
+        assertEquals(null, matched("""[{"id":"","offset":12.5}]"""))
+        assertEquals(null, matched("""[{"offset":12.5}]"""))
+        assertEquals(null, matched("""[]"""))
     }
 
     @Test
@@ -445,6 +457,10 @@ class SongListenerTest {
         // Nothing playing on the phone, the microphone listens for what's nearby.
         phone.onThePhone = null
         assertEquals(byMicrophone, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listen() })
+        // Asked not to, it never takes the microphone, even when the phone won't share its sound.
+        val unshared = PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { Heard.Failed(AppError.MICROPHONE) })
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { unshared.listenToPlaying(byMicrophone = false) })
+        assertEquals(bySound, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listenToPlaying(byMicrophone = false) })
     }
 
     private companion object {
