@@ -1307,7 +1307,7 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
-    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true, durationMs: Long = 62_000): FakePlayback {
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true, durationMs: Long? = 62_000): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
@@ -1672,10 +1672,15 @@ class ListeningTest {
     }
 
     @Test
-    fun aVideoHeardWhereItsSongIsAtOnceTriesFiveTimes() {
-        // As long as the song, there's no story before it to wait out.
+    fun aVideoHeardWhereItsSongIsAtOnceTriesFiveTimes() = triesFiveTimes(durationMs = 52_000)
+
+    @Test
+    fun aVideoOfNoKnownLengthTriesFiveTimes() = triesFiveTimes(durationMs = null)
+
+    /** As long as the song, or of no length it says, there's no story known before it to wait out. */
+    private fun triesFiveTimes(durationMs: Long?) {
         val hearing = FakeHearing()
-        videoWithWords(hearing, durationMs = 52_000)
+        videoWithWords(hearing, durationMs = durationMs)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         repeat(5) { index ->
             hearing.song("Wonderland", 5.0 + index * 10)

@@ -89,6 +89,7 @@ class LeadTimingTest {
         assertNull(confirmed(-36_800, 0L..60_000L))
         // Never more than five minutes, whatever may be.
         assertEquals(-299_000L, confirmed(-299_000, -400_000L..400_000L))
+        assertEquals(300_000L, confirmed(300_000, -400_000L..400_000L))
         assertNull(confirmed(-301_000, -400_000L..400_000L))
     }
 
