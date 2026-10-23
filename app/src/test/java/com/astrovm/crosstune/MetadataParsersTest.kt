@@ -157,6 +157,11 @@ class MetadataParsersTest {
         // As YouTube Music has an official video: the katakana says the English name.
         assertEquals(MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi"), MetadataParsers.youtubeVideo("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi"))
         assertEquals(MusicMetadata("Plastic Love - プラスティック・ラブ", "Mariya Takeuchi"), MetadataParsers.youtubeVideo("Plastic Love - プラスティック・ラブ", "Mariya Takeuchi"))
+        // A short name too, said with two sounds, as YouTube Music titles YOASOBI's video.
+        assertEquals(MusicMetadata("アイドル - Idol", "YOASOBI"), MetadataParsers.youtubeVideo("アイドル - Idol", "YOASOBI"))
+        assertEquals(MusicMetadata("ラブ - Love", "Artist"), MetadataParsers.youtubeVideo("ラブ - Love", "Artist"))
+        // One sound says too little: an artist in katakana before it is still the artist.
+        assertEquals(MusicMetadata("Yo", "ヨ"), MetadataParsers.youtubeVideo("ヨ - Yo", "Uploader"))
         // An artist in Japanese before an English song is still the artist: the two don't sound alike.
         assertEquals(MusicMetadata("First Love", "宇多田ヒカル"), MetadataParsers.youtubeVideo("宇多田ヒカル - First Love", "Uploader"))
         assertEquals(MusicMetadata("新宝島", "サカナクション"), MetadataParsers.youtubeVideo("サカナクション - 新宝島", "Uploader"))
