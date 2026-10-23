@@ -71,20 +71,12 @@
     <string name="setup_sources_listening_note">You listen in %1$s, so its links already open there.</string>
     <string name="settings_listening_locked">You listen in %1$s, so its links already open there. Pick another app below to turn this on.</string>
     <string name="setup_destination_title">Where do you listen?</string>
-    <string name="setup_allow_title">Allow the links</string>
     <string name="setup_allow_none">No services picked. You can still share or paste links.</string>
-    <string name="setup_allow_step_add">Tap Add link.</string>
-    <string name="setup_allow_step_in_app">Pick “In the app”.</string>
-    <string name="setup_allow_step_tick">Tick all the links, then tap Add.</string>
     <string name="setup_links_title">Let Crosstune open your links</string>
-    <string name="setup_links_body">Tap Fix, then come back. Each one checks itself off.</string>
+    <string name="setup_links_body">Tap each one. It checks itself off once done.</string>
     <string name="setup_check_app">Turn off links in %1$s</string>
     <string name="setup_check_allow">Allow links in Crosstune</string>
     <string name="setup_one_tap">Set everything up</string>
-    <string name="setup_one_tap_note">Uses Shizuku</string>
-    <string name="setup_one_tap_failed">Shizuku couldn\'t do it all. Fix what\'s left below.</string>
-    <string name="setup_apps_title">Turn off other apps\' links</string>
-    <string name="setup_still_opens">Still opens links</string>
     <string name="setup_done">Done</string>
     <string name="setup_not_allowed">Not allowed yet</string>
     <string name="target_apple_music" translatable="false">Apple Music</string>
@@ -204,15 +196,10 @@
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Pure black</string>
     <string name="follow_help_title">Let lyrics follow your music</string>
-    <string name="follow_help_try">Tap the switch, then Close.</string>
-    <string name="follow_help_restricted">Tap ⋮, then Allow restricted settings.</string>
-    <string name="follow_help_access">Now turn on the switch and tap Allow.</string>
     <string name="follow_turn_on">Turn on</string>
-    <string name="follow_help_simple">Turn on the switch and tap Allow.</string>
     <string name="setting_lyrics_follow">Lyrics follow your music app</string>
     <string name="setting_lyrics_follow_description">Needs notification access.</string>
     <string name="follow_help_app_info">App info</string>
-    <string name="follow_help_access_button">Notification access</string>
     <string name="song_search_title">Songs</string>
     <string name="song_search_none">No songs found for “%1$s”.</string>
     <string name="clear_history_button">Clear history</string>
@@ -230,9 +217,7 @@
     <string name="share_search_link">Share search link</string>
     <string name="search_copied_to_clipboard">Search text copied</string>
     <string name="link_copied_to_clipboard">Link copied</string>
-    <string name="link_settings_helper_title">Allow the new links</string>
     <string name="open_app_link_settings_button">Open %1$s settings</string>
-    <string name="open_link_settings_button">Open link settings</string>
     <string name="dismiss_button">Dismiss</string>
     <string name="settings_version">Version</string>
     <!-- %1$s is where the heart icon goes. -->
@@ -254,8 +239,6 @@
     <string name="history_open">Open %1$s</string>
     <string name="handoff_opening">Opening in %1$s…</string>
     <string name="handoff_getting_link">Getting the %1$s link…</string>
-    <string name="notice_links_not_allowed">Some links can\'t open in Crosstune yet</string>
-    <string name="notice_own_links_off">Tapped links open in your browser, not Crosstune</string>
     <string name="allow_button">Allow</string>
     <string name="notice_app_still_opens">%1$s still opens its own links</string>
     <string name="notice_apps_still_open">%1$s still open their own links</string>
@@ -284,12 +267,7 @@
     <string name="source_open_links">Open in Crosstune</string>
     <string name="setting_only_music_videos">Only music videos</string>
     <string name="setting_only_music_videos_description">Other videos open as usual.</string>
-    <string name="setup_apps_stop_body">Pick “In your browser”, or turn off “Open supported links”.</string>
-    <string name="setup_apps_progress">App %1$d of %2$d</string>
-    <string name="setup_apps_all_done">Done. No other app opens the links now.</string>
-    <string name="setup_allow_all_done">All set. These links open in Crosstune now.</string>
     <string name="setup_skip_for_now">Skip for now</string>
-    <string name="setup_fixed">Fixed</string>
     <string name="choose_app_button">Choose app</string>
     <string name="make_default_named">Make %1$s the default</string>
     <string name="listening_text">Listening…</string>
@@ -302,8 +280,6 @@
     <string name="floating_text_size">Text size</string>
     <string name="floating_float">Float over other apps</string>
     <string name="floating_permission_title">Float lyrics over your apps</string>
-    <string name="floating_permission_text">Android needs you to allow Crosstune to display over other apps. Turn it on in the next screen, then come back and the lyrics will float.</string>
-    <string name="floating_permission_continue">Continue</string>
     <string name="floating_customize">Customize</string>
     <string name="floating_previous_line">Previous line</string>
     <string name="floating_next_line">Next line</string>
@@ -419,4 +395,52 @@
     <string name="practice_back">Back</string>
     <string name="floating_shared">Shared with lyrics</string>
     <string name="floating_overlay_size">Overlay size</string>
+
+    <!-- What's broken, in one place, and the steps to fix each in Android's settings. -->
+    <string name="fix_title">Things to fix</string>
+    <string name="fix_all">Fix all</string>
+    <string name="fix_one_by_one">Fix one by one</string>
+    <string name="fix_with_shizuku">With Shizuku, in one tap</string>
+    <string name="fix_with_root">With root, in one tap</string>
+    <string name="fix_failed">One tap couldn\'t fix it all. The rest is by hand.</string>
+    <string name="fix_shizuku_stopped">Shizuku is stopped. Start it to fix all in one tap.</string>
+    <string name="fix_mic_title">Let lyrics hear the music</string>
+    <string name="fix_open_settings">Open Android settings</string>
+    <string name="fix_try_link">Try a link</string>
+    <string name="fix_step_tap">Tap %1$s.</string>
+    <string name="fix_step_pick">Pick %1$s.</string>
+    <string name="fix_step_turn_on">Turn on %1$s.</string>
+    <string name="fix_step_turn_off">Turn off %1$s.</string>
+    <string name="fix_step_switches">Turn on every switch.</string>
+    <string name="fix_step_tick_under">Tick every link under %1$s.</string>
+    <string name="fix_step_tick_then">Tick every link, then tap %1$s.</string>
+    <string name="fix_step_set">Set %1$s to %2$s.</string>
+    <string name="fix_step_menu">Tap ⋮, then %1$s.</string>
+    <string name="fix_step_try_then">Turn on %1$s. Android says no, so tap %2$s.</string>
+    <string name="fix_step_turn_on_then">Now turn on %1$s and tap %2$s.</string>
+    <!-- Android's own words, as its settings show them, for the steps and their pictures. -->
+    <string name="android_in_the_app">In the app</string>
+    <string name="android_in_your_browser">In your browser</string>
+    <string name="android_links_to_open">Links to open in this app</string>
+    <string name="android_add_link">Add link</string>
+    <string name="android_add">Add</string>
+    <string name="android_open_supported_links">Open supported links</string>
+    <string name="android_supported_web_addresses">Supported web addresses</string>
+    <string name="android_open_by_default">Open by default</string>
+    <string name="android_open_in_this_app">Open in this app</string>
+    <string name="android_dont_open_in_this_app">Don\'t open in this app</string>
+    <string name="android_allow_notification_access">Allow notification access</string>
+    <string name="android_deny">Deny</string>
+    <string name="android_close">Close</string>
+    <string name="android_restricted_setting">Restricted setting</string>
+    <string name="android_allow_restricted">Allow restricted settings</string>
+    <string name="android_permissions">Permissions</string>
+    <string name="android_app_permissions">App permissions</string>
+    <string name="android_microphone">Microphone</string>
+    <string name="android_allow_while_using">Allow only while using the app</string>
+    <string name="android_ask_every_time">Ask every time</string>
+    <string name="android_dont_allow">Don\'t allow</string>
+    <string name="android_while_using">While using the app</string>
+    <string name="android_only_this_time">Only this time</string>
+    <string name="android_display_over_apps">Allow display over other apps</string>
 </resources>

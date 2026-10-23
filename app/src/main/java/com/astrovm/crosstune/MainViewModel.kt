@@ -36,9 +36,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** The notice key for Crosstune's own links set to open in the browser. */
-internal const val OWN_LINKS_OFF = "own-links-off"
-
 internal sealed interface Effect {
     /**
      * [packageName] is null for custom destinations, which open in whatever app handles the URL.
@@ -102,7 +99,11 @@ internal class MainViewModel(
     /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
     private val updates: UpdateChecker? = null,
     /** Calibration may use the microphone only when its permission has already been granted. */
-    private val mayCalibrateVideo: () -> Boolean = { false }
+    private val mayCalibrateVideo: () -> Boolean = { false },
+    /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
+    private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
+    /** The kind of phone, whose settings pages the steps to fix things show. */
+    phone: Phone
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -185,8 +186,9 @@ internal class MainViewModel(
             savedLines = savedLinesStore.load(),
             setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
             systemStateKnown = false,
-            canSetUpInOneTap = oneTap?.available() == true
-        ).withDestinations()
+            phone = phone,
+            microphone = microphoneAccess()
+        ).withOneTap().withDestinations()
     )
 
     var uiState by screen
@@ -196,7 +198,11 @@ internal class MainViewModel(
     private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
-    private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.copy(canSetUpInOneTap = oneTap.available()) }
+    private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
+
+    /** Whether there's one tap now, and through what, or Shizuku stopped, which takes it away. */
+    private fun UiState.withOneTap(): UiState =
+        copy(canSetUpInOneTap = oneTap?.available() == true, oneTapRoot = oneTap?.root() == true, shizukuStopped = oneTap?.shizukuStopped() == true)
 
     private val visualsStore = VisualsStore(preferences)
 
@@ -211,8 +217,8 @@ internal class MainViewModel(
     }
 
     /**
-     * Does what setup asks of the user, through Shizuku: stops the apps in the way, allows the
-     * links and lets lyrics follow music apps. What it couldn't do is still there to fix by hand.
+     * Does all there is to fix, through Shizuku or root: stops the apps in the way, allows the
+     * links, the microphone, and lyrics following music apps. What it couldn't do is still there to fix by hand.
      */
     fun setUpInOneTap() {
         val setup = oneTap ?: return
@@ -220,7 +226,10 @@ internal class MainViewModel(
         val state = uiState
         uiState = uiState.copy(settingUpInOneTap = true, oneTapFailed = false)
         viewModelScope.launch {
-            val worked = inOneTap(setup, apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything, follow = !state.canFollowApps)
+            val worked = inOneTap(
+                setup, apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything,
+                follow = !state.canFollowApps, microphone = state.microphone != MicAccess.ALLOWED
+            )
             uiState = uiState.copy(settingUpInOneTap = false, oneTapFailed = !worked)
             refreshSystemState()
             refreshFollowing()
@@ -228,31 +237,34 @@ internal class MainViewModel(
     }
 
     /**
-     * Fixes [fix] in one tap, through Shizuku, after setup as during it, rather than by hand; what it
-     * couldn't is left to the steps, in [UiState.fixByHand]. Whether Shizuku is there to try.
+     * Fixes [fix] in one tap, through Shizuku or root, after setup as during it, rather than by hand,
+     * and [then] does what it was for; what it couldn't is left to the steps. Whether there's one tap to try.
      */
-    fun fixInOneTap(fix: OneTapFix): Boolean {
+    fun fixInOneTap(fix: OneTapFix, then: () -> Unit = {}): Boolean {
         val setup = oneTap ?: return false
         if (!uiState.canSetUpInOneTap) return false
         if (uiState.fixingInOneTap != null) return true
-        val apps = if (fix == OneTapFix.APPS) uiState.blockingApps.orEmpty().map { it.packageName } else emptyList()
-        uiState = uiState.copy(fixingInOneTap = fix, fixByHand = null)
+        uiState = uiState.copy(fixingInOneTap = fix)
         viewModelScope.launch {
-            val worked = inOneTap(setup, apps = apps, links = fix == OneTapFix.LINKS, follow = fix == OneTapFix.FOLLOW)
-            uiState = uiState.copy(fixingInOneTap = null, fixByHand = fix.takeUnless { worked })
+            val worked = inOneTap(setup, links = fix == OneTapFix.LINKS, follow = fix == OneTapFix.FOLLOW, floating = fix == OneTapFix.FLOAT)
+            val need = if (fix == OneTapFix.LINKS) Need.Links else if (fix == OneTapFix.FOLLOW) Need.Follow else Need.Float
+            uiState = uiState.copy(fixingInOneTap = null, fixes = if (worked) uiState.fixes else Fixes(list = uiState.fixes?.list == true, steps = listOf(need), failed = true))
             refreshSystemState()
             refreshFollowing()
+            if (worked) then()
         }
         return true
     }
 
-    /** The steps for what one tap couldn't fix are open. */
-    fun fixByHandShown() {
-        uiState = uiState.copy(fixByHand = null)
-    }
-
-    private suspend fun inOneTap(setup: OneTapSetup, apps: List<String>, links: Boolean, follow: Boolean): Boolean {
-        val worked = setup.setUp(apps = apps, links = links, follow = follow)
+    private suspend fun inOneTap(
+        setup: OneTapSetup,
+        apps: List<String> = emptyList(),
+        links: Boolean,
+        follow: Boolean,
+        microphone: Boolean = false,
+        floating: Boolean = false
+    ): Boolean {
+        val worked = setup.setUp(apps = apps, links = links, follow = follow, microphone = microphone, floating = floating)
         // Android lets Crosstune follow music apps a moment after it's told to.
         var waits = 0
         while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)
@@ -399,7 +411,7 @@ internal class MainViewModel(
      */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations().copy(canSetUpInOneTap = oneTap?.available() == true)
+        uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess())
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
         loadSystemState()
     }
@@ -1653,48 +1665,55 @@ internal class MainViewModel(
         uiState = uiState.copy(following = null)
     }
 
-    /** Set once Android's page for the access was opened, so coming back without it can say what to try. */
-    private var askedForAccess = false
-
-    /**
-     * Back from Android's settings, where following music apps may have just been allowed. Back
-     * without it, the steps show, since Android may have kept the switch from turning on.
-     */
+    /** Back from Android's settings, where following music apps may have just been allowed. */
     fun refreshFollowing() {
         val access = playback?.hasAccess() == true
-        if (access) {
-            askedForAccess = false
-            uiState = uiState.copy(followHelp = false)
-        } else if (askedForAccess) {
-            uiState = uiState.copy(followHelp = true)
-        }
         if (access == uiState.canFollowApps) return
         uiState = uiState.copy(canFollowApps = access)
         uiState.lyricsFor?.takeIf { !uiState.isLoadingLyrics }?.let(::follow)
         followPlayer()
     }
 
+    /** Whether the microphone may be used now, just asked about. */
+    fun refreshMicrophone() {
+        uiState = uiState.copy(microphone = microphoneAccess())
+    }
+
+    /** The list of things to fix, from the bar; one tap starts afresh there. */
+    fun openFixes() {
+        uiState = uiState.copy(fixes = Fixes(list = true), oneTapFailed = false)
+    }
+
+    /** The steps of [needs], one at a time, from the list or wherever they're needed. */
+    fun fixSteps(needs: List<Need>) {
+        uiState = uiState.copy(fixes = Fixes(list = uiState.fixes?.list == true, steps = needs))
+    }
+
+    /** On to the next thing to fix, done or skipped; after the last, back to the list, or out. */
+    fun nextFix() {
+        val fixes = uiState.fixes ?: return
+        uiState = uiState.copy(fixes = if (fixes.at + 1 < fixes.steps.size) fixes.copy(at = fixes.at + 1) else fixes.listed())
+    }
+
+    /** Out of the steps, back to the list they came from, if they did. */
+    fun fixBack() {
+        uiState = uiState.copy(fixes = uiState.fixes?.listed())
+    }
+
+    private fun Fixes.listed(): Fixes? = Fixes(list = true).takeIf { list }
+
+    fun closeFixes() {
+        uiState = uiState.copy(fixes = null)
+    }
+
     /**
-     * Allow, for the words to follow music apps: true when Android's page for it can just open.
-     * Where Android restricts it first, the steps show instead, that one included.
+     * Before Android 12, which can't tell, a test link to [host] reached Crosstune: its links open
+     * here, so the app of the service the link is of doesn't take them.
      */
-    fun allowFollowing(): Boolean {
-        if (playback?.restricted() == true) {
-            uiState = uiState.copy(followHelp = true)
-            return false
-        }
-        askedForAccess = true
-        return true
-    }
-
-    /** Android's page for the access is opening, from the steps. */
-    fun openingFollowAccess() {
-        askedForAccess = true
-    }
-
-    fun dismissFollowHelp() {
-        askedForAccess = false
-        uiState = uiState.copy(followHelp = false)
+    fun linkTested(host: String?) {
+        val service = LinkInterception.HOSTS.keys.firstOrNull { host == testHost(it) }
+        val apps = uiState.installedSourceApps.filter { service != null && MusicService.ofPackage(it.packageName) == service }
+        uiState = uiState.copy(linksTested = uiState.linksTested + Need.Links.key + apps.map { Need.StopApp(it).key })
     }
 
     fun selectPalette(palette: Palette) {
@@ -1848,9 +1867,8 @@ internal class MainViewModel(
         stopLearning()
         stopFollowing()
         stopListeningAlong()
-        askedForAccess = false
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = false, followHelp = false,
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
     }

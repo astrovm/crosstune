@@ -144,6 +144,7 @@ class ListeningTest {
         MainActivity.lyricsLanguageFactory = null
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
+        MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -645,14 +646,18 @@ class ListeningTest {
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, settings.action)
         assertEquals("package:${app.packageName}", settings.dataString)
 
-        // Allowed, it listens right away.
+        // Tapped again later, Android won't ask, so the steps to its page show instead.
         controller!!.pause().stop().destroy()
         val next = launch()
         recognize()
-        val again = shadowOf(next).lastRequestedPermission
+        waitForText(string(R.string.fix_mic_title))
+        assertNull(shadowOf(next).lastRequestedPermission)
+
+        // Allowed there, the steps go, and it listens right away.
         allowMicrophone()
-        next.onRequestPermissionsResult(again.requestCode, again.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
-        composeRule.waitForIdle()
+        controller!!.pause().resume()
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.fix_mic_title)) }
+        recognize()
         waitForText(string(R.string.listening_text))
         assertEquals(1, microphone.opened)
     }
@@ -1579,6 +1584,34 @@ class ListeningTest {
     }
 
     @Test
+    fun visualsWithoutTheMicrophoneAskForItThenStartOverHearingTheMusic() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        assertFalse(shown(string(R.string.fix_mic_title)))
+        click(string(R.string.visuals_options))
+
+        // Taken away meanwhile, they can't hear the music, and their menu offers it first.
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        val deaf = visualsShown().single()
+        click(string(R.string.visuals_options))
+        click(string(R.string.fix_mic_title))
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
+
+        // Allowed, they start over, hearing it, and the menu has nothing to fix.
+        allowMicrophone()
+        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        controller!!.pause().resume()
+        waitUntil(TIMEOUT_MS) { visualsShown().singleOrNull()?.let { it !== deaf } == true }
+        click(string(R.string.visuals_options))
+        assertFalse(shown(string(R.string.fix_mic_title)))
+    }
+
+    @Test
     fun visualsMoveBehindTheWordsFromTheStart() {
         prefs().edit().remove("visuals").commit()
         demoWords(FakeHearing())
@@ -2240,18 +2273,18 @@ class ListeningTest {
     }
 
     @Test
-    fun theFloatButtonSaysWhyAndroidAsksAndFloatsOnceAllowed() {
+    fun theFloatButtonShowsHowToLetItAndFloatsOnceAllowed() {
         ShadowSettings.setCanDrawOverlays(false)
         demoWords(FakeHearing())
-        // Said why first, which can be put off.
+        // Shown how first, which can be put off.
         click(string(R.string.floating_float))
         waitForText(string(R.string.floating_permission_title))
-        click(string(R.string.cancel_button))
+        click(string(R.string.setup_skip_for_now))
         assertFalse(shown(string(R.string.floating_permission_title)))
         assertEquals(null, shadowOf(app).nextStartedActivity)
 
         click(string(R.string.floating_float))
-        click(string(R.string.floating_permission_continue))
+        click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, shadowOf(app).nextStartedActivity.action)
         // Back, allowed: Android 13 asks about their notification once, and they float either way.
         ShadowSettings.setCanDrawOverlays(true)
@@ -2267,14 +2300,41 @@ class ListeningTest {
     }
 
     @Test
-    fun theFloatButtonLeftUnallowedFloatsNothing() {
+    fun theFloatButtonLeftUnallowedFloatsNothingLater() {
         ShadowSettings.setCanDrawOverlays(false)
         demoWords(FakeHearing())
         click(string(R.string.floating_float))
-        click(string(R.string.floating_permission_continue))
+        click(string(R.string.fix_open_settings))
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertEquals(null, shadowOf(app).nextStartedService)
+        // Put off, allowing it later doesn't float them out of the blue.
+        click(string(R.string.setup_skip_for_now))
+        ShadowSettings.setCanDrawOverlays(true)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertEquals(null, shadowOf(app).nextStartedService)
+    }
+
+    @Test
+    fun withShizukuTheFloatButtonLetsItAndFloatsInOneTap() {
+        ShadowSettings.setCanDrawOverlays(false)
+        val shell = FakeShell { command -> if ("SYSTEM_ALERT_WINDOW" in command) ShadowSettings.setCanDrawOverlays(true); true }
+        MainActivity.shellFactory = { listOf(shell) }
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        demoWords(FakeHearing())
+        click(string(R.string.floating_float))
+        val user = (android.os.Process.myUid() / 100_000).toString()
+        assertEquals(
+            listOf(
+                listOf("appops", "set", "--user", user, app.packageName, "SYSTEM_ALERT_WINDOW", "allow"),
+                // Locked, the words unlock from their notification, which Android 13 asks about.
+                listOf("pm", "grant", "--user", user, app.packageName, Manifest.permission.POST_NOTIFICATIONS)
+            ),
+            shell.ran
+        )
+        waitUntil(TIMEOUT_MS) { shadowOf(app).nextStartedService?.component?.className == FloatingLyricsService::class.java.name }
+        assertFalse(shown(string(R.string.floating_permission_title)))
     }
 
     @Test

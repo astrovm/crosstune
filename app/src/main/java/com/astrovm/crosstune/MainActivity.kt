@@ -7,7 +7,6 @@ import android.content.res.Configuration
 import android.graphics.drawable.Icon
 import android.util.Rational
 import android.app.UiModeManager
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -117,7 +116,9 @@ class MainActivity : ComponentActivity() {
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
-                    mayCalibrateVideo = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
+                    mayCalibrateVideo = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    microphoneAccess = { microphoneAccess(applicationContext) },
+                    phone = phoneFactory()
                 )
             }
         }
@@ -162,9 +163,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Set while saying why Android's about to be asked to let the words float over other apps. */
-    private var askingToFloat by mutableStateOf(false)
-
     /** Set while away in Android's settings to allow it, so the words float once back, if it was. */
     private var floatOnceAllowed = false
 
@@ -184,15 +182,25 @@ class MainActivity : ComponentActivity() {
     /** Set when the floating words' microphone was tapped without it allowed, to ask once back in sight. */
     private var listenAlongWhenBack = false
 
-    /** What the microphone is for: listening for a song, maybe for its words, listening along with the words, or visuals that move with what plays. */
-    private enum class MicrophoneFor { LISTEN, LISTEN_FOR_LYRICS, LISTEN_ALONG, VISUALS }
+    /**
+     * What the microphone is for: listening for a song, maybe for its words, listening along with the
+     * words, visuals that move with what plays, or nothing yet, just allowed.
+     */
+    private enum class MicrophoneFor { LISTEN, LISTEN_FOR_LYRICS, LISTEN_ALONG, VISUALS, ALLOW }
 
     /** What asked for the microphone, kept should the screen be made again while Android asks, e.g. turned. */
     private var afterMicrophone = MicrophoneFor.LISTEN
 
-    /** Asked on the first listen; without it, the error offers Android's settings for Crosstune. */
+    /**
+     * Asked on the first listen, or when lyrics first open; turned down, the error offers Android's
+     * settings for Crosstune. Turned down for good, Android won't ask again, so the steps show how instead.
+     */
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) listenFor(afterMicrophone) else viewModel.showError(AppError.MICROPHONE)
+        if (!granted && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putBoolean(KEY_MICROPHONE_DENIED, true).apply()
+        }
+        viewModel.refreshMicrophone()
+        if (granted) listenFor(afterMicrophone) else if (afterMicrophone != MicrophoneFor.ALLOW) viewModel.showError(AppError.MICROPHONE)
     }
 
     /** Set when launched to read the clipboard, which Android only allows once the window has focus. */
@@ -221,6 +229,17 @@ class MainActivity : ComponentActivity() {
 
         /** Set once Android 13 has asked about notifications for floating words, so it isn't asked again. */
         private const val KEY_ASKED_NOTIFICATIONS = "asked_floating_notifications"
+        /** Set once the microphone was asked for as lyrics opened, so they don't ask every time. */
+        private const val KEY_ASKED_MICROPHONE = "asked_microphone"
+        /** Set when the microphone was turned down for good, so Android won't ask again until it's allowed in settings. */
+        private const val KEY_MICROPHONE_DENIED = "microphone_denied"
+
+        /** Whether the microphone may be used, Android still asks for it, or it's turned down for good. */
+        private fun microphoneAccess(context: Context): MicAccess = when {
+            context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> MicAccess.ALLOWED
+            context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(KEY_MICROPHONE_DENIED, false) -> MicAccess.DENIED
+            else -> MicAccess.ASKABLE
+        }
         /** When the last clip Crosstune looked at, or copied itself, was copied. */
         private const val KEY_CLIP_SEEN = "clip_seen_at"
         /** How long after it's copied a link counts as just copied. */
@@ -292,9 +311,13 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var lyricsLanguageFactory: (() -> LyricsLanguage)? = null
 
-        /** Where setup in one tap runs its commands: Shizuku, unless a test stands in for it. */
+        /** Where setup in one tap runs its commands: Shizuku, or else root, unless a test stands in for them. */
         @VisibleForTesting
-        internal var shellFactory: () -> Shell = ::ShizukuShell
+        internal var shellFactory: () -> List<Shell> = { listOf(ShizukuShell(), RootShell()) }
+
+        /** The kind of phone, whose settings pages the steps to fix things show. */
+        @VisibleForTesting
+        internal var phoneFactory: () -> Phone = { Phone.of(Build.MANUFACTURER, Build.BRAND) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -351,6 +374,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                snapshotFlow { viewModel.uiState.lyricsFor != null }.distinctUntilChanged().collect { open -> if (open) askMicrophoneOnce() }
+            }
+        }
+
         setContent {
             val theme = viewModel.uiState.theme
             val dark = if (theme == ThemeMode.DARK) true else if (theme == ThemeMode.LIGHT) false else isSystemInDarkTheme()
@@ -373,7 +402,7 @@ class MainActivity : ComponentActivity() {
                         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
                         onLyricsNow = { withMicrophone(MicrophoneFor.LISTEN_FOR_LYRICS) },
                         onStopListening = viewModel::stopListening,
-                        onOpenMicrophoneSettings = ::openAppInfo,
+                        onOpenMicrophoneSettings = { openAppInfo() },
                         onRecognizerChange = { picked ->
                             recognizerPick = picked.packageName
                             getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putString(SongRecognizers.KEY_PICK, picked.packageName).apply()
@@ -457,15 +486,10 @@ class MainActivity : ComponentActivity() {
                         onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
                         onListenAlong = { withMicrophone(MicrophoneFor.LISTEN_ALONG) },
                         onStopListeningAlong = viewModel::stopListeningAlong,
-                        // With Shizuku, in one tap, as in setup; otherwise, or once it couldn't, by hand.
-                        onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW) && viewModel.allowFollowing()) openNotificationAccess() },
-                        onAllowFollowingByHand = { if (viewModel.allowFollowing()) openNotificationAccess() },
-                        onOpenFollowAccess = {
-                            viewModel.openingFollowAccess()
-                            openNotificationAccess()
-                        },
-                        onOpenAppInfo = ::openAppInfo,
-                        onDismissFollowHelp = viewModel::dismissFollowHelp,
+                        // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
+                        onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
+                        onOpenFollowAccess = { openNotificationAccess() },
+                        onOpenAppInfo = { openAppInfo() },
                         onThemeChange = ::selectTheme,
                         onSearchAnyway = viewModel::searchAnyway,
                         onNotFoundActionChange = viewModel::selectNotFoundAction,
@@ -501,8 +525,15 @@ class MainActivity : ComponentActivity() {
                         onCompleteSetup = viewModel::completeSetup,
                         onPreselectSources = viewModel::preselectSources,
                         onSetUpInOneTap = viewModel::setUpInOneTap,
-                        onFixInOneTap = viewModel::fixInOneTap,
-                        onFixByHandShown = viewModel::fixByHandShown,
+                        onAllowLinks = { if (!viewModel.fixInOneTap(OneTapFix.LINKS)) viewModel.fixSteps(listOf(Need.Links)) },
+                        onOpenFixes = viewModel::openFixes,
+                        onFixSteps = viewModel::fixSteps,
+                        onNextFix = viewModel::nextFix,
+                        onFixBack = viewModel::fixBack,
+                        onCloseFixes = viewModel::closeFixes,
+                        onOpenFix = ::openFix,
+                        onTryLink = ::tryLink,
+                        onOpenShizuku = { packageManager.getLaunchIntentForPackage(OneTapSetup.SHIZUKU_PACKAGE)?.let(::tryStartActivity) },
                         onLinkModeChange = viewModel::setLinkMode,
                         onExactMatchChange = viewModel::setExactMatch,
                         onCleanLinksChange = viewModel::setCleanLinks,
@@ -523,9 +554,7 @@ class MainActivity : ComponentActivity() {
                         onUndoClearHistory = viewModel::undoClearHistory,
                         onForgetClearedHistory = viewModel::forgetClearedHistory,
                         onCancelHandoff = viewModel::cancelHandoff,
-                        onOpenLinkSettings = ::openAppLinkSettings,
                         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
-                        onDismissLinkSettingsHelper = viewModel::dismissLinkSettingsHelper,
                         onDismissNotices = viewModel::dismissNotices,
                         onUpdate = viewModel::openUpdate,
                         onOpenPlayingNow = viewModel::openPlayingNow,
@@ -536,16 +565,6 @@ class MainActivity : ComponentActivity() {
                         loadArtwork = viewModel.artwork::load
                     )
                 )
-                if (askingToFloat) {
-                    FloatPermissionDialog(
-                        onAllow = {
-                            askingToFloat = false
-                            floatOnceAllowed = true
-                            tryStartActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()))
-                        },
-                        onDismiss = { askingToFloat = false }
-                    )
-                }
             }
         }
     }
@@ -556,27 +575,81 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // The user may have just allowed links, or installed a music app, outside Crosstune.
-        viewModel.refreshSystemState()
-        // Or let Crosstune follow what music apps play.
-        viewModel.refreshFollowing()
+        refresh()
         recognizers = SongRecognizers.available(this)
         recognizerPick = SongRecognizers.pick(getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE))
-        // Or let it show over other apps, as just asked to, so the words float now.
-        val canFloat = Settings.canDrawOverlays(this)
-        viewModel.setCanFloatOverApps(canFloat)
-        if (floatOnceAllowed && canFloat) float()
-        floatOnceAllowed = false
+        // Its steps left without allowing it, the words don't float later out of the blue.
+        if (viewModel.uiState.fixes?.need != Need.Float) floatOnceAllowed = false
+        // Let show over other apps, as just asked to, the words float now.
+        if (floatOnceAllowed && viewModel.uiState.canFloatOverApps) {
+            floatOnceAllowed = false
+            float()
+        }
     }
 
     /**
-     * The words float over other apps now, Crosstune going behind, once Android allows it; until
-     * then, it's said why it's about to be asked. On Android 13 their notification, which unlocks
-     * them, is asked about once first.
+     * What may have changed outside Crosstune: links just allowed, a music app installed, following
+     * music apps allowed, the microphone, or showing over other apps.
+     */
+    private fun refresh() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().remove(KEY_MICROPHONE_DENIED).apply()
+        }
+        viewModel.refreshSystemState()
+        viewModel.refreshFollowing()
+        viewModel.setCanFloatOverApps(Settings.canDrawOverlays(this))
+    }
+
+    /**
+     * Opens Android's page where [need] is done, with the guide floating over it; or, for the
+     * microphone while Android still asks, asks.
+     */
+    private fun openFix(need: Need) {
+        // Android still asks for the microphone itself, so there's no page to open.
+        if (need == Need.Microphone && viewModel.uiState.microphone != MicAccess.DENIED) return withMicrophone(MicrophoneFor.ALLOW)
+        // Opened, before Android 12 it's no longer known whether they're allowed, until a test link says.
+        if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
+        if (need == Need.Float) floatOnceAllowed = true
+        val open: Context.() -> Unit = when (need) {
+            is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
+            Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
+            Need.Microphone -> Context::openAppInfo
+            Need.Follow -> Context::openNotificationAccess
+            Need.Float -> Context::openOverlaySettings
+        }
+        // Without picture-in-picture, the steps wait here in Crosstune.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return open()
+        GuideActivity.host = guideHost
+        guideOpens = open
+        startActivity(Intent(this, GuideActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** What Android's page the guide floats over is, opened from it or, without one, from here. */
+    private var guideOpens: Context.() -> Unit = {}
+
+    private val guideHost = object : GuideHost {
+        override val state get() = viewModel.uiState
+        override val dark get() = floatingHost.dark
+        override fun refresh() = this@MainActivity.refresh()
+        override fun open(guide: Context?) = (guide ?: this@MainActivity).guideOpens()
+        override fun back(guide: Context) {
+            guide.startActivity(Intent(guide, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        }
+    }
+
+    /** Before Android 12, a link of the service [need] is about, which reaches Crosstune once its links do. */
+    private fun tryLink(need: Need) {
+        viewModel.uiState.testService(need)?.let { tryStartActivity(Intent(Intent.ACTION_VIEW, testLink(it).toUri()).addCategory(Intent.CATEGORY_BROWSABLE)) }
+    }
+
+    /**
+     * The words float over other apps now, Crosstune going behind, once Android allows it: with
+     * Shizuku or root, in one tap; otherwise the steps show how. On Android 13 their notification,
+     * which unlocks them, is asked about once first.
      */
     private fun float() {
         if (!Settings.canDrawOverlays(this)) {
-            askingToFloat = true
+            if (!viewModel.fixInOneTap(OneTapFix.FLOAT) { float() }) viewModel.fixSteps(listOf(Need.Float))
             return
         }
         val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
@@ -606,6 +679,8 @@ class MainActivity : ComponentActivity() {
     /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */
     override fun onStart() {
         super.onStart()
+        // Back from Android's settings, the guide floating over them is done with.
+        GuideActivity.close()
         // Even from a screen made again since, in a new look or language.
         if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
         floatingOverApps = false
@@ -635,17 +710,22 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (!isChangingConfigurations && FloatingLyricsService.host === floatingHost) FloatingLyricsService.stop(this)
+        // The guide's host is this screen, which mustn't outlive it.
+        if (isFinishing && GuideActivity.host === guideHost) GuideActivity.host = null
     }
 
     private fun listen() = withMicrophone(MicrophoneFor.LISTEN)
 
-    /** Listens as [purpose] says, asking for the microphone first if it hasn't been allowed. */
+    /**
+     * Listens as [purpose] says, asking for the microphone first if it hasn't been allowed; turned
+     * down for good, Android won't ask, so the steps show how to allow it in settings.
+     */
     private fun withMicrophone(purpose: MicrophoneFor) {
         afterMicrophone = purpose
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            listenFor(purpose)
-        } else {
-            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+        when (microphoneAccess(this)) {
+            MicAccess.ALLOWED -> listenFor(purpose)
+            MicAccess.ASKABLE -> microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+            MicAccess.DENIED -> viewModel.fixSteps(listOf(Need.Microphone))
         }
     }
 
@@ -654,6 +734,19 @@ class MainActivity : ComponentActivity() {
         MicrophoneFor.LISTEN_FOR_LYRICS -> viewModel.listen(lyrics = true)
         MicrophoneFor.LISTEN_ALONG -> viewModel.listenAlong()
         MicrophoneFor.VISUALS -> viewModel.setVisuals(true)
+        MicrophoneFor.ALLOW -> Unit
+    }
+
+    /**
+     * Lyrics listen along with the song, so the first time they open, the microphone is asked for,
+     * unless it's allowed already; only then, so a screen made again with them open doesn't ask over
+     * a question Android is still asking.
+     */
+    private fun askMicrophoneOnce() {
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_ASKED_MICROPHONE, false)) return
+        prefs.edit().putBoolean(KEY_ASKED_MICROPHONE, true).apply()
+        if (microphoneAccess(this) == MicAccess.ASKABLE) withMicrophone(MicrophoneFor.ALLOW)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -677,7 +770,8 @@ class MainActivity : ComponentActivity() {
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with
             // ChatGPT, it's all done by then.
-            Intent.ACTION_VIEW -> if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
+            // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
+            Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
                 intent.dataString,
                 show = viewModel.uiState.showSongFirst || intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
             )
@@ -747,11 +841,6 @@ class MainActivity : ComponentActivity() {
         return clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
     }
 
-    /** Crosstune's App info: where the microphone is allowed, and restricted settings. */
-    private fun openAppInfo() {
-        tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
-    }
-
     /** Light, dark or as the phone is: from Android 12 Android itself is told, so the launch screen matches too. */
     private fun selectTheme(theme: ThemeMode) {
         viewModel.selectTheme(theme)
@@ -763,16 +852,6 @@ class MainActivity : ComponentActivity() {
             }
             getSystemService(UiModeManager::class.java).setApplicationNightMode(mode)
         }
-    }
-
-    /** Android's page for letting Crosstune see what music apps play, at its own entry where Android has one. */
-    private fun openNotificationAccess() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val own = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
-                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(this, NowPlayingListener::class.java).flattenToString())
-            if (tryStartActivity(own)) return
-        }
-        tryStartActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
     private fun open(effect: Effect.Open) {
@@ -822,13 +901,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun tryStartActivity(intent: Intent): Boolean = try {
-        startActivity(intent)
-        true
-    } catch (_: ActivityNotFoundException) {
-        false
-    }
-
     private fun copySearch() {
         copyToClipboard("Crosstune search query", viewModel.searchQuery(), R.string.search_copied_to_clipboard)
     }
@@ -865,20 +937,5 @@ class MainActivity : ComponentActivity() {
         }
         return Intent.createChooser(shareIntent, getString(R.string.share_search_link))
             .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(this, MainActivity::class.java)))
-    }
-
-    private fun openAppLinkSettings() {
-        openLinkSettingsOf(packageName)
-        viewModel.dismissLinkSettingsHelper()
-    }
-
-    /** Opens Android's link settings for one app: Crosstune's to allow links, another's to turn its links off. */
-    private fun openLinkSettingsOf(appPackage: String) {
-        val packageUri = "package:$appPackage".toUri()
-        val openedDefaults = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            tryStartActivity(Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, packageUri))
-        if (!openedDefaults) {
-            tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri))
-        }
     }
 }

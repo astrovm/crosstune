@@ -100,6 +100,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -183,12 +184,24 @@ internal data class ScreenActions(
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
     val onCompleteSetup: () -> Unit = {},
     val onPreselectSources: () -> Unit = {},
-    /** Does all of setup's fixing at once, through Shizuku. */
+    /** Fixes all there is at once, through Shizuku or root. */
     val onSetUpInOneTap: () -> Unit = {},
-    /** Fixes one thing found wrong after setup, through Shizuku; whether it's there to try. */
-    val onFixInOneTap: (OneTapFix) -> Boolean = { false },
-    /** The steps for what one tap couldn't fix are open. */
-    val onFixByHandShown: () -> Unit = {},
+    /** Allows Crosstune's links: in one tap with Shizuku or root, otherwise the steps show how. */
+    val onAllowLinks: () -> Unit = {},
+    /** The list of things to fix, from its bar. */
+    val onOpenFixes: () -> Unit = {},
+    /** The steps of these, one at a time. */
+    val onFixSteps: (List<Need>) -> Unit = {},
+    /** On to the next thing to fix, done or skipped. */
+    val onNextFix: () -> Unit = {},
+    /** Out of the steps, back to where they were opened. */
+    val onFixBack: () -> Unit = {},
+    val onCloseFixes: () -> Unit = {},
+    /** Opens Android's page where this is done, with the guide floating over it, or asks for the microphone. */
+    val onOpenFix: (Need) -> Unit = {},
+    /** Before Android 12, a link that shows whether links reach Crosstune. */
+    val onTryLink: (Need) -> Unit = {},
+    val onOpenShizuku: () -> Unit = {},
     val onLinkModeChange: (LinkMode) -> Unit = {},
     val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
@@ -210,13 +223,8 @@ internal data class ScreenActions(
     val onUndoClearHistory: () -> Unit = {},
     val onForgetClearedHistory: () -> Unit = {},
     val onCancelHandoff: () -> Unit = {},
-    val onOpenLinkSettings: () -> Unit = {},
     val onOpenAppLinkSettings: (LinkApp) -> Unit = {},
-    /** Shows how to allow the links, step by step; the screen hosts it, so it's set there. */
-    val onShowAllowGuide: () -> Unit = {},
-    /** Shows how to stop the apps that keep the links, one at a time. */
-    val onShowAppsGuide: () -> Unit = {},
-    val onDismissLinkSettingsHelper: () -> Unit = {},
+    /** Closes the notice about an update, by its version. */
     val onDismissNotices: (Set<String>) -> Unit = {},
     val onUpdate: () -> Unit = {},
     /** Opens the player on the song a music app plays now. */
@@ -310,15 +318,12 @@ internal data class ScreenActions(
     val onCancelChatGptSignIn: () -> Unit = {},
     val onSignOutOfChatGpt: () -> Unit = {},
     val onDismissChatGptWelcome: () -> Unit = {},
-    /** Lets the words follow music apps: opens Android's settings for it, or the steps there are to it. */
+    /** Lets the words follow music apps: in one tap with Shizuku or root, otherwise the steps show how. */
     val onAllowFollowing: () -> Unit = {},
-    /** Opens Android's page for Crosstune seeing what music apps play, from the steps. */
+    /** Opens Android's page for Crosstune seeing what music apps play, where it's turned off too. */
     val onOpenFollowAccess: () -> Unit = {},
-    /** Lets the words follow music apps by hand, through Android's settings, once one tap couldn't. */
-    val onAllowFollowingByHand: () -> Unit = {},
     /** Opens Crosstune's App info, where restricted settings are allowed. */
     val onOpenAppInfo: () -> Unit = {},
-    val onDismissFollowHelp: () -> Unit = {},
     val onThemeChange: (ThemeMode) -> Unit = {},
     /** Searches where the result goes, though it wasn't found there. */
     val onSearchAnyway: () -> Unit = {},
@@ -366,33 +371,19 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             actions.onSettingsLeft()
         }
     }
-    var guide by rememberSaveable { mutableStateOf<String?>(null) }
-    // Opened because one tap couldn't fix it all, which the guide says.
-    var guideAfterOneTap by rememberSaveable { mutableStateOf(false) }
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
-    // With Shizuku, what's found wrong is fixed in one tap, as in setup; the guides are for what it can't.
-    val guided = actions.copy(
-        onShowAllowGuide = { if (!actions.onFixInOneTap(OneTapFix.LINKS)) guide = GUIDE_ALLOW },
-        onShowAppsGuide = { if (!actions.onFixInOneTap(OneTapFix.APPS)) guide = GUIDE_APPS }
-    )
-    LaunchedEffect(state.fixByHand) {
-        val fix = state.fixByHand ?: return@LaunchedEffect
-        if (fix == OneTapFix.FOLLOW) {
-            actions.onAllowFollowingByHand()
-        } else {
-            guide = if (fix == OneTapFix.LINKS) GUIDE_ALLOW else GUIDE_APPS
-            guideAfterOneTap = true
-        }
-        actions.onFixByHandShown()
-    }
+    // A link from another app on its way out shows just that, the fixes waiting till after.
+    val fixes = state.fixes?.takeIf { !state.handingOff }
     val screen = when {
         // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
         // after; so are the words it was for.
         state.listening -> Screen.LISTENING
+        // Opened from anywhere, setup included, the steps show over it.
+        fixes?.need != null -> Screen.FIX_STEP
         !state.setupComplete && state.lyricsFor != null -> Screen.LYRICS
         // A link from another app is handled right away; setup waits for the next regular launch.
         !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
-        guide != null && !state.handingOff -> if (guide == GUIDE_ALLOW) Screen.ALLOW_GUIDE else Screen.APPS_GUIDE
+        fixes?.list == true -> Screen.FIXES
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
         // Over the words, practice shows in their place, so they're as they were after.
@@ -435,6 +426,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             }
         }
     }
+    // A screen the steps to fix something show over is found as it was once they close; any other
+    // way back, a screen starts afresh, as it always has.
+    val kept = rememberSaveableStateHolder()
+    LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
     CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
@@ -444,98 +439,44 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
         }
     ) { shown ->
-        // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
-        if (shown == Screen.SETUP) {
-            SetupScreen(state, actions)
-        } else if (shown == Screen.ALLOW_GUIDE || shown == Screen.APPS_GUIDE) {
-            GuidePage(shown == Screen.ALLOW_GUIDE, state, actions, afterOneTap = guideAfterOneTap, onDone = {
-                guide = null
-                guideAfterOneTap = false
-            })
-        } else if (shown == Screen.SETTINGS) {
-            SettingsScreen(state, guided, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
-        } else if (shown == Screen.HANDOFF) {
-            Handoff(state, actions)
-        } else if (shown == Screen.LISTENING) {
-            ListeningScreen(actions)
-        } else if (shown == Screen.LYRICS) {
-            LyricsScreen(state, actions)
-        } else if (shown == Screen.PLAYER) {
-            PlayerScreen(state, actions)
-        } else if (shown == Screen.PRACTICE) {
-            PracticeScreen(state, actions)
-        } else if (shown == Screen.PRACTICE_LIST) {
-            PracticeList(state, actions, onBack = { showPracticeList = false })
-        } else {
-            MainScreen(state, guided, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+        kept.SaveableStateProvider(shown.name) {
+            // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
+            if (shown == Screen.SETUP) {
+                SetupScreen(state, actions)
+            } else if (shown == Screen.FIX_STEP) {
+                FixStepPage(state, actions)
+            } else if (shown == Screen.FIXES) {
+                FixesPage(state, actions)
+            } else if (shown == Screen.SETTINGS) {
+                SettingsScreen(state, actions, onBack = { showSettings = false }, openSource = openSource, onOpenSource = { openSource = it })
+            } else if (shown == Screen.HANDOFF) {
+                Handoff(state, actions)
+            } else if (shown == Screen.LISTENING) {
+                ListeningScreen(actions)
+            } else if (shown == Screen.LYRICS) {
+                LyricsScreen(state, actions)
+            } else if (shown == Screen.PLAYER) {
+                PlayerScreen(state, actions)
+            } else if (shown == Screen.PRACTICE) {
+                PracticeScreen(state, actions)
+            } else if (shown == Screen.PRACTICE_LIST) {
+                PracticeList(state, actions, onBack = { showPracticeList = false })
+            } else {
+                MainScreen(state, actions, onOpenSettings = { showSettings = true }, onOpenPractice = { showPracticeList = true })
+            }
         }
     }
     }
-    // Asked for from the words or from settings, so it shows over either.
-    if (state.followHelp) FollowHelp(state, actions)
     state.notFoundOffer?.let { NotFoundDialog(it, state, actions) }
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 internal enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), LYRICS(2), ALLOW_GUIDE(2), APPS_GUIDE(2), PRACTICE(2)
+    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), FIXES(1), LYRICS(2), PRACTICE(2), FIX_STEP(3)
 }
 
 /** Screens that rise over the one under them, and sink back into it. */
 private val RISING = setOf(Screen.LYRICS, Screen.PLAYER)
-
-private const val GUIDE_ALLOW = "allow"
-private const val GUIDE_APPS = "apps"
-
-/**
- * The setup guides on their own, opened from a notice or settings, or [afterOneTap] couldn't do it
- * all, with a way back once done.
- */
-@Composable
-private fun GuidePage(allow: Boolean, state: UiState, actions: ScreenActions, afterOneTap: Boolean, onDone: () -> Unit) {
-    BackHandler(onBack = onDone)
-    Page(
-        title = stringResource(if (allow) R.string.setup_allow_title else R.string.setup_apps_title),
-        navigationIcon = {
-            IconButton(onClick = onDone) {
-                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
-            }
-        }
-    ) {
-        // Both guides show what Android says, so a guide restored before that's known waits for it.
-        if (!state.systemStateKnown) return@Page
-        if (afterOneTap) {
-            Text(
-                text = stringResource(R.string.setup_one_tap_failed),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
-        // Leaving with something left to do is skipping it, so the button says so.
-        val done = if (allow) {
-            AllowLinksGuide(state, actions)
-            !state.someLinksNotAllowed
-        } else {
-            val apps = appsToStop(state)
-            Spacer(Modifier.height(8.dp))
-            StopAppsGuide(apps, state.blockingApps.orEmpty(), actions.onOpenAppLinkSettings)
-            appsGuideDone(apps, state.blockingApps.orEmpty())
-        }
-        val press = rememberPress()
-        FilledTonalButton(
-            onClick = onDone,
-            interactionSource = press.source,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 24.dp)
-                .heightIn(min = 52.dp)
-                .then(press.modifier)
-        ) {
-            Text(stringResource(if (done) R.string.setup_done else R.string.setup_skip_for_now), style = MaterialTheme.typography.labelLarge)
-        }
-    }
-}
 
 // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
 @Composable
@@ -660,18 +601,27 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
                 AppIcon(R.drawable.ic_settings, contentDescription = stringResource(R.string.settings_button))
             }
         },
-        bottomBar = { AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
-            // Kept while it fades out, as the song goes when it's tapped.
-            val shown = remember { mutableStateOf(playing) }
-            if (playing != null) shown.value = playing
-            shown.value?.let { NowPlayingBar(it, actions) }
-        } },
+        bottomBar = {
+            Column {
+                // What's broken stays in sight until it's fixed, over what's playing.
+                val toFix = state.toFix.takeIf { state.setupComplete } ?: 0
+                AnimatedVisibility(visible = toFix > 0, enter = Motion.appear, exit = Motion.disappear) {
+                    FixBar(toFix, actions.onOpenFixes, modifier = if (playing == null) Modifier.navigationBarsPadding() else Modifier)
+                }
+                AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+                    // Kept while it fades out, as the song goes when it's tapped.
+                    val shown = remember { mutableStateOf(playing) }
+                    if (playing != null) shown.value = playing
+                    shown.value?.let { NowPlayingBar(it, actions) }
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = { songList?.let { PlayButton(it, state, actions, part = partInView, visible = !mainButtonShown) } }
     ) {
         // The empty hint below says what the app does, so there's no tagline above it.
         Spacer(Modifier.height(8.dp))
-        LinkNotices(state, actions)
+        UpdateNotice(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
@@ -819,61 +769,16 @@ private fun Handoff(state: UiState, actions: ScreenActions) {
     }
 }
 
-/**
- * A line for what still keeps links from Crosstune: links Android doesn't let it open yet (before
- * Android 12, which can't tell, a reminder), and one for installed apps that still open their own.
- * On the main screen each can be closed, until something else keeps links; settings always shows them.
- */
+/** A newer Crosstune to update to: news rather than a problem, so it can be closed, until the next one. */
 @Composable
-internal fun LinkNotices(state: UiState, actions: ScreenActions, inSettings: Boolean = false) {
-    // Notices come and go as things are fixed, so the space they take follows smoothly.
-    Column(modifier = Modifier.animateContentSize(Motion.size)) { Notices(state, actions, inSettings) }
+private fun UpdateNotice(state: UiState, actions: ScreenActions) {
+    val update = state.update?.takeIf { "update:${it.version}" !in state.dismissedNotices } ?: return
+    val key = setOf("update:${update.version}")
+    NoticeStrip(stringResource(R.string.notice_update, update.version), stringResource(R.string.update_button), actions.onUpdate) { actions.onDismissNotices(key) }
 }
 
 @Composable
-private fun Notices(state: UiState, actions: ScreenActions, inSettings: Boolean) {
-    // Nothing is known to be wrong until Android has been asked.
-    if (!state.systemStateKnown) return
-    val allow = stringResource(R.string.allow_button)
-    val dismissed = if (inSettings) emptySet() else state.dismissedNotices
-    val dismiss = { keys: Set<String> -> { actions.onDismissNotices(keys) }.takeUnless { inSettings } }
-    // Each opens the matching guide, which shows exactly what to tap in Android's settings.
-    if (state.unapprovedHosts != null) {
-        val keys = state.notAllowedKeys
-        if (!dismissed.containsAll(keys)) {
-            // Set to open in the browser, no link reaches Crosstune at all.
-            if (OWN_LINKS_OFF in keys) {
-                NoticeStrip(stringResource(R.string.notice_own_links_off), stringResource(R.string.fix_button), actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
-            } else if (!inSettings) {
-                // Settings marks each service that isn't allowed yet instead.
-                NoticeStrip(stringResource(R.string.notice_links_not_allowed), allow, actions.onShowAllowGuide, dismiss(keys), fixing = state.fixingInOneTap == OneTapFix.LINKS)
-            }
-        }
-    } else if (state.showLinkSettingsHelper) {
-        NoticeStrip(
-            stringResource(R.string.link_settings_helper_title), allow, actions.onShowAllowGuide,
-            onDismiss = actions.onDismissLinkSettingsHelper, fixing = state.fixingInOneTap == OneTapFix.LINKS
-        )
-    }
-    // Closed, it's back for the next version, not this one.
-    state.update?.takeIf { !inSettings && "update:${it.version}" !in dismissed }?.let { update ->
-        NoticeStrip(stringResource(R.string.notice_update, update.version), stringResource(R.string.update_button), actions.onUpdate, dismiss(setOf("update:${update.version}")))
-    }
-    val apps = state.blockingApps.orEmpty().sortedBy { it.label }
-    val appKeys = apps.map { "app:${it.packageName}" }.toSet()
-    if (apps.isNotEmpty() && !dismissed.containsAll(appKeys)) {
-        val text = if (apps.size == 1) {
-            stringResource(R.string.notice_app_still_opens, apps.single().label)
-        } else {
-            stringResource(R.string.notice_apps_still_open, apps.joinToString(", ") { it.label })
-        }
-        NoticeStrip(text, stringResource(R.string.fix_button), actions.onShowAppsGuide, dismiss(appKeys), fixing = state.fixingInOneTap == OneTapFix.APPS)
-    }
-}
-
-/** [fixing] while Shizuku fixes it, in one tap, its button turns to a spinner. */
-@Composable
-private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDismiss: (() -> Unit)? = null, fixing: Boolean = false) {
+private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDismiss: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -895,11 +800,9 @@ private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDi
                     .weight(1f)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             )
-            OneTapButton(action, onAction, fixing)
-            if (onDismiss != null) {
-                IconButton(onClick = onDismiss) {
-                    AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button))
-                }
+            TextButton(onClick = onAction) { Text(action) }
+            IconButton(onClick = onDismiss) {
+                AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.dismiss_button))
             }
         }
     }

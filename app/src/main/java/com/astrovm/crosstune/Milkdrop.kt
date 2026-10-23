@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -695,13 +696,15 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
  * What the visuals are asked to do: move on each time [skips] goes up, pass over the one showing
  * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
  * [onFps] is told each second, on the main thread, how many frames a second the phone could draw it at.
+ * [hears] is whether Android lets them hear what plays, which needs the microphone.
  */
 internal data class VisualsPlay(
     val skips: Int = 0,
     val drops: Int = 0,
     val settings: VisualsSettings = VisualsSettings(),
     val only: String? = null,
-    val onFps: (Int) -> Unit = {}
+    val onFps: (Int) -> Unit = {},
+    val hears: Boolean = true
 )
 
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
@@ -717,6 +720,8 @@ internal val LocalVisuals = staticCompositionLocalOf<@Composable (play: VisualsP
 internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
     val onFps by rememberUpdatedState(play.onFps)
     val main = remember { Handler(Looper.getMainLooper()) }
+    // They listen from when they start, so once Android lets them hear, they start over.
+    key(play.hears) {
     AndroidView(
         factory = { context ->
             val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
@@ -740,6 +745,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
         },
         modifier = modifier
     )
+    }
 }
 
 /** A system property, set with adb shell setprop; null when it can't be read. */

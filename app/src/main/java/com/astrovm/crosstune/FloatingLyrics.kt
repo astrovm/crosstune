@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -258,7 +257,8 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
                 val listening = state.listeningAlong
                 IconToggleButton(checked = listening, onCheckedChange = { actions.onToggleListening() }) {
                     AppIcon(
-                        R.drawable.ic_recognize,
+                        // Crossed out without the microphone, as in the lyrics' bar.
+                        if (state.microphone == MicAccess.ALLOWED) R.drawable.ic_recognize else R.drawable.ic_recognize_off,
                         contentDescription = stringResource(if (listening) R.string.lyrics_stop_listening else R.string.lyrics_listen_along),
                         tint = if (listening) MaterialTheme.colorScheme.primary else LocalContentColor.current
                     )
@@ -334,22 +334,6 @@ private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: (
             }
         }
     }
-}
-
-/**
- * Said before Android's own settings open to let the words float over other apps, so it's clear why
- * they're there and that coming back is all it takes after.
- */
-@Composable
-internal fun FloatPermissionDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { AppIcon(R.drawable.ic_float, contentDescription = null) },
-        title = { Text(stringResource(R.string.floating_permission_title)) },
-        text = { Text(stringResource(R.string.floating_permission_text)) },
-        confirmButton = { TextButton(onClick = onAllow) { Text(stringResource(R.string.floating_permission_continue)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) } }
-    )
 }
 
 /** Below this much band, the words are outlined to read on whatever's under them. */

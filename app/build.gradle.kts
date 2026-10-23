@@ -128,6 +128,8 @@ kover {
                 classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*")
                 // Shizuku runs on a phone, where it's checked; what it's told to run is tested.
                 classes("com.astrovm.crosstune.ShizukuShell*")
+                // Root runs su, which only a rooted phone has, and none at hand is; what it's told to run is tested.
+                classes("com.astrovm.crosstune.RootShell*")
                 // Waking another music app binds to it, which needs a phone, where it's checked.
                 classes("com.astrovm.crosstune.MediaBrowserWaker*")
             }

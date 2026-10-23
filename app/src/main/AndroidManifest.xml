@@ -68,6 +68,8 @@
         <package android:name="com.zionhuang.music" />
         <package android:name="it.fast4x.rimusic" />
         <package android:name="oss.krtirtho.spotube" />
+        <!-- Shizuku, to say it's stopped, and open it, when it's installed. -->
+        <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
@@ -318,6 +320,20 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!--
+            The step being taken, floating over Android's settings in picture-in-picture, in a task
+            of its own, so closing it leaves Crosstune as it was.
+        -->
+        <activity
+            android:name=".GuideActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:taskAffinity="${applicationId}.guide" />
 
         <!--
             The Quick Settings tile and launcher shortcut read the clipboard through this alias.
