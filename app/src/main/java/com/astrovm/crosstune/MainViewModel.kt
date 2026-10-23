@@ -762,7 +762,7 @@ internal class MainViewModel(
     fun listen(lyrics: Boolean = false) {
         cancelContentWork()
         heardSong = null
-        heardClock = null
+        hear(null)
         retryListens = true
         uiState = uiState.copy(
             listening = true, isLoading = false, isMatching = false, error = null, linkText = "", result = null,
@@ -869,7 +869,8 @@ internal class MainViewModel(
         showSong(heard.metadata, heard.appleMusicId)
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
         heardSong = heard.metadata
-        heardClock = heard.clock
+        // Its words aren't found yet, so the gap for them moves it once they are.
+        hear(heard.clock, heard.matchId)
         heardAtMs = now()
         // Asked for its words, they open straight away, and keep listening along, song after song.
         if (lyrics) showLyricsFor(heard.metadata)
@@ -1340,6 +1341,10 @@ internal class MainViewModel(
     /** Where [heardSong] is, as far as hearing it can tell, kept steady against what one hearing gets wrong. */
     private var heardClock: PlaybackClock? = null
 
+    /** The recording Shazam matched [heardClock] to, and the gap moved it by, so a gap learnt later moves it too. */
+    private var heardMatch: String? = null
+    private var heardGapMs = 0L
+
     /** A place heard far from where the words are, held until a second hearing agrees with it. */
     private var unconfirmed: PlaybackClock? = null
 
@@ -1352,6 +1357,15 @@ internal class MainViewModel(
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var appLeadMs: Long? = null
     private var appLeadVerified = false
+    /** The recording Shazam matched the hearings [appLeadMs] was learnt from to, this time. */
+    private var leadMatch: String? = null
+
+    /**
+     * Shazam's gap for the recording it [match]ed, as it was before the words were put in time by hand
+     * by moving it, and the music app's lead then, so Reset puts both back; and the line that moved it.
+     */
+    private data class HandGap(val match: String, val gapMs: Long?, val leadMs: Long?, val lineMs: Long)
+    private var handGap: HandGap? = null
     private var leadTiming = LeadTiming()
     private var gapTiming = LeadTiming()
     /** The recording Shazam matched the hearings [gapTiming] holds to, as each has a gap of its own. */
@@ -1396,6 +1410,7 @@ internal class MainViewModel(
         found = null
         japanese = null
         syncPoints = emptyList()
+        handGap = null
         if (showKept(song)) {
             follow(song)
         } else {
@@ -1494,10 +1509,13 @@ internal class MainViewModel(
      */
     private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
         val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
-        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty()) return
+        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null) return
         foundLines = better.lines
         this.found = better
+        // Timed for another release, they're as far from Shazam's place as learnt for those.
+        placeHeard()
         uiState = uiState.copy(lyricLines = better.lines, lyricsOffTake = timedForAnother(song))
+        keepInTime()
         followSavedLines(song)
     }
 
@@ -1587,12 +1605,14 @@ internal class MainViewModel(
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (hearing.clock != null) heardAtMs = now()
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
-        val heard = if (sameSong(song, shown)) inWords(hearing) else hearing
+        val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
+        val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
         appFollowing?.takeIf { needsLead(it) && syncPoints.isEmpty() }?.let { app ->
             val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
                 appLeadMs = lead
                 appLeadVerified = true
+                leadMatch = hearing.matchId
                 leadStore.save(shown, lead)
                 if (app.video) leadSavedLines(shown, app.appPackage, lead)
                 if (autoCalibrating) stopListeningAlong()
@@ -1605,19 +1625,19 @@ internal class MainViewModel(
         if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
             clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
         ) {
-            heardClock = steadied(clock, at)
+            hear(steadied(clock, at), hearing.matchId, gap)
             return keepInTime()
         }
         if (heardSong?.let { sameSong(it, song) } != true || !sameSong(song, shown)) {
             heardSong = song
-            heardClock = heard.clock
+            hear(heard.clock, hearing.matchId, gap)
             unconfirmed = null
             if (!sameSong(song, shown)) {
                 remember(heard)
                 return showLyricsFor(song)
             }
         } else {
-            heardClock = steadied(heardClock, heard.clock ?: return)
+            hear(steadied(heardClock, heard.clock ?: return), hearing.matchId, gap)
         }
         keepInTime()
     }
@@ -1647,10 +1667,28 @@ internal class MainViewModel(
         if (autoCalibrating) stopListeningAlong()
     }
 
-    /** [heard] where the words have it: Shazam's place, moved by the gap learnt for the recording it matched. */
-    private fun inWords(heard: Heard.Song): Heard.Song {
-        val gap = heard.matchId?.let { match -> wordsMs?.let { gapStore.load(it, match) } } ?: return heard
-        return heard.copy(offsetMs = heard.offsetMs?.plus(gap))
+    /** How far the words are from Shazam's place in [heard], as learnt for the recording it matched. */
+    private fun gapOf(heard: Heard.Song): Long = heard.matchId?.let { match -> wordsMs?.let { gapStore.load(it, match) } } ?: 0L
+
+    /** Where the song is heard to be, by Shazam's place in the recording it matched, [match], moved by [gapMs]. */
+    private fun hear(clock: PlaybackClock?, match: String? = null, gapMs: Long = 0L) {
+        heardClock = clock
+        heardMatch = match
+        heardGapMs = gapMs
+    }
+
+    /**
+     * Where the song was heard, moved by the gap now known for the recording Shazam matched, e.g.
+     * once the words are found, or after they're put in time by hand.
+     */
+    private fun placeHeard() {
+        val match = heardMatch ?: return
+        val words = wordsMs ?: return
+        val gap = gapStore.load(words, match) ?: 0L
+        if (gap == heardGapMs) return
+        heardClock = heardClock?.let { it.copy(positionMs = it.positionMs + gap - heardGapMs) }
+        heardGapMs = gap
+        unconfirmed = null
     }
 
     /**
@@ -1709,7 +1747,7 @@ internal class MainViewModel(
 
     /** Whether [song]'s lines are timed for a recording not as long as the one playing (the app's own, for a video), so likely off, and not put right yet. */
     private fun timedForAnother(song: MusicMetadata) =
-        foundLines.isNotEmpty() && syncPoints.isEmpty() && appLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false &&
+        foundLines.isNotEmpty() && syncPoints.isEmpty() && handGap == null && appLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false &&
             !(lining && alongJob?.isActive == true)
 
     /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
@@ -1762,6 +1800,7 @@ internal class MainViewModel(
         gapTiming = LeadTiming()
         gapMatch = null
         calibrationAttempted = false
+        placeHeard()
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
         followJob = viewModelScope.launch {
@@ -1770,7 +1809,7 @@ internal class MainViewModel(
                 // The app stopped it, was closed or went on to another song: the words stop where it left
                 // them, rather than run on from where the song was heard before, until it's heard again.
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
-                if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
+                if (left != null && heardSong?.let { sameSong(it, song) } == true) hear(left)
                 appFollowing = playing
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
                     appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
@@ -1843,6 +1882,7 @@ internal class MainViewModel(
         appFollowing = null
         appLeadMs = null
         appLeadVerified = false
+        leadMatch = null
         uiState = uiState.copy(following = null)
     }
 
@@ -1976,7 +2016,11 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val line = foundLines.getOrNull(index) ?: return
         val position = uiState.following?.clock?.positionAt(now()) ?: return
-        setSync(song, LyricsSync.with(syncPoints, SyncPoint(line.timeMs, position.coerceAtLeast(0L))))
+        val point = SyncPoint(line.timeMs, position.coerceAtLeast(0L))
+        val hand = handGap
+        if (syncPoints.isEmpty() && (hand == null || hand.lineMs == line.timeMs) && moveGap(song, point.songMs - point.lineMs, line.timeMs)) return
+        // Another line put in time after the gap moved stretches the words from the one that moved it, now in place.
+        setSync(song, LyricsSync.with(if (syncPoints.isEmpty() && hand != null) listOf(SyncPoint(hand.lineMs, hand.lineMs)) else syncPoints, point))
     }
 
     /** Plays or pauses the song in the music app the words follow. */
@@ -1990,12 +2034,52 @@ internal class MainViewModel(
     fun nudgeSync(deltaMs: Long) {
         val song = uiState.lyricsFor ?: return
         val first = foundLines.firstOrNull() ?: return
+        if (syncPoints.isEmpty() && moveGap(song, deltaMs, handGap?.lineMs ?: first.timeMs)) return
         setSync(song, if (syncPoints.isEmpty()) listOf(SyncPoint(first.timeMs, first.timeMs + deltaMs)) else syncPoints.map { it.copy(songMs = it.songMs + deltaMs) })
     }
 
-    /** The words back in time as they were found. */
+    /** The words back in time as they were found, and Shazam's gap as it was before they were moved by hand. */
     fun resetSync() {
-        setSync(uiState.lyricsFor ?: return, emptyList())
+        val song = uiState.lyricsFor ?: return
+        handGap?.let { hand ->
+            handGap = null
+            wordsMs?.let { words -> hand.gapMs?.let { gapStore.save(song, words, hand.match, it) } ?: gapStore.forget(words, hand.match) }
+            hand.leadMs?.let { moveLead(song, it) }
+            placeHeard()
+        }
+        setSync(song, emptyList())
+    }
+
+    /**
+     * The words heard by Shazam put [shiftMs] later, by hand: it's how far Shazam's place in the
+     * recording it matched is from them, so it's learnt as that recording's gap, for every release
+     * Shazam matches to it, rather than kept for this one alone. False when they're not lined up by
+     * Shazam, or the gap would be too far to believe.
+     */
+    private fun moveGap(song: MusicMetadata, shiftMs: Long, lineMs: Long): Boolean {
+        val words = wordsMs ?: return false
+        val app = appFollowing
+        // Words following a music app playing the release they're timed for are off themselves, not Shazam.
+        val match = (if (app == null) heardMatch?.takeIf { heardClock != null } else leadMatch?.takeIf { needsLead(app) && appLeadMs != null }) ?: return false
+        val before = gapStore.load(words, match)
+        val gap = (before ?: 0L) - shiftMs
+        if (abs(gap) > MAX_GAP_MS) return false
+        if (handGap == null) handGap = HandGap(match, before, appLeadMs.takeIf { app != null }, lineMs)
+        gapStore.save(song, words, match, gap)
+        appLeadMs?.takeIf { app != null }?.let { moveLead(song, it + shiftMs) }
+        placeHeard()
+        uiState = uiState.copy(lyricsSynced = true, lyricsOffTake = false)
+        keepInTime()
+        return true
+    }
+
+    /** The music app's video put [leadMs] ahead of the words, and kept so, for it and the lines saved from it. */
+    private fun moveLead(song: MusicMetadata, leadMs: Long) {
+        appLeadMs = leadMs
+        leadStore.save(song, leadMs)
+        appFollowing?.takeIf { it.video }?.let { leadSavedLines(song, it.appPackage, leadMs) }
+        // Hearings from before were taken with the gap as it was.
+        leadTiming = LeadTiming()
     }
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
