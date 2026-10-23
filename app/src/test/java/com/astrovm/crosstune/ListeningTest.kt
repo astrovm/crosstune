@@ -1307,7 +1307,7 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
-    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true, durationMs: Long = 62_000): FakePlayback {
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true, durationMs: Long? = 62_000): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
@@ -1642,6 +1642,52 @@ class ListeningTest {
         hearing.next.trySend(Heard.Nothing)
         composeRule.waitForIdle()
         assertEquals(1, hearing.listens)
+    }
+
+    @Test
+    fun aVideoTellingAStoryBeforeItsSongIsLinedUpOnceTheSongStarts() {
+        // A minute and fifty seconds longer than the song, as IU's Good Day video opens with a scene.
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, durationMs = 162_000)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // What plays under the scene is heard, more times than the tries: the song may not have started, so none counts.
+        repeat(6) { index ->
+            composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000L + index * 10_000, SystemClock.elapsedRealtime())) }
+            hearing.song("Wonderland", 5.0 + index * 10)
+            waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        assertTrue(controllerModel().uiState.listeningAlong)
+        // Then the song, 100 seconds in.
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 100_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", position / 1000.0)
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 8 }
+        }
+        val song = controllerModel().uiState.lyricsFor!!
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
+        assertTrue(LeadStore(prefs()).load(song).toString(), LeadStore(prefs()).load(song)!! in 99_000..101_000)
+    }
+
+    @Test
+    fun aVideoHeardWhereItsSongIsAtOnceTriesFiveTimes() = triesFiveTimes(durationMs = 52_000)
+
+    @Test
+    fun aVideoOfNoKnownLengthTriesFiveTimes() = triesFiveTimes(durationMs = null)
+
+    /** As long as the song, or of no length it says, there's no story known before it to wait out. */
+    private fun triesFiveTimes(durationMs: Long?) {
+        val hearing = FakeHearing()
+        videoWithWords(hearing, durationMs = durationMs)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        repeat(5) { index ->
+            hearing.song("Wonderland", 5.0 + index * 10)
+            if (index < 4) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        assertEquals(5, hearing.listens)
     }
 
     @Test
