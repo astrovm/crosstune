@@ -24,6 +24,7 @@ import org.robolectric.shadows.ShadowAudioRecord
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import kotlin.random.Random
 
 /** Listening for a song: the microphone, Shazam's answers, and when to ask it. Robolectric for org.json and AudioRecord. */
 @RunWith(RobolectricTestRunner::class)
@@ -327,6 +328,121 @@ class SongListenerTest {
         // Nothing heard, as through headphones, the app's name still does.
         assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { Heard.Nothing }).listen() })
         assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { Heard.Failed(AppError.NETWORK) }).listen() })
+    }
+
+    /**
+     * Plays [sound], 8-bit at [rateHz], from when the clock is at 0: each read is the last
+     * [OutputMixTap.SAMPLES] played, as Android's tap gives them, or [size] of them.
+     */
+    private class PlayingTap(private val sound: ByteArray, override val rateHz: Int = 48_000, private val clock: () -> Long) : SoundTap {
+        var size = OutputMixTap.SAMPLES
+        var closed = false
+
+        override fun read(into: ByteArray): Int {
+            val end = (clock() * rateHz / 1000).toInt()
+            for (index in 0 until size) into[index] = sound.getOrElse(end - size + index) { 128.toByte() }
+            return size
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
+
+    private var clock = 0L
+    private fun played(tap: SoundTap?, every: Long = PlayedSound.POLL_MS) = PlayedSound({ tap }, now = { clock }, sleep = { clock += every })
+
+    /** All [recording] gives, [count] samples asked for at a time, until it gives no more or [max]. */
+    private fun all(recording: Recording, count: Int = 1_600, max: Int = 32_000): ShortArray {
+        val out = ShortArray(max)
+        var got = 0
+        while (got < max) {
+            val read = recording.read(out, got, minOf(count, max - got))
+            if (read <= 0) break
+            got += read
+        }
+        return out.copyOf(got)
+    }
+
+    private fun music(seconds: Int, rateHz: Int = 48_000) = Random(7).let { random -> ByteArray(seconds * rateHz) { (random.nextInt(40, 216)).toByte() } }
+
+    @Test
+    fun thePhonesOwnSoundIsHeardWhole() {
+        val sound = music(3)
+        clock = 100
+        val tap = PlayingTap(sound) { clock }
+        val heard = played(tap).open()!!.use { all(it, max = 16_000) }
+        // From where listening started on, every sample, at 16 kHz: each the three it's made of.
+        val start = 100 * 48
+        assertEquals(16_000, heard.size)
+        heard.forEachIndexed { index, sample ->
+            val three = (0 until 3).map { (sound[start + index * 3 + it].toInt() and 0xFF) - 128 }
+            assertEquals((three.average() * 256).toInt().toShort(), sample)
+        }
+        assertTrue(tap.closed)
+    }
+
+    @Test
+    fun soundMissedBetweenReadsFarApartIsSilenceSoWhatsHeardStaysInTime() {
+        val sound = music(3)
+        clock = 100
+        // Reads 40 ms apart don't overlap; what played between them is lost.
+        val heard = played(PlayingTap(sound) { clock }, every = 40).open()!!.use { all(it, max = 16_000) }
+        assertEquals(16_000, heard.size)
+        // Each 40 ms is 640 samples: the last 21 ms heard, the rest silence before it.
+        assertTrue(heard.copyOfRange(0, 297).all { it == 0.toShort() })
+        assertTrue(heard.copyOfRange(300, 640).all { it != 0.toShort() } || heard.copyOfRange(300, 640).count { it == 0.toShort() } < 10)
+    }
+
+    @Test
+    fun aPhonesSoundAt44KhzIsHeardAt16() {
+        clock = 0
+        val heard = played(PlayingTap(music(2, 44_100), rateHz = 44_100) { clock }).open()!!.use { all(it, max = 16_000) }
+        assertEquals(16_000, heard.size)
+        assertTrue(heard.count { it == 0.toShort() } < 300)
+    }
+
+    @Test
+    fun aQuietStartIsHeardWhileTheMusicComesInButOnlySilenceIsAPhoneThatWontShareItsSound() {
+        // A second of silence, then music: the silence is heard as such, in time.
+        val sound = ByteArray(48_000) { 128.toByte() } + music(2)
+        clock = 0
+        val tap = PlayingTap(sound) { clock }
+        val heard = played(tap).open()!!.use { all(it, max = 24_000) }
+        assertEquals(24_000, heard.size)
+        assertTrue(heard.copyOfRange(0, 15_900).all { it == 0.toShort() })
+        assertTrue(heard.copyOfRange(16_100, 24_000).any { it != 0.toShort() })
+        // Only silence for a while, there's nothing to hear it with, and the microphone listens instead.
+        clock = 0
+        val silent = PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { SongListener(played(silent), shazam).listen() })
+        assertTrue(silent.closed)
+        // Without the tap there's nothing to open.
+        assertNull(played(null).open())
+    }
+
+    @Test
+    fun readsThatShrinkAreTakenByTheClock() {
+        val sound = music(2)
+        clock = 100
+        val tap = PlayingTap(sound) { clock }
+        val heard = played(tap).open()!!.use { recording ->
+            all(recording, max = 1_600).also { tap.size = 512 } + all(recording, max = 1_600)
+        }
+        assertEquals(3_200, heard.size)
+    }
+
+    @Test
+    fun aVideoIsListenedToThroughThePhonesOwnSoundAndTheMicrophoneOnlyWhenThePhoneWontShareIt() {
+        val video = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null)
+        val phone = FakePlayback().apply { onThePhone = video }
+        val byMicrophone = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null, 12_000, 400_000)
+        val bySound = byMicrophone.copy(offsetMs = 13_000)
+        assertEquals(bySound, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listen() })
+        assertEquals(byMicrophone, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { Heard.Failed(AppError.MICROPHONE) }).listen() })
+        // Nothing playing on the phone, the microphone listens for what's nearby.
+        phone.onThePhone = null
+        assertEquals(byMicrophone, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listen() })
     }
 
     private companion object {

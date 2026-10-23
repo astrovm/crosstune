@@ -87,6 +87,9 @@ internal interface SoundTap {
     /** Fills [into] with what's playing now, 8-bit mono; how much, or 0 when there's nothing to hear. */
     fun read(into: ByteArray): Int
     fun close()
+
+    /** How many samples a second it hears. */
+    val rateHz: Int
 }
 
 /**
@@ -103,6 +106,9 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
     }
 
     override fun close() = visualizer.release()
+
+    // Android gives it in thousandths of a hertz.
+    override val rateHz = (visualizer.samplingRate / 1000).takeIf { it > 0 } ?: DEFAULT_RATE_HZ
 
     companion object {
         /** [create] makes one on the output mix, audio session 0; null without the permission, or on a phone that won't share its sound. */
@@ -122,6 +128,9 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
 
         /** As much as projectM takes in at once. */
         const val SAMPLES = 1024
+
+        /** What phones mix their sound at, when one doesn't say. */
+        private const val DEFAULT_RATE_HZ = 48_000
     }
 }
 
