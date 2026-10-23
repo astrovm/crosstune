@@ -663,6 +663,22 @@ class MainActivityTest {
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
+        controller!!.pause().stop().destroy()
+
+        // Shown here first again, they come here again too.
+        launch()
+        inSettings { click(string(R.string.setting_show_in_crosstune_first)) }
+        assertTrue(prefs().getBoolean("links_in_crosstune", false))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
+    }
+
+    @Test
+    fun anAppOfTheUsersOwnHasNoLinksToTakeWhenLinksShowInCrosstuneFirst() {
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        launch()
+        inSettings { click(string(R.string.setting_show_in_crosstune_first)) }
+        assertTrue(prefs().getBoolean("links_in_crosstune", false))
+        assertTrue(MusicService.entries.none { LinkInterception(app).isEnabled(it) })
     }
 
     @Test

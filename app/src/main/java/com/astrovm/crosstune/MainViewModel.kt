@@ -2970,8 +2970,10 @@ internal class MainViewModel(
     fun setShowInCrosstuneFirst(enabled: Boolean) {
         lookUpAsNow(uiState.copy(linksInCrosstune = enabled))
         preferences.edit { putBoolean(KEY_LINKS_IN_CROSSTUNE, enabled) }
-        // Straight to the app, Crosstune would only hand it its own links back.
+        // Straight to the app, Crosstune would only hand it its own links back; shown here first, they come here too.
+        val app = (uiState.defaultDestination as? Destination.Service)?.service
         if (!enabled) selectDefault(uiState.defaultDestination)
+        else if (app?.canBeSource == true) setIntercepted(app, true)
     }
 
     fun setPlayRightAway(enabled: Boolean) {
