@@ -247,6 +247,7 @@
     <string name="palette_sunset">Zonsondergang</string>
     <string name="palette_rose">Roos</string>
     <string name="setting_pure_black">Puur zwart</string>
+    <string name="setting_playing_bar">Laten zien wat er speelt</string>
     <string name="follow_help_title">Laat de songtekst je muziek volgen</string>
     <string name="follow_turn_on">Aanzetten</string>
     <string name="setting_lyrics_follow">Songtekst volgt je muziek-app</string>

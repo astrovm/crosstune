@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -212,6 +214,38 @@ class ListeningTest {
         assertEquals(0, microphone.opened)
         assertEquals(0, shazamRequests())
         assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun theBarOfWhatsPlayingCanBeTurnedOff() {
+        val playing = MusicMetadata("Demo", "Band")
+        MainActivity.playbackFactory = {
+            FakePlayback().apply {
+                access = true
+                onThePhone = Heard.Song(playing, null, 1_000, SystemClock.elapsedRealtime())
+                this.playing.value = Following(PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Music", canSeek = true, appPackage = MusicService.YOUTUBE_MUSIC.packageName)
+            }
+        }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        click(string(R.string.settings_button))
+        val bar = composeRule.onNodeWithText(string(R.string.setting_playing_bar)).performScrollTo()
+        bar.assertIsOn()
+        bar.performClick()
+        bar.assertIsOff()
+        assertFalse(prefs().getBoolean("playing_bar", true))
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertFalse(barShown())
+        // Kept for the next launch, and back on, it shows again.
+        controller!!.pause().stop().destroy()
+        launch()
+        composeRule.waitForIdle()
+        assertFalse(barShown())
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.setting_playing_bar)).performScrollTo().assertIsOff().performClick()
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        waitUntil(TIMEOUT_MS) { barShown() }
     }
 
     @Test

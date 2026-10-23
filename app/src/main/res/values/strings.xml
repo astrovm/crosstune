@@ -194,6 +194,7 @@
     <string name="palette_sunset">Sunset</string>
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Pure black</string>
+    <string name="setting_playing_bar">Show what\'s playing</string>
     <string name="follow_help_title">Let lyrics follow your music</string>
     <string name="follow_turn_on">Turn on</string>
     <string name="setting_lyrics_follow">Lyrics follow your music app</string>

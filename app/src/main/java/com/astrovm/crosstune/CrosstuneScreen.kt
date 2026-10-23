@@ -332,6 +332,7 @@ internal data class ScreenActions(
     val onDismissNotFoundOffer: () -> Unit = {},
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
+    val onPlayingBarChange: (Boolean) -> Unit = {},
     /** Floats the words over other apps now, asking Android first if need be. */
     val onFloat: () -> Unit = {},
     /** Visuals on or off behind the words; on asks for the microphone, which Android needs to share what plays. */
@@ -584,9 +585,9 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     val line = LocalWindowInfo.current.containerSize.height * 2 / 3f
     val partInView = partTops.filterValues { it < line }.keys.maxOrNull() ?: 0
 
-    // At the bottom, unless it's the song shown; not while a link is typed in.
+    // At the bottom, unless it's the song shown or it's turned off; not while a link is typed in.
     val playing = state.playingNow?.takeIf { now ->
-        state.error == null && !state.isLoading && !state.listening &&
+        state.playingBar && state.error == null && !state.isLoading && !state.listening &&
             (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
     }
     Page(

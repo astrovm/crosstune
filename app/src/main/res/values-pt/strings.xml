@@ -247,6 +247,7 @@
     <string name="palette_sunset">Pôr do sol</string>
     <string name="palette_rose">Rosa</string>
     <string name="setting_pure_black">Preto puro</string>
+    <string name="setting_playing_bar">Mostrar o que está tocando</string>
     <string name="follow_help_title">Deixe a letra acompanhar sua música</string>
     <string name="follow_turn_on">Ativar</string>
     <string name="setting_lyrics_follow">A letra acompanha seu app de música</string>

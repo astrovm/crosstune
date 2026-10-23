@@ -256,6 +256,13 @@ private fun SettingsList(
                 onCheckedChange = actions.onPureBlackChange
             )
             GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_playing_bar),
+                description = null,
+                checked = state.playingBar,
+                onCheckedChange = actions.onPlayingBarChange
+            )
+            GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
 

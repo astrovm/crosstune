@@ -247,6 +247,7 @@
     <string name="palette_sunset">सूर्यास्त</string>
     <string name="palette_rose">गुलाब</string>
     <string name="setting_pure_black">गहरा काला</string>
+    <string name="setting_playing_bar">जो चल रहा है, वह दिखाएँ</string>
     <string name="follow_help_title">बोल को अपने संगीत के साथ चलाएँ</string>
     <string name="follow_turn_on">चालू करें</string>
     <string name="setting_lyrics_follow">बोल आपके म्यूज़िक ऐप के साथ चलें</string>

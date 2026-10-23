@@ -247,6 +247,7 @@
     <string name="palette_sunset">Sonnenuntergang</string>
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Reines Schwarz</string>
+    <string name="setting_playing_bar">Zeigen, was gerade läuft</string>
     <string name="follow_help_title">Lass den Text deiner Musik folgen</string>
     <string name="follow_turn_on">Aktivieren</string>
     <string name="setting_lyrics_follow">Liedtext folgt deiner Musik-App</string>
