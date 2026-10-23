@@ -677,6 +677,21 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aVideosWholeTitleSaidAgainInJapaneseIsLookedUpUnderTheSongBeforeIt() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == "Plastic Love" ->
+                    FakeSpotify.html(request, """[{"trackName":"Plastic Love","artistName":"Mariya Takeuchi","syncedLyrics":"[00:30.54] 突然のキスや"}]""")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+            }
+        }
+        assertEquals("突然のキスや", words(MusicMetadata("Plastic Love  竹内 まりや - プラスティックラブ 1984", "Mariya Takeuchi")))
+    }
+
+    @Test
     fun aTitleThatsTwoNamesIsLookedUpUnderEach() {
         fake.handler = { request ->
             val url = request.url
