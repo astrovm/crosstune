@@ -1415,8 +1415,8 @@ class ListeningTest {
             }
             if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
-        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(song, 52_000, "longer") != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(ShazamGapStore(prefs()).load(song, 52_000, "longer")!! in -21_000..-19_000)
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(ShazamGapStore(prefs()).load(52_000, "longer")!! in -21_000..-19_000)
         // Nothing to line up, the app's place stays the words'.
         assertNull(LeadStore(prefs()).load(song))
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
@@ -1430,8 +1430,8 @@ class ListeningTest {
 
     @Test
     fun anotherReleaseShazamMatchesToARecordingWithAKnownGapIsLinedUpByIt() {
-        // Learnt on the release the words are timed for: Shazam's recording is twenty seconds ahead of them.
-        ShazamGapStore(prefs()).save(MusicMetadata("Demo", "Band"), 52_000, "longer", -20_000)
+        // Learnt on the release the words are timed for, which names it its own way: Shazam's recording is twenty seconds ahead of them.
+        ShazamGapStore(prefs()).save(MusicMetadata("デモ - Demo", "Band"), 52_000, "longer", -20_000)
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing, video = false)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }

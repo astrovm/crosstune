@@ -50,28 +50,30 @@ class LeadTimingTest {
     @Test fun shazamsGapIsKeptForEachRecordingItMatchesAndTheWordsItWasLearntFor() {
         val store = ShazamGapStore(prefs)
         val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
-        assertNull(store.load(song, 294_000, "403191606"))
+        assertNull(store.load(294_000, "403191606"))
         assertFalse(store.knows(song, 294_000))
         store.save(song, 294_000, "403191606", -36_800)
-        assertEquals(-36_800L, ShazamGapStore(prefs).load(MusicMetadata("PLASTIC LOVE", "Mariya Takeuchi"), 294_400, "403191606"))
+        // Whatever another release names the song, the recording Shazam matched is the same.
+        assertEquals(-36_800L, ShazamGapStore(prefs).load(294_400, "403191606"))
         assertTrue(store.knows(song, 294_000))
+        assertTrue(store.knows(MusicMetadata("PLASTIC LOVE", "Mariya Takeuchi"), 294_400))
         // Another recording Shazam matches, or words timed for another release, have gaps of their own.
-        assertNull(store.load(song, 294_000, "1"))
-        assertNull(store.load(song, 309_000, "403191606"))
+        assertNull(store.load(294_000, "1"))
+        assertNull(store.load(309_000, "403191606"))
         assertFalse(store.knows(song, 309_000))
         assertFalse(store.knows(MusicMetadata("Plastic Love", "Cindy Zhang"), 294_000))
         store.save(song, 294_000, "403191606", -36_000)
-        assertEquals(-36_000L, store.load(song, 294_000, "403191606"))
+        assertEquals(-36_000L, store.load(294_000, "403191606"))
         prefs.edit().putString("shazam_gaps", "invalid").commit()
-        assertNull(store.load(song, 294_000, "403191606"))
+        assertNull(store.load(294_000, "403191606"))
         assertFalse(store.knows(song, 294_000))
         store.save(song, 294_000, "403191606", 100)
-        assertEquals(100L, store.load(song, 294_000, "403191606"))
+        assertEquals(100L, store.load(294_000, "403191606"))
         prefs.edit().putString("shazam_gaps", "{\"plastic love\\u0000mariya takeuchi\\u0000294\\u0000403191606\":\"wrong\"}").commit()
-        assertNull(store.load(song, 294_000, "403191606"))
+        assertNull(store.load(294_000, "403191606"))
         repeat(201) { store.save(song, 294_000, "$it", it.toLong()) }
-        assertNull(store.load(song, 294_000, "0"))
-        assertEquals(200L, store.load(song, 294_000, "200"))
+        assertNull(store.load(294_000, "0"))
+        assertEquals(200L, store.load(294_000, "200"))
     }
 
     @Test fun aGapCanBeAheadOrBehindButOnlyAsFarAsItMayBe() {

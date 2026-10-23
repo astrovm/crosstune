@@ -1587,7 +1587,7 @@ internal class MainViewModel(
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (hearing.clock != null) heardAtMs = now()
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
-        val heard = if (sameSong(song, shown)) inWords(hearing, shown) else hearing
+        val heard = if (sameSong(song, shown)) inWords(hearing) else hearing
         appFollowing?.takeIf { needsLead(it) && syncPoints.isEmpty() }?.let { app ->
             val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
@@ -1648,8 +1648,8 @@ internal class MainViewModel(
     }
 
     /** [heard] where the words have it: Shazam's place, moved by the gap learnt for the recording it matched. */
-    private fun inWords(heard: Heard.Song, shown: MusicMetadata): Heard.Song {
-        val gap = heard.matchId?.let { match -> wordsMs?.let { gapStore.load(shown, it, match) } } ?: return heard
+    private fun inWords(heard: Heard.Song): Heard.Song {
+        val gap = heard.matchId?.let { match -> wordsMs?.let { gapStore.load(it, match) } } ?: return heard
         return heard.copy(offsetMs = heard.offsetMs?.plus(gap))
     }
 

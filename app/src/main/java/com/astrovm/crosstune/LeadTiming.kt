@@ -48,7 +48,11 @@ internal class LeadTiming {
  * right on any other release Shazam matches the same way.
  */
 internal class ShazamGapStore(private val preferences: SharedPreferences) {
-    fun load(song: MusicMetadata, wordsMs: Long, matchId: String): Long? = all().opt(key(song, wordsMs) + matchId)?.let { it as? Number }?.toLong()
+    /** By whatever name the song was learnt, as releases name it in their own ways, while a recording Shazam matches is of one song. */
+    fun load(wordsMs: Long, matchId: String): Long? {
+        val all = all()
+        return all.keys().asSequence().firstOrNull { it.endsWith("\u0000${wordsMs / 1000}\u0000$matchId") }?.let { all.opt(it) as? Number }?.toLong()
+    }
 
     /** Whether a gap was learnt for [song]'s words at all, by any recording. */
     fun knows(song: MusicMetadata, wordsMs: Long): Boolean = all().keys().asSequence().any { it.startsWith(key(song, wordsMs)) }
