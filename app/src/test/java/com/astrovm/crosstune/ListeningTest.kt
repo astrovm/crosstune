@@ -1491,6 +1491,97 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
+        val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
+        // The video is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", (position + 5_000) / 1000.0, matchId = "longer")
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        // Ten seconds into the words, the second line is tapped as it's sung: the words were five seconds ahead.
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        // That's Shazam's gap, for any release it matches to that recording, and this video's lead put right, the line saved from it
+        // too; nothing kept for this release alone.
+        assertTrue(ShazamGapStore(prefs()).load(52_000, "longer").toString(), ShazamGapStore(prefs()).load(52_000, "longer")!! in -5_600..-4_400)
+        assertTrue(LeadStore(prefs()).load(song)!! in 9_400..10_600)
+        assertTrue(SavedLinesStore(prefs()).load().single().leadMs in 9_400..10_600)
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+        assertFalse(controllerModel().uiState.lyricsOffTake)
+        // Another line tapped after stretches the words from the one that moved them, for this release.
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(55_000, SystemClock.elapsedRealtime())) }
+        composeRule.onNodeWithText("Demo three").performClick()
+        waitUntil(TIMEOUT_MS) { LyricsSyncStore(prefs()).load(song, lines).isNotEmpty() }
+        val points = LyricsSyncStore(prefs()).load(song, lines)
+        assertEquals(SyncPoint(10_000, 10_000), points.first())
+        assertEquals(40_000L, points.last().lineMs)
+        assertTrue(points.toString(), points.last().songMs in 44_400..45_600)
+        // Reset puts it all back as it was.
+        click(string(R.string.lyrics_sync_reset))
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") == null }
+        assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+    }
+
+    @Test
+    fun wordsOfASongHeardPutInTimeByHandMoveShazamsGapAndResetPutsItBack() {
+        // Shazam hears 12.5 seconds into the recording it matched, which is ten seconds ahead of the words, as learnt before.
+        ShazamGapStore(prefs()).save(MusicMetadata("Demo", "Band"), 600_000, "1", -10_000)
+        val synced = """[{"trackName":"Demo","artistName":"Band","duration":600,"syncedLyrics":"[00:00.00] Start\n[00:10.00] Ten\n[05:00.00] Late"}]"""
+        fake.handler = { request ->
+            when (request.url.host) {
+                "amp.shazam.com" -> FakeSpotify.html(request, """{"matches":[{"id":"1","offset":12.5}],"track":{"title":"Demo","subtitle":"Band"}}""")
+                "lrclib.net" -> FakeSpotify.html(request, synced)
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        allowMicrophone()
+        launch()
+        microphone.play(3.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        val song = MusicMetadata("Demo", "Band")
+        val lines = SyncedLyrics.parse("[00:00.00] Start\n[00:10.00] Ten\n[05:00.00] Late")
+        fun gap() = ShazamGapStore(prefs()).load(600_000, "1")
+        // Once the words are found, the place heard is moved by that gap: two and a half seconds in, not twelve.
+        waitUntil(TIMEOUT_MS) { lit("Start") }
+        // The second line is tapped as it's sung, so Shazam's recording is less ahead than learnt.
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Ten").performClick()
+        waitUntil(TIMEOUT_MS) { lit("Ten") }
+        assertTrue(gap().toString(), gap()!! in -3_500..-1_500)
+        // Nudged half a second later, the gap moves along.
+        val tapped = gap()!!
+        click(string(R.string.lyrics_sync_later))
+        waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+        // Reset puts back the gap learnt before, and the words with it, at once.
+        click(string(R.string.lyrics_sync_reset))
+        composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 6_000) }
+        assertEquals(-10_000L, gap())
+        // A line tapped too far from Shazam's place to be its gap is kept for these words alone.
+        composeRule.onNodeWithText("Late").performClick()
+        waitUntil(TIMEOUT_MS) { LyricsSyncStore(prefs()).load(song, lines).isNotEmpty() }
+        assertEquals(-10_000L, gap())
+    }
+
+    @Test
     fun learningShazamsGapNeverTakesTheMicrophone() {
         val hearing = FakeHearing()
         videoWithWords(hearing, video = false, durationMs = 52_000)

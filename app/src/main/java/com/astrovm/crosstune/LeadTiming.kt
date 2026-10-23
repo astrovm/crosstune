@@ -51,20 +51,28 @@ internal class ShazamGapStore(private val preferences: SharedPreferences) {
     /** By whatever name the song was learnt, as releases name it in their own ways, while a recording Shazam matches is of one song. */
     fun load(wordsMs: Long, matchId: String): Long? {
         val all = all()
-        return all.keys().asSequence().firstOrNull { it.endsWith("\u0000${wordsMs / 1000}\u0000$matchId") }?.let { all.opt(it) as? Number }?.toLong()
+        return all.keys().asSequence().firstOrNull { it.endsWith(suffix(wordsMs, matchId)) }?.let { all.opt(it) as? Number }?.toLong()
     }
 
     /** Whether a gap was learnt for [song]'s words at all, by any recording. */
     fun knows(song: MusicMetadata, wordsMs: Long): Boolean = all().keys().asSequence().any { it.startsWith(key(song, wordsMs)) }
 
     fun save(song: MusicMetadata, wordsMs: Long, matchId: String, gapMs: Long) {
-        val all = all()
-        val key = key(song, wordsMs) + matchId
-        all.remove(key)
-        all.put(key, gapMs)
+        // Learnt again by another name, it's the one gap, since it's found by any.
+        val all = without(wordsMs, matchId)
+        all.put(key(song, wordsMs) + matchId, gapMs)
         while (all.length() > 200) all.remove(all.keys().next())
         preferences.edit { putString("shazam_gaps", all.toString()) }
     }
+
+    fun forget(wordsMs: Long, matchId: String) {
+        preferences.edit { putString("shazam_gaps", without(wordsMs, matchId).toString()) }
+    }
+
+    private fun without(wordsMs: Long, matchId: String): JSONObject =
+        all().also { all -> all.keys().asSequence().filter { it.endsWith(suffix(wordsMs, matchId)) }.toList().forEach(all::remove) }
+
+    private fun suffix(wordsMs: Long, matchId: String) = "\u0000${wordsMs / 1000}\u0000$matchId"
 
     /** By the words' length too, as words for another release are timed another way. */
     private fun key(song: MusicMetadata, wordsMs: Long) =
