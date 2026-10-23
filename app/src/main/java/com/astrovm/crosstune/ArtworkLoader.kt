@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,10 +30,21 @@ internal class ArtworkLoader(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val cacheDir: File? = null
-) {
+) : Covers {
     /** Sized by memory rather than count, since a playlist's covers come by the hundred. */
     private val cache = object : LruCache<String, ImageBitmap>(MAX_CACHED_BYTES) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * BYTES_PER_PIXEL
+    }
+
+    /** The color each cover leans to, once worked out. */
+    private val colors = LruCache<String, Color>(MAX_COLORS)
+
+    override fun cover(url: String): ImageBitmap? = cache[url]
+
+    override fun color(url: String): Color? = colors[url]
+
+    override fun keepColor(url: String, color: Color) {
+        colors.put(url, color)
     }
 
     suspend fun load(url: String): ImageBitmap? {
@@ -98,6 +110,7 @@ internal class ArtworkLoader(
         const val MAX_CACHED_BYTES = 24 * 1024 * 1024
         const val BYTES_PER_PIXEL = 4
         const val MAX_ON_DISK = 600
+        const val MAX_COLORS = 200
         const val MAX_SIZE_PX = 400
     }
 }

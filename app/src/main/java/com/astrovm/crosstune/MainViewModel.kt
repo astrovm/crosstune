@@ -127,6 +127,26 @@ internal class MainViewModel(
         // Written otherwise, the line's words are no longer the ones timed.
         japanese?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
+
+    /** What was worked out for a song's words, kept so they show again at once, as they were left. */
+    private class Kept(
+        val lyrics: String,
+        val lines: List<LyricLine>,
+        val synced: Boolean,
+        val found: LyricsFinder.Lyrics.Found?,
+        val foundLines: List<LyricLine>,
+        val japanese: List<String>?,
+        val syncPoints: List<SyncPoint>,
+        val learning: Learning,
+        /** What the words were worked out with, see [madeWith]. */
+        val madeWith: String,
+        val chords: ChordsState
+    )
+
+    /** The words of the songs shown lately, by recording, the last one shown last. */
+    private val kept = object : LinkedHashMap<String, Kept>(KEPT_SONGS, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Kept>) = size > KEPT_SONGS
+    }
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
     init {
@@ -1351,6 +1371,7 @@ internal class MainViewModel(
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
+        keep()
         lyricsJob?.cancel()
         stopLearning()
         stopFollowing()
@@ -1358,46 +1379,97 @@ internal class MainViewModel(
         found = null
         japanese = null
         syncPoints = emptyList()
-        lyricsJob = viewModelScope.launch {
-            var first: LyricsFinder.FirstLook? = null
-            uiState = uiState.copy(
-                lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
-                canFollowApps = playback?.hasAccess() == true
-            )
-            try {
-                // A lookup that failed says so, rather than claiming the song has no words. The words
-                // show as soon as they're found, and their timing may get better after.
-                first = finder.firstLook(song)
-                when (val answer = first.lyrics) {
-                    is LyricsFinder.Lyrics.Found -> {
-                        foundLines = answer.lines
-                        found = answer
-                        syncPoints = syncStore.load(song, answer.lines)
-                        uiState = uiState.copy(
-                            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
-                            lyricsOffTake = timedForAnother(song)
-                        )
-                        uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
-                        followSavedLines(song)
-                        timeSavedLines(song)
-                        learn()
-                        chords()
-                        // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
-                        if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
-                    }
-                    LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
-                    LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
-                }
-            } finally {
-                if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
-            }
+        if (showKept(song)) {
             follow(song)
-            first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
+        } else {
+            lyricsJob = viewModelScope.launch {
+                var first: LyricsFinder.FirstLook? = null
+                uiState = uiState.copy(
+                    lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
+                    canFollowApps = playback?.hasAccess() == true
+                )
+                try {
+                    // A lookup that failed says so, rather than claiming the song has no words. The words
+                    // show as soon as they're found, and their timing may get better after.
+                    first = finder.firstLook(song)
+                    when (val answer = first.lyrics) {
+                        is LyricsFinder.Lyrics.Found -> {
+                            foundLines = answer.lines
+                            found = answer
+                            syncPoints = syncStore.load(song, answer.lines)
+                            uiState = uiState.copy(
+                                lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+                                lyricsOffTake = timedForAnother(song)
+                            )
+                            uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
+                            followSavedLines(song)
+                            timeSavedLines(song)
+                            learn()
+                            chords()
+                            // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
+                            if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
+                        }
+                        LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                        LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
+                    }
+                } finally {
+                    if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
+                }
+                follow(song)
+                first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
+            }
         }
         watchNext(song)
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
+
+    /** Keeps the words shown for when they're opened again, once all that's on for them is worked out. */
+    private fun keep() {
+        val song = uiState.lyricsFor ?: return
+        val learning = uiState.learning
+        val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || romajiJob?.isActive == true || learning.translating || uiState.chords.loading
+        if (uiState.lyrics.isEmpty() || working) return
+        kept[RecordingKey.of(song)] = Kept(
+            uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, japanese, syncPoints,
+            // A translation that failed is asked for again.
+            learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
+            // Chords none were found for are looked for again.
+            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh()
+        )
+    }
+
+    /**
+     * Shows [song]'s words as they were left, when they're kept and were worked out as they would
+     * be now, and says whether they were.
+     */
+    private fun showKept(song: MusicMetadata): Boolean {
+        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() } ?: return false
+        found = kept.found
+        foundLines = kept.foundLines
+        japanese = kept.japanese
+        syncPoints = kept.syncPoints
+        uiState = uiState.copy(
+            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
+            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, translations = kept.learning.translations, fromRomaji = kept.learning.fromRomaji),
+            chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
+        )
+        uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
+        followSavedLines(song)
+        timeSavedLines(song)
+        // Whatever's switched on since, and wasn't worked out then.
+        learn()
+        chords()
+        return true
+    }
+
+    /**
+     * What a song's words are worked out with: the language they're translated into, those left
+     * untranslated, and, signed in, ChatGPT and its model, which translate them, put their readings
+     * right and write romaji in Japanese.
+     */
+    private fun madeWith() =
+        listOf(translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
@@ -1892,6 +1964,7 @@ internal class MainViewModel(
      */
     fun dismissLyrics() {
         heardSong = null
+        keep()
         lyricsJob?.cancel()
         lyricsJob = null
         nextJob?.cancel()
@@ -2972,6 +3045,9 @@ internal class MainViewModel(
         /** Where a song's explanation, which is no line's, says it's from. */
         const val SONG = -1
         private const val KEY_TRANSLATE_INTO = "translate_into"
+
+        /** How many songs' words are kept to show again at once. */
+        private const val KEPT_SONGS = 20
         private const val KEY_UNTRANSLATED = "untranslated_languages"
         private const val KEY_READING_SCALE = "reading_scale"
         private const val KEY_WORDS_SCALE = "words_scale"
