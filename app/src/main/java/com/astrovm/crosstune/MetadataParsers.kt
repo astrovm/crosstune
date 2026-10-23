@@ -217,12 +217,31 @@ internal object MetadataParsers {
         if (separator <= 0) return MusicMetadata(rawTitle, author)
         val left = rawTitle.substring(0, separator).trim()
         val right = rawTitle.substring(separator + 3).trim()
+        // One song by two names, as YouTube Music titles Japanese ones, "プラスティック・ラブ - Plastic Love": by the channel.
+        if (SongNames.soundsAlike(right, left) || SongNames.soundsAlike(left, right)) return MusicMetadata(rawTitle, author)
         // "Song - Artist" when the artist is the channel and the left isn't: "Luz - Ciro y los Persas".
         if (author.isNotEmpty() && SongNames.same(right.substringBefore(" - ").trim(), author) && !SongNames.same(left, author)) {
             return MusicMetadata(left, author)
         }
-        return MusicMetadata(right.replace(paddedTrackRegex, "").removeSurrounding("\"").trim(), left)
+        val song = beforeItInJapanese(right) ?: right
+        return MusicMetadata(song.replace(paddedTrackRegex, "").removeSurrounding("\"").trim(), left)
     }
+
+    /**
+     * The song, when the title says it all again in Japanese after it, artist and all: "Plastic Love
+     * 竹内まりや - プラスティック・ラブ 1984" is "Plastic Love".
+     */
+    private fun beforeItInJapanese(title: String): String? {
+        val dash = artistSeparator(title).takeIf { it > 0 } ?: return null
+        val first = title.substring(0, dash)
+        val artist = first.indexOfFirst(::japanese).takeIf { it > 0 } ?: return null
+        if (!first.substring(artist).all { japanese(it) || it.isWhitespace() || it == '・' } || title.substring(dash).none(::japanese)) return null
+        return first.substring(0, artist).trim().takeIf { song -> song.any(Char::isLetter) && song.none(::japanese) }
+    }
+
+    private fun japanese(letter: Char) = Character.UnicodeScript.of(letter.code) in JAPANESE
+
+    private val JAPANESE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)
 
     /** Where "Artist - Song" splits, but not at a dash inside brackets: "NOFX [Reggae & Ska - 2014 Mixtape]" is one name. */
     private fun artistSeparator(title: String): Int {

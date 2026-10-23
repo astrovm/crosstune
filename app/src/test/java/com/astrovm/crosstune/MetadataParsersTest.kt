@@ -153,6 +153,32 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aJapaneseSongByTwoNamesIsOneSongByTheChannel() {
+        // As YouTube Music has an official video: the katakana says the English name.
+        assertEquals(MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi"), MetadataParsers.youtubeVideo("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi"))
+        assertEquals(MusicMetadata("Plastic Love - プラスティック・ラブ", "Mariya Takeuchi"), MetadataParsers.youtubeVideo("Plastic Love - プラスティック・ラブ", "Mariya Takeuchi"))
+        // An artist in Japanese before an English song is still the artist: the two don't sound alike.
+        assertEquals(MusicMetadata("First Love", "宇多田ヒカル"), MetadataParsers.youtubeVideo("宇多田ヒカル - First Love", "Uploader"))
+        assertEquals(MusicMetadata("新宝島", "サカナクション"), MetadataParsers.youtubeVideo("サカナクション - 新宝島", "Uploader"))
+        assertEquals(MusicMetadata("Bohemian Rhapsody", "Queen"), MetadataParsers.youtubeVideo("Queen - Bohemian Rhapsody [Lyrics English - Español Subtitulado]", "Luis Mihajlow"))
+    }
+
+    @Test
+    fun aSongSaidAgainInJapaneseAfterItIsTheFirst() {
+        assertEquals(
+            MusicMetadata("Plastic Love", "Mariya Takeuchi"),
+            MetadataParsers.youtubeVideo("Mariya Takeuchi - Plastic Love  竹内 まりや - プラスティックラブ 1984", "SOULCITYWALK")
+        )
+        assertEquals(MusicMetadata("Mayonaka no Door", "Miki Matsubara"), MetadataParsers.youtubeVideo("Miki Matsubara - Mayonaka no Door 松原みき - 真夜中のドア", "Uploader"))
+        // Not that: a song whose name goes on after a dash, or nothing in Japanese after it.
+        assertEquals(MusicMetadata("Song 日本 - Remix", "Band"), MetadataParsers.youtubeVideo("Band - Song 日本 - Remix", "Uploader"))
+        assertEquals(MusicMetadata("Song - 日本", "Band"), MetadataParsers.youtubeVideo("Band - Song - 日本", "Uploader"))
+        assertEquals(MusicMetadata("日本 - 真夜中", "Band"), MetadataParsers.youtubeVideo("Band - 日本 - 真夜中", "Uploader"))
+        assertEquals(MusicMetadata("Song 日本 Live - 真夜中", "Band"), MetadataParsers.youtubeVideo("Band - Song 日本 Live - 真夜中", "Uploader"))
+        assertEquals(MusicMetadata("1984 日本 - 真夜中", "Band"), MetadataParsers.youtubeVideo("Band - 1984 日本 - 真夜中", "Uploader"))
+    }
+
+    @Test
     fun aDashInsideBracketsDoesNotSplitTheTitle() {
         assertEquals(
             MusicMetadata("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod"),
