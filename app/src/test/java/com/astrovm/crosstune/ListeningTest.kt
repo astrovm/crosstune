@@ -1306,14 +1306,15 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
-    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true): FakePlayback {
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
         val phone = FakePlayback().apply {
             access = true
-            onThePhone = Heard.Song(song.copy(title = "デモ - Demo"), null)
-            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+            // A music app says where it is; a video's app can't.
+            onThePhone = if (video) Heard.Song(song.copy(title = "デモ - Demo"), null) else Heard.Song(song, null, 12_000, SystemClock.elapsedRealtime())
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = video, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
         inRecent("Demo")
@@ -1331,8 +1332,8 @@ class ListeningTest {
         val song = controllerModel().uiState.lyricsFor!!
         assertEquals("video:demo", song.recordingId)
         hearIntro(phone, hearing, 0..2)
-        waitUntil(TIMEOUT_MS) { VideoTimingStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
-        assertTrue(VideoTimingStore(prefs()).load(song)!! in 9_000..11_000)
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
         assertFalse(controllerModel().uiState.lyricsOffTake)
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
         assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.canSeek == true)
@@ -1345,16 +1346,56 @@ class ListeningTest {
         assertFalse(controllerModel().uiState.listeningAlong)
     }
 
-    /** The song heard at [hearings], 10 seconds apart, while the video, 10 seconds ahead of it, plays. */
-    private fun hearIntro(phone: FakePlayback, hearing: FakeHearing, hearings: IntRange) {
+    /** The song heard at [hearings], 10 seconds apart, while the video, [leadMs] ahead of it, plays. */
+    private fun hearIntro(phone: FakePlayback, hearing: FakeHearing, hearings: IntRange, leadMs: Long = 10_000) {
         for (index in hearings) {
             composeRule.runOnIdle {
                 val position = 2_000L + index * 10_000
-                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + leadMs, SystemClock.elapsedRealtime()))
                 hearing.song("Demo", position / 1000.0)
             }
             if (index < hearings.last) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
         }
+    }
+
+    @Test
+    fun aVideoWhoseExtraIsAfterTheSongIsLinedUpWhereItStarts() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        // Ten seconds longer than the words' take, all of it at the end: the song starts where the video does.
+        hearIntro(phone, hearing, 0..2, leadMs = 0)
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
+        assertTrue(LeadStore(prefs()).load(song)!! in -1_000..1_000)
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
+    }
+
+    @Test
+    fun aMusicAppPlayingAnotherReleaseThanTheWordsAreTimedForIsHeardAndLinedUp() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false)
+        // The release is heard, though its app says where it is, and meanwhile the words aren't offered to put in time by hand.
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.lyricsOffTake)
+        assertFalse(shown(string(R.string.lyrics_sync_hint)))
+        val song = controllerModel().uiState.lyricsFor!!
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
+        assertFalse(controllerModel().uiState.lyricsOffTake)
+        // The words follow the app, ten seconds behind it, and a line tapped is played where the release has it.
+        val following = controllerModel().uiState.following!!
+        assertTrue(following.toString(), following.clock.positionAt(SystemClock.elapsedRealtime()) in 20_000..24_000)
+        composeRule.onNodeWithText("Demo two").performClick()
+        assertTrue(phone.seeks.last() in 19_000..21_000)
+        // Opened again, the release is lined up at once, with no listening.
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        click(string(R.string.lyrics_button))
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        assertFalse(controllerModel().uiState.lyricsOffTake)
     }
 
     @Test
@@ -1385,12 +1426,27 @@ class ListeningTest {
     @Test
     fun linesKeptBeforeAnIntroWasKnownStartWhereTheSongDoesOnceItsRemembered() {
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
-        VideoTimingStore(prefs()).save(song, 10_000)
+        LeadStore(prefs()).save(song, 10_000)
         // Kept from the video by a version that didn't know its intro.
         SavedLinesStore(prefs()).toggle(SavedLine("Demo two", title = "Demo", artist = "Band", startMs = 10_000, endMs = 40_000))
         val hearing = FakeHearing()
         videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().leadMs == 10_000L }
+    }
+
+    @Test
+    fun aReleaseNotHeardAfterFiveTriesIsOfferedToPutInTimeByHand() {
+        val hearing = FakeHearing()
+        videoWithWords(hearing, video = false)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        repeat(5) { index ->
+            hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+            if (index < 4) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        assertTrue(controllerModel().uiState.lyricsOffTake)
+        waitForText(string(R.string.lyrics_sync_hint))
+        assertNull(LeadStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
     }
 
     @Test
@@ -1416,7 +1472,7 @@ class ListeningTest {
         }
         waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
         assertEquals(5, hearing.listens)
-        assertNull(VideoTimingStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
+        assertNull(LeadStore(prefs()).load(controllerModel().uiState.lyricsFor!!))
     }
 
     @Test

@@ -603,6 +603,47 @@ class MainActivityTest {
     }
 
     @Test
+    fun recentsPlayGoesWhereALinkTappedDoes() {
+        val deezer = MusicService.DEEZER.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
+        val url = "https://open.spotify.com/track/$TRACK_ID"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, url), MusicMetadata("Remember", "Artist")))
+        prefs().edit().putString("default_target", "DEEZER").putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
+        respondWithTrack("Remember", "Artist · Song")
+        // Shown in Crosstune first, it plays from its card here, and Crosstune stays.
+        val activity = launch()
+        val model = ViewModelProvider(activity)[MainViewModel::class.java]
+        click(string(R.string.history_open, "Remember"))
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("Remember", "Artist") to deezer, phone.songsAsked.single())
+        assertEquals("Remember", model.uiState.result?.title)
+        assertNull(nextStartedActivity())
+        assertFalse(activity.isFinishing)
+
+        // Not playing right away, its card only shows.
+        phone.songsAsked.clear()
+        composeRule.runOnIdle { model.clear() }
+        model.setPlayRightAway(false)
+        composeRule.waitForIdle()
+        click(string(R.string.history_open, "Remember"))
+        waitUntil { model.uiState.result != null && !model.uiState.isMatching }
+        composeRule.waitForIdle()
+        assertTrue(phone.songsAsked.isEmpty())
+        assertNull(nextStartedActivity())
+
+        // From the widget too.
+        composeRule.runOnIdle { model.clear() }
+        model.setPlayRightAway(true)
+        composeRule.runOnIdle { model.openRecent(url) }
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals("Remember", model.uiState.result?.title)
+        assertFalse(model.uiState.handingOff)
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
     fun linksGoStraightToTheAppOnNewInstallsAndShowInCrosstuneForWhoeverHadThemAskOrShowTheSongFirst() {
         fun migrated(vararg before: Pair<String, Boolean>): Pair<Boolean, Boolean> {
             prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")

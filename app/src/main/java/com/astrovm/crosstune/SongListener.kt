@@ -266,6 +266,9 @@ internal class PlayedSound(
 /** Something that hears what's playing nearby and names it. */
 internal fun interface SongHearing {
     suspend fun listen(): Heard
+
+    /** What an app on the phone plays, heard rather than as the app says, to tell how far the app is from the words. */
+    suspend fun listenToPlaying(): Heard = listen()
 }
 
 /**
@@ -279,9 +282,10 @@ internal class PlayingFirst(private val playback: PlaybackSource, private val he
     override suspend fun listen(): Heard {
         val playing = playback.nowPlaying() ?: return hearing.listen()
         if (playing.clock != null) return playing
-        val heard = played.listen().let { if (it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
-        return heard as? Heard.Song ?: playing
+        return listenToPlaying() as? Heard.Song ?: playing
     }
+
+    override suspend fun listenToPlaying(): Heard = played.listen().let { if (it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
 }
 
 /**

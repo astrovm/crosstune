@@ -103,7 +103,7 @@ internal class MainViewModel(
     /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
     private val updates: UpdateChecker? = null,
     /** Calibration may use the microphone only when its permission has already been granted. */
-    private val mayCalibrateVideo: () -> Boolean = { false },
+    private val mayCalibrate: () -> Boolean = { false },
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
@@ -113,7 +113,7 @@ internal class MainViewModel(
     private val historyStore = HistoryStore(preferences)
     private val savedLinesStore = SavedLinesStore(preferences)
     private val syncStore = LyricsSyncStore(preferences)
-    private val videoTimingStore = VideoTimingStore(preferences)
+    private val leadStore = LeadStore(preferences)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -1349,9 +1349,9 @@ internal class MainViewModel(
     private var appFollowing: Following? = null
 
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
-    private var videoLeadMs: Long? = null
-    private var videoLeadVerified = false
-    private var videoTiming = VideoTiming()
+    private var appLeadMs: Long? = null
+    private var appLeadVerified = false
+    private var leadTiming = LeadTiming()
     private var autoCalibrating = false
     private var calibrationAttempted = false
 
@@ -1518,41 +1518,51 @@ internal class MainViewModel(
     fun listenAlong() {
         if (alongJob?.isActive == true) return
         uiState = uiState.copy(listeningAlong = true)
-        alongJob = viewModelScope.launch {
-            var quiet = 0
-            var calibrationTries = 0
-            while (isActive) {
-                if (autoCalibrating && calibrationTries++ >= 5) {
-                    stopListeningAlong()
-                    return@launch
+        alongJob = listeningAlong()
+        // Being lined up by ear, the words aren't offered to put in time by hand meanwhile.
+        uiState.lyricsFor?.let { uiState = uiState.copy(lyricsOffTake = timedForAnother(it)) }
+    }
+
+    /**
+     * Whether a music app is playing a release the words aren't timed for, not lined up yet: it says
+     * where it is, so it's heard instead, to tell how far off it is.
+     */
+    private val lining get() = appFollowing?.let { !it.video && it.clock.playing && needsLead(it) && appLeadMs == null } == true
+
+    private fun listeningAlong() = viewModelScope.launch {
+        var quiet = 0
+        var calibrationTries = 0
+        while (isActive) {
+            if (autoCalibrating && calibrationTries++ >= 5) {
+                stopListeningAlong()
+                return@launch
+            }
+            when (val heard = if (lining) listener.listenToPlaying() else listener.listen()) {
+                is Heard.Song -> {
+                    quiet = 0
+                    heardAlong(heard)
+                    delay(listenAlongPauseMs)
                 }
-                when (val heard = listener.listen()) {
-                    is Heard.Song -> {
-                        quiet = 0
-                        heardAlong(heard)
-                        delay(listenAlongPauseMs)
+                // Nothing heard, the music has most likely stopped, so the words stop where they are,
+                // and the microphone rests, longer each time, until the app playing it plays again.
+                Heard.Nothing -> {
+                    heardClock?.takeIf { it.playing }?.let { clock ->
+                        heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
+                        keepInTime()
                     }
-                    // Nothing heard, the music has most likely stopped, so the words stop where they are,
-                    // and the microphone rests, longer each time, until the app playing it plays again.
-                    Heard.Nothing -> {
-                        heardClock?.takeIf { it.playing }?.let { clock ->
-                            heardClock = clock.copy(positionMs = clock.positionAt(now()), atMs = now(), playing = false)
-                            keepInTime()
-                        }
-                        val rest = quietPauseMs * (1L shl minOf(quiet, QUIET_PAUSE_DOUBLINGS))
-                        quiet++
-                        withTimeoutOrNull(rest) { appPlaysAgain.first() }
+                    val rest = quietPauseMs * (1L shl minOf(quiet, QUIET_PAUSE_DOUBLINGS))
+                    quiet++
+                    withTimeoutOrNull(rest) { appPlaysAgain.first() }
+                }
+                is Heard.Failed -> {
+                    // Without the microphone there's nothing to listen with; anything else, e.g. the
+                    // network or Shazam being busy, is tried again in a while.
+                    if (heard.error == AppError.MICROPHONE) {
+                        stopListeningAlong()
+                        uiState = uiState.copy(error = AppError.MICROPHONE, canRetry = false)
+                        return@launch
                     }
-                    is Heard.Failed -> {
-                        // Without the microphone there's nothing to listen with; anything else, e.g. the
-                        // network or Shazam being busy, is tried again in a while.
-                        if (heard.error == AppError.MICROPHONE) {
-                            stopListeningAlong()
-                            uiState = uiState.copy(error = AppError.MICROPHONE, canRetry = false)
-                            return@launch
-                        }
-                        delay(listenAlongPauseMs * 2)
-                    }
+                    delay(listenAlongPauseMs * 2)
                 }
             }
         }
@@ -1570,13 +1580,13 @@ internal class MainViewModel(
         // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (heard.clock != null) heardAtMs = now()
-        appFollowing?.takeIf { it.video && syncPoints.isEmpty() }?.let { app ->
-            val expected = app.durationMs?.let { video -> found?.lengthMs?.let { video - it } }
-            heard.clock?.let { clock -> videoTiming.heard(app.clock, clock, expected) }?.let { lead ->
-                videoLeadMs = lead
-                videoLeadVerified = true
-                videoTimingStore.save(shown, lead)
-                leadSavedLines(shown, app.appPackage, lead)
+        appFollowing?.takeIf { needsLead(it) && syncPoints.isEmpty() }?.let { app ->
+            val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
+            heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
+                appLeadMs = lead
+                appLeadVerified = true
+                leadStore.save(shown, lead)
+                if (app.video) leadSavedLines(shown, app.appPackage, lead)
                 if (autoCalibrating) stopListeningAlong()
             }
         }
@@ -1648,13 +1658,20 @@ internal class MainViewModel(
      */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        appFollowing?.takeIf { it.video && !videoLeadVerified && !calibrationAttempted && syncPoints.isEmpty() }?.let { app -> leadOf(app, shown)?.let { videoLeadMs = it } }
+        appFollowing?.takeIf { it.video && !appLeadVerified && !calibrationAttempted && syncPoints.isEmpty() }?.let { app -> leadOf(app, shown)?.let { appLeadMs = it } }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
     }
 
+    /**
+     * Whether what [app] plays may be ahead of, or behind, where the words are timed: a video, which
+     * may open with more than the song, or a release not as long as the one they're timed for.
+     */
+    private fun needsLead(app: Following) = app.video || found?.timedFor(app.durationMs) == false
+
     /** Whether [song]'s lines are timed for a recording not as long as the one playing (the app's own, for a video), so likely off, and not put right yet. */
     private fun timedForAnother(song: MusicMetadata) =
-        foundLines.isNotEmpty() && syncPoints.isEmpty() && videoLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false
+        foundLines.isNotEmpty() && syncPoints.isEmpty() && appLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false &&
+            !(lining && alongJob?.isActive == true)
 
     /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
     private fun leadOf(app: Following, song: MusicMetadata): Long? {
@@ -1665,23 +1682,24 @@ internal class MainViewModel(
     }
 
     /**
-     * Where the song is in what [app] plays: a video's place less how far it's ahead of the song.
-     * One not yet heard, so not lined up, gives way to where the song was heard, if it was.
+     * Where the song is in what [app] plays: its place less how far it was heard to be ahead of the
+     * words. A video not yet heard, so not lined up, gives way to where the song was heard, if it was.
      */
     private fun inSong(app: Following?): Following? {
-        if (app == null || !app.video) return app
-        val lead = videoLeadMs ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
+        if (app == null || (!app.video && appLeadMs == null)) return app
+        val lead = appLeadMs ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
         return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
     }
 
     /** [positionMs] in the song, where the app playing it has it: later, in a video ahead of it. */
-    private fun inApp(positionMs: Long) = positionMs + (videoLeadMs?.takeIf { appFollowing?.video == true } ?: 0L)
+    private fun inApp(positionMs: Long) = positionMs + (appLeadMs?.takeIf { appFollowing != null } ?: 0L)
 
     fun stopListeningAlong() {
         autoCalibrating = false
         pauseListeningAlong()
-        uiState = uiState.copy(listeningAlong = false)
+        // Not lined up by ear after all, the words may be put in time by hand.
+        uiState = uiState.copy(listeningAlong = false, lyricsOffTake = uiState.lyricsFor?.let(::timedForAnother) == true)
     }
 
     /** Crosstune went out of sight: the microphone stops, and starts again when it's back. */
@@ -1701,7 +1719,7 @@ internal class MainViewModel(
      */
     private fun follow(song: MusicMetadata) {
         stopFollowing()
-        videoTiming = VideoTiming()
+        leadTiming = LeadTiming()
         calibrationAttempted = false
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
@@ -1713,18 +1731,19 @@ internal class MainViewModel(
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) heardClock = left
                 appFollowing = playing
-                if (playing?.video == true && videoLeadMs == null) {
-                    videoLeadMs = videoTimingStore.load(song)?.also { leadSavedLines(song, playing.appPackage, it) }
-                    videoLeadVerified = videoLeadMs != null
+                if (playing?.let(::needsLead) == true && appLeadMs == null) {
+                    appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
+                    appLeadVerified = appLeadMs != null
                 }
                 // Once it's being listened for, only an intro heard to agree in several places lines the video up.
-                if (playing?.video == true && videoLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { videoLeadMs = it }
-                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) })
-                if (playing?.video == true && playing.clock.playing && videoLeadMs == null && syncPoints.isEmpty() && !calibrationAttempted && mayCalibrateVideo()) {
+                if (playing?.video == true && appLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { appLeadMs = it }
+                if (playing?.let(::needsLead) == true && playing.clock.playing && appLeadMs == null && syncPoints.isEmpty() && !calibrationAttempted && mayCalibrate()) {
                     calibrationAttempted = true
                     if (!uiState.listeningAlong) autoCalibrating = true
                     listenAlong()
                 }
+                // What the app plays tells whether the words are timed for it.
+                uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) }, lyricsOffTake = timedForAnother(song))
             }
         }
     }
@@ -1779,8 +1798,8 @@ internal class MainViewModel(
         followJob?.cancel()
         followJob = null
         appFollowing = null
-        videoLeadMs = null
-        videoLeadVerified = false
+        appLeadMs = null
+        appLeadVerified = false
         uiState = uiState.copy(following = null)
     }
 
@@ -2071,7 +2090,7 @@ internal class MainViewModel(
         // Timed again, it stays with the app it was kept from, when none follows the words now.
         val app = appFollowing
         return copy(
-            startMs = start, endMs = endOf(lines, index), leadMs = videoLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
+            startMs = start, endMs = endOf(lines, index), leadMs = appLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
             app = app?.appPackage ?: this.app, artworkUrl = uiState.lyricsFor?.artworkUrl ?: artworkUrl
         )
     }
@@ -2706,21 +2725,30 @@ internal class MainViewModel(
         )
     }
 
-    fun showHistoryEntry(entry: HistoryEntry) {
+    /** Shows [entry]'s card; [play], it plays from there, as a link shown here first does. */
+    fun showHistoryEntry(entry: HistoryEntry, play: Boolean = false) {
         selectHistoryEntry(entry)
+        pendingPlay = play
         loadTrackCovers()
         prepareResultDestination()
     }
 
-    fun openHistoryEntry(entry: HistoryEntry) = openSaved(entry, finishAfterOpen = false)
+    /**
+     * Recent's ▶ goes where a tapped link does: to the song's card here first, playing from there
+     * when it plays right away, or else straight to the user's app, from what was saved.
+     */
+    fun openHistoryEntry(entry: HistoryEntry) =
+        if (uiState.linksInCrosstune) showHistoryEntry(entry, play = uiState.playsRightAway) else openSaved(entry, finishAfterOpen = false)
 
     /**
-     * A Recent song from the widget's ▶: opened in the user's app like Recent's own ▶, from what
-     * was saved, with Crosstune going away after. Gone from Recent meanwhile, it's looked up again.
+     * A Recent song from the widget's ▶: as Recent's own ▶, with Crosstune going away after when it
+     * goes straight to the user's app. Gone from Recent meanwhile, it's looked up again.
      */
     fun openRecent(url: String?) {
         val entry = uiState.history.firstOrNull { it.link.url == url } ?: return resolveIncoming(url)
-        uiState = uiState.copy(handlingIncomingLink = true, handingOff = true, leaveSettings = true)
+        uiState = uiState.copy(leaveSettings = true)
+        if (uiState.linksInCrosstune) return openHistoryEntry(entry)
+        uiState = uiState.copy(handlingIncomingLink = true, handingOff = true)
         openSaved(entry, finishAfterOpen = true)
     }
 

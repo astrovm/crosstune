@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
-                    mayCalibrateVideo = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory()
                 )
