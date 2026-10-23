@@ -431,6 +431,10 @@ class SongListenerTest {
         val silent = PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }
         assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { SongListener(played(silent), shazam).listen() })
         assertTrue(silent.closed)
+        // Off by one from silence, as some phones' silence is, is silence too.
+        clock = 0
+        val hiss = PlayingTap(ByteArray(48_000 * 5) { if (it % 2 == 0) 127.toByte() else 129.toByte() }) { clock }
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { SongListener(played(hiss), shazam).listen() })
         // Without the tap there's nothing to open.
         assertNull(played(null).open())
     }
