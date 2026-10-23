@@ -316,6 +316,8 @@ class SongListenerTest {
         // Nothing playing on the phone, it listens.
         phone.onThePhone = null
         assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { PlayingFirst(phone, ears).listen() })
+        // Hearing that only has one way to listen hears what's playing that way too.
+        assertEquals(Heard.Failed(AppError.MICROPHONE), runBlocking { ears.listenToPlaying() })
     }
 
     @Test
