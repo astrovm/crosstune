@@ -174,6 +174,7 @@ internal class MainViewModel(
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
+            playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -1955,6 +1956,11 @@ internal class MainViewModel(
         uiState = uiState.copy(pureBlack = on)
     }
 
+    fun setPlayingBar(on: Boolean) {
+        preferences.edit { putBoolean(KEY_PLAYING_BAR, on) }
+        uiState = uiState.copy(playingBar = on)
+    }
+
     /** Kept only once let go, [save], rather than at every step of the slider. */
     fun setVisualsShade(shade: Float, save: Boolean) {
         if (save) preferences.edit { putFloat(KEY_VISUALS_SHADE, shade) }
@@ -3208,6 +3214,7 @@ internal class MainViewModel(
         const val KEY_PALETTE = "palette"
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
+        private const val KEY_PLAYING_BAR = "playing_bar"
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"

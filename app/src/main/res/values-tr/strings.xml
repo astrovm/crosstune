@@ -247,6 +247,7 @@
     <string name="palette_sunset">Gün batımı</string>
     <string name="palette_rose">Gül</string>
     <string name="setting_pure_black">Saf siyah</string>
+    <string name="setting_playing_bar">Çalanı göster</string>
     <string name="follow_help_title">Sözler müziğini takip etsin</string>
     <string name="follow_turn_on">Aç</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>

@@ -495,6 +495,7 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
                         },
                         onPureBlackChange = viewModel::setPureBlack,
+                        onPlayingBarChange = viewModel::setPlayingBar,
                         onFloat = ::float,
                         onVisualsShadeChange = viewModel::setVisualsShade,
                         onNextVisual = viewModel::nextVisual,

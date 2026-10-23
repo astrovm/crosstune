@@ -88,6 +88,8 @@ internal data class UiState(
     val palette: Palette = defaultPalette(),
     /** True black grounds in the dark. */
     val pureBlack: Boolean = false,
+    /** Whether what's playing shows as a bar at the bottom of the main screen. */
+    val playingBar: Boolean = true,
     /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
     val visuals: Boolean = false,
     /** How dark the ground over the visuals is, from 0, none, to 1, black. */

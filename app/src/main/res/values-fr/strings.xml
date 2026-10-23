@@ -247,6 +247,7 @@
     <string name="palette_sunset">Coucher de soleil</string>
     <string name="palette_rose">Rose</string>
     <string name="setting_pure_black">Noir pur</string>
+    <string name="setting_playing_bar">Afficher ce qui est en lecture</string>
     <string name="follow_help_title">Faire suivre votre musique aux paroles</string>
     <string name="follow_turn_on">Activer</string>
     <string name="setting_lyrics_follow">Les paroles suivent votre app de musique</string>
