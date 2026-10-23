@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 
 /**
@@ -12,7 +13,7 @@ internal class FakeShell(
     override val root: Boolean = false,
     private val does: (List<String>) -> Boolean = { true }
 ) : Shell {
-    val ran = mutableListOf<List<String>>()
+    val ran: MutableList<List<String>> = CopyOnWriteArrayList()
     /** Told when Shizuku starts or stops, while watched. */
     var changed: (() -> Unit)? = null
     /** Completed once the user answers; already, unless a test holds it. */

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -11,21 +12,21 @@ internal class FakePlayback : PlaybackSource {
     var access = false
     var restricted = false
     val playing = MutableStateFlow<Following?>(null)
-    val seeks = mutableListOf<Long>()
+    val seeks: MutableList<Long> = CopyOnWriteArrayList()
     /** Each ask to play (true) or pause (false). */
-    val plays = mutableListOf<Boolean>()
+    val plays: MutableList<Boolean> = CopyOnWriteArrayList()
     /** Each ask to go on to the next song (true) or back to the one before (false). */
-    val skips = mutableListOf<Boolean>()
+    val skips: MutableList<Boolean> = CopyOnWriteArrayList()
     /** Each song asked for by name, and the app asked. */
-    val songsAsked = mutableListOf<Pair<MusicMetadata, String?>>()
+    val songsAsked: MutableList<Pair<MusicMetadata, String?>> = CopyOnWriteArrayList()
     /** Each song's link given with it, when there was one. */
-    val linksAsked = mutableListOf<String?>()
+    val linksAsked: MutableList<String?> = CopyOnWriteArrayList()
     /** Whether there's an app to ask for a song. */
     var canPlaySongs = true
     /** The apps that can be asked for songs in the background, running or woken; any, when null. */
     var running: Set<String>? = null
     /** Each app opened on a song's link, and the link. */
-    val opened = mutableListOf<Pair<String, String>>()
+    val opened: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
     /** How many times Crosstune came back to the front. */
     var cameBack = 0
     private val songs = MutableStateFlow<Heard.Song?>(null)
