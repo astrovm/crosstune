@@ -20,7 +20,9 @@
     <string name="settings_button">설정</string>
     <string name="settings_title">설정</string>
     <string name="settings_where_you_listen">듣는 곳</string>
-    <string name="settings_default_label">링크를 열 앱</string>
+    <string name="settings_links_section">링크</string>
+    <string name="settings_default_label">음악 앱</string>
+    <string name="setting_show_in_crosstune_first">먼저 Crosstune에서 보기</string>
     <string name="settings_about_title">정보</string>
     <string name="settings_links_title">링크를 열 서비스</string>
     <string name="rule_opens_in">%1$s에서 열기</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">플레이리스트</string>
 
     <string name="setting_play_right_away">바로 재생</string>
-    <string name="settings_plays_in_label">재생할 앱</string>
     <string name="show_song_short">노래 보기</string>
-    <string name="setting_exact_match">정확한 항목 열기</string>
-    <string name="setting_exact_match_description">아니면 검색해요.</string>
+    <string name="setting_play_right_away_search">아니면 검색해요.</string>
     <string name="setting_not_found">곡을 찾지 못했을 때</string>
     <string name="not_found_ask">물어보기</string>
     <string name="not_found_original">원래 앱에서 열기</string>

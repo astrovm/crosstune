@@ -61,7 +61,6 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,7 +137,6 @@ internal const val RESULT_TAG = "result"
 internal const val PRACTICE_BADGE_TAG = "practice-badge"
 internal const val RESULT_TEXT_TAG = "result-text"
 internal const val DEFAULT_MENU_TAG = "default_destination"
-internal const val PLAYS_IN_MENU_TAG = "plays_in"
 internal const val NOW_PLAYING_TAG = "now_playing"
 
 /** Past this font scale, Play and Open stack: a long word like German's "Abspielen" no longer fits half the width. */
@@ -203,9 +201,8 @@ internal data class ScreenActions(
     val onTryLink: (Need) -> Unit = {},
     val onOpenShizuku: () -> Unit = {},
     /** Where tapped and shared links go: an app, or null for Crosstune. */
-    val onLinksOpenIn: (Destination?) -> Unit = {},
+    val onShowInCrosstuneFirstChange: (Boolean) -> Unit = {},
     val onPlayRightAwayChange: (Boolean) -> Unit = {},
-    val onExactMatchChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
@@ -900,10 +897,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     }
 }
 
-/**
- * "Open links in   Crosstune ▾": where tapped and shared links go, in settings, Crosstune first
- * and then the apps. With no [onCrosstune], it's only the apps, for which one plays them.
- */
+/** "Music app   Spotify ▾": the app songs open and play in, in settings. */
 @Composable
 internal fun DefaultDestinationMenu(
     destinations: List<Destination>,
@@ -911,18 +905,16 @@ internal fun DefaultDestinationMenu(
     onSelect: (Destination) -> Unit,
     label: String,
     modifier: Modifier,
-    installed: Set<MusicService>,
-    inCrosstune: Boolean = false,
-    onCrosstune: (() -> Unit)? = null
+    installed: Set<MusicService>
 ) {
     var expanded by remember { mutableStateOf(false) }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box {
-            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(if (onCrosstune == null) PLAYS_IN_MENU_TAG else DEFAULT_MENU_TAG)) {
-                if (inCrosstune) AppLogo(size = 20.dp) else DestinationIcon(selected, installed, size = 20.dp)
+            TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(DEFAULT_MENU_TAG)) {
+                DestinationIcon(selected, installed, size = 20.dp)
                 Spacer(Modifier.size(8.dp))
-                Text(if (inCrosstune) stringResource(R.string.app_name) else selected.label())
+                Text(selected.label())
                 AppIcon(
                     R.drawable.ic_expand_more,
                     contentDescription = null,
@@ -934,16 +926,9 @@ internal fun DefaultDestinationMenu(
             }
             var all by remember(expanded) { mutableStateOf(false) }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                if (onCrosstune != null) {
-                    MenuChoice(stringResource(R.string.app_name), inCrosstune, icon = { AppLogo(size = 24.dp) }) {
-                        expanded = false
-                        onCrosstune()
-                    }
-                    HorizontalDivider()
-                }
                 val short = destinations.shortList(installed, selected).takeUnless { all }
                 (short ?: destinations.installedFirst(installed)).forEach { destination ->
-                    MenuChoice(destination.label(), !inCrosstune && destination == selected, icon = { DestinationIcon(destination, installed) }) {
+                    MenuChoice(destination.label(), destination == selected, icon = { DestinationIcon(destination, installed) }) {
                         expanded = false
                         onSelect(destination)
                     }

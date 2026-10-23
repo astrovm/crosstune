@@ -20,7 +20,9 @@
     <string name="settings_button">Setelan</string>
     <string name="settings_title">Setelan</string>
     <string name="settings_where_you_listen">Tempat kamu mendengarkan</string>
-    <string name="settings_default_label">Buka link di</string>
+    <string name="settings_links_section">Link</string>
+    <string name="settings_default_label">Aplikasi musik</string>
+    <string name="setting_show_in_crosstune_first">Tampilkan di Crosstune dulu</string>
     <string name="settings_about_title">Tentang</string>
     <string name="settings_links_title">Buka link dari</string>
     <string name="rule_opens_in">Dibuka di %1$s</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_play_right_away">Langsung putar</string>
-    <string name="settings_plays_in_label">Putar di</string>
     <string name="show_song_short">Lihat lagu</string>
-    <string name="setting_exact_match">Buka yang persis sama</string>
-    <string name="setting_exact_match_description">Jika tidak, mencarinya.</string>
+    <string name="setting_play_right_away_search">Jika tidak, mencarinya.</string>
     <string name="setting_not_found">Saat lagu tidak ditemukan</string>
     <string name="not_found_ask">Tanya saya</string>
     <string name="not_found_original">Buka di tempat asalnya</string>

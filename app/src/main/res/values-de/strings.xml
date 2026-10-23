@@ -20,7 +20,9 @@
     <string name="settings_button">Einstellungen</string>
     <string name="settings_title">Einstellungen</string>
     <string name="settings_where_you_listen">Hier hörst du</string>
-    <string name="settings_default_label">Links öffnen in</string>
+    <string name="settings_links_section">Links</string>
+    <string name="settings_default_label">Musik-App</string>
+    <string name="setting_show_in_crosstune_first">Zuerst in Crosstune zeigen</string>
     <string name="settings_about_title">Info</string>
     <string name="settings_links_title">Links öffnen von</string>
     <string name="rule_opens_in">Öffnet in %1$s</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Playlist</string>
 
     <string name="setting_play_right_away">Sofort abspielen</string>
-    <string name="settings_plays_in_label">Abspielen in</string>
     <string name="show_song_short">Song zeigen</string>
-    <string name="setting_exact_match">Genauen Treffer öffnen</string>
-    <string name="setting_exact_match_description">Sonst wird gesucht.</string>
+    <string name="setting_play_right_away_search">Sonst wird gesucht.</string>
     <string name="setting_not_found">Wenn ein Song nicht gefunden wird</string>
     <string name="not_found_ask">Fragen</string>
     <string name="not_found_original">Dort öffnen, wo er herkommt</string>

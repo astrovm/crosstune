@@ -162,38 +162,32 @@ private fun SettingsList(
         scrollState = scroll
     ) {
 
-        // How songs come in and go out: where links open, whose links Crosstune opens, and what names a song playing nearby.
-        Spacer(Modifier.height(16.dp))
+        // How songs come in and go out: the app they open in, what a link does with it, and whose links Crosstune opens.
+        SectionHeader(stringResource(R.string.settings_links_section))
         Group {
             DefaultDestinationMenu(
                 destinations = state.destinations,
                 selected = state.defaultDestination,
-                onSelect = actions.onLinksOpenIn,
+                onSelect = actions.onTargetChange,
                 installed = state.installed,
                 label = stringResource(R.string.settings_default_label),
-                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                inCrosstune = state.linksInCrosstune,
-                onCrosstune = { actions.onLinksOpenIn(null) }
+                modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
-            // Opened in Crosstune, the song can play from there, in the app picked here.
-            if (state.linksInCrosstune) {
-                GroupDivider()
-                SettingSwitch(
-                    label = stringResource(R.string.setting_play_right_away),
-                    description = null,
-                    checked = state.playRightAway,
-                    onCheckedChange = actions.onPlayRightAwayChange
-                )
-                GroupDivider()
-                DefaultDestinationMenu(
-                    destinations = state.destinations,
-                    selected = state.defaultDestination,
-                    onSelect = actions.onTargetChange,
-                    installed = state.installed,
-                    label = stringResource(R.string.settings_plays_in_label),
-                    modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
-                )
-            }
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_show_in_crosstune_first),
+                description = null,
+                checked = state.linksInCrosstune,
+                onCheckedChange = actions.onShowInCrosstuneFirstChange
+            )
+            GroupDivider()
+            // Opened straight in the app, the song itself plays there; switched off, a search opens, so nothing starts.
+            SettingSwitch(
+                label = stringResource(R.string.setting_play_right_away),
+                description = if (state.linksInCrosstune) null else stringResource(R.string.setting_play_right_away_search),
+                checked = state.playRightAway,
+                onCheckedChange = actions.onPlayRightAwayChange
+            )
             GroupDivider()
             SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
         }
@@ -645,19 +639,7 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
     ) {
         Spacer(Modifier.height(16.dp))
         Group {
-            SettingSwitch(
-                label = stringResource(R.string.setting_exact_match),
-                description = stringResource(R.string.setting_exact_match_description),
-                checked = state.exactMatch,
-                onCheckedChange = actions.onExactMatchChange
-            )
-            // Only a song looked for can be not found; without exact matching, everything is searched.
-            AnimatedVisibility(visible = state.exactMatch, enter = Motion.appear, exit = Motion.disappear) {
-                Column {
-                    GroupDivider()
-                    NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
-                }
-            }
+            NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
             GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_clean_links),

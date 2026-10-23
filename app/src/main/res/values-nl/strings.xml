@@ -20,7 +20,9 @@
     <string name="settings_button">Instellingen</string>
     <string name="settings_title">Instellingen</string>
     <string name="settings_where_you_listen">Waar je luistert</string>
-    <string name="settings_default_label">Links openen in</string>
+    <string name="settings_links_section">Links</string>
+    <string name="settings_default_label">Muziek-app</string>
+    <string name="setting_show_in_crosstune_first">Eerst in Crosstune tonen</string>
     <string name="settings_about_title">Over</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="rule_opens_in">Opent in %1$s</string>
@@ -77,10 +79,8 @@
     <string name="type_playlist">Afspeellijst</string>
 
     <string name="setting_play_right_away">Meteen afspelen</string>
-    <string name="settings_plays_in_label">Afspelen in</string>
     <string name="show_song_short">Nummer tonen</string>
-    <string name="setting_exact_match">Exacte match openen</string>
-    <string name="setting_exact_match_description">Anders wordt er gezocht.</string>
+    <string name="setting_play_right_away_search">Anders wordt er gezocht.</string>
     <string name="setting_not_found">Als een nummer niet wordt gevonden</string>
     <string name="not_found_ask">Vraag het mij</string>
     <string name="not_found_original">Open het waar het vandaan komt</string>
