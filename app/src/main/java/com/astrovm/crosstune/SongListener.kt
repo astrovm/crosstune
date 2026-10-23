@@ -35,9 +35,10 @@ internal sealed interface Heard {
     /**
      * [appleMusicId] is the song on Apple Music, when Shazam knows it. [offsetMs] is how far into the
      * song the sound heard starts, and [startedAtMs] when that sound started, on the clock that counts
-     * since the phone started, so the words can follow on from there.
+     * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
+     * matched it to, whose place [offsetMs] is: often another release than the one playing.
      */
-    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null) : Heard {
+    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null, val matchId: String? = null) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs) else null
     }
@@ -106,9 +107,10 @@ internal class Shazam(
             artist = track.optString("subtitle"),
             artworkUrl = track.optJSONObject("images")?.optString("coverart")?.takeIf { it.isNotBlank() }
         )
+        val match = JSONObject(body).optJSONArray("matches")?.optJSONObject(0)
         // How far into the song the sound sent starts, in seconds.
-        val offset = JSONObject(body).optJSONArray("matches")?.optJSONObject(0)?.optDouble("offset")?.takeIf { it.isFinite() && it >= 0 }
-        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() })
+        val offset = match?.optDouble("offset")?.takeIf { it.isFinite() && it >= 0 }
+        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() }, matchId = match?.optString("id")?.takeIf { it.isNotBlank() })
     }
 
     companion object {
@@ -269,8 +271,11 @@ internal class PlayedSound(
 internal fun interface SongHearing {
     suspend fun listen(): Heard
 
-    /** What an app on the phone plays, heard rather than as the app says, to tell how far the app is from the words. */
-    suspend fun listenToPlaying(): Heard = listen()
+    /**
+     * What an app on the phone plays, heard rather than as the app says, to tell how far the app is from
+     * the words; by the microphone too, when the phone won't share its sound, unless not [byMicrophone].
+     */
+    suspend fun listenToPlaying(byMicrophone: Boolean = true): Heard = listen()
 }
 
 /**
@@ -287,7 +292,8 @@ internal class PlayingFirst(private val playback: PlaybackSource, private val he
         return listenToPlaying() as? Heard.Song ?: playing
     }
 
-    override suspend fun listenToPlaying(): Heard = played.listen().let { if (it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
+    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard =
+        played.listen().let { if (byMicrophone && it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
 }
 
 /**

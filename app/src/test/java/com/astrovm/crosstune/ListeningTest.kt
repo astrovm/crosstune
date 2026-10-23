@@ -774,9 +774,9 @@ class ListeningTest {
             return next.receive()
         }
 
-        /** [title] by Band, heard [seconds] into it, just now. */
-        fun song(title: String, seconds: Double) =
-            next.trySend(Heard.Song(MusicMetadata(title, "Band"), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime()))
+        /** [title] by Band, heard [seconds] into it, just now, in the recording Shazam calls [matchId]. */
+        fun song(title: String, seconds: Double, matchId: String? = null) =
+            next.trySend(Heard.Song(MusicMetadata(title, "Band"), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime(), matchId))
     }
 
     /**
@@ -1307,7 +1307,7 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_sync_hint)))
     }
 
-    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true): FakePlayback {
+    private fun videoWithWords(hearing: FakeHearing, permission: Boolean = true, video: Boolean = true, durationMs: Long = 62_000): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val song = MusicMetadata("Demo", "Band", recordingId = "video:demo")
@@ -1315,7 +1315,7 @@ class ListeningTest {
             access = true
             // A music app says where it is; a video's app can't.
             onThePhone = if (video) Heard.Song(song.copy(title = "デモ - Demo"), null) else Heard.Song(song, null, 12_000, SystemClock.elapsedRealtime())
-            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = video, durationMs = 62_000)
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = video, durationMs = durationMs)
         }
         MainActivity.playbackFactory = { phone }
         inRecent("Demo")
@@ -1397,6 +1397,70 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertEquals(3, hearing.listens)
         assertFalse(controllerModel().uiState.lyricsOffTake)
+    }
+
+    @Test
+    fun theReleaseTheWordsAreTimedForTeachesHowFarShazamsPlaceIsFromTheirs() {
+        val hearing = FakeHearing()
+        // As long as the words' take: where the app is, is where the words are.
+        val phone = videoWithWords(hearing, video = false, durationMs = 52_000)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        // Shazam matches it to a recording twenty seconds ahead of it, as one with a longer intro.
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(song, 52_000, "longer") != null && !controllerModel().uiState.listeningAlong }
+        assertTrue(ShazamGapStore(prefs()).load(song, 52_000, "longer")!! in -21_000..-19_000)
+        // Nothing to line up, the app's place stays the words'.
+        assertNull(LeadStore(prefs()).load(song))
+        assertTrue(controllerModel().uiState.following.toString(), controllerModel().uiState.following?.timingKnown == true)
+        // Learnt, it isn't listened for again.
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        click(string(R.string.lyrics_button))
+        composeRule.waitForIdle()
+        assertEquals(3, hearing.listens)
+        assertFalse(controllerModel().uiState.listeningAlong)
+    }
+
+    @Test
+    fun anotherReleaseShazamMatchesToARecordingWithAKnownGapIsLinedUpByIt() {
+        // Learnt on the release the words are timed for: Shazam's recording is twenty seconds ahead of them.
+        ShazamGapStore(prefs()).save(MusicMetadata("Demo", "Band"), 52_000, "longer", -20_000)
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        // This release is ten seconds ahead of the words, so thirty behind Shazam's place: not a lead it could
+        // have, unless Shazam's gap is taken off.
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.song("Demo", (position + 20_000) / 1000.0, matchId = "longer")
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null }
+        assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
+    }
+
+    @Test
+    fun learningShazamsGapNeverTakesTheMicrophone() {
+        val hearing = FakeHearing()
+        videoWithWords(hearing, video = false, durationMs = 52_000)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // The phone won't share its sound: it stops, with nothing wrong to say, as nobody asked it to listen.
+        hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        composeRule.waitForIdle()
+        assertNull(controllerModel().uiState.error)
+        assertEquals(1, hearing.listens)
     }
 
     @Test

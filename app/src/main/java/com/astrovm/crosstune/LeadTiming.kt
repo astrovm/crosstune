@@ -21,10 +21,13 @@ internal class LeadTiming {
      * song, after it or some of each, so it's ahead by no more than that, or behind, when it's
      * shorter. Not known, only a video's intro is believed.
      */
-    fun heard(app: PlaybackClock, song: PlaybackClock, extraMs: Long? = null): Long? {
+    fun heard(app: PlaybackClock, song: PlaybackClock, extraMs: Long? = null): Long? =
+        heard(app, song, extraMs?.let { min(0L, it) - SLACK_MS..max(0L, it) + SLACK_MS } ?: 0L..MAX_LEAD_MS)
+
+    /** The same, for a lead that can only be [possible]. */
+    fun heard(app: PlaybackClock, song: PlaybackClock, possible: LongRange): Long? {
         if (!app.playing || !song.playing || points.any { abs(it.lineMs - song.positionMs) < 3_000 }) return null
         val lead = app.positionAt(song.atMs) - song.positionMs
-        val possible = extraMs?.let { min(0L, it) - SLACK_MS..max(0L, it) + SLACK_MS } ?: 0L..MAX_LEAD_MS
         if (lead !in possible || abs(lead) > MAX_LEAD_MS) return null
         points += SyncPoint(song.positionMs, song.positionMs + lead)
         if (points.size > 7) points.removeAt(0)
@@ -35,6 +38,38 @@ internal class LeadTiming {
         /** How far off lengths, and hearings, may be. */
         const val SLACK_MS = 8_000L
         const val MAX_LEAD_MS = 60_000L
+    }
+}
+
+/**
+ * How far where the words are timed is from Shazam's place in the song, for each recording Shazam
+ * matches it to: one may open with more than the release the words fit, and Shazam may match a
+ * release that isn't playing to it. Learnt while what plays is timed by the words, it puts them
+ * right on any other release Shazam matches the same way.
+ */
+internal class ShazamGapStore(private val preferences: SharedPreferences) {
+    fun load(song: MusicMetadata, wordsMs: Long, matchId: String): Long? = all().opt(key(song, wordsMs) + matchId)?.let { it as? Number }?.toLong()
+
+    /** Whether a gap was learnt for [song]'s words at all, by any recording. */
+    fun knows(song: MusicMetadata, wordsMs: Long): Boolean = all().keys().asSequence().any { it.startsWith(key(song, wordsMs)) }
+
+    fun save(song: MusicMetadata, wordsMs: Long, matchId: String, gapMs: Long) {
+        val all = all()
+        val key = key(song, wordsMs) + matchId
+        all.remove(key)
+        all.put(key, gapMs)
+        while (all.length() > 200) all.remove(all.keys().next())
+        preferences.edit { putString("shazam_gaps", all.toString()) }
+    }
+
+    /** By the words' length too, as words for another release are timed another way. */
+    private fun key(song: MusicMetadata, wordsMs: Long) =
+        "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}\u0000${wordsMs / 1000}\u0000"
+
+    private fun all(): JSONObject = try {
+        JSONObject(preferences.getString("shazam_gaps", "{}").orEmpty())
+    } catch (_: JSONException) {
+        JSONObject()
     }
 }
 
