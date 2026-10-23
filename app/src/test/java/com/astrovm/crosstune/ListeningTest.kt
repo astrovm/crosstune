@@ -423,7 +423,8 @@ class ListeningTest {
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertFalse(barShown())
         click(string(R.string.dismiss_button))
-        assertTrue(barShown())
+        // Once the song the tap looked up is found, which happens off the main thread.
+        waitUntil(TIMEOUT_MS) { barShown() }
         // The app letting it go takes the bar away.
         phone.playing.value = null
         waitUntil(TIMEOUT_MS) { !barShown() }
