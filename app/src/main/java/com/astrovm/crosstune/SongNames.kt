@@ -56,10 +56,12 @@ internal object SongNames {
 
     /**
      * The names a song may go by: its title, then, for one that's two names joined by a dash, as
-     * YouTube Music gives "ミステリー・ガール - Mystery Girl", each of them.
+     * YouTube Music gives "ミステリー・ガール - Mystery Girl", each of them. A video's whole title, said
+     * again in Japanese, as Recent kept it before it was read better, goes by the song before that.
      */
     fun titleNames(title: String): List<String> =
-        listOf(title) + title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
+        listOf(title) + listOfNotNull(MetadataParsers.beforeItInJapanese(title)) +
+            title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
 
     /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     fun normalize(text: String): String =

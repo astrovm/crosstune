@@ -231,7 +231,7 @@ internal object MetadataParsers {
      * The song, when the title says it all again in Japanese after it, artist and all: "Plastic Love
      * 竹内まりや - プラスティック・ラブ 1984" is "Plastic Love".
      */
-    private fun beforeItInJapanese(title: String): String? {
+    fun beforeItInJapanese(title: String): String? {
         val dash = artistSeparator(title).takeIf { it > 0 } ?: return null
         val first = title.substring(0, dash)
         val artist = first.indexOfFirst(::japanese).takeIf { it > 0 } ?: return null
