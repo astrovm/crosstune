@@ -185,6 +185,10 @@ class MetadataParsersTest {
             MetadataParsers.youtubeVideo("NOFX [Reggae & Ska - 2014 Mixtape]", "YoDubMixes Prod")
         )
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song", "Chan"))
+        // Written with an en or em dash, as NewPipe names a video, it's the same.
+        assertEquals(MusicMetadata("Bohemian Rhapsody", "Queen"), MetadataParsers.musicVideo("Queen – Bohemian Rhapsody (Official Video Remastered)", "Queen Official"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band — Song", "Chan"))
+        assertEquals(MusicMetadata("Band–Song", "Chan"), MetadataParsers.youtubeVideo("Band–Song", "Chan"))
         assertEquals(MusicMetadata("Song", "Band ) [Mix - Series]"), MetadataParsers.youtubeVideo("Band ) [Mix - Series] - Song", "Chan"))
     }
 
