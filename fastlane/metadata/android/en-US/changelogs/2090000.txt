@@ -1,8 +1,8 @@
-A player for the song you play, with Copy, Share and Open with, and swipes to the lyrics.
-Lyrics keep their timing per recording, and video intros line up by listening.
+Links open in Crosstune first, then play in the app you pick.
+A player of its own, with Copy, Share and Open with.
+Lyrics line up by your phone's sound, for any release and for videos with an intro.
 Lyrics timed for another take offer a fix, with nudge arrows.
-Lyrics show faster.
-Make lyrics bigger or smaller from their menu, and report wrong words or timing.
-Reading correction moved to the practice card's menu.
-50 new visuals, 4 gone. Tap the visuals button for options.
+Reopened lyrics show at once, and play from there.
+One place to fix what Android hasn't allowed yet.
+50 new visuals, lyrics size, and problem reports.
 Patched YouTube and YouTube Music work too.
