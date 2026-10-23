@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     LinkInterception(applicationContext),
                     ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR)),
                     hearingFactory?.invoke().let { hearing ->
-                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(PlayedSound(soundTapFactory), Shazam(client)))
+                        PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(PlayedSound(soundTapFactory, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)), Shazam(client)))
                     },
                     systemDispatcher,
                     listenAlongPauseMs,

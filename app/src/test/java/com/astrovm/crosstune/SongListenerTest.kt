@@ -1,8 +1,10 @@
 package com.astrovm.crosstune
 
+import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -444,10 +446,12 @@ class SongListenerTest {
         // A phone that shared its sound once does again, so a video's silent start isn't heard by the microphone.
         clock = 0
         val taps = ArrayDeque(listOf(PlayingTap(music(1)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
-        val sound = PlayedSound({ taps.removeFirst() }, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
-        assertTrue(sound.open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("played", Context.MODE_PRIVATE)
+        fun sound() = PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        assertTrue(sound().open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
+        // Even after Crosstune starts again.
         clock = 0
-        val quiet = sound.open()!!.use { all(it, max = 48_000) }
+        val quiet = sound().open()!!.use { all(it, max = 48_000) }
         assertTrue(quiet.isNotEmpty() && quiet.all { it == 0.toShort() })
     }
 
