@@ -436,6 +436,18 @@ class SongListenerTest {
     }
 
     @Test
+    fun aPhoneThatHasSharedItsSoundIsntCountedOutByAQuietStart() {
+        // A phone that shared its sound once does again, so a video's silent start isn't heard by the microphone.
+        clock = 0
+        val taps = ArrayDeque(listOf(PlayingTap(music(1)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
+        val sound = PlayedSound({ taps.removeFirst() }, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        assertTrue(sound.open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
+        clock = 0
+        val quiet = sound.open()!!.use { all(it, max = 48_000) }
+        assertTrue(quiet.isNotEmpty() && quiet.all { it == 0.toShort() })
+    }
+
+    @Test
     fun readsThatShrinkAreTakenByTheClock() {
         val sound = music(2)
         clock = 100
