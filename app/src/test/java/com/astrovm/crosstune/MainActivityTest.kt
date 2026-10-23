@@ -253,11 +253,17 @@ class MainActivityTest {
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.onAllNodesWithTextCount(text: String): Int =
         onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().size
 
-    /** Resolved titles also appear in the history list, so any matching node counts. */
+    /**
+     * Resolved titles also appear in the history list, so any matching node counts. It may still be
+     * on its way, as a song's button that waits for its match while its name already shows.
+     */
     private fun assertTextShown(text: String) {
-        val action = resultActionText(text)
         // The main button says one word, and its description says where.
-        assertTrue("'$text' not shown", composeRule.onAllNodesWithTextCount(action) > 0 || composeRule.onAllNodes(hasContentDescription(action)).fetchSemanticsNodes().isNotEmpty())
+        fun shown() = resultActionText(text).let { action ->
+            composeRule.onAllNodesWithTextCount(action) > 0 || composeRule.onAllNodes(hasContentDescription(action)).fetchSemanticsNodes().isNotEmpty()
+        }
+        runCatching { composeRule.waitUntil(TIMEOUT_MS) { shown() } }
+        assertTrue("'$text' not shown", shown())
     }
 
     /** An icon that says [description] to screen readers, in place of words on screen. */
