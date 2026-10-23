@@ -50,6 +50,9 @@ internal sealed interface Effect {
      * The player covers where an error would show, so it's left unsaid there.
      */
     data class Show(val packageName: String, val finishAfterOpen: Boolean, val saysWhenItFails: Boolean = true) : Effect
+
+    /** Shazam can't be reached, so another app that names songs, when there's one, listens instead. */
+    data object RecognizeElsewhere : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -845,6 +848,7 @@ internal class MainViewModel(
 
     private fun showListenError(error: AppError) {
         uiState = uiState.copy(error = error, canRetry = error.canRetry)
+        if (error == AppError.RECOGNITION_UNAVAILABLE) effectChannel.trySend(Effect.RecognizeElsewhere)
     }
 
     /**

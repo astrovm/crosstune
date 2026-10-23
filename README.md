@@ -33,7 +33,7 @@ Anything that breaks later shows as **Things to fix** at the bottom of the main 
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
 - **Recent.** Search your recent songs, and swipe one away to remove it.
 - **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek. Whatever is playing waits in a bar on the home screen. Swipe up for the player, up again for the words, and down to go back.
-- **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. Prefer Shazam or the Google app? Pick it in **Settings** → **Song recognition app**.
+- **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. If Shazam can't be reached, it opens the Shazam app or Google's song search instead, when you have them.
 - **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there, make the words bigger or smaller, and fix the timing by tapping the line you hear or nudging it half a second at a time. Lyrics timed for another take offer the fix themselves. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
 - **Recording timing.** Lyrics and corrections stay with their recording. With microphone access already allowed, video lyrics briefly listen for an intro offset and remember it after three agreeing audio fingerprints.

@@ -6,7 +6,6 @@
     <string name="search_button">Найти</string>
     <string name="paste_button">Вставить</string>
     <string name="recognize_button">Распознать трек</string>
-    <string name="setting_recognizer">Приложение для распознавания музыки</string>
     <string name="clear_button">Очистить</string>
     <string name="loading_text">Обрабатываем ссылку…</string>
     <string name="open_in_youtube_music">Открыть в YouTube Music</string>

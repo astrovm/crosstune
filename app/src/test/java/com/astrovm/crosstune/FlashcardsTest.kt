@@ -77,8 +77,7 @@ class FlashcardsTest {
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.playbackFactory = { phone }
         MainActivity.lyricsBusyPauseMs = 0
-        prefs().edit().clear().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false)
-            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
+        prefs().edit().clear().putBoolean("setup_complete", true).putBoolean("exact_match", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         fake.handler = { request ->

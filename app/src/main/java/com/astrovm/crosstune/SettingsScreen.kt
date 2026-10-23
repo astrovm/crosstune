@@ -196,11 +196,6 @@ private fun SettingsList(
             }
             GroupDivider()
             SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
-            // Which app names a song playing nearby, when there's more than one.
-            if (actions.recognizers.size > 1) {
-                GroupDivider()
-                RecognizerRow(actions)
-            }
         }
 
         // What the words are translated into, and whether they follow the music app.
@@ -502,51 +497,6 @@ private const val CHATGPT = "ChatGPT"
 
 /** Marks where the heart icon goes in [R.string.made_with_love]. */
 internal const val HEART = "\uFFFC"
-
-/** Picks the app the Recognize button opens. */
-@Composable
-private fun RecognizerRow(actions: ScreenActions) {
-    var expanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = true }
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.setting_recognizer),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
-        Box {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                actions.recognizer?.let { PackageIcon(it.packageName, size = 20.dp) }
-                Text(
-                    text = actions.recognizer?.label.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-                AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 2.dp).size(16.dp).flipWhen(expanded))
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                actions.recognizers.forEach { recognizer ->
-                    DropdownMenuItem(
-                        text = { Text(recognizer.label) },
-                        leadingIcon = { PackageIcon(recognizer.packageName, size = 24.dp) },
-                        trailingIcon = { PickedMark(recognizer == actions.recognizer) },
-                        modifier = Modifier.semantics { selected = recognizer == actions.recognizer },
-                        onClick = {
-                            expanded = false
-                            actions.onRecognizerChange(recognizer)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
 
 /** The page listing the visuals. */
 private const val VISUALS_PAGE = "visuals"

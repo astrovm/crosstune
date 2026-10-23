@@ -43,7 +43,7 @@ abstract class ActionWidget : GlanceAppWidget() {
     }
 }
 
-/** Names the song playing nearby, with the app picked in Settings, as the big widget's button does. */
+/** Names the song playing nearby, as the big widget's button does. */
 class RecognizeWidget : ActionWidget() {
     override val icon = R.drawable.ic_recognize
     override val label = R.string.widget_recognize_label

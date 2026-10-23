@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.isSelectable
@@ -123,8 +122,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with search fallback; defaults and exact matching have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false)
-            .putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
+        prefs().edit().putBoolean("setup_complete", true).putBoolean("exact_match", false).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -312,21 +310,8 @@ class MainActivityTest {
     // endregion
 
     @Test
-    fun recognizeListensInCrosstuneUnlessAnotherAppIsChosenInSettings() {
+    fun recognizeAlwaysListensInCrosstune() {
         val recognize = string(R.string.recognize_button)
-        val setting = string(R.string.setting_recognizer)
-        val crosstune = string(R.string.app_name)
-        fun listenFilter(action: String) = IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) }
-        fun resume() {
-            controller!!.pause().resume()
-            composeRule.waitForIdle()
-        }
-        fun chooseRecognizer(label: String) = inSettings {
-            composeRule.onNodeWithText(setting).performScrollTo().performClick()
-            composeRule.waitForIdle()
-            composeRule.onAllNodesWithText(label).onLast().performClick()
-            composeRule.waitForIdle()
-        }
         /** A tap that listens here asks for the microphone, at most, rather than opening another app. */
         fun assertListensHere() {
             click(recognize)
@@ -336,79 +321,22 @@ class MainActivityTest {
         val activity = launch()
         // Turned down once, Android would still ask, so a tap that listens here asks again.
         shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(android.Manifest.permission.RECORD_AUDIO, true)
-        // Nothing installed: Crosstune listens itself, so there's nothing to pick.
         click(recognize)
         assertEquals(android.Manifest.permission.RECORD_AUDIO, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
         assertListensHere()
-        inSettings { assertTextAbsent(setting) }
 
-        // With other apps, Crosstune still comes first, and Settings offers them.
+        // Shazam's and Google's apps are only for when Crosstune can't reach Shazam, even one picked
+        // in Settings back when there was a choice.
         shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
-        installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), listenFilter(SongRecognizers.GOOGLE_SONG_SEARCH))
-        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.SHAZAM, "Shazam"))
-        installActivity(ComponentName(SongRecognizers.SHAZAM, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
-        resume()
-        assertListensHere()
-        inSettings {
-            composeRule.onNodeWithText(setting).performScrollTo().performClick()
-            composeRule.waitForIdle()
-            assertEquals(
-                listOf(crosstune, "Shazam", "Google"),
-                composeRule.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction() and (hasText("Shazam") or hasText("Google") or hasText(crosstune)))
-                    .fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString() }
-            )
-            composeRule.onAllNodesWithText("Google").onLast().performClick()
-            composeRule.waitForIdle()
-        }
-        assertEquals(SongRecognizers.GOOGLE, prefs().getString("song_recognizer", null))
-        click(recognize)
-        assertEquals(SongRecognizers.GOOGLE_SONG_SEARCH, nextStartedActivity()!!.action)
-
-        // Shazam opens even without its listening shortcut, and listens right away with it.
-        chooseRecognizer("Shazam")
-        click(recognize)
-        assertEquals(Intent.ACTION_MAIN, nextStartedActivity()!!.action)
-        installActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"), listenFilter(SongRecognizers.SHAZAM_LISTEN))
-        resume()
-        click(recognize)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
-
-        // A fresh activity reads the saved choice.
-        controller!!.pause().stop().destroy()
-        launch()
-        click(recognize)
-        assertEquals(SongRecognizers.SHAZAM_LISTEN, nextStartedActivity()!!.action)
-
-        // Uninstalling the chosen app goes back to Crosstune, keeping the choice for when it's back.
-        // Remove the fake components too: Robolectric keeps their manifest registry separately.
-        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Main"))
-        shadowOf(app.packageManager).removeActivity(ComponentName(SongRecognizers.SHAZAM, "Tagging"))
-        shadowOf(app.packageManager).removePackage(SongRecognizers.SHAZAM)
-        resume()
-        assertListensHere()
-        assertEquals(SongRecognizers.SHAZAM, prefs().getString("song_recognizer", null))
-
-        // Picking Crosstune again listens here.
-        chooseRecognizer("Google")
-        chooseRecognizer(crosstune)
+        installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), IntentFilter(SongRecognizers.GOOGLE_SONG_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        prefs().edit().putString("song_recognizer", SongRecognizers.GOOGLE).commit()
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
         assertListensHere()
 
         // Once there's text, the field offers to clear it instead.
         typeUrl(TRACK_ID)
         assertTextAbsent(recognize)
-    }
-
-    @Test
-    fun aRecognizerPickedBeforeCrosstuneCouldListenGoesBackToCrosstune() {
-        shadowOf(app.packageManager).installPackage(installedApp(SongRecognizers.GOOGLE, "Google"))
-        installActivity(ComponentName(SongRecognizers.GOOGLE, "MusicSearch"), IntentFilter(SongRecognizers.GOOGLE_SONG_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
-        prefs().edit().remove(SongRecognizers.KEY_PICK_RESET).putString("song_recognizer", SongRecognizers.GOOGLE).commit()
-        val activity = launch()
-        click(string(R.string.recognize_button))
-        // It listens here, asking for the microphone, instead of opening Google.
-        assertEquals(android.Manifest.permission.RECORD_AUDIO, shadowOf(activity).lastRequestedPermission.requestedPermissions.single())
-        assertNull(prefs().getString("song_recognizer", null))
-        inSettings { composeRule.onNodeWithText(string(R.string.setting_recognizer)).assertExists() }
     }
 
     @Test

@@ -80,7 +80,7 @@ class FixCenterTest {
         MainActivity.shellFactory = { emptyList() }
         MainActivity.phoneFactory = { Phone.PIXEL }
         MainActivity.checksForUpdates = { false }
-        prefs().edit().putBoolean("setup_complete", true).putBoolean(SongRecognizers.KEY_PICK_RESET, true).commit()
+        prefs().edit().putBoolean("setup_complete", true).commit()
         File(app.cacheDir, "lookups.json").delete()
         // Before Android 12 there's nothing to ask.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

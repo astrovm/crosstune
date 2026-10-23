@@ -7,7 +7,6 @@
     <string name="search_button">Cerca</string>
     <string name="paste_button">Incolla</string>
     <string name="recognize_button">Riconosci un brano</string>
-    <string name="setting_recognizer">App per riconoscere i brani</string>
     <string name="clear_button">Cancella</string>
     <string name="loading_text">Ricerca del link in corso…</string>
     <string name="open_in_youtube_music">Apri in YouTube Music</string>

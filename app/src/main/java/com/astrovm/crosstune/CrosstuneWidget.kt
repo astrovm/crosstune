@@ -147,10 +147,7 @@ class CrosstuneWidget : GlanceAppWidget() {
     }
 }
 
-/**
- * When it's wide, a button names a song playing nearby, with the app picked at the tap, see
- * RecognizeSongActivity.
- */
+/** When it's wide, a button names a song playing nearby, see RecognizeSongActivity. */
 @Composable
 internal fun WidgetContent(songs: List<WidgetSong>) {
     val context = LocalContext.current
