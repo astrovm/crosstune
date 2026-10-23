@@ -40,6 +40,19 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun whatFilmOrShowASongIsOfNamesNoOtherRecording() {
+        assertEquals("小幸運", SongNames.withoutEditionTag("小幸運 (電影《我的少女時代》主題曲)"))
+        assertEquals("光年之外", SongNames.withoutEditionTag("光年之外 (电影《Passengers》中国区主题曲)"))
+        assertEquals("Lemon", SongNames.withoutEditionTag("Lemon (ドラマ『アンナチュラル』主題歌)"))
+        assertEquals("Stay With Me", SongNames.withoutEditionTag("Stay With Me (From \"Goblin\" OST)"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song - Theme Song from Show"))
+        assertTrue(SongNames.same("小幸運 (電影《我的少女時代》主題曲)", "小幸運(我的少女時代電影主題曲)"))
+        // Words in a title aren't such a note: "Lost" isn't "OST", and a remix of the film's song is another recording.
+        assertEquals("Song (Lost Love)", SongNames.withoutEditionTag("Song (Lost Love)"))
+        assertEquals("Song (OST Remix)", SongNames.withoutEditionTag("Song (OST Remix)"))
+    }
+
+    @Test
     fun aTagThatAlsoNamesAnotherRecordingIsntJustAnEdition() {
         assertEquals("Hotel California", SongNames.withoutEditionTag("Hotel California (2013 Remaster)"))
         assertEquals("Hotel California (Live; 2013 Remaster)", SongNames.withoutEditionTag("Hotel California (Live; 2013 Remaster)"))

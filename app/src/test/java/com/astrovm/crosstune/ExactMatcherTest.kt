@@ -385,6 +385,14 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongNamedWithTheFilmItsOfIsFoundOnYouTubeMusicHoweverItSaysSo() {
+        respond(youTubeMusicPage(youTubeMusicRow("小幸運(我的少女時代電影主題曲)", "田馥甄 • 小幸運 • 4:26", videoId = "xiaoxingyun")))
+        assertEquals("https://music.youtube.com/watch?v=xiaoxingyun", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("小幸運 (電影《我的少女時代》主題曲)", "田馥甄")) })
+        // It's searched for without the film, which YouTube Music finds nothing for when it names it otherwise.
+        assertTrue(fake.requestBodies.first(), fake.requestBodies.first().contains("\"query\":\"小幸運 田馥甄\""))
+    }
+
+    @Test
     fun youTubeMusicMatchesSongsAlbumsAndArtists() {
         respond(
             youTubeMusicPage(
@@ -567,6 +575,21 @@ class ExactMatcherTest {
         val lookups = fake.requestedUrls.filter { "itunes.apple.com/lookup" in it }.map { it.toHttpUrl() }
         assertEquals(setOf("JP", "KR", "TW", "HK", "CN"), lookups.map { it.queryParameter("country") }.toSet())
         assertTrue(lookups.all { it.queryParameter("id") == "7" })
+    }
+
+    @Test
+    fun aSongCreditedOtherwiseEverywhereButItsOwnCountryIsFoundByThatCountrysStore() {
+        val song = MusicMetadata("光年之外 (電影《Passengers》中國區主題曲)", "鄧紫棋")
+        val songs = listOf(youTubeMusicRow("光年之外 (電影 《Passengers》 中文主題曲)", "G.E.M. • 光年之外 • 3:56", videoId = "lightyears0"))
+        // Only karaoke of it is credited to the name the link gives.
+        val videos = listOf(youTubeMusicRow("鄧紫棋 - 光年之外(KTV伴唱)", "米米KTV • 1M views • 3:56", videoId = "karaoke0000"))
+        // Argentina's and the US store credit it to G.E.M., Taiwan's to 鄧紫棋, and Japan's, looked up by the song, to G.E.M.
+        val japan = mapOf("JP" to appleSong("光年之外 (電影《Passengers》中國區主題曲)", "G.E.M.", 235_505))
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("TW" to appleSong("光年之外 (電影《Passengers》中國區主題曲)", "鄧紫棋", 235_505)), elsewhere = japan)
+        assertEquals("https://music.youtube.com/watch?v=lightyears0", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+        // Not known by G.E.M. anywhere, it isn't found, and the karaoke doesn't stand in for it.
+        namesAndTabs(songs = songs, videos = videos, elsewhere = japan)
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test

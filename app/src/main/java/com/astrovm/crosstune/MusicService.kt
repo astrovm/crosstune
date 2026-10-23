@@ -104,5 +104,6 @@ private fun pathSearchUrl(baseUrl: String): (String) -> String = { query ->
     baseUrl.toHttpUrl().newBuilder().addPathSegment(query).build().toString()
 }
 
+/** Without a tag that names no other recording, which some services' names leave out, and then find nothing. */
 internal fun searchQuery(metadata: MusicMetadata): String =
-    listOf(metadata.title, metadata.artist).filter { it.isNotBlank() }.joinToString(" ")
+    listOf(SongNames.withoutEditionTag(metadata.title), metadata.artist).filter { it.isNotBlank() }.joinToString(" ")

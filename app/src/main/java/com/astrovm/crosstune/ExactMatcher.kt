@@ -637,26 +637,30 @@ internal class ExactMatcher(
     /**
      * The song on Apple Music, by its name, or one of the same name and artist with a tag, as "(with
      * Delon)". A store may only have it in another script, as Argentina's has 夜に駆ける, so the US
-     * store, which names it in Latin letters too, is asked when this one doesn't have it.
+     * store, which names it in Latin letters too, is asked when this one doesn't have it; and last,
+     * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
+     * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
     private suspend fun appleSong(metadata: MusicMetadata): JSONObject? {
         val stores = listOf(country.takeIf { it.length == 2 }, "US").distinct()
-        return stores.firstNotNullOfOrNull { store ->
-            answering {
-                val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
-                    .addQueryParameter("term", searchQuery(metadata))
-                    .addQueryParameter("entity", "song")
-                    .addQueryParameter("limit", "10")
-                    .apply { store?.let { addQueryParameter("country", it) } }
-                    .build()
-                val results = fetchJson(url.toString()).optJSONArray("results")?.objects().orEmpty()
-                results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
-                    ?: results.firstOrNull {
-                        looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
-                            !hasVersionWords(it.optString("trackName"), metadata.title)
-                    }
+        stores.firstNotNullOfOrNull { appleSong(metadata, it) }?.let { return it }
+        if ((metadata.title + metadata.artist).none { Character.UnicodeScript.of(it.code) in EAST_ASIAN }) return null
+        return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store) } }.awaitAll() }.firstNotNullOfOrNull { it }
+    }
+
+    private suspend fun appleSong(metadata: MusicMetadata, store: String?): JSONObject? = answering {
+        val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("term", searchQuery(metadata))
+            .addQueryParameter("entity", "song")
+            .addQueryParameter("limit", "10")
+            .apply { store?.let { addQueryParameter("country", it) } }
+            .build()
+        val results = fetchJson(url.toString()).optJSONArray("results")?.objects().orEmpty()
+        results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
+            ?: results.firstOrNull {
+                looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
+                    !hasVersionWords(it.optString("trackName"), metadata.title)
             }
-        }
     }
 
     private suspend fun appleLookup(id: Long, store: String): JSONObject? {
@@ -846,6 +850,9 @@ internal class ExactMatcher(
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")
 
+        /** The scripts the stores in [NAMING_STORES] write names in. */
+        private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
+
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
 
@@ -857,7 +864,7 @@ internal class ExactMatcher(
             "cover", "covers", "covered", "karaoke", "live", "unplugged", "mtv", "vivo", "directo", "session", "sessions",
             "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "guitar",
             "bass", "drum", "drums", "chords", "tab", "tabs", "tutorial", "lesson", "practice", "reaction", "slowed",
-            "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute",
+            "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
             "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
         )
 
@@ -867,7 +874,7 @@ internal class ExactMatcher(
          */
         private val VERSION_MARKS = listOf(
             "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-            "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "커버", "라이브", "노래방"
+            "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
         ).map(SongNames::normalize)
     }
 }
