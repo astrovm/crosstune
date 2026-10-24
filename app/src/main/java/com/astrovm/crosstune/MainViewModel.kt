@@ -65,7 +65,7 @@ internal class MainViewModel(
     /** Where a song typed by name is looked up; nullable so tests need no catalogue. */
     private val songSearcher: SongSearcher? = null,
     /** What music apps are playing, which a song's timed words follow; nullable so tests need none. */
-    playback: PlaybackSource? = null,
+    playback: PlaybackSource?,
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
