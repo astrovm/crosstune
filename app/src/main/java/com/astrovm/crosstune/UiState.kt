@@ -410,6 +410,8 @@ internal data class Learning(
     val script: Script? = null,
     /** How each line reads, once worked out. */
     val lines: List<LineReading> = emptyList(),
+    /** How the song's title and its artist read, in that order, once worked out with its lines. */
+    val names: List<LineReading> = emptyList(),
     /** Each line translated, or null where it needs none, once done. */
     val translations: List<String?> = emptyList(),
     val translating: Boolean = false,

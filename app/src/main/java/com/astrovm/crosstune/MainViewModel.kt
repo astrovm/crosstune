@@ -1528,7 +1528,7 @@ internal class MainViewModel(
         syncPoints = kept.syncPoints
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
-            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, translations = kept.learning.translations, fromRomaji = kept.learning.fromRomaji),
+            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
         uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
@@ -2659,9 +2659,11 @@ internal class MainViewModel(
         if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
-                uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
                 val song = uiState.lyricsFor
+                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
+                // The song's name and its artist's read the same way, to show how to say them.
+                val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
+                uiState = uiState.copy(learning = uiState.learning.copy(lines = read, names = names))
                 // Lines kept with no reading, as ones once written otherwise, are read as they are now.
                 song?.let { rereadSavedLines(it, unread = true) }
                 if (script != Script.JAPANESE || song == null) return@launch
