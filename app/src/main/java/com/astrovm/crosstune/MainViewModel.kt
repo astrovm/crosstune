@@ -107,7 +107,9 @@ internal class MainViewModel(
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
-    phone: Phone
+    phone: Phone,
+    /** Where the words of the songs shown lately are kept for after the app's closed; nullable so tests need none. */
+    private val keptOnDisk: LookupCache? = null
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -129,24 +131,9 @@ internal class MainViewModel(
         japanese?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
 
-    /** What was worked out for a song's words, kept so they show again at once, as they were left. */
-    private class Kept(
-        val lyrics: String,
-        val lines: List<LyricLine>,
-        val synced: Boolean,
-        val found: LyricsFinder.Lyrics.Found?,
-        val foundLines: List<LyricLine>,
-        val japanese: List<String>?,
-        val syncPoints: List<SyncPoint>,
-        val learning: Learning,
-        /** What the words were worked out with, see [madeWith]. */
-        val madeWith: String,
-        val chords: ChordsState
-    )
-
     /** The words of the songs shown lately, by recording, the last one shown last. */
-    private val kept = object : LinkedHashMap<String, Kept>(KEPT_SONGS, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Kept>) = size > KEPT_SONGS
+    private val kept = object : LinkedHashMap<String, KeptWords>(KEPT_SONGS, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, KeptWords>) = size > KEPT_SONGS
     }
     private val destinationStore = DestinationStore(preferences, interception::isInstalled)
 
@@ -342,6 +329,14 @@ internal class MainViewModel(
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
     init {
+        // Read as the app starts, before anyone can open them, so they show at once as they were left.
+        keptOnDisk?.let { disk ->
+            viewModelScope.launch {
+                val read = withContext(systemDispatcher) { disk.entries().mapNotNull { (key, json) -> KeptWords.from(json)?.let { key to it } } }
+                // Any shown since are newer.
+                read.forEach { (key, words) -> if (key !in kept) kept[key] = words }
+            }
+        }
         updates?.let { checker ->
             viewModelScope.launch {
                 // Asked first, so what changed on screen meanwhile is kept.
@@ -1458,18 +1453,26 @@ internal class MainViewModel(
     }
 
     /** Keeps the words shown for when they're opened again, once all that's on for them is worked out. */
-    private fun keep() {
+    fun keep() {
         val song = uiState.lyricsFor ?: return
         val learning = uiState.learning
         val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || romajiJob?.isActive == true || learning.translating || uiState.chords.loading
         if (uiState.lyrics.isEmpty() || working) return
-        kept[RecordingKey.of(song)] = Kept(
+        val key = RecordingKey.of(song)
+        val words = KeptWords(
             uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, japanese, syncPoints,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
             madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh()
         )
+        kept[key] = words
+        keptOnDisk?.let { disk ->
+            viewModelScope.launch {
+                disk.put(key, words.json())
+                disk.save()
+            }
+        }
     }
 
     /**
@@ -3237,7 +3240,7 @@ internal class MainViewModel(
         private const val KEY_TRANSLATE_INTO = "translate_into"
 
         /** How many songs' words are kept to show again at once. */
-        private const val KEPT_SONGS = 20
+        const val KEPT_SONGS = 20
         private const val KEY_UNTRANSLATED = "untranslated_languages"
         private const val KEY_READING_SCALE = "reading_scale"
         private const val KEY_WORDS_SCALE = "words_scale"

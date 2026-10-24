@@ -682,6 +682,17 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aWordForAnotherVersionInTheArtistsNameDoesntCountAgainstIt() {
+        // "Mix" says a remix, but not in Little Mix's own video.
+        val song = MusicMetadata("Shout Out to My Ex", "Little Mix")
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow("Little Mix - Shout Out To My Ex (Official Video)", "Little Mix • 300M views • 4:06", videoId = "littlemix00")),
+            apple = mapOf("AR" to appleSong("Shout Out to My Ex", "Little Mix", 246_000))
+        )
+        assertEquals("https://music.youtube.com/watch?v=littlemix00", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {

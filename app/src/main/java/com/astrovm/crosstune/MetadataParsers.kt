@@ -364,7 +364,7 @@ internal object MetadataParsers {
     /** Deezer API object; errors come back as {"error": {...}} with HTTP 200, see [deezerError]. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
         if (json.has("error")) return null
-        val title = json.optString("title").ifEmpty { json.optString("name") }
+        val title = deezerTitle(json).ifEmpty { json.optString("name") }
         val artist = if (type == ItemType.TRACK || type == ItemType.ALBUM) {
             json.optJSONObject("artist")?.optString("name").orEmpty()
         } else {
@@ -385,7 +385,7 @@ internal object MetadataParsers {
     private fun deezerTracks(data: JSONArray): List<MusicMetadata> = (0 until data.length()).mapNotNull { index ->
         val track = data.optJSONObject(index) ?: return@mapNotNull null
         MusicMetadata(
-            track.optString("title").ifBlank { return@mapNotNull null },
+            deezerTitle(track).ifBlank { return@mapNotNull null },
             track.optJSONObject("artist")?.optString("name").orEmpty(),
             // The 250px size: sharp in a list.
             artworkUrl = track.optJSONObject("album")?.optString("cover_medium")?.ifBlank { null }
@@ -397,6 +397,17 @@ internal object MetadataParsers {
         val title = json.optString("title").ifBlank { return null }
         val artist = if (type == ItemType.PLAYLIST) "" else json.optString("author_name")
         return MusicMetadata(title, artist, type, json.optString("thumbnail_url").ifBlank { null })
+    }
+
+    /**
+     * A Deezer song's name, with its version in brackets, as other services write it: Deezer joins
+     * them with a space, "Matador Remasterizado 2008", which reads as one name.
+     */
+    fun deezerTitle(song: JSONObject): String {
+        val title = song.optString("title")
+        val name = song.optString("title_short")
+        val version = song.optString("title_version").trim()
+        return if (version.isNotEmpty() && version.first() !in "([" && title == "$name $version") "$name ($version)" else title
     }
 
     /** The error inside a Deezer API response, or null when there is none. */

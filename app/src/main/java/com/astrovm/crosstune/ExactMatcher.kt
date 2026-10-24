@@ -351,7 +351,7 @@ internal class ExactMatcher(
         // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
         val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
         return searchDeezer(searched).firstOrNull { result ->
-            val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("title")))
+            val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
             val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
@@ -627,7 +627,7 @@ internal class ExactMatcher(
         }
         if (lengthMs == null) {
             lengthMs = answering {
-                searchDeezer(metadata).firstOrNull { matches(metadata, it.optString("title"), it.optJSONObject("artist")?.optString("name").orEmpty()) }
+                searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }
         }
@@ -659,7 +659,7 @@ internal class ExactMatcher(
         results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
             ?: results.firstOrNull {
                 looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
-                    !hasVersionWords(it.optString("trackName"), metadata.title)
+                    !SongNames.saysAnotherVersion(it.optString("trackName"), metadata.title, metadata.artist)
             }
     }
 
@@ -707,7 +707,7 @@ internal class ExactMatcher(
     private fun isTheSongsVideo(row: Row, names: Names): Boolean {
         if (row.id == null) return false
         if (names.titles.none { titleIn(it, row.name) }) return false
-        if (names.titles.all { hasVersionWords(row.name, it) }) return false
+        if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
         val outside = row.name.replace(BRACKETED, " ")
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
@@ -746,15 +746,6 @@ internal class ExactMatcher(
     /** One of the artist's names in [name], as [titleIn] tells. */
     private fun artistIn(artist: String, name: String): Boolean =
         SongNames.artistNames(artist).any { titleIn(SongNames.withoutArticle(it), name) }
-
-    /** [name] says it's another version of [title]: a cover, karaoke, live, a remix… unless [title] itself does. */
-    private fun hasVersionWords(name: String, title: String): Boolean {
-        val own = SongNames.words(title)
-        if ((SongNames.words(name) - own).any { it in VERSION_WORDS }) return true
-        val letters = SongNames.normalize(name)
-        val titleLetters = SongNames.normalize(title)
-        return VERSION_MARKS.any { it in letters && it !in titleLetters }
-    }
 
     private fun JSONObject.text(): String = optJSONObject("text").runsText()
 
@@ -859,23 +850,6 @@ internal class ExactMatcher(
         /** How far a video ChatGPT picks may be from the song's length, as a video may open or end with more. */
         const val PICKED_VIDEO_LENGTH_MS = 45_000L
 
-        /** Words a video's title has when it's another version of the song, or not the song at all. */
-        private val VERSION_WORDS = setOf(
-            "cover", "covers", "covered", "karaoke", "live", "unplugged", "mtv", "vivo", "directo", "session", "sessions",
-            "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "guitar",
-            "bass", "drum", "drums", "chords", "tab", "tabs", "tutorial", "lesson", "practice", "reaction", "slowed",
-            "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
-            "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
-        )
-
-        /**
-         * The same, as other scripts write them, found anywhere in a title; written as [SongNames.normalize]
-         * leaves them, which takes the marks off ブ and splits 커버 into its letters.
-         */
-        private val VERSION_MARKS = listOf(
-            "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-            "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
-        ).map(SongNames::normalize)
     }
 }
 

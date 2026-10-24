@@ -89,6 +89,26 @@ class TranslatorTest {
     }
 
     @Test
+    fun spokenKoreanTheServicesMisreadIsAskedAsItsWritten() {
+        googleTranslates()
+        val lines = listOf("암만 봐도 넌 내 거야", "암만해도 난 네가 좋아", "글구 넌 갔어", "멀 원해", "멀리 가지 마", "암만이")
+        // Each kept, and shown, under the line as it's sung; only a word of its own is written out.
+        assertEquals(lines.map { "<$it>" }.toMutableList().apply {
+            this[0] = "<아무리 봐도 넌 내 거야>"; this[1] = "<아무래도 난 네가 좋아>"; this[2] = "<그리고 넌 갔어>"; this[3] = "<뭘 원해>"
+        }, translate(lines))
+        // MyMemory too, together and, when its rows don't come back apart, line by line.
+        google = { request -> FakeSpotify.html(request, "<html>Sorry...</html>", code = 429) }
+        myMemory()
+        assertEquals(listOf("[아무리 울어도]", "[그리고 울어]"), translate(listOf("암만 울어도", "글구 울어")))
+        others = { request ->
+            val text = request.url.queryParameter("q").orEmpty()
+            val rows = if ("\n" in text) "together" else "[$text]"
+            FakeSpotify.html(request, JSONObject().put("responseData", JSONObject().put("translatedText", rows)).put("responseStatus", 200).toString())
+        }
+        assertEquals(listOf("[아무리 웃어도]", "[그리고 울어]"), translate(listOf("암만 웃어도", "글구 울어")))
+    }
+
+    @Test
     fun whatGoogleCantTranslateMyMemoryDoes() {
         // A song longer than Google is asked at once, turned away after the first lines.
         val lines = (1..Translator.GOOGLE_LINES + 2).map { "Line $it" }

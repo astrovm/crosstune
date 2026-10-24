@@ -74,6 +74,13 @@ internal class Translator(
     private fun worthTranslating(line: String) = line.any(Char::isLetter)
 
     /**
+     * [line] with the spoken Korean the services read as other words written out, as a lyric
+     * sings it: "암만 봐도" ("no matter how I look") came back about cancer, 암.
+     */
+    private fun written(line: String): String =
+        SPOKEN_KOREAN.fold(line) { text, (spoken, written) -> text.replace(Regex("(?<![가-힣])$spoken(?![가-힣])"), written) }
+
+    /**
      * Google Translate, as Chrome's dictionary asks it, with no account: up to [GOOGLE_LINES] lines
      * at once, each its own row back. Rows other than the lines asked, e.g. turned away with a
      * page instead, leave the rest to MyMemory. [onFound] hears each line translated.
@@ -85,7 +92,7 @@ internal class Translator(
             .addQueryParameter("tl", target)
             .build()
         for (batch in lines.chunked(GOOGLE_LINES)) {
-            val form = FormBody.Builder().apply { batch.forEach { add("q", it) } }.build()
+            val form = FormBody.Builder().apply { batch.forEach { add("q", written(it)) } }.build()
             // Each row is the line in [target], then the language it was in.
             val rows = JSONArray(call(Request.Builder().url(url).post(form).build()))
             if (rows.length() != batch.size) return false
@@ -106,11 +113,11 @@ internal class Translator(
             if (batch.isNotEmpty() && (batch + line).joinToString("\n").toByteArray().size > MYMEMORY_BYTES) batches += mutableListOf(line) else batch += line
         }
         for (batch in batches) {
-            val rows = myMemoryRows(batch.joinToString("\n"), target) ?: return false
+            val rows = myMemoryRows(batch.joinToString("\n", transform = ::written), target) ?: return false
             if (rows.size == batch.size) {
                 batch.zip(rows).forEach { (line, row) -> onFound(line, row) }
             } else {
-                batch.forEach { line -> onFound(line, myMemoryRows(line, target)?.joinToString(" ") ?: return false) }
+                batch.forEach { line -> onFound(line, myMemoryRows(written(line), target)?.joinToString(" ") ?: return false) }
             }
         }
         return true
@@ -171,6 +178,9 @@ internal class Translator(
         private const val SAME_LANGUAGE = "DISTINCT LANGUAGES"
         /** Wikimedia asks to be told who's calling. */
         private const val USER_AGENT = "Crosstune (https://github.com/astrovm/crosstune)"
+        /** Spoken forms, each a word of its own, and how they're written; the longer first, as one holds another. */
+        private val SPOKEN_KOREAN = listOf("암만해도" to "아무래도", "암만" to "아무리", "글구" to "그리고", "멀" to "뭘")
+
         /** Lines asked of Google at once: a whole song, most of the time. */
         const val GOOGLE_LINES = 100
         /** Where Google's translations are kept, apart from MyMemory's. */

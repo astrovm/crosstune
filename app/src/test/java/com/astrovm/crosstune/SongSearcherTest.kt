@@ -60,6 +60,41 @@ class SongSearcherTest {
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { it.contains("country=AR") })
     }
 
+    /** Hong Kong's store answers its own query, the country's store another. */
+    private fun respondByStore(hongKong: String) {
+        fake.handler = { request: Request ->
+            val body = if (request.url.queryParameter("country") == "HK") hongKong else """{"results":[],"data":[]}"""
+            FakeSpotify.html(request, body)
+        }
+    }
+
+    private val jayChou = """{"results":[
+        {"trackName":"晴天","artistName":"周杰倫","trackViewUrl":"https://music.apple.com/hk/song/1721464906"},
+        {"trackName":"七里香","artistName":"周杰倫","trackViewUrl":"https://music.apple.com/hk/song/1721450037"}]}"""
+
+    @Test
+    fun aChineseSongTypedInPinyinIsFoundByItsName() {
+        respondByStore(jayChou)
+        // Hong Kong's store finds both by "jay chou", but only 晴天 is what was typed.
+        assertEquals(
+            listOf(MusicMetadata("晴天", "周杰倫", url = "https://music.apple.com/hk/song/1721464906")),
+            found("qing tian jay chou")
+        )
+    }
+
+    @Test
+    fun aSearchInChineseLettersDoesntAskForPinyin() {
+        respondByStore(jayChou)
+        assertEquals(emptyList<MusicMetadata>(), found("晴天"))
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.contains("country=HK") })
+    }
+
+    @Test
+    fun aSongWithoutChineseInItsNameIsntTakenForPinyin() {
+        respondByStore("""{"results":[{"trackName":"Qing Tian","artistName":"Someone","trackViewUrl":"https://music.apple.com/hk/song/2"}]}""")
+        assertEquals(emptyList<MusicMetadata>(), found("qing tian"))
+    }
+
     @Test
     fun deezersAnswersLeadAndARepeatedSongIsOne() {
         respond(
@@ -78,6 +113,24 @@ class SongSearcherTest {
     }
 
     @Test
+    fun aSongComesBeforeACoverNamedJustLikeIt() {
+        // As Deezer answers: a violin cover named word for word as typed, then the song.
+        respond(
+            """{"data":[
+                {"id":1,"title":"Quevedo BZRP Music Sessions, Vol. 52","rank":39919,"link":"https://www.deezer.com/track/1","artist":{"name":"Carlos Ro Violin"}},
+                {"id":2,"title":"Shakira: Bzrp Music Sessions, Vol. 53","rank":900000,"link":"https://www.deezer.com/track/2","artist":{"name":"Bizarrap"}},
+                {"id":3,"title":"Quevedo: Bzrp Music Sessions, Vol. 52/66","rank":764325,"link":"https://www.deezer.com/track/3","artist":{"name":"Bizarrap"}}
+            ]}"""
+        )
+        // Of those with all that was typed, the one more people play leads; one with less of it,
+        // however played, follows.
+        assertEquals(
+            listOf("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Quevedo BZRP Music Sessions, Vol. 52", "Shakira: Bzrp Music Sessions, Vol. 53"),
+            found("Quevedo Bzrp Music Sessions Vol 52").map { it.title }
+        )
+    }
+
+    @Test
     fun nothingToSearchAndNothingFoundBothFindNothing() {
         respond("""{"data":[]}""")
         assertEquals(emptyList<MusicMetadata>(), found("   "))
@@ -88,6 +141,10 @@ class SongSearcherTest {
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
         respond("""{"data":[{"id":1,"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":""}}]}""")
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
+
+        // Its version in brackets, as other services write it.
+        respond("""{"data":[{"id":1,"title":"Matador Remasterizado 2008","title_short":"Matador","title_version":"Remasterizado 2008","link":"https://www.deezer.com/track/1","artist":{"name":"Los Fabulosos Cadillacs"}}]}""")
+        assertEquals(listOf("Matador (Remasterizado 2008)"), found("Matador").map { it.title })
         respond("""{"data":[null,7,"nope"]}""")
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
 

@@ -58,6 +58,25 @@ class ReadingsTest {
     }
 
     @Test
+    fun aChineseNameIsSaidInPlainLetters() {
+        assertEquals("qingtian", Readings.pinyinLetters("晴天"))
+        assertEquals("guangnianzhiwai", Readings.pinyinLetters("光年之外 (Light Years Away)"))
+        assertNull(Readings.pinyinLetters("Plastic Love"))
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun fromAndroid10AChineseNameIsSaidInLetters() {
+        assertEquals("qingtian", Readings.pinyinLetters("晴天"))
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun beforeAndroid10AChineseNameCantBeSaidInLetters() {
+        assertNull(Readings.pinyinLetters("晴天"))
+    }
+
+    @Test
     @Config(sdk = [28])
     fun beforeAndroid10OtherScriptsHaveNoLatinReading() {
         assertNull(Readings.displayScriptOf(listOf("Привет, мир")))
@@ -197,6 +216,23 @@ class ReadingsTest {
         assertEquals(listOf(Ruby("我", "wǒ"), Ruby("爱", "ài"), Ruby("你", "nǐ"), Ruby("!")), line.parts)
         assertEquals("wǒ ài nǐ!", line.romanized)
         assertEquals(line.romanized, line.reading)
+    }
+
+    @Test
+    fun bopomofoIsAlreadyAReadingThoughItsㄧIsWrittenAs一() {
+        // Jay Chou's 晴天 writes a sound "ㄒ一", with 一 for the bopomofo ㄧ; elsewhere 一 is a word.
+        val (line) = Readings.of(listOf("ㄒ一 一起 一ㄠˋ"), Script.CHINESE)
+        assertEquals(listOf(Ruby("ㄒ一 "), Ruby("一", "yī"), Ruby("起", "qǐ"), Ruby(" 一ㄠˋ")), line.parts)
+        assertEquals("ㄒㄧ yī qǐ ㄧㄠˋ", line.romanized)
+    }
+
+    @Test
+    fun everyBopomofoLetterIsAReading() {
+        // The first and last of bopomofo's letters, and of its extended ones.
+        for (letter in listOf('ㄅ', 'ㄯ', 'ㆠ', 'ㆿ')) {
+            val (line) = Readings.of(listOf("${letter}一"), Script.CHINESE)
+            assertEquals(letter.toString(), listOf(Ruby("${letter}一")), line.parts)
+        }
     }
 
     @Test

@@ -346,13 +346,35 @@ internal object Readings {
         return synchronized(this) { (simplifier ?: Transliterator.getInstance("Hant-Hans").also { simplifier = it }).transliterate(text) }
     }
 
+    /**
+     * How [text]'s Chinese is said, in plain letters, "晴天" as "qingtian", as someone who can't type
+     * it would; null with none, or before Android 10, which has no pinyin.
+     */
+    @SuppressLint("NewApi")
+    fun pinyinLetters(text: String): String? {
+        val han = text.filter(::isHan).ifEmpty { return null }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        return synchronized(this) { SongNames.normalize(pinyin().transliterate(han)) }
+    }
+
     /** One line at a time, as Android's transliterator can't be used from two threads at once. */
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun chinese(line: String): LineReading = synchronized(this) {
-        val parts = line.map { char -> if (isHan(char)) Ruby(char.toString(), pinyin().transliterate(char.toString())) else Ruby(char.toString()) }
-        val romanized = pinyin().transliterate(line).trim()
+        val parts = line.mapIndexed { index, char ->
+            if (isHan(char) && !spelledInBopomofo(line, index)) Ruby(char.toString(), pinyin().transliterate(char.toString())) else Ruby(char.toString())
+        }
+        // Bopomofo is a reading already, so it's left as it's said.
+        val said = line.mapIndexed { index, char -> if (spelledInBopomofo(line, index)) 'ㄧ' else char }.joinToString("")
+        val romanized = pinyin().transliterate(said).trim()
         LineReading(joined(parts), romanized, romanized)
     }
+
+    /** Whether [line]'s letter at [index] is 一 written for the bopomofo ㄧ it looks like, next to bopomofo: "ㄒ一" is "ㄒㄧ". */
+    private fun spelledInBopomofo(line: String, index: Int): Boolean =
+        line[index] == '一' && (line.getOrNull(index - 1)?.let(::isBopomofo) == true || line.getOrNull(index + 1)?.let(::isBopomofo) == true)
+
+    /** A bopomofo letter, or a tone mark written with them. */
+    private fun isBopomofo(c: Char) = c in 'ㄅ'..'ㄯ' || c in 'ㆠ'..'ㆿ' || c in "ˊˇˋ˙"
 
     /** Android's own letters-to-Latin, made once, the first time it's needed. */
     private var latinizer: Transliterator? = null

@@ -117,7 +117,9 @@ class MainActivity : ComponentActivity() {
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     microphoneAccess = { microphoneAccess(applicationContext) },
-                    phone = phoneFactory()
+                    phone = phoneFactory(),
+                    // The words of the songs shown lately, so they show at once after the app's closed too.
+                    keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS)
                 )
             }
         }
@@ -689,6 +691,8 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         if (isChangingConfigurations) return
+        // Left with the words open, they're kept, as Android may close the app before they're shut.
+        viewModel.keep()
         if (viewModel.uiState.listening) viewModel.stopListening()
         if (!floatingOverApps) {
             viewModel.pauseListeningAlong()

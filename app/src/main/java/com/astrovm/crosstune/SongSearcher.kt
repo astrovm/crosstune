@@ -38,7 +38,15 @@ internal class SongSearcher(
             // part, and the other is still asked.
             val deezer = async { withTimeoutOrNull(timeoutMs) { answering { deezer(words) } } ?: emptyList() }
             val itunes = async { withTimeoutOrNull(timeoutMs) { answering { itunes(words) } } ?: emptyList() }
-            val songs = deezer.await() + itunes.await()
+            // A Chinese song typed as it's said, "qing tian jay chou", which only Hong Kong's store
+            // looks up by; its songs whose name says that come first.
+            val pinyin = async {
+                if (words.any { it.code > 0x7f }) return@async emptyList()
+                val typed = SongNames.normalize(words)
+                val found = withTimeoutOrNull(timeoutMs) { answering { itunes(words, PINYIN_STORE) } }.orEmpty()
+                found.filter { song -> Readings.pinyinLetters(SongNames.bareTitle(song.title))?.let { it in typed } == true }
+            }
+            val songs = pinyin.await() + deezer.await() + itunes.await()
             // Each service's own repeated name is one song.
             songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
         }
@@ -61,29 +69,37 @@ internal class SongSearcher(
             .addQueryParameter("limit", "$LIMIT")
             .build()
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
+        val typed = query.split(Regex("\\s+")).map(SongNames::normalize).filter { it.isNotEmpty() }
         return (0 until results.length()).mapNotNull { index ->
             val song = results.optJSONObject(index) ?: return@mapNotNull null
-            val title = song.text("title")
+            val title = MetadataParsers.deezerTitle(song).trim()
             val artist = song.optJSONObject("artist")?.text("name").orEmpty()
             // Without both a name and an artist there's no song to look up anywhere else.
             if (title.isEmpty() || artist.isEmpty()) return@mapNotNull null
-            MusicMetadata(
+            val named = SongNames.normalize("$title $artist")
+            val found = MusicMetadata(
                 title = title,
                 artist = artist,
                 // Deezer's own link, so a song picked from here opens as itself in its app.
                 url = song.text("link").ifBlank { null },
                 artworkUrl = song.optJSONObject("album")?.text("cover_big")?.ifBlank { null }
             )
+            Triple(found, typed.count { it in named }, song.optLong("rank"))
         }
+            // Deezer puts the name said word for word first, so a cover named just like the song,
+            // "Quevedo BZRP Music Sessions, Vol. 52", came before it. Of those with as much of
+            // what was typed, the one more people play is first.
+            .sortedWith(compareByDescending<Triple<MusicMetadata, Int, Long>> { it.second }.thenByDescending { it.third })
+            .map { it.first }
     }
 
     /** What Apple's search holds for [query]; empty when it won't answer or has nothing. */
-    private suspend fun itunes(query: String): List<MusicMetadata> {
+    private suspend fun itunes(query: String, store: String = country): List<MusicMetadata> {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", query)
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "$LIMIT")
-            .apply { if (country.length == 2) addQueryParameter("country", country) }
+            .apply { if (store.length == 2) addQueryParameter("country", store) }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return emptyList()
         return (0 until results.length()).mapNotNull { index ->
@@ -114,6 +130,9 @@ internal class SongSearcher(
 
     private companion object {
         const val TIMEOUT_MS = 6_000L
+
+        /** Apple's store that finds Chinese songs by their pinyin. */
+        const val PINYIN_STORE = "HK"
 
         /** Enough to fill the list, few enough that neither service is asked for a page nobody reads. */
         const val LIMIT = 20
