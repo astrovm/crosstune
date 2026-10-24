@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.astrovm.crosstune.ui.theme.Palette
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -973,6 +974,7 @@ internal class MainViewModel(
             destinationUrls = savedDestinations(entry),
             history = history
         )
+        lookAhead()
         loadTrackCovers()
         prepareResult()
     }
@@ -1387,9 +1389,30 @@ internal class MainViewModel(
         showLyricsFor(uiState.lyricsFor ?: uiState.result ?: return)
     }
 
-    private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
+    /** [requested] as its words are looked up: as the app playing it has it, when one does. */
+    private fun asPlayed(requested: MusicMetadata): MusicMetadata {
         val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        val song = current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
+        return current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
+    }
+
+    /** The words of songs shown, by recording, while they're being looked up ahead. */
+    private val lookingAhead = HashMap<String, Deferred<LyricsFinder.FirstLook>>()
+
+    /**
+     * Looks up the words of the song shown as it shows, so they're there, or on their way, when
+     * opened; once found they're kept by the finder, so only one still on its way is held here.
+     */
+    private fun lookAhead() {
+        // A link going straight to the user's app shows nothing here to open the words of.
+        val finder = lyricsFinder?.takeIf { !uiState.handingOff } ?: return
+        val song = uiState.result?.takeIf { it.type == ItemType.TRACK }?.let(::asPlayed) ?: return
+        val key = RecordingKey.of(song)
+        if (key in lookingAhead || key in kept) return
+        lookingAhead[key] = viewModelScope.async { finder.firstLook(song) }.also { it.invokeOnCompletion { lookingAhead.remove(key) } }
+    }
+
+    private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
+        val song = asPlayed(requested)
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
         val finder = lyricsFinder ?: return
         if (song.type != ItemType.TRACK || song.artist.isBlank()) return
@@ -1419,7 +1442,7 @@ internal class MainViewModel(
                 try {
                     // A lookup that failed says so, rather than claiming the song has no words. The words
                     // show as soon as they're found, and their timing may get better after.
-                    first = finder.firstLook(song)
+                    first = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
                     when (val answer = first.lyrics) {
                         is LyricsFinder.Lyrics.Found -> {
                             foundLines = answer.lines
@@ -2873,6 +2896,7 @@ internal class MainViewModel(
     fun showHistoryEntry(entry: HistoryEntry, play: Boolean = false) {
         selectHistoryEntry(entry)
         pendingPlay = play
+        lookAhead()
         loadTrackCovers()
         prepareResultDestination()
     }
