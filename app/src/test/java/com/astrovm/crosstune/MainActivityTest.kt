@@ -2429,7 +2429,8 @@ class MainActivityTest {
 
         val started = nextStartedActivity()
         assertNotNull(started)
-        assertNull(started!!.`package`)
+        // The browser, by name, not the missing app.
+        assertEquals("com.example.browser", started!!.`package`)
         assertEquals(
             "https://music.youtube.com/search?q=Fallback%20Artist",
             started.dataString
@@ -5153,7 +5154,7 @@ class MainActivityTest {
         click(string(R.string.search_in_destination, "Invidious"))
         val opened = nextStartedActivity()!!
         assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
-        assertNull(opened.`package`)
+        assertEquals("com.example.browser", opened.`package`)
     }
 
     @Test
