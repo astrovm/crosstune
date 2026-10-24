@@ -46,6 +46,8 @@
         <package android:name="app.rvx.android.youtube" />
         <package android:name="app.morphe.android.youtube" />
         <package android:name="com.vanced.android.youtube" />
+        <!-- YouTube's TV app, which plays YouTube Music's songs on a TV, as MusicService.kt says. -->
+        <package android:name="com.google.android.youtube.tv" />
         <package android:name="app.revanced.android.apps.youtube.music" />
         <package android:name="app.rvx.android.apps.youtube.music" />
         <package android:name="app.morphe.android.apps.youtube.music" />

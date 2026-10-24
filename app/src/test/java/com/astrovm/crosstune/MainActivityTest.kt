@@ -2413,6 +2413,24 @@ class MainActivityTest {
     }
 
     @Test
+    fun onATvYouTubeMusicOpensInYouTubesTvAppBeforeABrowser() {
+        shadowOf(app).checkActivities(true)
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        installActivity(ComponentName(MusicService.YOUTUBE_TV, "${MusicService.YOUTUBE_TV}.ShellActivity"), browserFilter())
+        respondWithTrack("Fallback", "Artist · Song")
+        launch()
+
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText("Fallback")
+        click(string(R.string.open_in_youtube_music))
+
+        val started = nextStartedActivity()!!
+        assertEquals(MusicService.YOUTUBE_TV, started.`package`)
+        assertEquals("https://www.youtube.com/search?q=Fallback%20Artist", started.dataString)
+    }
+
+    @Test
     fun openFallsBackToBrowserWhenAppIsMissing() {
         shadowOf(app).checkActivities(true)
         installActivity(

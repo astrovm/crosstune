@@ -657,6 +657,27 @@ class PlaybackTest {
     }
 
     @Test
+    fun onATvAYouTubeMusicSongOpensInYouTubesTvApp() {
+        // YouTube Music's TV app opens its home for a song's link; YouTube's plays it, as YouTube's.
+        shadowOf(app).checkActivities(true)
+        val tv = ComponentName(MusicService.YOUTUBE_TV, "${MusicService.YOUTUBE_TV}.ShellActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(tv)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            tv, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https") }
+        )
+        assertTrue(playback.openSong(MusicService.YOUTUBE_MUSIC.packageName, "https://music.youtube.com/watch?v=other000000&list=RDAMVMother000000"))
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(MusicService.YOUTUBE_TV, opened.`package`)
+        assertEquals("https://www.youtube.com/watch?v=other000000&list=RDAMVMother000000", opened.dataString)
+        // What it plays is YouTube's.
+        assertEquals(MusicService.YOUTUBE, MusicService.ofPackage(MusicService.YOUTUBE_TV))
+        // Other services' links, and YouTube Music's that aren't its site, go to their own apps only.
+        assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://open.spotify.com/track/x"), MusicService.SPOTIFY.appLinks("https://open.spotify.com/track/x"))
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, MusicService.YOUTUBE_MUSIC.appLinks("vnd.youtube.music:x").map { it.first })
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, MusicService.YOUTUBE_MUSIC.appLinks("https://www.youtube.com/watch?v=x").map { it.first })
+    }
+
+    @Test
     fun aFilePlayingInABrowserIsNoSong() {
         allow()
         sounding()

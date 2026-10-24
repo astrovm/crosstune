@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal enum class ItemType(@StringRes val labelRes: Int) {
     TRACK(R.string.type_track),
@@ -80,11 +81,11 @@ internal enum class MusicService(
     /**
      * The app's own package, then those of builds patched from it, e.g. ReVanced's, which open its
      * links and play as it does: YouTube and YouTube Music by ReVanced, ReVanced Extended, Morphe and
-     * Vanced, under names of their own. Patched Spotify keeps Spotify's. Keep in sync with the
-     * manifest's queries.
+     * Vanced, under names of their own. Patched Spotify keeps Spotify's. YouTube's also has its TV app.
+     * Keep in sync with the manifest's queries.
      */
     val packageNames: List<String> get() = listOf(packageName) + when (this) {
-        YOUTUBE -> listOf("app.revanced.android.youtube", "app.rvx.android.youtube", "app.morphe.android.youtube", "com.vanced.android.youtube")
+        YOUTUBE -> listOf("app.revanced.android.youtube", "app.rvx.android.youtube", "app.morphe.android.youtube", "com.vanced.android.youtube", YOUTUBE_TV)
         YOUTUBE_MUSIC -> listOf(
             "app.revanced.android.apps.youtube.music", "app.rvx.android.apps.youtube.music", "app.morphe.android.apps.youtube.music",
             "com.vanced.android.apps.youtube.music"
@@ -92,7 +93,21 @@ internal enum class MusicService(
         else -> emptyList()
     }
 
+    /**
+     * Each app [link] may open in, with the link it takes there: this service's own apps, then, for
+     * YouTube Music, YouTube's TV app, as a YouTube link. YouTube Music's TV app opens its home for
+     * one, so on a TV a song plays there or nowhere.
+     */
+    fun appLinks(link: String): List<Pair<String, String>> {
+        val own = packageNames.map { it to link }
+        val onYouTube = link.toHttpUrlOrNull()?.takeIf { this == YOUTUBE_MUSIC && it.host == "music.youtube.com" } ?: return own
+        return own + (YOUTUBE_TV to onYouTube.newBuilder().host("www.youtube.com").build().toString())
+    }
+
     companion object {
+        /** YouTube's app on Android TV and Google TV. */
+        const val YOUTUBE_TV = "com.google.android.youtube.tv"
+
         fun fromName(name: String?): MusicService? = entries.firstOrNull { it.name == name }
 
         /** The service whose app, or a build patched from it, has [packageName]. */
