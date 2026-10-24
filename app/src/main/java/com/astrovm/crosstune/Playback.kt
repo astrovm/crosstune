@@ -38,6 +38,30 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 }
 
 /**
+ * Where an app says it paused can be a moment behind where the song really stopped, as YouTube
+ * Music's often is, by up to half a second. The song plays on from where it really stopped, so the
+ * words would come in late after every pause: where it was playing on to is believed instead, until
+ * the app says it's somewhere else, e.g. moved to another place.
+ */
+internal class SteadyPause {
+    private var last: PlaybackClock? = null
+    /** Where the app said it paused, when that was a moment behind; and where it had really got to. */
+    private var said: Long? = null
+    private var stopped = 0L
+
+    fun of(clock: PlaybackClock): PlaybackClock {
+        val behind = last?.takeIf { it.playing && !clock.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
+        if (behind != null) {
+            said = clock.positionMs.takeIf { behind in 1..STALE_PAUSE_MS }
+            stopped = clock.positionMs + behind
+        } else if (clock.positionMs != said) {
+            said = null
+        }
+        return (if (said != null) clock.copy(positionMs = stopped) else clock).also { last = it }
+    }
+}
+
+/**
  * A song followed as it plays: where it is, the app playing it if one is, by name and package, and
  * whether a line can be jumped to. In a [video] the app says where the video is, which may have
  * more before the song starts. The app may also go on to its next song, or back to the one before.
@@ -130,9 +154,11 @@ internal class MediaSessionPlayback(
     override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
         var watched: List<MediaController> = emptyList()
+        var pauses = SteadyPause()
+        fun steadily(controller: MediaController) = following(controller)?.let { it.copy(clock = pauses.of(it.clock)) }
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                trySend(followed?.let(::following))
+                trySend(followed?.let(::steadily))
             }
         }
         fun pick(controllers: List<MediaController>) {
@@ -140,9 +166,10 @@ internal class MediaSessionPlayback(
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
                 followed = playing
+                pauses = SteadyPause()
                 playing?.registerCallback(callback, handler)
             }
-            trySend(playing?.let(::following))
+            trySend(playing?.let(::steadily))
         }
         // An app moving on to another song, e.g. YouTube from an ad to the video, may now play it, or no longer.
         val renamed = object : MediaController.Callback() {
@@ -403,6 +430,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L
+
+/** How far behind where it was playing an app may say it paused, and still be believed to have stopped there instead. */
+internal const val STALE_PAUSE_MS = 1_000L
 
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
