@@ -71,6 +71,9 @@ class FixCenterTest {
     /** Spotify's app, once installed, still opening its links until a test stops it. */
     private var appKeepsLinks = true
 
+    /** Put back after, so other tests still tell the phone as the app does. */
+    private val realPhone = MainActivity.phoneFactory
+
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
@@ -107,7 +110,7 @@ class FixCenterTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
-        MainActivity.phoneFactory = { Phone.of(android.os.Build.MANUFACTURER, android.os.Build.BRAND) }
+        MainActivity.phoneFactory = realPhone
         MainActivity.checksForUpdates = ::looksForUpdates
         GuideActivity.host = null
         ShadowSettings.setCanDrawOverlays(false)

@@ -216,6 +216,7 @@ class FixStepsTest {
         steps(Need.Float, Phone.TV)
         composeRule.waitForIdle()
         assertShown(turnOn(R.string.app_name))
+        assertFalse(shown(turnOn(R.string.android_display_over_apps)))
         assertEquals(0, pictures())
     }
 
