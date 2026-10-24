@@ -385,6 +385,7 @@ class FixStepsTest {
         assertEquals(listOf(Need.Follow), state.copy(intercepted = emptySet()).checks().map { it.need })
         assertEquals("app:${spotify.packageName}", Need.StopApp(spotify).key)
         assertEquals("float", Need.Float.key)
+        assertEquals("mic", Need.Microphone.key)
         assertEquals(false, state.done(Need.Float))
     }
 
