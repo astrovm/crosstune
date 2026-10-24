@@ -73,33 +73,17 @@ class LinkInterceptionTest {
     }
 
     @Test
-    fun invidiousAndPipedSitesAreSourcesOfTheirOwn() {
-        for ((frontend, link) in mapOf(
-            Frontend.INVIDIOUS to "https://yewtu.be/watch?v=4NRXx6U8ABQ",
-            Frontend.PIPED to "https://piped.video/shorts/4NRXx6U8ABQ"
-        )) {
-            assertFalse(link, handledByCrosstune(link))
-            interception.setEnabled(frontend, true)
-            assertTrue(interception.isEnabled(frontend))
-            assertTrue(link, handledByCrosstune(link))
-            // YouTube's own links stay off.
-            assertFalse(handledByCrosstune("https://youtu.be/4NRXx6U8ABQ"))
-            interception.setEnabled(frontend, false)
-        }
-        Frontend.SOURCES.forEach { frontend ->
-            val component = ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${frontend.name}")
-            val declared = shadowOf(app.packageManager).getIntentFiltersForActivity(component)
+    fun invidiousAndPipedSitesArentLinksToAllow() {
+        // Each declared site is a box to tick in Android's settings, so frontends' aren't declared.
+        MusicService.entries.filter { it.canBeSource }.forEach { interception.setEnabled(it, true) }
+        assertFalse(handledByCrosstune("https://yewtu.be/watch?v=4NRXx6U8ABQ"))
+        assertFalse(handledByCrosstune("https://piped.video/shorts/4NRXx6U8ABQ"))
+        val declared = MusicService.entries.filter { it.canBeSource }.flatMap { service ->
+            shadowOf(app.packageManager).getIntentFiltersForActivity(ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${service.name}"))
                 .flatMap { filter -> (0 until filter.countDataAuthorities()).map { filter.getDataAuthority(it).host } }
-            assertEquals(frontend.name, declared.sorted(), frontend.sites.sorted())
         }
-    }
-
-    @Test
-    fun eachFrontendsSitesAreAllowedSeparately() {
-        FakeDomainVerification.install(app) { mapOf("yewtu.be" to DomainVerificationUserState.DOMAIN_STATE_SELECTED) }
-        val unapproved = interception.linkState().unapprovedFrontendHosts!!
-        assertEquals(Frontend.INVIDIOUS.sites - "yewtu.be", unapproved[Frontend.INVIDIOUS])
-        assertEquals(Frontend.PIPED.sites, unapproved[Frontend.PIPED])
+        assertEquals(LinkInterception.HOSTS.values.flatten().sorted(), declared.sorted())
+        assertEquals(25, declared.size)
     }
 
     @Test
@@ -251,10 +235,7 @@ class LinkInterceptionTest {
         installApp(MusicService.TIDAL)
         FakeDomainVerification.installPerPackage(app, linkHandlingAllowed = { it == MusicService.SPOTIFY.packageName }) { packageName ->
             when (packageName) {
-                MusicService.SPOTIFY.packageName -> mapOf(
-                    "open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED,
-                    "yewtu.be" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED
-                )
+                MusicService.SPOTIFY.packageName -> mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
                 MusicService.TIDAL.packageName -> mapOf("tidal.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
                 else -> emptyMap()
             }
@@ -265,10 +246,10 @@ class LinkInterceptionTest {
         // An app that claims several sources' links is one app, listed once.
         assertEquals(
             listOf(linkApp(MusicService.SPOTIFY) to true, linkApp(MusicService.TIDAL) to false),
-            state.claimingApps(setOf(MusicService.TIDAL, MusicService.SPOTIFY), setOf(Frontend.INVIDIOUS))!!.toList()
+            state.claimingApps(setOf(MusicService.TIDAL, MusicService.SPOTIFY))!!.toList()
         )
         // What's worked out for some sources doesn't need Android again.
-        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), state.blockingApps(emptySet(), setOf(Frontend.INVIDIOUS)))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), state.blockingApps(setOf(MusicService.SPOTIFY)))
         assertEquals(emptySet<LinkApp>(), state.blockingApps(setOf(MusicService.TIDAL)))
         assertEquals(listOf(linkApp(MusicService.SPOTIFY)), state.installedSourceApps(setOf(MusicService.SPOTIFY, MusicService.DEEZER)))
     }
@@ -280,7 +261,6 @@ class LinkInterceptionTest {
         val state = interception.linkState()
         assertEquals(listOf(linkApp(MusicService.SPOTIFY)), state.installedSourceApps(setOf(MusicService.SPOTIFY)))
         assertNull(state.unapprovedHosts)
-        assertNull(state.unapprovedFrontendHosts)
         assertNull(state.claimingApps(setOf(MusicService.SPOTIFY)))
     }
 }

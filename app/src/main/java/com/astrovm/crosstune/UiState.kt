@@ -28,10 +28,6 @@ internal data class UiState(
     /** Per-frontend destinations for links from Invidious's or Piped's sites; without one, YouTube's rule or the default applies. */
     val frontendRules: Map<Frontend, Destination> = emptyMap(),
     val intercepted: Set<MusicService> = emptySet(),
-    /** Web frontends, like Invidious, whose popular sites' links Crosstune opens: sources of their own. */
-    val frontendSources: Set<Frontend> = emptySet(),
-    /** Each one's sites Android doesn't let Crosstune open yet; null before Android 12. */
-    val unapprovedFrontendHosts: Map<Frontend, List<String>>? = null,
     /** Whether tapped and shared links open in Crosstune, on the song's card, rather than straight in an app. */
     val linksInCrosstune: Boolean = false,
     /**
@@ -261,12 +257,11 @@ internal data class UiState(
         get() = (defaultDestination as? Destination.Service)?.service
 
     /** Whether Crosstune opens any links at all. */
-    val interceptsAnything: Boolean get() = intercepted.isNotEmpty() || frontendSources.isNotEmpty()
+    val interceptsAnything: Boolean get() = intercepted.isNotEmpty()
 
     /** Whether some link Crosstune is set to open isn't allowed yet; false before Android 12, which can't tell. */
     val someLinksNotAllowed: Boolean
-        get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() } ||
-            frontendSources.any { unapprovedFrontendHosts?.get(it).orEmpty().isNotEmpty() }
+        get() = (ownLinksOff && interceptsAnything) || intercepted.any { unapprovedHosts?.get(it).orEmpty().isNotEmpty() }
 
     /**
      * Set when the app the result goes to was searched for it and doesn't have it, e.g. a song only on

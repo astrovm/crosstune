@@ -58,7 +58,10 @@ internal enum class Frontend(
     }
 
     companion object {
-        /** The web frontends whose links Crosstune can open when tapped. */
+        /**
+         * The web frontends whose popular sites' links Crosstune reads, shared or pasted. Not tapped:
+         * each site would be one more box to tick in Android's settings.
+         */
         val SOURCES = entries.filter { it.sites.isNotEmpty() }
 
         /** "yewtu.be" or "https://yewtu.be/feed" both mean "https://yewtu.be"; null if it isn't a web address. */

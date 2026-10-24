@@ -204,61 +204,6 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" android:host="www.audiomack.com" />
         </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="yewtu.be" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="inv.nadeko.net" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="invidious.nerdvpn.de" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="invidious.f5.si" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="invidious.tiekoetter.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="yt.chocolatemoo53.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="piped.video" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="piped.yt" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="piped.adminforge.de" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="piped.privacy.com.de" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="piped.leptons.xyz" />
-        </intent>
         <!-- Music apps that can be woken in the background, as AppWaker.kt does, whichever played a song. -->
         <intent>
             <action android:name="android.media.browse.MediaBrowserService" />
@@ -437,55 +382,6 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
-            </intent-filter>
-        </activity-alias>
-
-        <!-- Popular Invidious sites: a source of their own (Frontend.sites). -->
-        <activity-alias
-            android:name=".intercept.INVIDIOUS"
-            android:enabled="false"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            tools:ignore="AppLinkWarning">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:host="yewtu.be" />
-                <data android:host="inv.nadeko.net" />
-                <data android:host="invidious.nerdvpn.de" />
-                <data android:host="invidious.f5.si" />
-                <data android:host="invidious.tiekoetter.com" />
-                <data android:host="yt.chocolatemoo53.com" />
-                <data android:pathPrefix="/watch" />
-                <data android:pathPrefix="/shorts/" />
-                <data android:pathPrefix="/live/" />
-                <data android:pathPrefix="/embed/" />
-            </intent-filter>
-        </activity-alias>
-
-        <!-- Popular Piped sites: a source of their own (Frontend.sites). -->
-        <activity-alias
-            android:name=".intercept.PIPED"
-            android:enabled="false"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            tools:ignore="AppLinkWarning">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:host="piped.video" />
-                <data android:host="piped.yt" />
-                <data android:host="piped.adminforge.de" />
-                <data android:host="piped.privacy.com.de" />
-                <data android:host="piped.leptons.xyz" />
-                <data android:pathPrefix="/watch" />
-                <data android:pathPrefix="/shorts/" />
-                <data android:pathPrefix="/live/" />
-                <data android:pathPrefix="/embed/" />
             </intent-filter>
         </activity-alias>
 

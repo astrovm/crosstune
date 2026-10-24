@@ -518,7 +518,6 @@ class MainActivity : ComponentActivity() {
                         onResultTargetChange = viewModel::selectResultDestination,
                         onMakeDefault = { viewModel.selectDefault(viewModel.uiState.resultDestination) },
                         onInterceptChange = viewModel::setIntercepted,
-                        onFrontendInterceptChange = viewModel::setFrontendIntercepted,
                         onFrontendRuleChange = viewModel::setFrontendRule,
                         onRuleChange = viewModel::setRule,
                         onAddCustom = viewModel::addCustomDestination,
