@@ -1,0 +1,6 @@
+Runs on Android TV and Google TV, with the remote.
+A song cast to a TV shows as what's playing.
+Japanese readings float over the kanji.
+How a song's name and artist read, about the song.
+The words stay in time after a pause.
+Tapped SoundCloud, Bandcamp and Audiomack links stay in their apps.
