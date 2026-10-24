@@ -119,7 +119,8 @@ class MainActivity : ComponentActivity() {
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
-                    keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS)
+                    keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
+                    lookAhead = lookAheadLyrics
                 )
             }
         }
@@ -276,6 +277,10 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
+        @VisibleForTesting
+        internal var lookAheadLyrics: Boolean = true
 
         /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
         @VisibleForTesting

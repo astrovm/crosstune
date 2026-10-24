@@ -127,6 +127,8 @@ class MainActivityTest {
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
+        // Each song shown would look up its lyrics too, which tests counting what's asked don't expect.
+        MainActivity.lookAheadLyrics = false
     }
 
     @After
@@ -137,6 +139,7 @@ class MainActivityTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.lookAheadLyrics = true
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
     }
@@ -2991,6 +2994,7 @@ class MainActivityTest {
 
     @Test
     fun aSongsWordsLookedUpAsItShowsAreTheOnesOpened() {
+        MainActivity.lookAheadLyrics = true
         val held = java.util.concurrent.CountDownLatch(1)
         var tapped = false
         fake.handler = { request ->
@@ -3014,6 +3018,7 @@ class MainActivityTest {
 
     @Test
     fun aSongShowsItsWordsAndSaysSoWhenItHasNoneOrTheServiceIsBusy() {
+        MainActivity.lookAheadLyrics = true
         fun lyrics(json: String) {
             fake.handler = { request ->
                 if (request.url.host == "lrclib.net") FakeSpotify.html(request, json)
@@ -6744,10 +6749,7 @@ class MainActivityTest {
         click(string(R.string.clear_button))
         resolveTyped(OTHER_TRACK_ID)
         click(string(R.string.clear_button))
-        // Only its words are looked up again, ahead of being opened.
-        fun songLookups() = fake.requestedUrls.count { "spotify" in it }
-        val requests = songLookups()
-        assertTrue(fake.requestedUrls.toString(), requests > 0)
+        val requests = fake.requestedUrls.size
         fake.handler = { throw IOException("offline") }
 
         // The same song, shared with tracking added, is the same link once cleaned up.
@@ -6755,7 +6757,7 @@ class MainActivityTest {
         click(string(R.string.resolve_button))
         assertResultShown()
         assertTextShown("First Song")
-        assertEquals(requests, songLookups())
+        assertEquals(requests, fake.requestedUrls.size)
         // It moves to the top of Recent, as if looked up again.
         assertEquals(listOf(TRACK_ID, OTHER_TRACK_ID), HistoryStore(prefs()).load().map { it.link.id })
     }

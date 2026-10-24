@@ -110,7 +110,9 @@ internal class MainViewModel(
     /** The kind of phone, whose settings pages the steps to fix things show. */
     phone: Phone,
     /** Where the words of the songs shown lately are kept for after the app's closed; nullable so tests need none. */
-    private val keptOnDisk: LookupCache? = null
+    private val keptOnDisk: LookupCache? = null,
+    /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
+    private val lookAhead: Boolean = true
 ) : ViewModel() {
 
     private val historyStore = HistoryStore(preferences)
@@ -1404,7 +1406,7 @@ internal class MainViewModel(
      */
     private fun lookAhead() {
         // A link going straight to the user's app shows nothing here to open the words of.
-        val finder = lyricsFinder?.takeIf { !uiState.handingOff } ?: return
+        val finder = lyricsFinder?.takeIf { lookAhead && !uiState.handingOff } ?: return
         val song = uiState.result?.takeIf { it.type == ItemType.TRACK }?.let(::asPlayed) ?: return
         val key = RecordingKey.of(song)
         if (key in lookingAhead || key in kept) return
