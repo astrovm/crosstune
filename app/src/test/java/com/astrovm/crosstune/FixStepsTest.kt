@@ -153,16 +153,9 @@ class FixStepsTest {
     }
 
     @Test
-    fun theMicrophoneIsAskedForWhileAndroidAsksAndAllowedInAppInfoOnceItWont() {
-        showSteps(Need.Microphone) { copy(microphone = MicAccess.ASKABLE) }
-        assertShown(tap(R.string.android_while_using))
-        assertEquals(1, pictures())
-        // Android's own question, rather than a page.
-        click(string(R.string.allow_button))
-        assertEquals(listOf("open mic"), done)
-
-        steps(Need.Microphone) { copy(microphone = MicAccess.DENIED) }
-        composeRule.waitForIdle()
+    fun theMicrophoneTurnedDownForGoodIsAllowedInAppInfo() {
+        // While Android still asks, it's asked where it's used, so its steps are only for once it won't.
+        showSteps(Need.Microphone) { copy(microphone = MicAccess.DENIED) }
         assertShown(
             tap(R.string.android_permissions),
             tap(R.string.android_microphone),
@@ -217,12 +210,7 @@ class FixStepsTest {
     @Test
     @Config(sdk = [29])
     fun beforeAndroid11TheStepsAreAndroidsOlderOnesInWords() {
-        showSteps(Need.Microphone) { copy(microphone = MicAccess.ASKABLE) }
-        assertShown(tap(R.string.allow_button))
-        assertEquals(0, pictures())
-
-        steps(Need.Microphone) { copy(microphone = MicAccess.DENIED) }
-        composeRule.waitForIdle()
+        showSteps(Need.Microphone) { copy(microphone = MicAccess.DENIED) }
         assertShown(tap(R.string.android_permissions), string(R.string.fix_step_pick, string(R.string.allow_button)))
         assertEquals(0, pictures())
 
@@ -294,14 +282,16 @@ class FixStepsTest {
     @Test
     fun theListMarksEachThingAndFixesThemOneByOne() {
         showList { copy(canFollowApps = true) }
-        assertShown(string(R.string.setup_check_allow), string(R.string.fix_mic_title), string(R.string.follow_help_title))
+        assertShown(string(R.string.setup_check_allow), string(R.string.follow_help_title))
+        // The microphone is asked where it's used, not listed.
+        assertFalse(shown(string(R.string.fix_mic_title)))
         assertEquals(1, checkedOff())
         // Done, a row has nothing left to open.
-        click(string(R.string.fix_mic_title))
         click(string(R.string.follow_help_title))
+        click(string(R.string.setup_check_allow))
         click(string(R.string.fix_one_by_one))
         click(string(R.string.back_button))
-        assertEquals(listOf("steps mic", "steps links, mic", "close"), done)
+        assertEquals(listOf("steps links", "steps links", "close"), done)
     }
 
     @Test
@@ -335,9 +325,9 @@ class FixStepsTest {
         assertShown(string(R.string.fix_one_by_one))
 
         // Nothing left, there's nothing to do it all with.
-        state = state.copy(unapprovedHosts = emptyMap(), microphone = MicAccess.ALLOWED, canFollowApps = true)
+        state = state.copy(unapprovedHosts = emptyMap(), canFollowApps = true)
         composeRule.waitForIdle()
-        assertEquals(3, checkedOff())
+        assertEquals(2, checkedOff())
         assertFalse(shown(string(R.string.fix_one_by_one)))
     }
 
@@ -386,12 +376,13 @@ class FixStepsTest {
     @Test
     fun whatsBrokenIsCountedInTheOrderItsFixed() {
         val state = broken.copy(blockingApps = setOf(spotify), microphone = MicAccess.DENIED)
-        assertEquals(listOf(Need.StopApp(spotify), Need.Links, Need.Microphone, Need.Follow), state.checks().map { it.need })
-        assertEquals(4, state.toFix)
+        // The microphone, even turned down for good, is asked where it's used rather than listed.
+        assertEquals(listOf(Need.StopApp(spotify), Need.Links, Need.Follow), state.checks().map { it.need })
+        assertEquals(3, state.toFix)
         // Not known yet, nothing is.
         assertEquals(0, state.copy(systemStateKnown = false).toFix)
         // With no links to open, only lyrics are left.
-        assertEquals(listOf(Need.Microphone, Need.Follow), state.copy(intercepted = emptySet()).checks().map { it.need })
+        assertEquals(listOf(Need.Follow), state.copy(intercepted = emptySet()).checks().map { it.need })
         assertEquals("app:${spotify.packageName}", Need.StopApp(spotify).key)
         assertEquals("float", Need.Float.key)
         assertEquals(false, state.done(Need.Float))

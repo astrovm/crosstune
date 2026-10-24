@@ -173,7 +173,6 @@ class FixCenterTest {
             "false" in command -> appKeepsLinks = false
             "all" in command -> allowed = true
             "allow_listener" in command -> playback.access = true
-            Manifest.permission.RECORD_AUDIO in command -> allowMicrophone()
         }
         true
     }
@@ -183,17 +182,18 @@ class FixCenterTest {
     @Test
     fun theBarCountsWhatsBrokenOpensTheListAndGoesOnceItsAllFixed() {
         launch()
-        // The links, the microphone and following music apps: none allowed yet. It can't be closed.
-        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("3"))
+        // The links and following music apps: neither allowed yet. It can't be closed.
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
         assertAbsent(string(R.string.dismiss_button))
         openFixes()
-        assertShown(string(R.string.setup_check_allow), string(R.string.fix_mic_title), string(R.string.follow_help_title), string(R.string.fix_one_by_one))
+        assertShown(string(R.string.setup_check_allow), string(R.string.follow_help_title), string(R.string.fix_one_by_one))
+        // The microphone is asked where it's used, naming a song or opening lyrics, not here.
+        assertAbsent(string(R.string.fix_mic_title))
         assertEquals(0, checkedOff())
 
-        allowMicrophone()
         playback.access = true
         comeBack()
-        assertEquals(2, checkedOff())
+        assertEquals(1, checkedOff())
         click(string(R.string.back_button))
         composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("1"))
 
@@ -207,7 +207,7 @@ class FixCenterTest {
         val activity = launch()
         openFixes()
         click(string(R.string.fix_one_by_one))
-        assertShown(string(R.string.setup_step, 1, 3), string(R.string.setup_check_allow))
+        assertShown(string(R.string.setup_step, 1, 2), string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
         val links = nextStarted()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, links.action)
@@ -215,19 +215,13 @@ class FixCenterTest {
 
         allowed = true
         comeBack()
-        waitUntil { shown(string(R.string.setup_step, 2, 3)) }
-        // Android still asks for the microphone itself.
-        assertShown(string(R.string.fix_mic_title))
-        click(string(R.string.allow_button))
-        answerMicrophone(granted = true)
-        waitUntil { shown(string(R.string.setup_step, 3, 3)) }
-
+        waitUntil { shown(string(R.string.setup_step, 2, 2)) }
         click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS, nextStarted()!!.action)
         playback.access = true
         comeBack()
         // All done, it's back to the list, all checked off.
-        waitUntil { checkedOff() == 3 }
+        waitUntil { checkedOff() == 2 }
         assertAbsent(string(R.string.fix_one_by_one))
         click(string(R.string.back_button))
         assertFalse(barShown())
@@ -238,12 +232,12 @@ class FixCenterTest {
         launch()
         openFixes()
         click(string(R.string.fix_one_by_one))
-        repeat(3) { click(string(R.string.setup_skip_for_now)) }
+        repeat(2) { click(string(R.string.setup_skip_for_now)) }
         assertShown(string(R.string.fix_one_by_one))
         assertEquals(0, checkedOff())
 
-        click(string(R.string.fix_mic_title))
-        assertShown(string(R.string.allow_button))
+        click(string(R.string.follow_help_title))
+        assertShown(string(R.string.fix_open_settings))
         click(string(R.string.back_button))
         assertShown(string(R.string.fix_one_by_one))
         click(string(R.string.back_button))
@@ -253,13 +247,12 @@ class FixCenterTest {
     @Test
     fun theMicrophoneTurnedDownForGoodIsAllowedInAppInfo() {
         val activity = launch()
-        openFixes()
-        click(string(R.string.fix_mic_title))
-        click(string(R.string.allow_button))
+        click(string(R.string.recognize_button))
         // Turned down with nothing more to say, Android won't ask again: it's in App info now.
         answerMicrophone(granted = false)
+        assertTrue(prefs().getBoolean("microphone_denied", false))
+        click(string(R.string.recognize_button))
         assertShown(string(R.string.fix_step_tap, string(R.string.android_permissions)))
-        assertAbsent(string(R.string.error_microphone))
         click(string(R.string.fix_open_settings))
         val appInfo = nextStarted()!!
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfo.action)
@@ -267,7 +260,7 @@ class FixCenterTest {
 
         allowMicrophone()
         comeBack()
-        waitUntil { checkedOff() == 1 }
+        waitUntil { !shown(string(R.string.fix_step_tap, string(R.string.android_permissions))) }
         assertFalse(prefs().contains("microphone_denied"))
     }
 
@@ -275,22 +268,24 @@ class FixCenterTest {
     fun turnedDownOnceAndroidStillAsks() {
         launch()
         shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO, true)
-        openFixes()
-        click(string(R.string.fix_mic_title))
-        click(string(R.string.allow_button))
+        click(string(R.string.recognize_button))
         answerMicrophone(granted = false)
-        assertShown(string(R.string.allow_button))
         assertFalse(prefs().getBoolean("microphone_denied", false))
+        // Tapped again, Android asks again, rather than the steps showing.
+        val first = shadowOf(controller!!.get()).lastRequestedPermission
+        click(string(R.string.recognize_button))
+        assertFalse(first === shadowOf(controller!!.get()).lastRequestedPermission)
+        assertAbsent(string(R.string.fix_step_tap, string(R.string.android_permissions)))
     }
 
     @Test
     fun anAppInTheWayIsListedFirstWithItsOwnPage() {
         installSpotify()
         launch()
-        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("4"))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("3"))
         openFixes()
         click(string(R.string.fix_one_by_one))
-        assertShown(string(R.string.setup_step, 1, 4), string(R.string.setup_check_app, "Spotify"))
+        assertShown(string(R.string.setup_step, 1, 3), string(R.string.setup_check_app, "Spotify"))
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         val started = nextStarted()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
@@ -298,7 +293,7 @@ class FixCenterTest {
 
         appKeepsLinks = false
         comeBack()
-        waitUntil { shown(string(R.string.setup_step, 2, 4)) }
+        waitUntil { shown(string(R.string.setup_step, 2, 3)) }
     }
 
     @Test
@@ -316,12 +311,12 @@ class FixCenterTest {
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", spotify, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
                 listOf("pm", "set-app-links-user-selection", "--user", user, "--package", app.packageName, "true", "all"),
-                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user),
-                listOf("pm", "grant", "--user", user, app.packageName, Manifest.permission.RECORD_AUDIO)
+                // Not the microphone: it's asked where it's used.
+                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user)
             ),
             shell.ran
         )
-        waitUntil { checkedOff() == 4 }
+        waitUntil { checkedOff() == 3 }
         assertAbsent(string(R.string.fix_all))
         click(string(R.string.back_button))
         assertFalse(barShown())
@@ -345,7 +340,8 @@ class FixCenterTest {
         waitUntil { checkedOff() == 1 }
         assertShown(string(R.string.fix_failed), string(R.string.fix_one_by_one))
         click(string(R.string.fix_one_by_one))
-        assertShown(string(R.string.setup_step, 1, 2))
+        // Following music apps is all that's left.
+        assertShown(string(R.string.follow_help_title), string(R.string.fix_open_settings))
         // Back on the list from the bar, it tries again.
         click(string(R.string.back_button))
         click(string(R.string.back_button))

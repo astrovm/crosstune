@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Yalnızca uygulama kullanılırken izin ver</string>
     <string name="android_ask_every_time">Her zaman sor</string>
     <string name="android_dont_allow">İzin verme</string>
-    <string name="android_while_using">Uygulamayı kullanırken</string>
-    <string name="android_only_this_time">Yalnız bu sefer</string>
     <string name="android_display_over_apps">Diğer uygulamalar üzerinde gösterime izin ver</string>
 </resources>

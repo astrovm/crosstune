@@ -128,15 +128,15 @@ internal val UiState.appsInTheWay: List<LinkApp> get() = blockingApps?.sortedBy 
 
 /**
  * Everything Android has to allow, in the order it's done: the apps in the way first, since
- * Android won't let Crosstune take links another app verified, then the links, the microphone and
- * following music apps. [apps] can include ones fixed already, so a list doesn't shrink under a finger.
+ * Android won't let Crosstune take links another app verified, then the links and following music
+ * apps. [apps] can include ones fixed already, so a list doesn't shrink under a finger. The
+ * microphone isn't one: it's asked where it's used, naming a song or opening lyrics.
  */
 internal fun UiState.checks(apps: List<LinkApp> = appsInTheWay): List<Check> = buildList {
     if (interceptsAnything) {
         apps.forEach { add(Check(Need.StopApp(it), done(Need.StopApp(it)))) }
         add(Check(Need.Links, linksAllowed))
     }
-    add(Check(Need.Microphone, done(Need.Microphone)))
     add(Check(Need.Follow, canFollowApps))
 }
 
@@ -449,7 +449,7 @@ internal fun FixStepPage(state: UiState, actions: ScreenActions) {
     }
 }
 
-/** The way to Android's page, or its question for the microphone; before Android 12, a test link; and skipping it. */
+/** The way to Android's page; before Android 12, a test link; and skipping it. */
 @Composable
 private fun StepButtons(need: Need, state: UiState, actions: ScreenActions) {
     Column(
@@ -464,8 +464,6 @@ private fun StepButtons(need: Need, state: UiState, actions: ScreenActions) {
             .widthIn(max = 400.dp)
             .fillMaxWidth()
             .heightIn(min = 52.dp)
-        // Android still asks for the microphone itself, so its question is all it takes.
-        val asks = need == Need.Microphone && state.microphone == MicAccess.ASKABLE
         val press = rememberPress()
         Button(
             onClick = { actions.onOpenFix(need) },
@@ -473,12 +471,10 @@ private fun StepButtons(need: Need, state: UiState, actions: ScreenActions) {
             interactionSource = press.source,
             modifier = buttonModifier.then(press.modifier)
         ) {
-            AppIcon(if (asks) R.drawable.ic_recognize else R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             Spacer(Modifier.size(ButtonDefaults.IconSpacing))
             Text(
-                if (asks) {
-                    stringResource(R.string.allow_button)
-                } else if (need is Need.StopApp) {
+                if (need is Need.StopApp) {
                     stringResource(R.string.open_app_link_settings_button, need.app.label)
                 } else {
                     stringResource(R.string.fix_open_settings)
@@ -521,12 +517,9 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
     val tap = R.string.fix_step_tap
     val pick = R.string.fix_step_pick
     val turnOn = R.string.fix_step_turn_on
+    // Only turned down for good does the microphone have steps: while Android still asks, it's asked.
     if (need == Need.Microphone) {
-        // Android asks with While using the app from 11; before, it just asks to Allow.
         val newer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        if (state.microphone != MicAccess.DENIED) {
-            return listOf(if (newer) phone.step(tap, stringResource(R.string.android_while_using)) { AndroidPictures.MicrophoneQuestion() } else inWords(tap, stringResource(R.string.allow_button)))
-        }
         val permissions = stringResource(if (phone == Phone.XIAOMI) R.string.android_app_permissions else R.string.android_permissions)
         val microphone = stringResource(R.string.android_microphone)
         if (!newer) return listOf(inWords(tap, permissions), inWords(tap, microphone), inWords(pick, stringResource(R.string.allow_button)))

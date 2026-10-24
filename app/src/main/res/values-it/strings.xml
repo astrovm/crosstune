@@ -420,7 +420,5 @@
     <string name="android_allow_while_using">Consenti solo mentre l\'app è in uso</string>
     <string name="android_ask_every_time">Chiedi ogni volta</string>
     <string name="android_dont_allow">Non consentire</string>
-    <string name="android_while_using">Mentre usi l\'app</string>
-    <string name="android_only_this_time">Solo questa volta</string>
     <string name="android_display_over_apps">Consenti la visualizzazione sopra altre app</string>
 </resources>

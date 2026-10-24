@@ -440,7 +440,5 @@
     <string name="android_allow_while_using">Allow only while using the app</string>
     <string name="android_ask_every_time">Ask every time</string>
     <string name="android_dont_allow">Don\'t allow</string>
-    <string name="android_while_using">While using the app</string>
-    <string name="android_only_this_time">Only this time</string>
     <string name="android_display_over_apps">Allow display over other apps</string>
 </resources>

@@ -81,7 +81,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), [Ultimate Guitar](https://www.ultimate-guitar.com), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org).
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. The visuals use it to move to your music, and record and send nothing.
-- Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune.
+- Shizuku or root is used only to change Android's link, lyrics and floating settings for Crosstune.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

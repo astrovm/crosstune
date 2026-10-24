@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Permitir durante o uso do app</string>
     <string name="android_ask_every_time">Perguntar sempre</string>
     <string name="android_dont_allow">Não permitir</string>
-    <string name="android_while_using">Durante o uso do app</string>
-    <string name="android_only_this_time">Apenas esta vez</string>
     <string name="android_display_over_apps">Permitir sobreposição a outros apps</string>
 </resources>

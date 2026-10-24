@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Autoriser seulement si l\'appli est utilisée</string>
     <string name="android_ask_every_time">Toujours demander</string>
     <string name="android_dont_allow">Ne pas autoriser</string>
-    <string name="android_while_using">Lorsque vous utilisez l\'appli</string>
-    <string name="android_only_this_time">Uniquement cette fois-ci</string>
     <string name="android_display_over_apps">Autoriser la superposition sur d\'autres applis</string>
 </resources>

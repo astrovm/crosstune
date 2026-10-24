@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Zugriff nur während der Nutzung der App zulassen</string>
     <string name="android_ask_every_time">Jedes Mal fragen</string>
     <string name="android_dont_allow">Nicht zulassen</string>
-    <string name="android_while_using">Bei Nutzung der App</string>
-    <string name="android_only_this_time">Nur dieses Mal</string>
     <string name="android_display_over_apps">Einblendung über anderen Apps zulassen</string>
 </resources>
