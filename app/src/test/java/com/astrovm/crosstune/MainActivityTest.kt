@@ -127,6 +127,8 @@ class MainActivityTest {
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
+        // Each song shown would look up its lyrics too, which tests counting what's asked don't expect.
+        MainActivity.lookAheadLyrics = false
     }
 
     @After
@@ -137,6 +139,7 @@ class MainActivityTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.lookAheadLyrics = true
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
     }
@@ -2990,7 +2993,50 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongsWordsLookedUpAsItShowsAreTheOnesOpened() {
+        MainActivity.lookAheadLyrics = true
+        val held = java.util.concurrent.CountDownLatch(1)
+        var tapped = false
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") {
+                // Only what was asked before the words were opened has them, so words shown came from there.
+                val early = !tapped
+                held.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                FakeSpotify.html(request, if (early) """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"夜が灯りを投げるBedで"}]""" else "[]")
+            } else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        // Looked up as soon as the song shows, and still on its way when the words are opened.
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://lrclib.net") } }
+        tapped = true
+        click(string(R.string.lyrics_button))
+        waitForDescription(string(R.string.lyrics_loading))
+        held.countDown()
+        waitForText("夜が灯りを投げるBedで")
+    }
+
+    @Test
+    fun aSongOpenedFromRecentHasItsWordsLookedUpAsItShows() {
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"夜が灯りを投げるBedで"}]""")
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.clear_button))
+        controller!!.pause().stop().destroy()
+
+        MainActivity.lookAheadLyrics = true
+        launch()
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://lrclib.net") })
+        click("Dakare Ni Kita Onna")
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://lrclib.net") } }
+    }
+
+    @Test
     fun aSongShowsItsWordsAndSaysSoWhenItHasNoneOrTheServiceIsBusy() {
+        MainActivity.lookAheadLyrics = true
         fun lyrics(json: String) {
             fake.handler = { request ->
                 if (request.url.host == "lrclib.net") FakeSpotify.html(request, json)
@@ -3000,18 +3046,17 @@ class MainActivityTest {
         val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"夜が灯りを投げるBedで"}]"""
         lyrics(words)
         launch()
-        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
-        waitForResult()
-
-        // Nothing is asked for until the button is tapped.
-        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.startsWith("https://lrclib.net") })
-        assertTextShown(string(R.string.lyrics_button))
-        assertTextAbsent("夜が灯りを投げるBedで")
-
         // The words take a moment to come back, and the sheet shows they're on their way, with no
         // words of its own, rather than sitting blank while it waits. The delay is what keeps that
         // state on screen long enough to be seen at all, on a loaded machine as well as a quiet one.
         fake.delayMillis = 500
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        waitForResult()
+
+        // They're looked up as soon as the song shows, so they're on their way before the button's tapped.
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://lrclib.net") } }
+        assertTextShown(string(R.string.lyrics_button))
+        assertTextAbsent("夜が灯りを投げるBedで")
         click(string(R.string.lyrics_button))
         waitForDescription(string(R.string.lyrics_loading))
         assertEquals(0, composeRule.onAllNodesWithTextCount(string(R.string.lyrics_loading)))

@@ -125,6 +125,8 @@ class ListeningTest {
         File(app.cacheDir, "sung_readings.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         MainActivity.lyricsBusyPauseMs = 0
+        // Each song shown would look up its lyrics too, which tests counting what's asked don't expect.
+        MainActivity.lookAheadLyrics = false
         shazamAnswers(MATCH)
     }
 
@@ -142,6 +144,7 @@ class ListeningTest {
         MainActivity.hearingFactory = null
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.lookAheadLyrics = true
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = { OutputMixTap.open() }
         MainActivity.lyricsLanguageFactory = null
