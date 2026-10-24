@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     microphoneAccess = { microphoneAccess(applicationContext) },
-                    phone = phoneFactory(),
+                    phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
                     lookAhead = lookAheadLyrics
@@ -323,7 +323,9 @@ class MainActivity : ComponentActivity() {
 
         /** The kind of phone, whose settings pages the steps to fix things show. */
         @VisibleForTesting
-        internal var phoneFactory: () -> Phone = { Phone.of(Build.MANUFACTURER, Build.BRAND) }
+        internal var phoneFactory: (Context) -> Phone = {
+            Phone.of(Build.MANUFACTURER, Build.BRAND, tv = it.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

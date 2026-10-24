@@ -4,13 +4,17 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
@@ -158,7 +162,11 @@ fun CrosstuneTheme(
     MaterialTheme(
         colorScheme = if (darkTheme && pureBlack) scheme.pureBlack() else scheme,
         typography = AppTypography,
-        shapes = AppShapes,
-        content = content
-    )
+        shapes = AppShapes
+    ) {
+        CompositionLocalProvider(LocalRippleConfiguration provides RippleConfiguration(rippleAlpha = FocusShown), content = content)
+    }
 }
+
+/** Material's own, but what a TV remote or a keyboard is on shows plainly, to follow it from across the room. */
+private val FocusShown = RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.32f, hoveredAlpha = 0.08f, pressedAlpha = 0.1f)

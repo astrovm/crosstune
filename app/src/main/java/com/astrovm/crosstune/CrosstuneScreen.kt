@@ -121,8 +121,18 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -816,6 +826,14 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         focus.clearFocus()
         actions.onResolve()
     }
+    // A TV puts the remote on the field as it opens, and its keyboard would cover half the screen,
+    // so there it's typed in once pressed.
+    val tv = state.phone == Phone.TV
+    var typing by remember { mutableStateOf(!tv) }
+    LaunchedEffect(typing) { if (tv && typing) keyboard?.show() }
+    val field = remember { MutableInteractionSource() }
+    // With no cursor in it, a ring says the remote is on it.
+    val ringed = tv && !typing && field.collectIsFocusedAsState().value
     TextField(
         value = state.linkText,
         onValueChange = actions.onUrlChange,
@@ -856,6 +874,8 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         ),
         keyboardActions = KeyboardActions(onGo = { resolve() }),
         enabled = !busy,
+        readOnly = !typing,
+        interactionSource = field,
         shape = MaterialTheme.shapes.large,
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = Color.Transparent,
@@ -866,7 +886,25 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (ringed) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large) else Modifier)
+            .onFocusChanged { if (tv && !it.hasFocus) typing = false }
+            .onPreviewKeyEvent { event ->
+                when {
+                    !tv -> false
+                    // Up and down leave it, typing or not, as a single line has nowhere to go that way.
+                    event.key == Key.DirectionDown || event.key == Key.DirectionUp -> {
+                        if (event.type == KeyEventType.KeyDown) focus.moveFocus(if (event.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                        true
+                    }
+                    !typing && event.key in setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
+                        if (event.type == KeyEventType.KeyUp) typing = true
+                        true
+                    }
+                    else -> false
+                }
+            }
     )
     val convertModifier = Modifier
         .fillMaxWidth()

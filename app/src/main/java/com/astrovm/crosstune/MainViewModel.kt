@@ -3129,7 +3129,8 @@ internal class MainViewModel(
      * are rarely anywhere else, and Invidious and Piped are a dozen sites of their own.
      */
     private fun preselectSources() {
-        if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false)) return
+        // A TV has nowhere to allow links in, and links rarely reach one anyway.
+        if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false) || uiState.phone == Phone.TV) return
         preferences.edit { putBoolean(KEY_SOURCES_PRESELECTED, true) }
         if (uiState.interceptsAnything) return
         val listening = uiState.listeningService()
