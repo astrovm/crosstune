@@ -58,6 +58,19 @@ class ReadingsTest {
     }
 
     @Test
+    fun aChineseNameIsSaidInPlainLetters() {
+        assertEquals("qingtian", Readings.pinyinLetters("晴天"))
+        assertEquals("guangnianzhiwai", Readings.pinyinLetters("光年之外 (Light Years Away)"))
+        assertNull(Readings.pinyinLetters("Plastic Love"))
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun beforeAndroid10AChineseNameCantBeSaidInLetters() {
+        assertNull(Readings.pinyinLetters("晴天"))
+    }
+
+    @Test
     @Config(sdk = [28])
     fun beforeAndroid10OtherScriptsHaveNoLatinReading() {
         assertNull(Readings.displayScriptOf(listOf("Привет, мир")))

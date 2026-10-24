@@ -38,7 +38,15 @@ internal class SongSearcher(
             // part, and the other is still asked.
             val deezer = async { withTimeoutOrNull(timeoutMs) { answering { deezer(words) } } ?: emptyList() }
             val itunes = async { withTimeoutOrNull(timeoutMs) { answering { itunes(words) } } ?: emptyList() }
-            val songs = deezer.await() + itunes.await()
+            // A Chinese song typed as it's said, "qing tian jay chou", which only Hong Kong's store
+            // looks up by; its songs whose name says that come first.
+            val pinyin = async {
+                if (words.any { it.code > 0x7f }) return@async emptyList()
+                val typed = SongNames.normalize(words)
+                val found = withTimeoutOrNull(timeoutMs) { answering { itunes(words, PINYIN_STORE) } }.orEmpty()
+                found.filter { song -> Readings.pinyinLetters(SongNames.bareTitle(song.title))?.let { it in typed } == true }
+            }
+            val songs = pinyin.await() + deezer.await() + itunes.await()
             // Each service's own repeated name is one song.
             songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
         }
@@ -86,12 +94,12 @@ internal class SongSearcher(
     }
 
     /** What Apple's search holds for [query]; empty when it won't answer or has nothing. */
-    private suspend fun itunes(query: String): List<MusicMetadata> {
+    private suspend fun itunes(query: String, store: String = country): List<MusicMetadata> {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", query)
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "$LIMIT")
-            .apply { if (country.length == 2) addQueryParameter("country", country) }
+            .apply { if (store.length == 2) addQueryParameter("country", store) }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return emptyList()
         return (0 until results.length()).mapNotNull { index ->
@@ -122,6 +130,9 @@ internal class SongSearcher(
 
     private companion object {
         const val TIMEOUT_MS = 6_000L
+
+        /** Apple's store that finds Chinese songs by their pinyin. */
+        const val PINYIN_STORE = "HK"
 
         /** Enough to fill the list, few enough that neither service is asked for a page nobody reads. */
         const val LIMIT = 20

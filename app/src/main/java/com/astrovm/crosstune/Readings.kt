@@ -346,6 +346,17 @@ internal object Readings {
         return synchronized(this) { (simplifier ?: Transliterator.getInstance("Hant-Hans").also { simplifier = it }).transliterate(text) }
     }
 
+    /**
+     * How [text]'s Chinese is said, in plain letters, "晴天" as "qingtian", as someone who can't type
+     * it would; null with none, or before Android 10, which has no pinyin.
+     */
+    @SuppressLint("NewApi")
+    fun pinyinLetters(text: String): String? {
+        val han = text.filter(::isHan).ifEmpty { return null }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        return synchronized(this) { SongNames.normalize(pinyin().transliterate(han)) }
+    }
+
     /** One line at a time, as Android's transliterator can't be used from two threads at once. */
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun chinese(line: String): LineReading = synchronized(this) {

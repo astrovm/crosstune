@@ -60,6 +60,41 @@ class SongSearcherTest {
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { it.contains("country=AR") })
     }
 
+    /** Hong Kong's store answers its own query, the country's store another. */
+    private fun respondByStore(hongKong: String) {
+        fake.handler = { request: Request ->
+            val body = if (request.url.queryParameter("country") == "HK") hongKong else """{"results":[],"data":[]}"""
+            FakeSpotify.html(request, body)
+        }
+    }
+
+    private val jayChou = """{"results":[
+        {"trackName":"晴天","artistName":"周杰倫","trackViewUrl":"https://music.apple.com/hk/song/1721464906"},
+        {"trackName":"七里香","artistName":"周杰倫","trackViewUrl":"https://music.apple.com/hk/song/1721450037"}]}"""
+
+    @Test
+    fun aChineseSongTypedInPinyinIsFoundByItsName() {
+        respondByStore(jayChou)
+        // Hong Kong's store finds both by "jay chou", but only 晴天 is what was typed.
+        assertEquals(
+            listOf(MusicMetadata("晴天", "周杰倫", url = "https://music.apple.com/hk/song/1721464906")),
+            found("qing tian jay chou")
+        )
+    }
+
+    @Test
+    fun aSearchInChineseLettersDoesntAskForPinyin() {
+        respondByStore(jayChou)
+        assertEquals(emptyList<MusicMetadata>(), found("晴天"))
+        assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.none { it.contains("country=HK") })
+    }
+
+    @Test
+    fun aSongWithoutChineseInItsNameIsntTakenForPinyin() {
+        respondByStore("""{"results":[{"trackName":"Qing Tian","artistName":"Someone","trackViewUrl":"https://music.apple.com/hk/song/2"}]}""")
+        assertEquals(emptyList<MusicMetadata>(), found("qing tian"))
+    }
+
     @Test
     fun deezersAnswersLeadAndARepeatedSongIsOne() {
         respond(
