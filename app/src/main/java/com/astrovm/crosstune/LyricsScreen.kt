@@ -264,7 +264,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
-    if (tv) LaunchedEffect(Unit) { bar.requestFocus() }
+    // Again once the words arrive, which put their own tools first on it.
+    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { bar.requestFocus() }
     LaunchedEffect(scrolledAt) {
         if (scrolledAt == 0L) return@LaunchedEffect
         barShown = false
