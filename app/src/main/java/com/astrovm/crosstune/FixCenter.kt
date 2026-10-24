@@ -302,19 +302,37 @@ private fun FixAll(state: UiState, actions: ScreenActions, left: List<Need>) {
     }
 }
 
-/** Each thing to fix, a red dot until it's done and a check once it is; a tap shows how. What Android can't tell about is never marked. */
+/**
+ * Before anything's been opened, under the link field: what Android has to allow, each saying what
+ * it gets you, and a way to do it all. Once something has been, what's left folds into [FixBar].
+ */
 @Composable
-internal fun FixList(checks: List<Check>, onOpen: (Need) -> Unit) {
+internal fun FirstAsks(state: UiState, actions: ScreenActions) {
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        val checks = state.checks(appsToStop(state))
+        FixList(checks, asks = true) { actions.onFixSteps(listOf(it)) }
+        val left = checks.filter { it.done == false }.map { it.need }
+        if (left.isNotEmpty()) FixAll(state, actions, left)
+    }
+}
+
+/**
+ * Each thing to fix, a red dot until it's done and a check once it is; a tap shows how. What
+ * Android can't tell about is never marked. As first [asks], each says what it gets you, and
+ * what's left to allow says Allow rather than that it's broken.
+ */
+@Composable
+internal fun FixList(checks: List<Check>, asks: Boolean = false, onOpen: (Need) -> Unit) {
     Group {
         checks.forEachIndexed { index, check ->
             if (index > 0) GroupDivider()
-            FixRow(check, onOpen)
+            FixRow(check, asks, onOpen)
         }
     }
 }
 
 @Composable
-private fun FixRow(check: Check, onOpen: (Need) -> Unit) {
+private fun FixRow(check: Check, asks: Boolean, onOpen: (Need) -> Unit) {
     val done = check.done == true
     val doneLabel = stringResource(R.string.setup_done)
     Row(
@@ -327,17 +345,22 @@ private fun FixRow(check: Check, onOpen: (Need) -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         NeedIcon(check.need)
-        Text(
-            needTitle(check.need),
-            style = MaterialTheme.typography.bodyLarge,
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 12.dp)
-        )
+        ) {
+            Text(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
+            check.need.gets().takeIf { asks }?.let {
+                Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         AnimatedContent(targetState = check.done, transitionSpec = { fade() }, label = "check") { shown ->
-            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp), contentAlignment = Alignment.Center) {
                 if (shown == true) {
                     AppIcon(R.drawable.ic_check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                } else if (shown == false && asks && check.need.gets() != null) {
+                    Text(stringResource(R.string.allow_button), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 } else if (shown == false) {
                     Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.error, CircleShape))
                 }
@@ -358,6 +381,14 @@ private fun NeedIcon(need: Need, size: Dp = 32.dp) {
             AppIcon(need.icon(), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
     }
+}
+
+/** What allowing it gets you, said where it's first asked; an app in the way only needs stopping. */
+@StringRes
+private fun Need.gets(): Int? = when (this) {
+    Need.Links -> R.string.ask_links_gets
+    Need.Follow -> R.string.ask_follow_gets
+    else -> null
 }
 
 private fun Need.icon(): Int = when (this) {

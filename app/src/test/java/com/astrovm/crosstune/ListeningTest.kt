@@ -119,7 +119,7 @@ class ListeningTest {
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
         // Visuals are on from the start; the tests about turning them on start with them off.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "sung_readings.json").delete()
@@ -1873,21 +1873,21 @@ class ListeningTest {
     }
 
     @Test
-    fun listeningForWordsBeforeSetupShowsListeningThenTheWordsThenSetup() {
+    fun listeningForWordsOnAFreshInstallShowsListeningThenTheWordsThenTheMainScreen() {
         prefs().edit().putBoolean("setup_complete", false).commit()
         val hearing = FakeHearing()
         listeningAlong(hearing)
         allowMicrophone()
         launch(MainActivity.lyricsIntent(app))
-        // Listening is in sight, to be stopped, not hidden behind setup.
+        // Listening is in sight, to be stopped, on a fresh install too.
         waitForText(string(R.string.listening_text))
         hearing.song("Demo", 2.0)
         waitUntil(TIMEOUT_MS) { shown("Demo one") }
-        // Done with the words, setup's next.
+        // Done with the words, the main screen's under them.
         controllerModel().dismissLyrics()
         composeRule.waitForIdle()
         assertFalse(shown("Demo one"))
-        waitForText(string(R.string.setup_get_started))
+        waitForText(string(R.string.spotify_link_placeholder))
     }
 
     @Test

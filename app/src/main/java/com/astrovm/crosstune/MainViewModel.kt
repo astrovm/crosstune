@@ -201,7 +201,6 @@ internal class MainViewModel(
             dismissedNotices = preferences.getStringSet(KEY_DISMISSED_NOTICES, null).orEmpty().toSet(),
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
-            setupComplete = preferences.getBoolean(KEY_SETUP_COMPLETE, false),
             systemStateKnown = false,
             phone = phone,
             microphone = microphoneAccess()
@@ -290,12 +289,12 @@ internal class MainViewModel(
 
     /**
      * Versions before first-run setup always intercepted Spotify links. People updating from one
-     * skip setup and keep that, so their links don't silently stop opening in Crosstune.
+     * keep that, so their links don't silently stop opening in Crosstune.
      */
     private fun migrateExistingInstall() {
         if (preferences.contains(KEY_SETUP_COMPLETE)) return
-        // Recorded on a fresh install's first launch too, so data created before finishing setup
-        // (e.g. history from a link opened right away) is never mistaken for an old install.
+        // Recorded on a fresh install's first launch too, so data created after it (e.g. history
+        // from a link opened right away) is never mistaken for an old install.
         val isExistingInstall = LEGACY_KEYS.any(preferences::contains)
         if (isExistingInstall) interception.setEnabled(MusicService.SPOTIFY, true)
         preferences.edit { putBoolean(KEY_SETUP_COMPLETE, isExistingInstall) }
@@ -332,6 +331,11 @@ internal class MainViewModel(
     val effects: Flow<Effect> = effectChannel.receiveAsFlow()
 
     init {
+        // A fresh install opens every source's links from the start, rather than in a setup first.
+        if (!preferences.getBoolean(KEY_SETUP_COMPLETE, false)) {
+            preferences.edit { putBoolean(KEY_SETUP_COMPLETE, true) }
+            preselectSources()
+        }
         // Read as the app starts, before anyone can open them, so they show at once as they were left.
         keptOnDisk?.let { disk ->
             viewModelScope.launch {
@@ -433,15 +437,19 @@ internal class MainViewModel(
      */
     private fun UiState.withDestinations(): UiState {
         val destinations = destinationStore.allDestinations()
+        val picked = destinationStore.hasDefault(destinations)
+        // None picked yet, the first music app on the phone is offered, YouTube, mostly videos, last.
+        val installed = linkState?.serviceApps?.keys.orEmpty()
+        val offered = destinations.filterIsInstance<Destination.Service>().filter { it.service in installed }.minByOrNull { it.service == MusicService.YOUTUBE }
         return copy(
-            defaultDestination = destinationStore.defaultDestination(destinations),
+            defaultDestination = offered?.takeIf { !picked } ?: destinationStore.defaultDestination(destinations),
             destinations = destinations,
             selectedDestination = selectedDestination?.takeIf { it in destinations },
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source, destinations)?.let { source to it } }.toMap(),
             frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend, destinations)?.let { frontend to it } }.toMap(),
             intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet(),
             frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet(),
-            hasDefault = destinationStore.hasDefault(destinations)
+            hasDefault = picked
         ).withLinkState()
     }
 
@@ -488,16 +496,23 @@ internal class MainViewModel(
             // Anything looked up or cleared meanwhile is newer than what was read.
             val unchanged = uiState.history === history
             uiState = uiState.withLinkState().let { if (unchanged) it.copy(history = stored) else it }
+            pickTheOnlyMusicApp()
         }
     }
 
-    fun completeSetup() {
-        preferences.edit {
-            putBoolean(KEY_SETUP_COMPLETE, true)
-            // Setup already walked through allowing links, so the reminder isn't needed.
-            putBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, true)
-        }
-        uiState = uiState.copy(setupComplete = true, showLinkSettingsHelper = false)
+    /**
+     * With one music app on the phone, but YouTube, which comes with most and is mostly videos,
+     * that's where songs play, without asking; it can be changed in settings.
+     */
+    private fun pickTheOnlyMusicApp() {
+        if (uiState.hasDefault) return
+        val only = (uiState.installed - MusicService.YOUTUBE).singleOrNull()?.let(Destination::Service)?.takeIf { it in uiState.destinations } ?: return
+        selectDefault(only)
+    }
+
+    /** Without an app songs play in yet, the first one picked on a song becomes it. */
+    private fun adoptDefault(destination: Destination) {
+        if (!uiState.hasDefault) selectDefault(destination)
     }
 
     fun onUrlChange(text: String) {
@@ -675,7 +690,8 @@ internal class MainViewModel(
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
         cancelContentWork()
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
-        val here = !show && destination == null && after == AfterLookup.OPEN && uiState.linksInCrosstune
+        // Without an app songs play in yet, it shows here, where one's picked.
+        val here = !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
@@ -710,7 +726,7 @@ internal class MainViewModel(
     }
 
     /** Whether a link just copied may be filled in: nothing else is shown or under way. */
-    val readyForCopy get() = uiState.let { it.setupComplete && it.linkText.isBlank() && it.result == null && !it.isLoading && !it.listening && it.lyricsFor == null }
+    val readyForCopy get() = uiState.let { it.linkText.isBlank() && it.result == null && !it.isLoading && !it.listening && it.lyricsFor == null }
 
     /** A music link copied a moment ago, filled in as if pasted; a YouTube video only once it's known to be music. */
     fun pasteCopy(text: String) {
@@ -1048,8 +1064,8 @@ internal class MainViewModel(
             pendingOpen = false
             uiState = uiState.copy(handingOff = false)
         }
-        // Incoming links without a chosen destination must not search the default before asking.
-        val ask = uiState.selectedDestination == null && (!uiState.setupComplete || ownService != null)
+        // Incoming links without an app to go to must not search one before asking.
+        val ask = uiState.selectedDestination == null && (!uiState.hasDefault || ownService != null)
         if (pendingOpen && ask) {
             pendingOpen = false
             uiState = uiState.copy(showDestinationPicker = true, pickerHides = ownService, handingOff = false)
@@ -1127,6 +1143,7 @@ internal class MainViewModel(
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
         val chosen = destination ?: uiState.resultDestination
+        adoptDefault(chosen)
         pendingOpen = false
         uiState = uiState.copy(
             showDestinationPicker = false, isMatching = false,
@@ -1142,6 +1159,7 @@ internal class MainViewModel(
      */
     fun playResult() {
         val destination = uiState.resultDestination as? Destination.Service ?: return
+        adoptDefault(destination)
         val song = uiState.result ?: return
         job?.cancel()
         job = viewModelScope.launch {
@@ -3075,6 +3093,7 @@ internal class MainViewModel(
     }
 
     fun selectResultDestination(destination: Destination) {
+        adoptDefault(destination)
         uiState = uiState.copy(selectedDestination = destination)
         prepareResultDestination()
     }
@@ -3098,11 +3117,11 @@ internal class MainViewModel(
     }
 
     /**
-     * Opens every source's links the first time setup asks for them, but the one the user listens
-     * in, whose links already open there; videos too, since only music videos are opened elsewhere.
-     * Changing them later is up to the user, in settings.
+     * Opens every source's links on a fresh install, but the one the user listens in, whose links
+     * already open there; videos too, since only music videos are opened elsewhere. Changing them
+     * later is up to the user, in settings.
      */
-    fun preselectSources() {
+    private fun preselectSources() {
         if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false)) return
         preferences.edit { putBoolean(KEY_SOURCES_PRESELECTED, true) }
         if (uiState.interceptsAnything) return

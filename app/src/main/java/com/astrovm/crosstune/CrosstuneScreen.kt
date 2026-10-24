@@ -180,8 +180,6 @@ internal data class ScreenActions(
     val onAddCustom: (String, String) -> Boolean = { _, _ -> false },
     val onRemoveCustom: (Destination.Custom) -> Unit = {},
     val onFrontendInstanceChange: (Frontend, String) -> Boolean = { _, _ -> false },
-    val onCompleteSetup: () -> Unit = {},
-    val onPreselectSources: () -> Unit = {},
     /** Fixes all there is at once, through Shizuku or root. */
     val onSetUpInOneTap: () -> Unit = {},
     /** Allows Crosstune's links: in one tap with Shizuku or root, otherwise the steps show how. */
@@ -379,11 +377,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
         // after; so are the words it was for.
         state.listening -> Screen.LISTENING
-        // Opened from anywhere, setup included, the steps show over it.
+        // Opened from anywhere, the steps show over it.
         fixes?.need != null -> Screen.FIX_STEP
-        !state.setupComplete && state.lyricsFor != null -> Screen.LYRICS
-        // A link from another app is handled right away; setup waits for the next regular launch.
-        !state.setupComplete && !state.handlingIncomingLink -> Screen.SETUP
         fixes?.list == true -> Screen.FIXES
         showSettings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
@@ -442,9 +437,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     ) { shown ->
         kept.SaveableStateProvider(shown.name) {
             // if/else rather than an exhaustive when, which compiles an unreachable branch into composables.
-            if (shown == Screen.SETUP) {
-                SetupScreen(state, actions)
-            } else if (shown == Screen.FIX_STEP) {
+            if (shown == Screen.FIX_STEP) {
                 FixStepPage(state, actions)
             } else if (shown == Screen.FIXES) {
                 FixesPage(state, actions)
@@ -473,7 +466,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
 internal enum class Screen(val depth: Int) {
-    SETUP(-1), HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), FIXES(1), LYRICS(2), PRACTICE(2), FIX_STEP(3)
+    HANDOFF(-1), LISTENING(-1), MAIN(0), PLAYER(1), SETTINGS(1), PRACTICE_LIST(1), FIXES(1), LYRICS(2), PRACTICE(2), FIX_STEP(3)
 }
 
 /** Screens that rise over the one under them, and sink back into it. */
@@ -604,8 +597,8 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         },
         bottomBar = {
             Column {
-                // What's broken stays in sight until it's fixed, over what's playing.
-                val toFix = state.toFix.takeIf { state.setupComplete } ?: 0
+                // What's broken stays in sight until it's fixed, over what's playing, once it isn't asked below the field.
+                val toFix = state.toFix.takeIf { !state.firstAsks } ?: 0
                 AnimatedVisibility(visible = toFix > 0, enter = Motion.appear, exit = Motion.disappear) {
                     FixBar(toFix, actions.onOpenFixes, modifier = if (playing == null) Modifier.navigationBarsPadding() else Modifier)
                 }
@@ -638,8 +631,11 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             }
         }
 
-        val idle = state.result == null && state.error == null && !state.isLoading
-        AnimatedVisibility(visible = idle && state.history.isEmpty(), enter = fadeIn(Motion.fadeIn), exit = fadeOut(Motion.fadeOut)) {
+        // Before anything's been opened, what Android has to allow is asked here, saying what each gets you.
+        AnimatedVisibility(visible = state.firstAsks, enter = fadeIn(Motion.fadeIn), exit = fadeOut(Motion.fadeOut)) {
+            FirstAsks(state, actions)
+        }
+        AnimatedVisibility(visible = state.idle && state.history.isEmpty() && !state.firstAsks, enter = fadeIn(Motion.fadeIn), exit = fadeOut(Motion.fadeOut)) {
             Text(
                 text = stringResource(R.string.empty_hint),
                 style = MaterialTheme.typography.bodyMedium,

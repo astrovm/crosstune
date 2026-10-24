@@ -17,13 +17,15 @@ Needs Android 8.0 or newer.
 
 ## 🚀 Set up
 
-Pasting or sharing a link to Crosstune works with no setup. To open links you tap in other apps, the app walks you through it:
+Pasting or sharing a link to Crosstune works with no setup. Crosstune opens on its main screen, and under the link field lists what Android has to allow, each with what it gets you:
 
-1. Pick the app you listen in.
-2. Tap each thing left in the list. Its steps show Android's page for your phone, a small guide floats over it, and it checks itself off once done.
-3. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Set everything up** instead. It's one tap.
+1. **Allow links in Crosstune**, so music links you tap in any app open here.
+2. **Let lyrics follow your music**, so the words of what's playing show in time.
+3. Tap one to see its steps: Android's page for your phone, a small guide floats over it, and it checks itself off once done. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Fix all** instead. It's one tap.
 
-Anything that breaks later shows as **Things to fix** at the bottom of the main screen: **Fix all** with Shizuku or root, or **Fix one by one**.
+With one music app on your phone, songs play there. With more, the first one you pick on a song is where they play from then on. Change it in **Settings**.
+
+Once you've opened something, anything left or broken later shows as **Things to fix** at the bottom of the main screen: **Fix all** with Shizuku or root, or **Fix one by one**.
 
 ## Features
 
