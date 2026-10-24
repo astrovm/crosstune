@@ -448,7 +448,6 @@ internal class MainViewModel(
             rules = MusicService.entries.mapNotNull { source -> destinationStore.rule(source, destinations)?.let { source to it } }.toMap(),
             frontendRules = Frontend.SOURCES.mapNotNull { frontend -> destinationStore.rule(frontend, destinations)?.let { frontend to it } }.toMap(),
             intercepted = MusicService.entries.filter { it.canBeSource && interception.isEnabled(it) }.toSet(),
-            frontendSources = Frontend.SOURCES.filter(interception::isEnabled).toSet(),
             hasDefault = picked
         ).withLinkState()
     }
@@ -456,13 +455,12 @@ internal class MainViewModel(
     /** What Android last said about apps and links, as it concerns the sources Crosstune opens now. */
     private fun UiState.withLinkState(): UiState {
         val state = linkState ?: return this
-        val claiming = state.claimingApps(intercepted, frontendSources)
+        val claiming = state.claimingApps(intercepted)
         return copy(
             systemStateKnown = true,
             installed = state.serviceApps.keys,
             unapprovedHosts = state.unapprovedHosts,
             ownLinksOff = state.ownLinksOff,
-            unapprovedFrontendHosts = state.unapprovedFrontendHosts,
             blockingApps = claiming?.filterValues { it }?.keys,
             claimingApps = claiming?.keys,
             claimingAppsBySource = state.claimingAppsBySource,
@@ -3135,12 +3133,6 @@ internal class MainViewModel(
     fun setFrontendRule(frontend: Frontend, destination: Destination?) {
         destinationStore.setRule(frontend, destination)
         refreshSystemState()
-    }
-
-    fun setFrontendIntercepted(frontend: Frontend, enabled: Boolean) {
-        interception.setEnabled(frontend, enabled)
-        uiState = uiState.withDestinations().copy(showLinkSettingsHelper = enabled || uiState.showLinkSettingsHelper)
-        loadSystemState()
     }
 
     fun setIntercepted(source: MusicService, enabled: Boolean) {

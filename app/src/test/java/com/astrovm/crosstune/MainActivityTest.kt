@@ -5158,38 +5158,22 @@ class MainActivityTest {
     }
 
     @Test
-    fun invidiousAndPipedAreSourcesOfTheirOwnInSettings() {
-        var states = emptyMap<String, Int>()
-        FakeDomainVerification.install(app) { states }
-        freshInstall()
-        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE))
-        // A saved default looks like an older install, so mark it a fresh one explicitly.
-        prefs().edit().putBoolean("setup_complete", false).commit()
+    fun invidiousAndPipedSitesAreListedWithWhereTheirLinksGoButNoSwitch() {
         launch()
-
-        // A dozen sites of their own to allow, they wait in settings, as YouTube's links do.
-        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
-        assertFalse(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
-        assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
-        assertTextShown(string(R.string.setup_check_allow))
-        // Settings marks the sources, and each one Android doesn't let Crosstune open yet.
-        click(string(R.string.settings_button))
-        assertMarked(string(R.string.setup_not_allowed))
-        click(string(R.string.settings_links_title))
-        assertMarked(string(R.string.setup_not_allowed))
-        states = (LinkInterception.HOSTS.values.flatten() + Frontend.SOURCES.flatMap { it.sites }).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
-        controller!!.pause().resume()
-        composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.setup_not_allowed))
-        // Turned on, Piped's links are one source, though it's YouTube's frontend.
-        toggleRow("Piped")
-        assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
-        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        openSources()
+        // Their links come shared or pasted, never tapped: a dozen more sites to allow otherwise.
+        assertTrue(composeRule.onAllNodes(isToggleable() and hasContentDescription("Invidious")).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(isToggleable() and hasContentDescription("Piped")).fetchSemanticsNodes().isEmpty())
+        sourceSwitch(string(R.string.service_spotify)).assertExists()
+        openSource("Piped")
+        assertTextAbsent(string(R.string.source_open_links))
+        assertTextShown(string(R.string.setting_only_music_videos))
+        assertTextShown(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music")))
+        assertTextShown(string(R.string.frontend_site_on, "piped.video"))
     }
 
     @Test
     fun invidiousLinksCanOpenSomewhereElseThanYouTubes() {
-        LinkInterception(app).setEnabled(Frontend.INVIDIOUS, true)
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
         openSources()
@@ -5403,7 +5387,6 @@ class MainActivityTest {
             setOf(MusicService.SPOTIFY, MusicService.YOUTUBE_MUSIC, MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL),
             on.toSet()
         )
-        assertTrue(Frontend.SOURCES.none { LinkInterception(app).isEnabled(it) })
         // Each site's a box to tick in Android's settings, without Shizuku or root.
         assertEquals(14, on.sumOf { LinkInterception.HOSTS.getValue(it).size })
 

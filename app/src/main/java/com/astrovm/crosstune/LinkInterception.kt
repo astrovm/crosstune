@@ -25,8 +25,6 @@ internal data class LinkState(
      * or null before Android 12, which has no way to ask.
      */
     val unapprovedHosts: Map<MusicService, List<String>>?,
-    /** Like [unapprovedHosts], for each web frontend's sites. */
-    val unapprovedFrontendHosts: Map<Frontend, List<String>>?,
     /** For every source, by [Destination.key], installed apps that claim its links and whether each still opens them; null before Android 12. */
     val claimingAppsBySource: Map<String, Map<LinkApp, Boolean>>?,
     /**
@@ -40,10 +38,9 @@ internal data class LinkState(
      * opens them, i.e. hasn't had "Open supported links" turned off. Not just the services' own
      * apps: e.g. YouTube Create also claims YouTube's links. Null before Android 12, which can't say.
      */
-    fun claimingApps(sources: Set<MusicService>, frontends: Set<Frontend> = emptySet()): Map<LinkApp, Boolean>? {
+    fun claimingApps(sources: Set<MusicService>): Map<LinkApp, Boolean>? {
         val bySource = claimingAppsBySource ?: return null
-        val keys = sources.map { it.name } + frontends.map { Destination.FRONTEND_PREFIX + it.name }
-        return keys.flatMap { bySource[it].orEmpty().toList() }.distinct().sortedBy { it.first.label.lowercase() }.toMap()
+        return sources.map { it.name }.flatMap { bySource[it].orEmpty().toList() }.distinct().sortedBy { it.first.label.lowercase() }.toMap()
     }
 
     /**
@@ -52,8 +49,8 @@ internal data class LinkState(
      * once "Open supported links" is turned off in that app's own settings. Null before Android 12,
      * which can't say.
      */
-    fun blockingApps(sources: Set<MusicService>, frontends: Set<Frontend> = emptySet()): Set<LinkApp>? =
-        claimingApps(sources, frontends)?.filterValues { it }?.keys
+    fun blockingApps(sources: Set<MusicService>): Set<LinkApp>? =
+        claimingApps(sources)?.filterValues { it }?.keys
 
     /** Installed apps whose services' links Crosstune opens, for when Android can't say which really take them. */
     fun installedSourceApps(sources: Set<MusicService>): List<LinkApp> =
@@ -71,11 +68,6 @@ internal class LinkInterception(private val context: Context) {
     fun isEnabled(service: MusicService): Boolean = isEnabled(component(service.name))
 
     fun setEnabled(service: MusicService, enabled: Boolean) = setEnabled(component(service.name), enabled)
-
-    /** Whether Crosstune opens tapped links from [frontend]'s popular sites, which have their own alias. */
-    fun isEnabled(frontend: Frontend): Boolean = isEnabled(component(frontend.name))
-
-    fun setEnabled(frontend: Frontend, enabled: Boolean) = setEnabled(component(frontend.name), enabled)
 
     private fun isEnabled(component: ComponentName): Boolean =
         context.packageManager.getComponentEnabledSetting(component) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -109,13 +101,12 @@ internal class LinkInterception(private val context: Context) {
     fun linkState(): LinkState {
         val installed = installedServices()
         val serviceApps = installed.associateWith { appFor(installedPackage(it) ?: it.packageName) }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null, null)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null)
         val own = ownState()
         val hosts = own?.hostToStateMap
         return LinkState(
             serviceApps,
             unapprovedHosts = hosts?.let(::unapprovedFrom),
-            unapprovedFrontendHosts = hosts?.let(::unapprovedFrontendsFrom),
             claimingAppsBySource = claimingAppsBySource(installed),
             ownLinksOff = own?.isLinkHandlingAllowed == false
         )
@@ -133,13 +124,13 @@ internal class LinkInterception(private val context: Context) {
 
     /**
      * For every source on its own, whether Crosstune opens its links or not, the installed apps that
-     * claim them, each with whether it still opens them, keyed like [Destination.key]: a service's
-     * name, or "frontend:" and a web frontend's. Android is asked about the apps once, for every
+     * claim them, each with whether it still opens them, keyed by the service's name. Android is
+     * asked about the apps once, for every
      * source's hosts together. Null when Android can't say.
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private fun claimingAppsBySource(installed: Set<MusicService>): Map<String, Map<LinkApp, Boolean>>? {
-        val hosts = HOSTS.mapKeys { it.key.name } + Frontend.SOURCES.associate { Destination.FRONTEND_PREFIX + it.name to it.sites }
+        val hosts = HOSTS.mapKeys { it.key.name }
         val states = appStates(installed, hosts.values.flatten()) ?: return null
         return hosts.mapValues { (_, wanted) -> claims(states, wanted) }
     }
@@ -234,10 +225,6 @@ internal class LinkInterception(private val context: Context) {
         @RequiresApi(Build.VERSION_CODES.S)
         private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =
             HOSTS.mapValues { (_, hosts) -> hosts.filter { notAllowed(hostStates, it) } }
-
-        @RequiresApi(Build.VERSION_CODES.S)
-        private fun unapprovedFrontendsFrom(hostStates: Map<String, Int>): Map<Frontend, List<String>> =
-            Frontend.SOURCES.associateWith { frontend -> frontend.sites.filter { notAllowed(hostStates, it) } }
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun notAllowed(hostStates: Map<String, Int>, host: String): Boolean =

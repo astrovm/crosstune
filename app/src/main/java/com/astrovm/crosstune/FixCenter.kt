@@ -642,7 +642,7 @@ private fun inWords(@StringRes template: Int, vararg words: String): FixStep = F
 
 /** The links Android doesn't let Crosstune open yet, or, set to open in the browser with all allowed, every one. */
 private fun UiState.hostsToTick(): List<String> =
-    (intercepted.flatMap { unapprovedHosts?.get(it).orEmpty() } + frontendSources.flatMap { unapprovedFrontendHosts?.get(it).orEmpty() })
+    intercepted.flatMap { unapprovedHosts?.get(it).orEmpty() }
         .ifEmpty { intercepted.flatMap { LinkInterception.HOSTS[it].orEmpty() } }
 
 /** A step's number beside what to do. */

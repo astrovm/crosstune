@@ -1235,7 +1235,8 @@ private class SourceSettings(
     val rule: Destination?,
     /** Where its links go without a rule of their own. */
     val fallback: Destination,
-    val onToggle: (Boolean) -> Unit,
+    /** Null where tapped links can't reach Crosstune, as for web frontends' sites. */
+    val onToggle: ((Boolean) -> Unit)?,
     val onRule: (Destination?) -> Unit,
     /** YouTube and its frontends, which are mostly videos that aren't music. */
     val video: Boolean = false,
@@ -1274,21 +1275,21 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             video = source == MusicService.YOUTUBE
         )
     }
+    // Their links reach Crosstune shared or pasted, so only where they go and their site are set here.
     val frontends = Frontend.SOURCES.map { frontend ->
-        val on = frontend in state.frontendSources
         SourceSettings(
             key = Destination.FRONTEND_PREFIX + frontend.name,
             icon = Destination.Alternative(frontend),
             label = frontend.label,
-            on = on,
+            on = false,
             locked = false,
             listeningNote = null,
-            notAllowed = on && state.unapprovedFrontendHosts?.get(frontend).orEmpty().isNotEmpty(),
-            keptBy = if (on) keptBy(Destination.FRONTEND_PREFIX + frontend.name) else emptyList(),
+            notAllowed = false,
+            keptBy = emptyList(),
             rule = state.frontendRules[frontend],
             // Without a rule of its own, its videos go where YouTube's do.
             fallback = state.rules[MusicService.YOUTUBE] ?: state.defaultDestination,
-            onToggle = { actions.onFrontendInterceptChange(frontend, it) },
+            onToggle = null,
             onRule = { actions.onFrontendRuleChange(frontend, it) },
             video = true,
             site = state.destinations.filterIsInstance<Destination.Alternative>().firstOrNull { it.frontend == frontend },
@@ -1333,7 +1334,7 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
             DestinationIcon(item.icon, installed)
             Column(modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp)) {
             Text(item.label, style = MaterialTheme.typography.bodyLarge)
-            if (item.on && item.rule != null && !item.notAllowed && !item.locked) {
+            if ((item.on || item.onToggle == null) && item.rule != null && !item.notAllowed && !item.locked) {
                 // Only when it differs from the default, so the list stays quiet.
                 Text(
                     stringResource(R.string.rule_opens_in, item.rule.label()),
@@ -1357,12 +1358,14 @@ private fun SourceSummaryRow(item: SourceSettings, installed: Set<MusicService>,
                 )
             }
         }
-        Switch(
-            checked = item.on,
-            onCheckedChange = item.onToggle,
-            enabled = !item.locked,
-            modifier = Modifier.semantics { contentDescription = item.label }
-        )
+        item.onToggle?.let { onToggle ->
+            Switch(
+                checked = item.on,
+                onCheckedChange = onToggle,
+                enabled = !item.locked,
+                modifier = Modifier.semantics { contentDescription = item.label }
+            )
+        }
     }
 }
 
@@ -1391,16 +1394,19 @@ private fun SourcePage(
         }
     ) {
         Group(modifier = Modifier.padding(top = 8.dp)) {
-            SettingSwitch(
-                label = stringResource(R.string.source_open_links),
-                description = item.listeningNote,
-                checked = item.on,
-                onCheckedChange = item.onToggle,
-                enabled = !item.locked
-            )
-            if (item.notAllowed) NotAllowedRow(fixingLinks, actions)
+            val onToggle = item.onToggle
+            if (onToggle != null) {
+                SettingSwitch(
+                    label = stringResource(R.string.source_open_links),
+                    description = item.listeningNote,
+                    checked = item.on,
+                    onCheckedChange = onToggle,
+                    enabled = !item.locked
+                )
+                if (item.notAllowed) NotAllowedRow(fixingLinks, actions)
+            }
             if (item.video) {
-                GroupDivider()
+                if (onToggle != null) GroupDivider()
                 // Shared by YouTube, Invidious and Piped.
                 SettingSwitch(
                     label = stringResource(R.string.setting_only_music_videos),
