@@ -607,7 +607,8 @@ private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
             )
         }
         Text(
-            stringResource(R.string.visuals_list_summary, sources.count { it.on }, sources.size),
+            // Web frontends' sites have no switch, so they're not counted as off.
+            sources.filter { it.onToggle != null }.let { switches -> stringResource(R.string.visuals_list_summary, switches.count { it.on }, switches.size) },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary
         )
