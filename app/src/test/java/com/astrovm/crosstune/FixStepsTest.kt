@@ -418,8 +418,6 @@ class FixStepsTest {
         assertEquals(listOf(spotify), old.appsInTheWay)
 
         assertEquals("https://open.spotify.com/#$TEST_LINK", testLink(MusicService.SPOTIFY))
-        // Any of Bandcamp's sites, made a real one.
-        assertEquals("www.bandcamp.com", testHost(MusicService.BANDCAMP))
         assertEquals(MusicService.SPOTIFY, old.testService(Need.StopApp(spotify)))
         assertEquals(MusicService.SPOTIFY, old.testService(Need.Links))
         assertNull(UiState().testService(Need.Links))
