@@ -3721,6 +3721,58 @@ class ListeningTest {
         assertFalse(prefs().getBoolean("lyrics_translation", true))
     }
 
+    /** The readings drawn over the floating line's kanji; null when it has none drawn over it. */
+    private fun floatingReadings() = composeRule.onAllNodes(
+        androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG)) and
+            androidx.compose.ui.test.SemanticsMatcher("has readings") { it.config.getOrElseNullable(ReadingsShown) { null } != null },
+        useUnmergedTree = true
+    ).fetchSemanticsNodes().singleOrNull()?.config?.get(ReadingsShown)
+
+    /** How many times [text] floats. */
+    private fun floating(text: String) = composeRule.onAllNodes(
+        hasText(text) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG)),
+        useUnmergedTree = true
+    ).fetchSemanticsNodes().size
+
+    @Test
+    fun aLineAllInKanaFloatsWithNothingOverIt() {
+        wordsOf("[00:00.00] ひかりが\\n[00:30.00] 夜空に星が", "ひかりが\\n夜空に星が")
+        waitForText("ひかりが")
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        val floatingWords = floatNow()
+        assertEquals(1, floating("ひかりが"))
+        assertNull(floatingReadings())
+        floatingWords.destroy()
+    }
+
+    @Test
+    fun floatingReadingsFollowHowTheWordsAreSetToShow() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
+        waitForText("食べる")
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        // Readings off, the floating line has none, over it or under it.
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        composeRule.waitForIdle()
+        var floatingWords = floatNow()
+        assertEquals(1, floating("夜空に星が"))
+        assertNull(floatingReadings())
+        assertEquals(0, floating("よぞらにほしが"))
+        floatingWords.destroy()
+        controller!!.start().resume()
+        composeRule.waitForIdle()
+
+        // In kana, the line already is its reading: it floats once, with nothing over it.
+        learnMenu()
+        click(string(R.string.lyrics_readings))
+        click(string(R.string.lyrics_only_kana))
+        waitUntil(TIMEOUT_MS) { !shown("夜空に星が") }
+        floatingWords = floatNow()
+        assertEquals(1, floating("よぞらにほしが"))
+        assertNull(floatingReadings())
+        floatingWords.destroy()
+    }
+
     @Test
     fun japaneseRomajiCanBeSpelledAsTyped() {
         wordsOf("[00:00.00] 東京を\\n[00:30.00] 食べる", "東京を\\n食べる")
