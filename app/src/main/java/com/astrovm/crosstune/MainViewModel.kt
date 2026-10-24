@@ -3117,17 +3117,17 @@ internal class MainViewModel(
     }
 
     /**
-     * Opens every source's links on a fresh install, but the one the user listens in, whose links
-     * already open there; videos too, since only music videos are opened elsewhere. Changing them
-     * later is up to the user, in settings.
+     * Opens the big services' links on a fresh install, but the one the user listens in, whose
+     * links already open there. Each site is a box to tick in Android's settings, so the rest wait
+     * in settings: YouTube's links are mostly videos, SoundCloud's, Bandcamp's and Audiomack's songs
+     * are rarely anywhere else, and Invidious and Piped are a dozen sites of their own.
      */
     private fun preselectSources() {
         if (preferences.getBoolean(KEY_SOURCES_PRESELECTED, false)) return
         preferences.edit { putBoolean(KEY_SOURCES_PRESELECTED, true) }
         if (uiState.interceptsAnything) return
         val listening = uiState.listeningService()
-        MusicService.entries.filter { it.canBeSource && it != listening }.forEach { interception.setEnabled(it, true) }
-        Frontend.SOURCES.forEach { interception.setEnabled(it, true) }
+        STARTING_SOURCES.filter { it != listening }.forEach { interception.setEnabled(it, true) }
         uiState = uiState.withDestinations().copy(showLinkSettingsHelper = true)
         loadSystemState()
     }
@@ -3339,6 +3339,9 @@ internal class MainViewModel(
         private const val MAX_COVER_LOOKUPS = 100
         private const val KEY_ONLY_MUSIC_VIDEOS = "only_music_videos"
         private const val KEY_SOURCES_PRESELECTED = "sources_preselected"
+
+        /** The sources whose links open in Crosstune from the start. */
+        private val STARTING_SOURCES = listOf(MusicService.SPOTIFY, MusicService.YOUTUBE_MUSIC, MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL)
 
         /** How many times, and how long apart, setup in one tap looks for lyrics being let follow music apps. */
         private const val FOLLOW_WAITS = 10

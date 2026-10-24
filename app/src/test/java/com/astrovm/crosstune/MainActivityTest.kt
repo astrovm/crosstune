@@ -5158,7 +5158,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun invidiousAndPipedAreSourcesOfTheirOwnFromTheStartAndInSettings() {
+    fun invidiousAndPipedAreSourcesOfTheirOwnInSettings() {
         var states = emptyMap<String, Int>()
         FakeDomainVerification.install(app) { states }
         freshInstall()
@@ -5167,10 +5167,10 @@ class MainActivityTest {
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
 
-        // Links going straight to YouTube, its own stay there, but its frontends' come here, sources of their own.
+        // A dozen sites of their own to allow, they wait in settings, as YouTube's links do.
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
-        assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
-        assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
+        assertFalse(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
+        assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
         assertTextShown(string(R.string.setup_check_allow))
         // Settings marks the sources, and each one Android doesn't let Crosstune open yet.
         click(string(R.string.settings_button))
@@ -5181,8 +5181,10 @@ class MainActivityTest {
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.setup_not_allowed))
+        // Turned on, Piped's links are one source, though it's YouTube's frontend.
         toggleRow("Piped")
-        assertFalse(LinkInterception(app).isEnabled(Frontend.PIPED))
+        assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
     }
 
     @Test
@@ -5393,15 +5395,17 @@ class MainActivityTest {
     }
 
     @Test
-    fun aFreshInstallOpensEverySourcesLinks() {
+    fun aFreshInstallOpensTheBigServicesLinksOnly() {
         freshInstall()
         launch()
-        // Videos' too: only music videos go elsewhere.
+        val on = MusicService.entries.filter { LinkInterception(app).isEnabled(it) }
         assertEquals(
-            MusicService.entries.filter { it.canBeSource }.toSet(),
-            MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
+            setOf(MusicService.SPOTIFY, MusicService.YOUTUBE_MUSIC, MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL),
+            on.toSet()
         )
-        assertTrue(Frontend.SOURCES.all { LinkInterception(app).isEnabled(it) })
+        assertTrue(Frontend.SOURCES.none { LinkInterception(app).isEnabled(it) })
+        // Each site's a box to tick in Android's settings, without Shizuku or root.
+        assertEquals(14, on.sumOf { LinkInterception.HOSTS.getValue(it).size })
 
         // Coming back later leaves the user's choices alone.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
@@ -5425,7 +5429,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.empty_hint))
         // No app picked yet, so none's links are left out.
         assertFalse(DestinationStore(prefs()).hasDefault())
-        assertTrue(MusicService.entries.filter { it.canBeSource }.all { LinkInterception(app).isEnabled(it) })
+        assertTrue(listOf(MusicService.SPOTIFY, MusicService.YOUTUBE_MUSIC, MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).all { LinkInterception(app).isEnabled(it) })
         assertTrue(prefs().getBoolean("setup_complete", false))
 
         // Only some are allowed, so each shows how.
@@ -5953,21 +5957,21 @@ class MainActivityTest {
         freshInstall()
         // YouTube comes with most phones, so it doesn't count.
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE.packageName })
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.DEEZER.packageName })
         launch()
         waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
-        assertEquals(Destination.Service(MusicService.SOUNDCLOUD), DestinationStore(prefs()).defaultDestination())
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
         // Links going straight to it, its own stay there.
-        assertFalse(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.DEEZER))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
         controller!!.pause().stop().destroy()
 
         // An app picked already stays, though another's the only one now.
         freshInstall()
-        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.DEEZER))
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
+        assertEquals(Destination.Service(MusicService.TIDAL), DestinationStore(prefs()).defaultDestination())
         controller!!.pause().stop().destroy()
 
         // With two, it's left to the first one picked on a song.
@@ -6014,7 +6018,7 @@ class MainActivityTest {
         launch()
         waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
+        assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
 
     /** A fresh install with Spotify's app in the way of links not allowed yet, and lyrics not let follow; returns what Shizuku ran. */
