@@ -532,7 +532,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
         const val ACTION_UNLOCK = "com.astrovm.crosstune.floating.UNLOCK"
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"
-        private const val EXTRA_COVER = "com.astrovm.crosstune.floating.COVER"
+        const val EXTRA_COVER = "com.astrovm.crosstune.floating.COVER"
         private const val CHANNEL = "floating_lyrics"
         private const val NOTIFICATION_ID = 1
 
