@@ -806,7 +806,7 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
             },
             onValueChangeFinished = { onChange(latest, true) },
             valueRange = range,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = description ?: size }
+            modifier = Modifier.fillMaxWidth().slidesSideways().semantics { contentDescription = description ?: size }
         )
     }
 }
@@ -1220,7 +1220,7 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
                 },
                 onValueChangeFinished = { actions.onVisualsShadeChange(latest, true) },
                 valueRange = 0f..MAX_VISUALS_SHADE,
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = brightness }
+                modifier = Modifier.fillMaxWidth().slidesSideways().semantics { contentDescription = brightness }
             )
         }
         VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange, modifier = Modifier.fillMaxWidth(), inset = 0.dp, icon = R.drawable.ic_timer)

@@ -197,7 +197,7 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
                 },
                 valueRange = 0f..duration.toFloat(),
                 enabled = following.canSeek,
-                modifier = Modifier.fillMaxWidth().semantics { stateDescription = description }
+                modifier = Modifier.fillMaxWidth().slidesSideways().semantics { stateDescription = description }
             )
         }
         Row(modifier = Modifier.fillMaxWidth()) {

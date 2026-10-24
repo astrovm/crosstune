@@ -183,6 +183,13 @@ class FixStepsTest {
         composeRule.waitForIdle()
         assertShown(turnOn(R.string.app_name))
 
+        // So does a TV, whose switch asks nothing more, and which has no pictures.
+        steps(Need.Follow, Phone.TV)
+        composeRule.waitForIdle()
+        assertShown(turnOn(R.string.app_name))
+        assertFalse(shown(tap(R.string.allow_button)))
+        assertEquals(0, pictures())
+
         // Installed from a file, Android turns the first try down, then lets it from App info.
         steps(Need.Follow) { copy(followRestricted = true) }
         composeRule.waitForIdle()
@@ -205,6 +212,11 @@ class FixStepsTest {
         composeRule.waitForIdle()
         assertShown(turnOn(R.string.app_name))
         assertFalse(shown(turnOn(R.string.android_display_over_apps)))
+
+        steps(Need.Float, Phone.TV)
+        composeRule.waitForIdle()
+        assertShown(turnOn(R.string.app_name))
+        assertEquals(0, pictures())
     }
 
     @Test
@@ -371,6 +383,8 @@ class FixStepsTest {
         assertEquals(Phone.XIAOMI, Phone.of("Xiaomi", "POCO"))
         assertEquals(Phone.XIAOMI, Phone.of("Xiaomi", "Redmi"))
         assertEquals(Phone.OTHER, Phone.of("OnePlus", "OnePlus"))
+        // A TV is one whoever made it.
+        assertEquals(Phone.TV, Phone.of("Google", "google", tv = true))
     }
 
     @Test

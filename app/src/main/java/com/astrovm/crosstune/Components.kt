@@ -37,6 +37,17 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.alpha
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
@@ -266,4 +277,26 @@ internal fun OneTapButton(label: String, onClick: () -> Unit, fixing: Boolean) {
         }
         Text(label)
     }
+}
+
+/**
+ * A slider a TV remote passes through: left and right slide it, up and down move on as from
+ * anything else, where the slider would take them too, and a ring says the remote is on it.
+ */
+@Composable
+internal fun Modifier.slidesSideways(): Modifier {
+    val focus = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.hasFocus }
+        .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small) else Modifier)
+        .onPreviewKeyEvent { event ->
+            val direction = when (event.key) {
+                Key.DirectionUp -> FocusDirection.Up
+                Key.DirectionDown -> FocusDirection.Down
+                else -> return@onPreviewKeyEvent false
+            }
+            if (event.type == KeyEventType.KeyDown) focus.moveFocus(direction)
+            true
+        }
 }

@@ -188,8 +188,11 @@ private fun SettingsList(
                 checked = state.playRightAway,
                 onCheckedChange = actions.onPlayRightAwayChange
             )
-            GroupDivider()
-            SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
+            // A TV has nowhere to allow links in, so they can't open here.
+            if (state.phone != Phone.TV) {
+                GroupDivider()
+                SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
+            }
         }
 
         // What the words are translated into, and whether they follow the music app.
@@ -568,7 +571,7 @@ internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier
             onValueChange = { at -> steps[at.roundToInt().coerceIn(steps.indices)].takeIf { it != changeMs }?.let(onChange) },
             valueRange = 0f..steps.lastIndex.toFloat(),
             steps = steps.size - 2,
-            modifier = Modifier.heightIn(min = 48.dp).semantics {
+            modifier = Modifier.heightIn(min = 48.dp).slidesSideways().semantics {
                 contentDescription = label
                 stateDescription = shown
             }

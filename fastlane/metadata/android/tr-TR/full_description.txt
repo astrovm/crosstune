@@ -17,6 +17,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Zamanlı sözler: müzik uygulamanı takip eder ya da seninle birlikte dinler, diğer uygulamaların üzerinde yüzer ve arkada MilkDrop görselleriyle akar. Yanlış sözler ya da zamanlama mı var? Sözlerden bildir: şarkı, zamanlama ayrıntıları ile uygulama ve Android sürümleriyle doldurulmuş bir GitHub sorunu ya da e-posta açılır, gönderirsin.</li>
 <li>Kana, pinyin, romaji ve diğer yazılar için Latin harfleriyle, henüz okuyamadığın diller için çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun.</li>
 <li>Şarkıları baştan sona çevirmek, satırları açıklamak, öğrenmeye değer kelimeleri bulmak ve şarkıları tarif ederek aramak için ücretli ChatGPT planınla giriş yap.</li>
+<li>Android TV'de de kumandayla çalışır.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>
 

@@ -64,13 +64,16 @@ internal const val TEST_LINK = "crosstune-test"
 
 /** The kind of phone, whose settings pages the steps' pictures show; for others the steps are in words. */
 internal enum class Phone {
-    PIXEL, SAMSUNG, XIAOMI, OTHER;
+    PIXEL, SAMSUNG, XIAOMI, OTHER,
+    /** A TV, run with a remote, whose settings have no page for opening links. */
+    TV;
 
     companion object {
-        /** From who Android says made the phone, e.g. "samsung", and whose brand it is, e.g. "POCO". */
-        fun of(manufacturer: String, brand: String): Phone {
+        /** From who Android says made the phone, e.g. "samsung", and whose brand it is, e.g. "POCO", or that it's a [tv]. */
+        fun of(manufacturer: String, brand: String, tv: Boolean = false): Phone {
             val names = setOf(manufacturer.lowercase(), brand.lowercase())
             return when {
+                tv -> TV
                 "samsung" in names -> SAMSUNG
                 names.any { it in XIAOMI_BRANDS } -> XIAOMI
                 "google" in names -> PIXEL
@@ -561,10 +564,12 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
         )
     }
     if (need == Need.Follow) {
-        // Samsung lists every app, each with its switch, rather than open Crosstune's own page.
-        val access = stringResource(if (phone == Phone.SAMSUNG) R.string.app_name else R.string.android_allow_notification_access)
+        // Samsung and TVs list every app, each with its switch, rather than open Crosstune's own page.
+        val access = stringResource(if (phone == Phone.SAMSUNG || phone == Phone.TV) R.string.app_name else R.string.android_allow_notification_access)
         val allow = stringResource(R.string.allow_button)
         if (!state.followRestricted) {
+            // A TV's switch asks nothing more.
+            if (phone == Phone.TV) return listOf(inWords(turnOn, access))
             return listOf(phone.step(turnOn, access) { AndroidPictures.AccessSwitch(phone) }, phone.step(tap, allow) { AndroidPictures.AllowDialog() })
         }
         // Android turns the first try down for an app installed from a file, and only then offers
@@ -591,10 +596,10 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
     }
     if (need == Need.Float) {
         val overApps = stringResource(R.string.android_display_over_apps)
-        // Before 11 Android opens Crosstune's own page; from 11, the list of apps, which Samsung switches right there.
+        // Before 11 Android opens Crosstune's own page; from 11, the list of apps, which Samsung and TVs switch right there.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return listOf(phone.step(turnOn, overApps) { AndroidPictures.OverlaySwitch() })
         val crosstune = stringResource(R.string.app_name)
-        if (phone == Phone.SAMSUNG) return listOf(phone.step(turnOn, crosstune) { AndroidPictures.OverlayRow(phone) })
+        if (phone == Phone.SAMSUNG || phone == Phone.TV) return listOf(phone.step(turnOn, crosstune) { AndroidPictures.OverlayRow(phone) })
         return listOf(phone.step(tap, crosstune) { AndroidPictures.OverlayRow(phone) }, phone.step(turnOn, overApps) { AndroidPictures.OverlaySwitch() })
     }
     // Links, Crosstune's or another app's. Before Android 12 they're one choice in App info, which a test link checks.
@@ -634,7 +639,7 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
 /** A step with its [picture], which shows only on the phones there are pictures for. */
 @Composable
 private fun Phone.step(@StringRes template: Int, vararg words: String, button: Pair<String, () -> Unit>? = null, picture: @Composable () -> Unit): FixStep =
-    FixStep(bold(template, *words), picture.takeIf { this != Phone.OTHER }, button)
+    FixStep(bold(template, *words), picture.takeIf { this != Phone.OTHER && this != Phone.TV }, button)
 
 /** A step in words alone, for a page of Android's that looks different on every phone. */
 @Composable

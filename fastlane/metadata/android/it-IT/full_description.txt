@@ -17,6 +17,7 @@ Ricevi un link da un servizio musicale e apri lo stesso brano nella tua app pref
 <li>Testi a tempo: seguono la tua app di musica o ascoltano con te, fluttuano sopra le altre app e scorrono con gli effetti visivi MilkDrop dietro. Parole o tempi sbagliati? Segnalalo direttamente dal testo: si apre una issue di GitHub o un'email già compilata con il brano, i dettagli dei tempi e le versioni dell'app e di Android, da inviare.</li>
 <li>Impara le parole con kana, pinyin, romaji e ogni altra scrittura in lettere latine, e traduzioni per le lingue che non leggi già. Scegli cosa mostrare su ogni lato delle schede di ripasso. Crea più tipi di scheda da una riga, ognuno con il suo calendario.</li>
 <li>Accedi con il tuo piano ChatGPT a pagamento per tradurre brani interi, spiegare righe, trovare le parole da imparare e cercare brani descrivendoli.</li>
+<li>Funziona anche su Android TV, con il telecomando.</li>
 <li>Colori Material You su Android 12 e versioni successive.</li>
 </ul>
 
