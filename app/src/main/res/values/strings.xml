@@ -68,7 +68,7 @@
     <string name="settings_listening_locked">You listen in %1$s, so its links already open there. Pick another app below to turn this on.</string>
     <string name="setup_check_app">Turn off links in %1$s</string>
     <string name="ask_links_gets">Tap a music link in any app, and it opens here.</string>
-    <string name="ask_follow_gets">Play something, and its lyrics show here, in time.</string>
+    <string name="ask_follow_gets">Play something, and its lyrics show here.</string>
     <string name="setup_check_allow">Allow links in Crosstune</string>
     <string name="setup_done">Done</string>
     <string name="setup_not_allowed">Not allowed yet</string>
@@ -422,6 +422,8 @@
     <string name="android_open_in_this_app">Open in this app</string>
     <string name="android_dont_open_in_this_app">Don\'t open in this app</string>
     <string name="android_allow_notification_access">Allow notification access</string>
+    <string name="android_special_app_access">Special app access</string>
+    <string name="android_notification_access">Notification access</string>
     <string name="android_deny">Deny</string>
     <string name="android_close">Close</string>
     <string name="android_restricted_setting">Restricted setting</string>

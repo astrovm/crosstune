@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">Du hörst in %1$s, also öffnen sich dessen Links schon dort. Wähle unten eine andere App, um das einzuschalten.</string>
     <string name="setup_check_app">Links in %1$s abschalten</string>
     <string name="ask_links_gets">Tippe in einer beliebigen App auf einen Musiklink, und er öffnet sich hier.</string>
-    <string name="ask_follow_gets">Spiel etwas ab, und sein Songtext erscheint hier, im Takt.</string>
+    <string name="ask_follow_gets">Spiel etwas ab, und sein Songtext erscheint hier.</string>
     <string name="setup_check_allow">Links in Crosstune erlauben</string>
     <string name="setup_done">Erledigt</string>
     <string name="setup_not_allowed">Noch nicht erlaubt</string>
@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">In dieser App öffnen</string>
     <string name="android_dont_open_in_this_app">Nicht in dieser App öffnen</string>
     <string name="android_allow_notification_access">Benachrichtigungszugriff erlauben</string>
+    <string name="android_special_app_access">Spezieller App-Zugriff</string>
+    <string name="android_notification_access">Benachrichtigungszugriff</string>
     <string name="android_deny">Ablehnen</string>
     <string name="android_close">Schließen</string>
     <string name="android_restricted_setting">Eingeschränkte Einstellung</string>

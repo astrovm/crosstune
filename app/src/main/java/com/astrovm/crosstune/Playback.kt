@@ -249,10 +249,10 @@ internal class MediaSessionPlayback(
         else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
     }
 
-    // The app may be installed as a build patched from it, under a name of its own.
-    override fun openSong(app: String, link: String): Boolean = (MusicService.ofPackage(app)?.packageNames ?: listOf(app)).any { packageName ->
+    // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
+    override fun openSong(app: String, link: String): Boolean = (MusicService.ofPackage(app)?.appLinks(link) ?: listOf(app to link)).any { (packageName, its) ->
         runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
         }.getOrDefault(false)
     }

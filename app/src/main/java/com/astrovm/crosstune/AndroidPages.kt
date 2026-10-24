@@ -21,8 +21,13 @@ internal fun Context.openAppInfo() {
     tryStartActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
 }
 
-/** Android's page for letting Crosstune see what music apps play, at its own entry where Android has one. */
-internal fun Context.openNotificationAccess() {
+/**
+ * Android's page for letting Crosstune see what music apps play, at its own entry where Android has one.
+ * A [tv] opens its list of apps instead: Google TV's page, opened straight away, can leave the remote
+ * stuck outside its list, as on the Chromecast, but reached from there it doesn't.
+ */
+internal fun Context.openNotificationAccess(tv: Boolean) {
+    if (tv && tryStartActivity(Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS))) return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         val own = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
             .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(this, NowPlayingListener::class.java).flattenToString())

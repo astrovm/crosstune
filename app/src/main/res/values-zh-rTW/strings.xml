@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">你在 %1$s 中收聽，所以它的連結已經會在那裡開啟。要開啟，請在下面選擇另一個應用程式。</string>
     <string name="setup_check_app">關閉 %1$s 中的連結</string>
     <string name="ask_links_gets">在任意應用程式中輕觸音樂連結，就會在這裡開啟。</string>
-    <string name="ask_follow_gets">播放任意歌曲，歌詞就會在這裡同步顯示。</string>
+    <string name="ask_follow_gets">播放任意歌曲，歌詞就會顯示在這裡。</string>
     <string name="setup_check_allow">允許在 Crosstune 中開啟連結</string>
     <string name="setup_done">已完成</string>
     <string name="setup_not_allowed">尚未允許</string>
@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">在這個應用程式中開啟</string>
     <string name="android_dont_open_in_this_app">不要在這個應用程式中開啟</string>
     <string name="android_allow_notification_access">授予通知存取權</string>
+    <string name="android_special_app_access">特殊應用程式存取權</string>
+    <string name="android_notification_access">通知存取權</string>
     <string name="android_deny">拒絕</string>
     <string name="android_close">關閉</string>
     <string name="android_restricted_setting">受限制的設定</string>

@@ -57,7 +57,7 @@
     <string name="settings_listening_locked">%1$s で聴いているので、そのリンクはすでにそこで開きます。オンにするには、下で別のアプリを選んでください。</string>
     <string name="setup_check_app">%1$s のリンクをオフにする</string>
     <string name="ask_links_gets">どのアプリでも音楽リンクをタップすると、ここで開きます。</string>
-    <string name="ask_follow_gets">何かを再生すると、その歌詞がタイミングに合わせてここに表示されます。</string>
+    <string name="ask_follow_gets">何かを再生すると、その歌詞がここに表示されます。</string>
     <string name="setup_check_allow">Crosstune のリンクを許可</string>
     <string name="setup_done">完了</string>
     <string name="setup_not_allowed">未許可</string>
@@ -402,6 +402,8 @@
     <string name="android_open_in_this_app">このアプリで開く</string>
     <string name="android_dont_open_in_this_app">このアプリで開かない</string>
     <string name="android_allow_notification_access">通知へのアクセスを許可</string>
+    <string name="android_special_app_access">特別なアプリアクセス</string>
+    <string name="android_notification_access">通知へのアクセス</string>
     <string name="android_deny">許可しない</string>
     <string name="android_close">閉じる</string>
     <string name="android_restricted_setting">制限付き設定</string>

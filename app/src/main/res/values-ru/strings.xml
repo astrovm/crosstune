@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">Вы слушаете в %1$s, поэтому его ссылки и так открываются там. Чтобы включить, выберите ниже другое приложение.</string>
     <string name="setup_check_app">Отключите ссылки в %1$s</string>
     <string name="ask_links_gets">Нажмите на музыкальную ссылку в любом приложении, и она откроется здесь.</string>
-    <string name="ask_follow_gets">Включите что-нибудь, и текст появится здесь, в такт.</string>
+    <string name="ask_follow_gets">Включите что-нибудь, и текст появится здесь.</string>
     <string name="setup_check_allow">Разрешите ссылки в Crosstune</string>
     <string name="setup_done">Готово</string>
     <string name="setup_not_allowed">Ещё не разрешено</string>
@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">Открывать в этом приложении</string>
     <string name="android_dont_open_in_this_app">Не открывать в этом приложении</string>
     <string name="android_allow_notification_access">Доступ к уведомлениям</string>
+    <string name="android_special_app_access">Специальный доступ</string>
+    <string name="android_notification_access">Доступ к уведомлениям</string>
     <string name="android_deny">Отклонить</string>
     <string name="android_close">Закрыть</string>
     <string name="android_restricted_setting">Настройки с ограниченным доступом</string>

@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं। इसे चालू करने के लिए नीचे कोई दूसरा ऐप चुनें।</string>
     <string name="setup_check_app">%1$s में लिंक बंद करें</string>
     <string name="ask_links_gets">किसी भी ऐप में संगीत लिंक पर टैप करें, वह यहाँ खुलेगा।</string>
-    <string name="ask_follow_gets">कुछ भी चलाएँ, उसके बोल यहाँ समय के साथ दिखेंगे।</string>
+    <string name="ask_follow_gets">कुछ भी चलाएँ, उसके बोल यहाँ दिखेंगे।</string>
     <string name="setup_check_allow">Crosstune में लिंक की अनुमति दें</string>
     <string name="setup_done">हो गया</string>
     <string name="setup_not_allowed">अभी अनुमति नहीं है</string>
@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">इस ऐप्लिकेशन में खोलें</string>
     <string name="android_dont_open_in_this_app">इस ऐप्लिकेशन में न खोलें</string>
     <string name="android_allow_notification_access">सूचनाओं को ऐक्सेस करने की अनुमति दें</string>
+    <string name="android_special_app_access">ऐप्लिकेशन को खास अनुमति दें</string>
+    <string name="android_notification_access">सूचना देखने की मंज़ूरी</string>
     <string name="android_deny">अनुमति न दें</string>
     <string name="android_close">बंद करें</string>
     <string name="android_restricted_setting">इस सेटिंग पर पाबंदी लगाई गई है</string>

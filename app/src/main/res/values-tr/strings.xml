@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">%1$s uygulamasında dinliyorsun, bu yüzden bağlantıları zaten orada açılıyor. Açmak için aşağıdan başka bir uygulama seç.</string>
     <string name="setup_check_app">%1$s içinde bağlantıları kapat</string>
     <string name="ask_links_gets">Herhangi bir uygulamada bir müzik bağlantısına dokun, burada açılsın.</string>
-    <string name="ask_follow_gets">Bir şey çal, sözleri burada zamanında görünsün.</string>
+    <string name="ask_follow_gets">Bir şey çal, sözleri burada görünsün.</string>
     <string name="setup_check_allow">Crosstune\'da bağlantılara izin ver</string>
     <string name="setup_done">Tamam</string>
     <string name="setup_not_allowed">Henüz izin verilmedi</string>
@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">Bu uygulamada aç</string>
     <string name="android_dont_open_in_this_app">Bu uygulamada açma</string>
     <string name="android_allow_notification_access">Bildirimlere erişime izin ver</string>
+    <string name="android_special_app_access">Özel uygulama erişimi</string>
+    <string name="android_notification_access">Bildirim erişimi</string>
     <string name="android_deny">Reddet</string>
     <string name="android_close">Kapat</string>
     <string name="android_restricted_setting">Kısıtlanmış ayar</string>

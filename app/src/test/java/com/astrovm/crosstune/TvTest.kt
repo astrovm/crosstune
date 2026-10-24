@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,11 +16,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -39,6 +42,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
@@ -66,6 +70,7 @@ class TvTest {
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.phoneFactory = { phone }
         MainActivity.checksForUpdates = { false }
+        MainActivity.shellFactory = { emptyList() }
         prefs().edit().clear().commit()
     }
 
@@ -77,6 +82,8 @@ class TvTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.phoneFactory = realPhone
         MainActivity.checksForUpdates = ::looksForUpdates
+        MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
+        MainActivity.playbackFactory = ::MediaSessionPlayback
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -114,6 +121,31 @@ class TvTest {
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.setting_show_in_crosstune_first)))
         assertTrue(!shown(string(R.string.settings_links_title)))
+    }
+
+    @Test
+    fun onATvFollowingMusicIsTurnedOnFromTheListOfApps() {
+        launch()
+        composeRule.onNode(hasText(string(R.string.allow_button)) and hasClickAction()).performClick()
+        composeRule.waitForIdle()
+        // Google TV's own page, opened straight away, can leave the remote stuck, as on the Chromecast.
+        assertTrue(shown(string(R.string.fix_step_pick, string(R.string.android_special_app_access))))
+        assertTrue(shown(string(R.string.fix_step_pick, string(R.string.android_notification_access))))
+        assertTrue(shown(string(R.string.fix_step_turn_on, string(R.string.app_name))))
+        composeRule.onNode(hasText(string(R.string.fix_open_settings))).performClick()
+        composeRule.waitForIdle()
+        assertEquals(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, shadowOf(app).nextStartedActivity.action)
+    }
+
+    @Test
+    fun onATvFollowingMusicIsTurnedOffFromTheListOfAppsToo() {
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
+        launch()
+        composeRule.onNode(hasContentDescription(string(R.string.settings_button))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, shadowOf(app).nextStartedActivity.action)
     }
 
     @Test

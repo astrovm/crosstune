@@ -183,10 +183,14 @@ class FixStepsTest {
         composeRule.waitForIdle()
         assertShown(turnOn(R.string.app_name))
 
-        // So does a TV, whose switch asks nothing more, and which has no pictures.
+        // So does a TV, reached from its list of apps, whose switch asks nothing more, and which has no pictures.
         steps(Need.Follow, Phone.TV)
         composeRule.waitForIdle()
-        assertShown(turnOn(R.string.app_name))
+        assertShown(
+            string(R.string.fix_step_pick, string(R.string.android_special_app_access)),
+            string(R.string.fix_step_pick, string(R.string.android_notification_access)),
+            turnOn(R.string.app_name)
+        )
         assertFalse(shown(tap(R.string.allow_button)))
         assertEquals(0, pictures())
 
