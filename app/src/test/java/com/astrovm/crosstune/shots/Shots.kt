@@ -249,15 +249,15 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
 
     /** A fresh install: nothing opened yet, and what Android has to allow asked under the field. */
     private fun firstRun() = base().copy(
-        intercepted = MusicService.entries.filter { it.canBeSource }.toSet(),
-        unapprovedHosts = MusicService.entries.filter { it.canBeSource }.associateWith { listOf("open.spotify.com") },
+        intercepted = MusicService.entries.filter { it.opensTappedLinks }.toSet(),
+        unapprovedHosts = MusicService.entries.filter { it.opensTappedLinks }.associateWith { listOf("open.spotify.com") },
         canFollowApps = false
     )
 
     private fun base() = UiState(
         palette = Palette.VIOLET,
         destinations = MusicService.entries.map { com.astrovm.crosstune.Destination.Service(it) },
-        intercepted = MusicService.entries.filter { it.canBeSource }.toSet(),
+        intercepted = MusicService.entries.filter { it.opensTappedLinks }.toSet(),
         unapprovedHosts = emptyMap(),
         blockingApps = emptySet(),
         claimingApps = emptySet(),

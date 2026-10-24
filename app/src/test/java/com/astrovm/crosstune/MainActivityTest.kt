@@ -5173,6 +5173,25 @@ class MainActivityTest {
     }
 
     @Test
+    fun soundCloudBandcampAndAudiomackKeepWhereTheirLinksGoButNoSwitch() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        openSources()
+        // Their links come shared or pasted, never tapped (#372).
+        for (label in listOf(string(R.string.target_soundcloud), string(R.string.service_bandcamp), string(R.string.service_audiomack))) {
+            assertTrue(label, composeRule.onAllNodes(isToggleable() and hasContentDescription(label)).fetchSemanticsNodes().isEmpty())
+        }
+        openSource(string(R.string.target_soundcloud))
+        assertTextAbsent(string(R.string.source_open_links))
+        composeRule.onNodeWithText(string(R.string.rule_opens_in, string(R.string.rule_default, "YouTube Music"))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.service_spotify))).onLast().performClick()
+        composeRule.waitForIdle()
+        assertTextShown(string(R.string.rule_opens_in, "Spotify"))
+        assertEquals(Destination.Service(MusicService.SPOTIFY), DestinationStore(prefs()).rule(MusicService.SOUNDCLOUD))
+    }
+
+    @Test
     fun invidiousLinksCanOpenSomewhereElseThanYouTubes() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         launch()
@@ -5307,7 +5326,7 @@ class MainActivityTest {
         launch()
         click(string(R.string.settings_button))
 
-        val switches = MusicService.entries.count { it.canBeSource }
+        val switches = MusicService.entries.count { it.opensTappedLinks }
         val total = string(R.string.visuals_list_summary, 0, switches).substringAfter("0")
         composeRule.onNodeWithText(total, substring = true).assertIsDisplayed()
     }

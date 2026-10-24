@@ -1274,7 +1274,8 @@ private fun sourceSettings(state: UiState, actions: ScreenActions): List<SourceS
             keptBy = if (intercepted) keptBy(source.name) else emptyList(),
             rule = rule,
             fallback = state.defaultDestination,
-            onToggle = { actions.onInterceptChange(source, it) },
+            // Links Crosstune can't open when tapped still come shared or pasted, so like the frontends' only where they go is set.
+            onToggle = if (source.opensTappedLinks) { on -> actions.onInterceptChange(source, on) } else null,
             onRule = { actions.onRuleChange(source, it) },
             video = source == MusicService.YOUTUBE
         )

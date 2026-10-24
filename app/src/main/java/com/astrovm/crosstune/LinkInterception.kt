@@ -65,7 +65,7 @@ internal data class LinkState(
  */
 internal class LinkInterception(private val context: Context) {
 
-    fun isEnabled(service: MusicService): Boolean = isEnabled(component(service.name))
+    fun isEnabled(service: MusicService): Boolean = service.opensTappedLinks && isEnabled(component(service.name))
 
     fun setEnabled(service: MusicService, enabled: Boolean) = setEnabled(component(service.name), enabled)
 
@@ -206,21 +206,12 @@ internal class LinkInterception(private val context: Context) {
             MusicService.DEEZER to listOf(
                 "deezer.com", "www.deezer.com", "link.deezer.com", "deezer.page.link", "dzr.page.link"
             ),
-            MusicService.TIDAL to listOf("tidal.com", "www.tidal.com", "listen.tidal.com"),
-            MusicService.SOUNDCLOUD to listOf("soundcloud.com", "www.soundcloud.com", "m.soundcloud.com", "on.soundcloud.com"),
-            MusicService.BANDCAMP to listOf("*.bandcamp.com"),
-            MusicService.AUDIOMACK to listOf("audiomack.com", "www.audiomack.com")
+            MusicService.TIDAL to listOf("tidal.com", "www.tidal.com", "listen.tidal.com")
         )
 
-        /** Whether two hosts, either of which may be a `*.` wildcard, can name the same site. */
-        private fun covers(a: String, b: String): Boolean {
-            fun suffix(host: String) = host.removePrefix("*")
-            return when {
-                a.startsWith("*.") -> b.endsWith(suffix(a))
-                b.startsWith("*.") -> a.endsWith(suffix(b))
-                else -> a == b
-            }
-        }
+        /** Whether an app's [host], which may be a `*.` wildcard, takes links to one of Crosstune's, [wanted]. */
+        private fun covers(wanted: String, host: String): Boolean =
+            if (host.startsWith("*.")) wanted.endsWith(host.removePrefix("*")) else wanted == host
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =

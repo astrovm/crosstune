@@ -176,41 +176,6 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" android:host="listen.tidal.com" />
         </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="soundcloud.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="www.soundcloud.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="m.soundcloud.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="on.soundcloud.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="bandcamp.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="audiomack.com" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="www.audiomack.com" />
-        </intent>
         <!-- Music apps that can be woken in the background, as AppWaker.kt does, whichever played a song. -->
         <intent>
             <action android:name="android.media.browse.MediaBrowserService" />
@@ -483,60 +448,8 @@
             </intent-filter>
         </activity-alias>
 
-        <activity-alias
-            android:name=".intercept.SOUNDCLOUD"
-            android:enabled="false"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            tools:ignore="AppLinkWarning">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:host="soundcloud.com" />
-                <data android:host="www.soundcloud.com" />
-                <data android:host="m.soundcloud.com" />
-                <data android:host="on.soundcloud.com" />
-                <data android:pathPattern="/..*" />
-            </intent-filter>
-        </activity-alias>
 
-        <activity-alias
-            android:name=".intercept.BANDCAMP"
-            android:enabled="false"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            tools:ignore="AppLinkWarning">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:host="*.bandcamp.com" />
-                <data android:pathPrefix="/track/" />
-                <data android:pathPrefix="/album/" />
-            </intent-filter>
-        </activity-alias>
 
-        <activity-alias
-            android:name=".intercept.AUDIOMACK"
-            android:enabled="false"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            tools:ignore="AppLinkWarning">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:host="audiomack.com" />
-                <data android:host="www.audiomack.com" />
-                <data android:pathPattern="/.*/song/.*" />
-                <data android:pathPattern="/.*/album/.*" />
-                <data android:pathPattern="/.*/playlist/.*" />
-            </intent-filter>
-        </activity-alias>
 
         <!-- Home screen widget: Crosstune in miniature, with Recent and the copied link. -->
         <receiver
