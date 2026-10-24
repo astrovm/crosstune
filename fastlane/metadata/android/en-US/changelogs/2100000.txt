@@ -1,0 +1,7 @@
+No setup: Crosstune opens on its main screen and asks there for what Android has to allow.
+Your only music app is picked for you. With more, the first one you pick on a song.
+Lyrics are looked up as a song shows, so they open at once.
+The microphone is asked for where it's used.
+The bar of what's playing can be turned off.
+The song sheet works signed out, with ChatGPT's sign-in in it.
+Better song names, readings, pinyin search, and reopened lyrics.
