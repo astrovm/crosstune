@@ -1,7 +1,13 @@
 package com.astrovm.crosstune
 
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onAllNodesWithText
@@ -109,6 +115,9 @@ class ListeningTest {
     private var microphone = FakeMicrophone()
     private var controller: ActivityController<MainActivity>? = null
 
+    /** Put back after, so other tests still tell the phone as the app does. */
+    private val realPhone = MainActivity.phoneFactory
+
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
@@ -148,6 +157,7 @@ class ListeningTest {
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = { OutputMixTap.open() }
         MainActivity.lyricsLanguageFactory = null
+        MainActivity.phoneFactory = realPhone
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
@@ -4331,6 +4341,97 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertTrue(shown("yoru ni kimi wa") && shown("ashita no uta"))
         assertFalse(shown("夜に君は"))
+    }
+
+    /** How far what's drawn for [text] is from the screen's left edge, and from its right, which doesn't change along a row of the background. */
+    private fun gaps(text: String): Pair<Int, Int> {
+        val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        val bounds = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        var left = image.width
+        var right = -1
+        for (y in bounds.top.toInt() until bounds.bottom.toInt()) {
+            val background = image.getPixel(0, y)
+            for (x in 1 until image.width) {
+                val pixel = image.getPixel(x, y)
+                if (listOf(16, 8, 0).sumOf { Math.abs(((pixel shr it) and 0xff) - ((background shr it) and 0xff)) } > 60) {
+                    left = minOf(left, x)
+                    right = maxOf(right, x)
+                }
+            }
+        }
+        return left to (image.width - 1 - right)
+    }
+
+    private fun wordsAtStart(text: String) = gaps(text).let { (left, right) -> right > left * 2 }
+
+    private fun wordsCentered(text: String) = gaps(text).let { (left, right) -> Math.abs(left - right) < 3 && left > 50 }
+
+    private fun alignOption(label: Int) = composeRule.onNode(hasContentDescription(string(label)))
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onAPhoneTheWordsStartAtTheStartUntilCenteredFromTheMenuAndStayCentered() {
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertEquals(null, controllerModel().uiState.learning.centered)
+        assertTrue(wordsAtStart("Sky full of stars"))
+        learnMenu()
+        alignOption(R.string.lyrics_align_start).assertIsSelected()
+        alignOption(R.string.lyrics_align_center).assertIsNotSelected()
+        click(string(R.string.lyrics_align_center))
+        assertTrue(wordsCentered("Sky full of stars"))
+        alignOption(R.string.lyrics_align_center).assertIsSelected()
+        assertTrue(prefs().getBoolean("words_centered", false))
+        // Turned over, the words are still centered.
+        controller = controller!!.recreate()
+        composeRule.waitForIdle()
+        assertTrue(wordsCentered("Sky full of stars"))
+        learnMenu()
+        click(string(R.string.lyrics_align_start))
+        assertTrue(wordsAtStart("Sky full of stars"))
+        assertEquals(false, prefs().getBoolean("words_centered", true))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onATvTheWordsAreCenteredUntilPickedToStartAndStayAtTheStart() {
+        MainActivity.phoneFactory = { Phone.TV }
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertTrue(wordsCentered("Sky full of stars"))
+        // Nothing is kept until picked.
+        assertFalse(prefs().contains("words_centered"))
+        learnMenu()
+        alignOption(R.string.lyrics_align_center).assertIsSelected()
+        // The remote can reach and press both, at a size it can hit.
+        listOf(R.string.lyrics_align_start, R.string.lyrics_align_center).forEach {
+            alignOption(it).assert(SemanticsMatcher.keyIsDefined(SemanticsActions.RequestFocus)).assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        }
+        click(string(R.string.lyrics_align_start))
+        assertTrue(wordsAtStart("Sky full of stars"))
+        controller = controller!!.recreate()
+        composeRule.waitForIdle()
+        assertTrue(wordsAtStart("Sky full of stars"))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsAtTheStartLastTimeAreAtTheStartOnATv() {
+        MainActivity.phoneFactory = { Phone.TV }
+        prefs().edit().putBoolean("words_centered", false).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertTrue(wordsAtStart("Sky full of stars"))
+        assertEquals(false, controllerModel().uiState.learning.centered)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theWordsCenteredLastTimeAreCenteredOnAPhone() {
+        prefs().edit().putBoolean("words_centered", true).commit()
+        wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
+        waitForText("Sky full of stars")
+        assertTrue(wordsCentered("Sky full of stars"))
     }
 }
 

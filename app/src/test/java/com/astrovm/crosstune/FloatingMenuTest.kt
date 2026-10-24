@@ -7,7 +7,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import org.junit.Assert.assertEquals
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +75,9 @@ class FloatingMenuTest {
         compose.onNodeWithContentDescription(app.getString(R.string.floating_customize)).performClick()
         compose.onNodeWithText(app.getString(R.string.lyrics_learn)).performClick()
         compose.onNodeWithText(app.getString(R.string.floating_shared)).assertExists()
+        // Floating words have no side to start on: the option is for the lyrics screen.
+        compose.onAllNodesWithContentDescription(app.getString(R.string.lyrics_align_center)).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription(app.getString(R.string.lyrics_align_start)).assertCountEquals(0)
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_words_size)).performSemanticsAction(SemanticsActions.SetProgress) { it(1.5f) }
         assertEquals(1.5f, learning.value.wordsScale, 0f)
         assertTrue(compose.onNodeWithText("夜").getUnclippedBoundsInRoot().let { it.bottom - it.top } > before)

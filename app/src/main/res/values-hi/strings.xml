@@ -266,6 +266,8 @@
     <string name="lyrics_readings">शब्दों के ऊपर उच्चारण</string>
     <string name="lyrics_reading_size">उच्चारण का आकार</string>
     <string name="lyrics_words_size">बोलों का आकार</string>
+    <string name="lyrics_align_start">बोलों को शुरुआत में रखें</string>
+    <string name="lyrics_align_center">बोलों को बीच में रखें</string>
     <string name="lyrics_translation_size">अनुवाद का आकार</string>
     <string name="lyrics_show_as">इस रूप में दिखाएँ</string>
     <string name="report_problem">समस्या की रिपोर्ट करें</string>

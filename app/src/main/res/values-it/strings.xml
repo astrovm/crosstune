@@ -267,6 +267,8 @@
     <string name="lyrics_readings">Lettura sopra le parole</string>
     <string name="lyrics_reading_size">Dimensione della lettura</string>
     <string name="lyrics_words_size">Dimensione del testo</string>
+    <string name="lyrics_align_start">Allinea il testo all\'inizio</string>
+    <string name="lyrics_align_center">Centra il testo</string>
     <string name="lyrics_translation_size">Dimensione della traduzione</string>
     <string name="lyrics_show_as">Mostra come</string>
     <string name="report_problem">Segnala un problema</string>

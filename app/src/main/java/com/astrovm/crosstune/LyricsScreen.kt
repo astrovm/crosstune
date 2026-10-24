@@ -187,6 +187,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -361,7 +362,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         // Read line by line, each with what helps read it, or its chords.
                         LyricLines(state, onStudy = { studying = it })
                     } else {
-                        PlainLyrics(state.lyrics, state.learning.wordsScale)
+                        PlainLyrics(state.lyrics, state.learning.wordsScale, state.wordsCentered)
                     }
                 }
             }
@@ -611,7 +612,7 @@ private fun LyricsActions(
     Box(modifier = modifier.widthIn(max = 392.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.onSizeChanged { onHeightChange(with(density) { it.height.toDp() }) }) {
         val close = { onMenuChange(null) }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions)
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
         Surface(
@@ -702,7 +703,7 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * three; and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions) {
+private fun LearnMenu(open: Boolean, learning: Learning, centered: Boolean, actions: ScreenActions) {
     if (!open) return
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
     Surface(
@@ -712,14 +713,17 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
         modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag("lyrics-display-options")
     ) {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            WordsOptions(learning, actions)
+            WordsOptions(learning, actions, centered)
         }
     }
 }
 
-/** The same display controls in the lyrics menu and in the floating lyrics' settings. */
+/** Whether the words are centered: as picked, else on a TV, where they read better from the couch. */
+internal val UiState.wordsCentered get() = learning.centered ?: (phone == Phone.TV)
+
+/** The same display controls in the lyrics menu and in the floating lyrics' settings; [centered] is null where words have no alignment to pick. */
 @Composable
-internal fun WordsOptions(learning: Learning, actions: ScreenActions) {
+internal fun WordsOptions(learning: Learning, actions: ScreenActions, centered: Boolean? = null) {
     val script = learning.script
     if (script != null) {
         MenuCaption(R.string.lyrics_show_as)
@@ -747,11 +751,31 @@ internal fun WordsOptions(learning: Learning, actions: ScreenActions) {
         ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
     }
     SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+    if (centered != null) AlignPicker(centered, actions.onWordsCenteredChange)
     if (readings && learning.readings) {
         SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
     }
     if (learning.translation) {
         SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
+    }
+}
+
+/** Whether the words sit at the start of the line or in its middle, an icon each so there's nothing to read. */
+@Composable
+private fun AlignPicker(centered: Boolean, onChange: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        listOf(false to (R.drawable.ic_format_align_left to R.string.lyrics_align_start), true to (R.drawable.ic_format_align_center to R.string.lyrics_align_center))
+            .forEachIndexed { index, (middle, look) ->
+                SegmentedButton(
+                    selected = centered == middle,
+                    onClick = { onChange(middle) },
+                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    icon = {}
+                ) {
+                    AppIcon(look.first, contentDescription = stringResource(look.second), modifier = Modifier.size(20.dp))
+                }
+            }
     }
 }
 
@@ -1339,10 +1363,10 @@ private fun LoadingLines() {
 
 /** Words with no timings, read as a page. */
 @Composable
-private fun PlainLyrics(words: String, scale: Float) {
+private fun PlainLyrics(words: String, scale: Float, centered: Boolean) {
     Text(
         text = words,
-        style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * scale, lineHeight = 34.sp * scale) },
+        style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * scale, lineHeight = 34.sp * scale, textAlign = alignment(centered)) },
         modifier = Modifier
             .fillMaxSize()
             .fadedEdges()
@@ -1415,7 +1439,8 @@ private fun TimedLyrics(
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
                 help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale
+                textScale = state.learning.wordsScale,
+                centered = state.wordsCentered
             )
         }
     }
@@ -1434,7 +1459,7 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
         itemsIndexed(lines) { index, line ->
             LyricLineText(
                 line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale
+                textScale = state.learning.wordsScale, centered = state.wordsCentered
             )
         }
     }
@@ -1549,7 +1574,8 @@ private fun LyricLineText(
     help: LineHelp? = null,
     waiting: Boolean = false,
     seekLabel: Int = R.string.lyrics_jump,
-    textScale: Float
+    textScale: Float,
+    centered: Boolean
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1565,9 +1591,12 @@ private fun LyricLineText(
         lineHeight = (if (place == null) 30.sp else 34.sp) * textScale,
         fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
         // Rows of about even length, broken between words, so no word or kana is left alone on the last.
-        lineBreak = LineBreak.Heading
+        lineBreak = LineBreak.Heading,
+        textAlign = alignment(centered)
     ).writing(text)
     Column(
+        // The rows of a line are centered by their style; this centers the line where it's shorter than the screen.
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
         modifier = Modifier
             .fillMaxWidth()
             .testTag(LYRIC_LINE_TAG)
@@ -1576,7 +1605,7 @@ private fun LyricLineText(
                 this.alpha = alpha
                 scaleX = scale
                 scaleY = scale
-                transformOrigin = TransformOrigin(0f, 0.5f)
+                transformOrigin = TransformOrigin(if (centered) 0.5f else 0f, 0.5f)
             }
             // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
             // A gap, e.g. a solo, has no words to study, so it only moves the app there.
@@ -1609,17 +1638,19 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
-        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
+        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
         // Shown in them already, they'd say it twice.
         if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let {
-            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale)
+            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale, textAlign = style.textAlign)
             Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
+
+private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
 /** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable
