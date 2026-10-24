@@ -205,12 +205,16 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var songTab by rememberSaveable(song) { mutableStateOf<SongTab?>(null) }
     // A problem with the words being reported.
     var reporting by rememberSaveable(song) { mutableStateOf(false) }
+    val signedIn = state.chatGpt.email != null
     val openTab = { tab: SongTab ->
         songTab = tab
-        if (tab == SongTab.MEANING) actions.onExplainSong()
-        if (tab == SongTab.WORDS) actions.onFindWordsToKnow()
-        if (tab == SongTab.ARTIST) actions.onAboutArtist()
+        // ChatGPT finds it all, so without it there's nothing to ask yet.
+        if (signedIn && tab == SongTab.MEANING) actions.onExplainSong()
+        if (signedIn && tab == SongTab.WORDS) actions.onFindWordsToKnow()
+        if (signedIn && tab == SongTab.ARTIST) actions.onAboutArtist()
     }
+    // Signed in from the sheet, what it's open at is asked for then.
+    LaunchedEffect(signedIn) { if (signedIn) songTab?.let(openTab) }
     if (state.practice != null) {
         PracticeScreen(state, actions)
         return
@@ -296,12 +300,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .align(Alignment.TopCenter)
                 .widthIn(max = ContentMaxWidth)
         ) {
-            // Signed in with ChatGPT, the song opens to what it's about; otherwise a problem to report is all there'd be, so that's what's offered.
-            LyricsHeader(
-                song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious,
-                onAbout = if (state.chatGpt.email != null) ({ openTab(SongTab.MEANING) }) else null,
-                onReport = { reporting = true }
-            )
+            // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
+            LyricsHeader(song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, onAbout = { openTab(SongTab.MEANING) })
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
@@ -466,7 +466,7 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
  * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: (() -> Unit)?, onReport: () -> Unit) {
+private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: () -> Unit) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
     var skippedNext by remember { mutableStateOf<Boolean?>(null) }
@@ -511,7 +511,7 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                     if (skips.isNotEmpty()) customActions = skips
                 }
                 // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
-                .then(if (onAbout != null) Modifier.clickable(onClickLabel = about, onClick = onAbout) else Modifier)
+                .clickable(onClickLabel = about, onClick = onAbout)
                 .pointerInput(rtl) {
                     // Toward the start of the line, as reading goes, is on to the next song.
                     fun next(offset: Float) = (offset < 0f) != rtl
@@ -562,8 +562,7 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                 }
             }
         }
-        if (onAbout != null) IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
-        else IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
+        IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
     }
 }
 
@@ -2058,7 +2057,8 @@ private fun Examples(asking: Asking<List<Example>>) {
 /**
  * All about the song, as ChatGPT finds it, a [tab] at a time: what it means, with how hard its words
  * are and what it covers or samples, and questions about it; its words most worth learning; and its
- * artist. Songs like it are a tap away from any, and so is reporting a problem with its words.
+ * artist. Songs like it are a tap away from any. Without ChatGPT, the way to sign in for it. A
+ * problem with its words is reported from its corner.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2068,11 +2068,19 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
-            Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                // Wrong words, or out of time, said where they can be put right.
+                IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
+            }
             PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
                 SongTab.entries.forEach { shown ->
                     Tab(selected = shown == tab, onClick = { onTab(shown) }, text = { Text(stringResource(shown.label)) })
                 }
+            }
+            if (state.chatGpt.email == null) {
+                ContinueWithChatGpt(state.chatGpt, actions, modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp))
+                return@Column
             }
             if (tab == SongTab.MEANING) SongMeaning(state, actions)
             if (tab == SongTab.WORDS) WordsToKnow(state, actions)
@@ -2080,15 +2088,6 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             OutlinedButton(onClick = { state.lyricsFor?.let(actions.onSongsLike) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(18.dp))
                 Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
-            }
-            // Wrong words, or out of time, said where they can be put right.
-            TextButton(
-                onClick = onReport,
-                modifier = Modifier.align(Alignment.Start).heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
-            ) {
-                AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(stringResource(R.string.report_problem), modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
