@@ -27,7 +27,7 @@ The most common defect here is a change that works where you tested it and is mi
 
 ## Design
 
-- Crosstune needs two things from Android to work: opening links and notification access. Missing either is a problem to show and fix, never an extra. The microphone is asked where it's used: naming a song, or opening lyrics.
+- Crosstune needs two things from Android to work: opening links and notification access. Missing either is a problem to show and fix, never an extra. The microphone is asked where it's used: naming a song, or opening lyrics. With Shizuku, the one tap allows it too, since that costs nothing more.
 - Design for someone without Shizuku, root or ADB first. Shizuku only adds a shortcut on top.
 - The content is the screen. Nothing covers the words, the cover art or the visuals, and a screen's tools stay small, like the lyrics pill.
 - Words cost. Icon, color and state before text. A label, hint or caption has to earn its place. Problems are the exception: say them plainly, in words.
