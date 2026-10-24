@@ -200,6 +200,14 @@ class ReadingsTest {
     }
 
     @Test
+    fun bopomofoIsAlreadyAReadingThoughItsㄧIsWrittenAs一() {
+        // Jay Chou's 晴天 writes a sound "ㄒ一", with 一 for the bopomofo ㄧ; elsewhere 一 is a word.
+        val (line) = Readings.of(listOf("ㄒ一 一起 一ㄠˋ"), Script.CHINESE)
+        assertEquals(listOf(Ruby("ㄒ一 "), Ruby("一", "yī"), Ruby("起", "qǐ"), Ruby(" 一ㄠˋ")), line.parts)
+        assertEquals("ㄒㄧ yī qǐ ㄧㄠˋ", line.romanized)
+    }
+
+    @Test
     fun koreanIsRomanizedSyllableBySyllable() {
         val (line) = Readings.of(listOf("사랑해 한국"), Script.KOREAN)
         assertEquals(listOf(Ruby("사랑해 한국")), line.parts)

@@ -291,6 +291,33 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun deezerSaysASongsVersionInBracketsAsOtherServicesDo() {
+        fun title(song: String) = MetadataParsers.deezer(json(song), ItemType.TRACK)?.title
+        // Deezer joins them with a space, which reads as one name.
+        assertEquals(
+            "Matador (Remasterizado 2008)",
+            title("""{"title":"Matador Remasterizado 2008","title_short":"Matador","title_version":"Remasterizado 2008","artist":{"name":"Los Fabulosos Cadillacs"}}""")
+        )
+        // Already in brackets, or with no version, it's left as it is.
+        assertEquals(
+            "Piel Morena (30th Anniversary/ Remasterizado 2025)",
+            title("""{"title":"Piel Morena (30th Anniversary/ Remasterizado 2025)","title_short":"Piel Morena","title_version":"(30th Anniversary/ Remasterizado 2025)"}""")
+        )
+        assertEquals(
+            "Dime Cuánto - Remasterizado",
+            title("""{"title":"Dime Cuánto - Remasterizado","title_short":"Dime Cuánto - Remasterizado","title_version":""}""")
+        )
+        // A version that isn't what the name ends with isn't moved.
+        assertEquals("Song Live", title("""{"title":"Song Live","title_short":"Song","title_version":"Remastered"}"""))
+        // An album's songs too.
+        val album = MetadataParsers.deezer(
+            json("""{"title":"Vasos Vacíos","tracks":{"data":[{"title":"Matador Remasterizado 2008","title_short":"Matador","title_version":"Remasterizado 2008"}]}}"""),
+            ItemType.ALBUM
+        )
+        assertEquals(listOf("Matador (Remasterizado 2008)"), album?.tracks?.map { it.title })
+    }
+
+    @Test
     fun tidalPagesUseTheirTitleTag() {
         assertEquals(
             MusicMetadata("Blinding Lights", "The Weeknd"),

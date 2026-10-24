@@ -88,6 +88,10 @@ class SongSearcherTest {
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
         respond("""{"data":[{"id":1,"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":""}}]}""")
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
+
+        // Its version in brackets, as other services write it.
+        respond("""{"data":[{"id":1,"title":"Matador Remasterizado 2008","title_short":"Matador","title_version":"Remasterizado 2008","link":"https://www.deezer.com/track/1","artist":{"name":"Los Fabulosos Cadillacs"}}]}""")
+        assertEquals(listOf("Matador (Remasterizado 2008)"), found("Matador").map { it.title })
         respond("""{"data":[null,7,"nope"]}""")
         assertEquals(emptyList<MusicMetadata>(), found("Song"))
 

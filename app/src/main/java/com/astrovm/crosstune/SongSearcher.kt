@@ -63,7 +63,7 @@ internal class SongSearcher(
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
         return (0 until results.length()).mapNotNull { index ->
             val song = results.optJSONObject(index) ?: return@mapNotNull null
-            val title = song.text("title")
+            val title = MetadataParsers.deezerTitle(song).trim()
             val artist = song.optJSONObject("artist")?.text("name").orEmpty()
             // Without both a name and an artist there's no song to look up anywhere else.
             if (title.isEmpty() || artist.isEmpty()) return@mapNotNull null

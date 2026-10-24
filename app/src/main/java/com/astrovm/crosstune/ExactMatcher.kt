@@ -351,7 +351,7 @@ internal class ExactMatcher(
         // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
         val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
         return searchDeezer(searched).firstOrNull { result ->
-            val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("title")))
+            val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
             val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
         }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
@@ -627,7 +627,7 @@ internal class ExactMatcher(
         }
         if (lengthMs == null) {
             lengthMs = answering {
-                searchDeezer(metadata).firstOrNull { matches(metadata, it.optString("title"), it.optJSONObject("artist")?.optString("name").orEmpty()) }
+                searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
             }
         }
