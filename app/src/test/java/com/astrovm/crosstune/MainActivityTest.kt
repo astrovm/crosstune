@@ -30,6 +30,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
+import android.content.pm.ResolveInfo
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.content.pm.verify.domain.DomainVerificationUserState
@@ -2428,7 +2429,8 @@ class MainActivityTest {
 
         val started = nextStartedActivity()
         assertNotNull(started)
-        assertNull(started!!.`package`)
+        // The browser, by name, not the missing app.
+        assertEquals("com.example.browser", started!!.`package`)
         assertEquals(
             "https://music.youtube.com/search?q=Fallback%20Artist",
             started.dataString
@@ -4949,9 +4951,31 @@ class MainActivityTest {
 
         val opened = nextStartedActivity()!!
         assertEquals(Intent.ACTION_CHOOSER, opened.action)
-        @Suppress("DEPRECATION")
-        val excluded = opened.getParcelableArrayExtra(Intent.EXTRA_EXCLUDE_COMPONENTS)!!.map { (it as ComponentName).className }
-        assertTrue(excluded.toString(), "${LinkInterception.ALIAS_PREFIX}SPOTIFY" in excluded)
+        // Each browser named outright, since Android would leave them out for a link Crosstune is allowed.
+        val first = opened.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        val rest = opened.getParcelableArrayExtra(Intent.EXTRA_INITIAL_INTENTS, Intent::class.java)!!.toList()
+        assertEquals(setOf("com.example.browser", "com.example.other"), (rest + first).map { it.component!!.packageName }.toSet())
+        assertTrue((rest + first).all { it.dataString == "https://open.spotify.com/track/$TRACK_ID" })
+    }
+
+    @Test
+    fun fallbackOpensTheAppSetToOpenSuchLinksByName() {
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        shadowOf(app).checkActivities(true)
+        val browser = ComponentName("com.example.browser", "com.example.browser.Browser")
+        installActivity(browser, browserFilter())
+        installActivity(ComponentName("com.example.other", "com.example.other.Browser"), browserFilter())
+        shadowOf(app.packageManager).addResolveInfoForIntent(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")).addCategory(Intent.CATEGORY_BROWSABLE),
+            ResolveInfo().apply { activityInfo = ActivityInfo().apply { packageName = browser.packageName; name = browser.className }; isDefault = true; priority = 1000 }
+        )
+        respondWithTrack("Default", "Artist · Song")
+        launch()
+        resolveTyped()
+
+        openInTheAppItCameFrom()
+
+        assertEquals("com.example.browser", nextStartedActivity()!!.`package`)
     }
 
     // endregion
@@ -5130,7 +5154,7 @@ class MainActivityTest {
         click(string(R.string.search_in_destination, "Invidious"))
         val opened = nextStartedActivity()!!
         assertEquals("https://inv.example.org/search?q=Web%20Song%20Artist", opened.dataString)
-        assertNull(opened.`package`)
+        assertEquals("com.example.browser", opened.`package`)
     }
 
     @Test

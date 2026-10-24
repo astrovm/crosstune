@@ -876,21 +876,18 @@ class MainActivity : ComponentActivity() {
         // Custom destinations may use an app's own scheme, which Crosstune never handles.
         if (uri.scheme != "https" && uri.scheme != "http") return tryStartActivity(Intent(Intent.ACTION_VIEW, uri))
         val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
-        val (own, others) = packageManager.queryIntentActivities(intent, 0)
-            .partition { it.activityInfo.packageName == packageName }
+        val others = packageManager.queryIntentActivities(intent, 0).filter { it.activityInfo.packageName != packageName }
         if (others.isEmpty()) return false
         val defaultPackage = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName
+        // Each app is named outright: resolving the link itself, Android keeps to the apps allowed
+        // its site, Crosstune among them, and leaves browsers out, so a chooser could come up empty.
+        val targets = others.map { Intent(intent).setClassName(it.activityInfo.packageName, it.activityInfo.name) }
         return when {
-            others.any { it.activityInfo.packageName == defaultPackage } -> tryStartActivity(intent)
-            others.size == 1 -> tryStartActivity(
-                intent.setClassName(others[0].activityInfo.packageName, others[0].activityInfo.name)
-            )
+            defaultPackage != null && others.any { it.activityInfo.packageName == defaultPackage } -> tryStartActivity(intent.setPackage(defaultPackage))
+            targets.size == 1 -> tryStartActivity(targets[0])
             else -> tryStartActivity(
-                Intent.createChooser(intent, null).putExtra(
-                    Intent.EXTRA_EXCLUDE_COMPONENTS,
-                    own.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.toTypedArray()
-                )
+                Intent.createChooser(targets[0], null).putExtra(Intent.EXTRA_INITIAL_INTENTS, targets.drop(1).toTypedArray())
             )
         }
     }
