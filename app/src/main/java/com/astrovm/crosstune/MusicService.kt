@@ -94,6 +94,12 @@ internal enum class MusicService(
     }
 
     /**
+     * Every app that plays this service's songs: its [packageNames], then, for YouTube Music, YouTube's
+     * TV app, where on a TV its songs play; see [appLinks].
+     */
+    val appPackages: List<String> get() = packageNames + listOfNotNull(YOUTUBE_TV.takeIf { this == YOUTUBE_MUSIC })
+
+    /**
      * Each app [link] may open in, with the link it takes there: this service's own apps, then, for
      * YouTube Music, YouTube's TV app, as a YouTube link. YouTube Music's TV app opens its home for
      * one, so on a TV a song plays there or nowhere.
@@ -115,8 +121,8 @@ internal enum class MusicService(
     }
 }
 
-/** Whether [one] and [other] are the same app, or one is a build patched from the other. */
-internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofPackage(one)?.packageNames?.contains(other) == true
+/** Whether [one] and [other] are the same app, or [other] is a build patched from [one], or plays its songs, as YouTube's TV app does YouTube Music's. */
+internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofPackage(one)?.appPackages?.contains(other) == true
 
 private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> String = { query ->
     baseUrl.toHttpUrl().newBuilder().addQueryParameter(parameter, query).build().toString()

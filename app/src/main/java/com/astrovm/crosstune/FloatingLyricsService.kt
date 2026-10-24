@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
@@ -25,6 +26,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.OnBackPressedDispatcherOwner
+import androidx.activity.setViewTreeOnBackPressedDispatcherOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.ComposeView
@@ -41,6 +45,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -49,6 +55,8 @@ internal interface FloatingHost {
     val state: UiState
     val dark: Boolean
     val learningActions: ScreenActions
+    /** Everything Crosstune's screen does, for the one covering another app on a TV. */
+    val actions: ScreenActions
     fun toggleListening()
     /** Plays or pauses the song in the music app the words follow. */
     fun playPause()
@@ -63,13 +71,16 @@ internal interface FloatingHost {
  * Android requires for it, which can also unlock or close them. With the microphone allowed, it can
  * keep listening along too.
  */
-class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner {
+class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner, OnBackPressedDispatcherOwner {
 
     // The words' window is in sight, and so as live as a screen in front, from when it's shown.
     private val registry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = registry
     private val savedState = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
+
+    // Back goes back in the screen covering another app, as it does in Crosstune, then closes it.
+    override val onBackPressedDispatcher = OnBackPressedDispatcher { close() }
 
     private val windows get() = getSystemService(WindowManager::class.java)
     private var view: FrameLayout? = null
@@ -84,6 +95,24 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
         PixelFormat.TRANSLUCENT
     ).apply { gravity = Gravity.TOP or Gravity.START }
+
+    /**
+     * On a TV, the whole screen, over the app a song plays in, which stops once anything's in front of
+     * it, though not under a window. It takes the remote's keys, so it can be moved around in.
+     */
+    private val coverParams = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+        PixelFormat.TRANSLUCENT
+    )
+
+    /** Whether it covers another app, rather than float the words over it. */
+    private var covering = false
+
+    /** Closes the screen covering another app once it's done. */
+    private var coverDone: Job? = null
 
     /**
      * Locked, the words let every touch through, so a small button of their own, beside them, still
@@ -142,7 +171,10 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
             // else, even when there's nothing to float after all.
             null -> {
                 startForeground()
-                if (host == null) stopSelf() else if (view == null) show(host)
+                val cover = intent?.getBooleanExtra(EXTRA_COVER, false) == true
+                // Floated from the screen covering an app, the words float over it instead.
+                if (covering && !cover) uncover()
+                if (host == null) stopSelf() else if (view == null) if (cover) cover(host) else show(host)
             }
             ACTION_UNLOCK -> host?.let { it.update(it.state.floating.copy(locked = false)) }
             else -> close()
@@ -195,7 +227,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     /** Turned, the words fit the screen's new width, rather than run off its side. */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        val view = view ?: return
+        val view = view?.takeIf { !covering } ?: return
         place(host?.state?.floating ?: return)
         windows.updateViewLayout(view, params)
     }
@@ -245,6 +277,53 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
                 if (locked) showUnlock(host) else hideUnlock()
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(locked))
             }
+        }
+    }
+
+    /** All of Crosstune's screen, covering the app playing, until its words close, or, before they open, its player. */
+    private fun cover(host: FloatingHost) {
+        if (!Settings.canDrawOverlays(this)) return stopSelf()
+        covering = true
+        val content = ComposeView(this).apply {
+            setContent {
+                val state = host.state
+                CrosstuneTheme(darkTheme = host.dark, palette = state.palette, pureBlack = state.pureBlack) {
+                    CrosstuneScreen(state, host.actions)
+                }
+            }
+        }
+        val view = BackFrame(this).apply {
+            addView(content)
+            setViewTreeLifecycleOwner(this@FloatingLyricsService)
+            setViewTreeSavedStateRegistryOwner(this@FloatingLyricsService)
+            setViewTreeOnBackPressedDispatcherOwner(this@FloatingLyricsService)
+        }
+        this.view = view
+        registry.currentState = Lifecycle.State.RESUMED
+        windows.addView(view, coverParams)
+        coverDone = lifecycleScope.launch {
+            var words = false
+            snapshotFlow { (host.state.lyricsFor != null) to (host.state.player != null) }.first { (open, player) ->
+                words = words || open
+                !open && (words || !player)
+            }
+            close()
+        }
+    }
+
+    private fun uncover() {
+        coverDone?.cancel()
+        view?.let(windows::removeView)
+        view = null
+        covering = false
+    }
+
+    /** Takes the remote's Back, which no activity is there to. */
+    private inner class BackFrame(context: Context) : FrameLayout(context) {
+        override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+            if (event.keyCode != KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
+            if (event.action == KeyEvent.ACTION_UP) onBackPressedDispatcher.onBackPressed()
+            return true
         }
     }
 
@@ -453,6 +532,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
         const val ACTION_UNLOCK = "com.astrovm.crosstune.floating.UNLOCK"
         const val ACTION_CLOSE = "com.astrovm.crosstune.floating.CLOSE"
+        private const val EXTRA_COVER = "com.astrovm.crosstune.floating.COVER"
         private const val CHANNEL = "floating_lyrics"
         private const val NOTIFICATION_ID = 1
 
@@ -472,9 +552,10 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         /** The most Android lets a window be seen while touches pass through it to another app's. */
         private const val LOCKED_ALPHA = 0.8f
 
-        fun start(context: Context, host: FloatingHost) {
+        /** Floats the words of [host], or, [whole], covers another app with all of its screen. */
+        fun start(context: Context, host: FloatingHost, whole: Boolean = false) {
             this.host = host
-            ContextCompat.startForegroundService(context, Intent(context, FloatingLyricsService::class.java))
+            ContextCompat.startForegroundService(context, Intent(context, FloatingLyricsService::class.java).putExtra(EXTRA_COVER, whole))
         }
 
         fun stop(context: Context) {

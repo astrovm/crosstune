@@ -65,7 +65,7 @@ internal class MainViewModel(
     /** Where a song typed by name is looked up; nullable so tests need no catalogue. */
     private val songSearcher: SongSearcher? = null,
     /** What music apps are playing, which a song's timed words follow; nullable so tests need none. */
-    private val playback: PlaybackSource? = null,
+    playback: PlaybackSource? = null,
     private val preferences: SharedPreferences,
     private val interception: LinkInterception,
     /** Lives here so loaded covers survive configuration changes. */
@@ -114,6 +114,22 @@ internal class MainViewModel(
     /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
     private val lookAhead: Boolean = true
 ) : ViewModel() {
+    /**
+     * On a TV, an app opened on a song is covered rather than left, once Android lets Crosstune show
+     * over other apps: brought in front of it, YouTube stops playing.
+     */
+    private val playback: PlaybackSource? = playback?.takeIf { phone == Phone.TV }?.let { source ->
+        object : PlaybackSource by source {
+            override fun openSong(app: String, link: String): Boolean {
+                if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
+                return source.openSong(app, link).also { if (!it) uncover() }
+            }
+
+            // Already in front of it, the words of the song just played show there.
+            override fun comesBack() = if (!uiState.coveringApp) source.comesBack() else if (uiState.lyricsFor == null) playerLyrics() else Unit
+        }
+    } ?: playback
+
 
     private val historyStore = HistoryStore(preferences)
     private val savedLinesStore = SavedLinesStore(preferences)
@@ -1159,6 +1175,11 @@ internal class MainViewModel(
         val destination = uiState.resultDestination as? Destination.Service ?: return
         adoptDefault(destination)
         val song = uiState.result ?: return
+        // On a TV the song's words cover the app it plays in, which Android has to let them first.
+        if (uiState.phone == Phone.TV && !uiState.canFloatOverApps) {
+            if (!fixInOneTap(OneTapFix.FLOAT, ::playResult)) fixSteps(listOf(Need.Float))
+            return
+        }
         job?.cancel()
         job = viewModelScope.launch {
             uiState = uiState.copy(playingResult = true)
@@ -1248,7 +1269,10 @@ internal class MainViewModel(
         val player = uiState.player ?: return
         val following = player.following ?: return run {
             // Still being asked for, a second ask would start it over.
-            if (!uiState.playingResult) viewModelScope.launch { playback?.playSong(player.song, player.app, player.link) }
+            if (!uiState.playingResult) viewModelScope.launch {
+                // On a TV, YouTube lets go of a song once Crosstune is in front, so it's opened on it again, covered.
+                if (playback?.playSong(player.song, player.app, player.link) == false && uiState.phone == Phone.TV) player.app?.let { app -> player.link?.let { playback.openSong(app, it) } }
+            }
         }
         playback?.playPause(player.song, !following.clock.playing)
     }
@@ -2173,6 +2197,11 @@ internal class MainViewModel(
             learn()
             chords()
         }
+    }
+
+    /** Crosstune no longer covers the app playing, closed or back in sight itself. */
+    fun uncover() {
+        uiState = uiState.copy(coveringApp = false)
     }
 
     /**
