@@ -475,6 +475,27 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongAMusicAppCastsToATvIsWhatThePhonePlays() {
+        allow()
+        fun remote(controller: MediaController) = controller.also {
+            shadowOf(it).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        }
+        // Cast, the phone itself plays nothing, and the computer's video shown through KDE Connect still isn't it.
+        shadowOf(sessions).addController(remote(player("org.kde.kdeconnect_tp", "KDE Connect", "Fake Talk Show - Episode 12", "Fake Channel", at = NOW)))
+        shadowOf(sessions).addController(remote(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000)))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(song.title, playback.recording(song)?.title)
+
+        // A song the phone itself plays comes first, though the cast one said where it is later.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(remote(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd", album = "After Hours", at = NOW)))
+        shadowOf(sessions).addController(player("com.music", "Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW - 60_000))
+        assertEquals("Save Your Tears", playback.nowPlaying()?.metadata?.title)
+        sounding()
+        assertEquals(song, playback.nowPlaying()?.metadata)
+    }
+
+    @Test
     fun aVideosPlaceIsntGivenAsItsSongsButIsFollowedAsAVideo() {
         allow()
         sounding()

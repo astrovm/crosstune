@@ -264,20 +264,22 @@ internal class MediaSessionPlayback(
 
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
-        // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so
-        // it's only believed while the phone is playing something.
-        if (!hasAccess() || !audio.isMusicActive) return null
+        if (!hasAccess()) return null
+        // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
+        // playing on the phone is only believed while the phone is playing something. Cast to a TV,
+        // the phone itself stays quiet.
+        val sounding = audio.isMusicActive
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && !it.elsewhere() }
-            // The one that last said where it is, over one that said so long ago.
-            .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && !it.mirrored() && (sounding || it.cast()) }
+            // What the phone itself plays over what it casts, then the one that last said where it is, over one that said so long ago.
+            .sortedWith(compareBy<MediaController> { it.cast() }.thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L })
             .firstNotNullOfOrNull(::playing)
     }
 
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.plays(song) && !it.elsewhere() }
+            .filter { it.packageName != context.packageName && it.plays(song) && !it.mirrored() }
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             // plays() already checked the session's title and artist. YouTube's video-title
             // parser can mistake a bilingual title's first half for an artist.
@@ -402,11 +404,14 @@ internal class MediaSessionPlayback(
         return state.position < 0 && now() - state.lastPositionUpdateTime > LEFT_BEHIND_MS
     }
 
-    /**
-     * Playing on another device, e.g. a computer's video shown through KDE Connect, or a TV it casts
-     * to: what the phone plays is another one.
-     */
-    private fun MediaController.elsewhere(): Boolean = playbackInfo?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+    /** Playing on another device, e.g. a TV a music app casts to, or a computer KDE Connect shows here. */
+    private fun MediaController.remote(): Boolean = playbackInfo?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+
+    /** A music app's own song, cast to a TV: still the phone's, played and paused from it. */
+    private fun MediaController.cast(): Boolean = remote() && MusicService.ofPackage(packageName) != null
+
+    /** Only shown here from another device, e.g. a computer's video through KDE Connect: what the phone plays is another one. */
+    private fun MediaController.mirrored(): Boolean = remote() && !cast()
 
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
