@@ -301,6 +301,49 @@ class PlaybackTest {
     }
 
     @Test
+    fun aPauseSaidAMomentBehindPlaysOnFromWhereItReallyStopped() {
+        allow()
+        // Playing from 42 s since PLAYED_AT, so 10 s later it's at 52 s; YouTube Music says it paused 400 ms before.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        fun says(state: Int, position: Long, at: Long) {
+            shadowOf(music).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, position, 1f, at).build())
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+
+        says(PlaybackState.STATE_PAUSED, 51_600, PLAYED_AT + 10_000)
+        assertEquals(PlaybackClock(52_000, PLAYED_AT + 10_000, 1f, false), seen.last()!!.clock)
+        // Played again from where it said, it goes on from where it really stopped.
+        says(PlaybackState.STATE_PLAYING, 51_600, PLAYED_AT + 20_000)
+        assertEquals(PlaybackClock(52_000, PLAYED_AT + 20_000, 1f, true), seen.last()!!.clock)
+        // The same again, e.g. as the app names the song anew, changes nothing.
+        shadowOf(music).executeOnMetadataChanged(music.metadata!!)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(52_000L, seen.last()!!.clock.positionMs)
+
+        // Moved elsewhere, it's where the app says.
+        says(PlaybackState.STATE_PLAYING, 90_000, PLAYED_AT + 25_000)
+        assertEquals(90_000L, seen.last()!!.clock.positionMs)
+        // Said to pause right where it was, or ahead, or well behind, e.g. moved back as it paused, it's believed.
+        says(PlaybackState.STATE_PAUSED, 95_000, PLAYED_AT + 30_000)
+        assertEquals(95_000L, seen.last()!!.clock.positionMs)
+        says(PlaybackState.STATE_PLAYING, 95_000, PLAYED_AT + 40_000)
+        says(PlaybackState.STATE_PAUSED, 100_500, PLAYED_AT + 45_000)
+        assertEquals(100_500L, seen.last()!!.clock.positionMs)
+        says(PlaybackState.STATE_PLAYING, 100_500, PLAYED_AT + 50_000)
+        says(PlaybackState.STATE_PAUSED, 105_500 - STALE_PAUSE_MS - 1, PLAYED_AT + 55_000)
+        assertEquals(105_500 - STALE_PAUSE_MS - 1, seen.last()!!.clock.positionMs)
+        // Up to a second behind is still taken as where it stopped.
+        says(PlaybackState.STATE_PLAYING, 110_000, PLAYED_AT + 60_000)
+        says(PlaybackState.STATE_PAUSED, 115_000 - STALE_PAUSE_MS, PLAYED_AT + 65_000)
+        assertEquals(115_000L, seen.last()!!.clock.positionMs)
+        // Moved while paused, it's where it was moved to.
+        says(PlaybackState.STATE_PAUSED, 30_000, PLAYED_AT + 70_000)
+        assertEquals(30_000L, seen.last()!!.clock.positionMs)
+    }
+
+    @Test
     fun onlyTheSameSongByTheSameArtistIsFollowed() {
         allow()
         // Same name, someone else's; no name at all; no session at all.
