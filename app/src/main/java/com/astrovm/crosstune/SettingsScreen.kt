@@ -424,21 +424,22 @@ private fun LanguageMark(tag: String?, modifier: Modifier = Modifier) {
 }
 
 /**
- * The ChatGPT account, by its logo: OpenAI's own "Continue with ChatGPT" to sign in, the browser
- * being waited for, or who's signed in, to sign out.
+ * The ChatGPT account: OpenAI's own "Continue with ChatGPT" to sign in, the browser being waited
+ * for, or who's signed in, by its logo, to sign out.
  */
 @Composable
 private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
     Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
         val email = chatGpt.email
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
-            AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(24.dp))
+            // Signed out, the logo's on the button.
+            if (email != null) AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.padding(end = 16.dp).size(24.dp))
             Text(
                 email ?: stringResource(R.string.chatgpt_use_plan),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(start = 16.dp)
+                modifier = Modifier.weight(1f)
             )
             if (email != null) TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
         }
@@ -473,7 +474,11 @@ internal fun ContinueWithChatGpt(chatGpt: ChatGptState, actions: ScreenActions, 
                 // Edged, so it shows on a pure black ground too.
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.padding(top = 4.dp)
-            ) { Text(stringResource(R.string.chatgpt_continue)) }
+            ) {
+                // OpenAI's logo starts its button.
+                AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = null, modifier = Modifier.size(20.dp))
+                Text(stringResource(R.string.chatgpt_continue), modifier = Modifier.padding(start = 10.dp))
+            }
         }
     }
 }
