@@ -5303,6 +5303,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun theSourcesCountLeavesOutSitesWithNoSwitch() {
+        launch()
+        click(string(R.string.settings_button))
+
+        val switches = MusicService.entries.count { it.canBeSource }
+        val total = string(R.string.visuals_list_summary, 0, switches).substringAfter("0")
+        composeRule.onNodeWithText(total, substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun systemBackLeavesSettings() {
         val activity = launch()
         click(string(R.string.settings_button))
