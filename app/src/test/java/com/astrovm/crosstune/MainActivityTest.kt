@@ -3017,6 +3017,24 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongOpenedFromRecentHasItsWordsLookedUpAsItShows() {
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"夜が灯りを投げるBedで"}]""")
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        click(string(R.string.clear_button))
+        controller!!.pause().stop().destroy()
+
+        MainActivity.lookAheadLyrics = true
+        launch()
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://lrclib.net") })
+        click("Dakare Ni Kita Onna")
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { it.startsWith("https://lrclib.net") } }
+    }
+
+    @Test
     fun aSongShowsItsWordsAndSaysSoWhenItHasNoneOrTheServiceIsBusy() {
         MainActivity.lookAheadLyrics = true
         fun lyrics(json: String) {
