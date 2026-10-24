@@ -812,9 +812,9 @@ class ListeningTest {
             return next.receive()
         }
 
-        /** [title] by Band, heard [seconds] into it, just now, in the recording Shazam calls [matchId]. */
-        fun song(title: String, seconds: Double, matchId: String? = null) =
-            next.trySend(Heard.Song(MusicMetadata(title, "Band"), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime(), matchId))
+        /** [title] by [artist], heard [seconds] into it, just now, in the recording Shazam calls [matchId]. */
+        fun song(title: String, seconds: Double, matchId: String? = null, artist: String = "Band") =
+            next.trySend(Heard.Song(MusicMetadata(title, artist), null, (seconds * 1000).toLong(), SystemClock.elapsedRealtime(), matchId))
     }
 
     /**
@@ -2794,23 +2794,31 @@ class ListeningTest {
      * Hears Demo, whose words LRCLIB has as [synced] lines, or else as [plain] ones; Google Translate,
      * and MyMemory where it can't, answer [translations], and [openAi] for ChatGPT when signed in.
      */
-    private fun wordsOf(synced: String?, plain: String, translations: Int = 200, openAi: FakeOpenAi? = null, sites: (okhttp3.Request) -> okhttp3.Response? = { null }) {
+    private fun wordsOf(
+        synced: String?,
+        plain: String,
+        translations: Int = 200,
+        openAi: FakeOpenAi? = null,
+        title: String = "Demo",
+        artist: String = "Band",
+        sites: (okhttp3.Request) -> okhttp3.Response? = { null }
+    ) {
         MainActivity.listenAlongPauseMs = 0
-        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        MainActivity.hearingFactory = { FakeHearing().apply { song(title, 2.0, artist = artist) } }
         fake.handler = { request ->
             openAi?.answer(request) ?: sites(request) ?: when (request.url.host) {
                 GOOGLE_TRANSLATE_HOST -> translation(request, translations)
                 "api.mymemory.translated.net" -> myMemoryTranslation(request, translations)
                 else -> {
                     val timed = synced?.let { ""","syncedLyrics":"$it"""" }.orEmpty()
-                    FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"$plain"$timed}]""")
+                    FakeSpotify.html(request, """[{"trackName":"$title","artistName":"$artist","plainLyrics":"$plain"$timed}]""")
                 }
             }
         }
         allowMicrophone()
         launch()
         recognize()
-        waitForText("Demo")
+        waitForText(title)
         click(string(R.string.lyrics_button))
     }
 
@@ -3771,6 +3779,78 @@ class ListeningTest {
         assertEquals(1, floating("よぞらにほしが"))
         assertNull(floatingReadings())
         floatingWords.destroy()
+    }
+
+    @Test
+    fun theSongsNameAndArtistShowHowTheyReadAboutTheSong() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京", artist = "星空")
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        aboutSong()
+        // Readings are on from the start: over the kanji of both.
+        waitUntil(TIMEOUT_MS) { readingShown("とうきょう") }
+        assertTrue(readingShown("ほしぞら"))
+        assertFalse(shown("tookyoo"))
+    }
+
+    @Test
+    fun theSongsNameAndArtistShowInLatinLettersAsTheWordsDo() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京", artist = "星空")
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        // In Latin letters too, as the words are; with readings off, none over them.
+        learnMenu()
+        click(string(R.string.lyrics_romanized))
+        click(string(R.string.lyrics_readings))
+        click(string(R.string.lyrics_learn))
+        composeRule.waitForIdle()
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { shown("tookyoo") }
+        assertTrue(shown("hoshizora"))
+        assertFalse(readingShown("とうきょう"))
+        assertTrue(shown("東京"))
+    }
+
+    @Test
+    fun theSongsNameIsTranslatedAboutTheSongAsTheWordsAre() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京", artist = "星空")
+        learnMenu()
+        click(string(R.string.lyrics_translation))
+        waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        click(string(R.string.lyrics_learn))
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { shown("[東京]") }
+        // Only the title: the artist's is a name.
+        assertFalse(shown("[星空]"))
+    }
+
+    @Test
+    fun theSongsNameIsntTranslatedWithTranslationsOff() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京")
+        learnMenu()
+        click(string(R.string.lyrics_translation))
+        waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        // Translated already, switched off, it goes.
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { it.contains(GOOGLE_TRANSLATE_HOST) } >= 2 }
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_translation))
+        click(string(R.string.lyrics_learn))
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { shown("東京") && composeRule.onAllNodes(hasText("東京")).fetchSemanticsNodes().size == 2 }
+        assertFalse(shown("[東京]"))
+    }
+
+    @Test
+    fun aNameAsWrittenInLatinLettersSaysItOnce() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "Tokyo")
+        waitUntil(TIMEOUT_MS) { readingShown("よぞら") }
+        learnMenu()
+        click(string(R.string.lyrics_romanized))
+        waitUntil(TIMEOUT_MS) { shown("yozora ni hoshi ga") }
+        click(string(R.string.lyrics_learn))
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Tokyo")).fetchSemanticsNodes().size == 2 }
+        // Already in Latin letters, the name isn't written out again under itself.
+        assertEquals(2, composeRule.onAllNodes(hasText("Band")).fetchSemanticsNodes().size)
+        assertFalse(shown("tokyo"))
     }
 
     @Test

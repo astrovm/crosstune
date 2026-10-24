@@ -2075,7 +2075,7 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(state.lyricsFor?.title.orEmpty(), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                SongNames(state, Modifier.weight(1f))
                 // Wrong words, or out of time, said where they can be put right.
                 IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
             }
@@ -2096,6 +2096,31 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
                 Text(stringResource(R.string.lyrics_songs_like), modifier = Modifier.padding(start = 8.dp))
             }
         }
+    }
+}
+
+/**
+ * The song's title and its artist, read as its words are: with readings over their kanji, and in
+ * Latin letters, as those are switched on, to know how to say them; and what the title means,
+ * translated as the words are.
+ */
+@Composable
+private fun SongNames(state: UiState, modifier: Modifier) {
+    val song = state.lyricsFor
+    val learning = state.learning
+    Column(modifier) {
+        SongName(song?.title.orEmpty(), learning.names.getOrNull(0), learning, MaterialTheme.typography.titleLarge)
+        learning.titleMeaning?.takeIf { learning.translation }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
+        song?.artist?.takeIf { it.isNotBlank() }?.let { SongName(it, learning.names.getOrNull(1), learning, MaterialTheme.typography.bodyLarge) }
+    }
+}
+
+@Composable
+private fun SongName(name: String, reading: LineReading?, learning: Learning, style: TextStyle) {
+    val parts = reading?.parts?.takeIf { learning.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == name }
+    if (parts != null) RubyLine(parts, style, learning.readingScale) else Text(name, style = style)
+    reading?.latin(learning.romajiTyped)?.takeIf { learning.romanized && it.isNotBlank() && it != name }?.let {
+        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
