@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">आप %1$s में सुनते हैं, इसलिए उसके लिंक पहले से वहीं खुलते हैं। इसे चालू करने के लिए नीचे कोई दूसरा ऐप चुनें।</string>
     <string name="setup_check_app">%1$s में लिंक बंद करें</string>
     <string name="ask_links_gets">किसी भी ऐप में संगीत लिंक पर टैप करें, वह यहाँ खुलेगा।</string>
-    <string name="ask_follow_gets">कुछ भी चलाएँ, उसके बोल यहाँ समय के साथ दिखेंगे।</string>
+    <string name="ask_follow_gets">कुछ भी चलाएँ, उसके बोल यहाँ दिखेंगे।</string>
     <string name="setup_check_allow">Crosstune में लिंक की अनुमति दें</string>
     <string name="setup_done">हो गया</string>
     <string name="setup_not_allowed">अभी अनुमति नहीं है</string>

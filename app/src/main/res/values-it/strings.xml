@@ -57,7 +57,7 @@
     <string name="settings_listening_locked">Ascolti su %1$s, quindi i suoi link si aprono già lì. Scegli un’altra app qui sotto per attivarlo.</string>
     <string name="setup_check_app">Disattiva i link in %1$s</string>
     <string name="ask_links_gets">Tocca un link musicale in qualsiasi app e si apre qui.</string>
-    <string name="ask_follow_gets">Riproduci qualcosa e il suo testo appare qui, a tempo.</string>
+    <string name="ask_follow_gets">Riproduci qualcosa e il suo testo appare qui.</string>
     <string name="setup_check_allow">Consenti i link in Crosstune</string>
     <string name="setup_done">Fatto</string>
     <string name="setup_not_allowed">Non ancora consentiti</string>

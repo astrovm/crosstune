@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">Kamu mendengarkan di %1$s, jadi tautannya sudah terbuka di sana. Pilih aplikasi lain di bawah untuk menyalakannya.</string>
     <string name="setup_check_app">Matikan link di %1$s</string>
     <string name="ask_links_gets">Ketuk tautan musik di aplikasi apa pun, dan tautan itu terbuka di sini.</string>
-    <string name="ask_follow_gets">Putar sesuatu, dan liriknya muncul di sini, tepat waktu.</string>
+    <string name="ask_follow_gets">Putar sesuatu, dan liriknya muncul di sini.</string>
     <string name="setup_check_allow">Izinkan link di Crosstune</string>
     <string name="setup_done">Selesai</string>
     <string name="setup_not_allowed">Belum diizinkan</string>

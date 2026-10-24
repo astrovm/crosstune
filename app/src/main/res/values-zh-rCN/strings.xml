@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">你在 %1$s 中收听，所以它的链接已经会在那里打开。要开启，请在下面选择另一个应用。</string>
     <string name="setup_check_app">关闭 %1$s 中的链接</string>
     <string name="ask_links_gets">在任意应用中点按音乐链接，就会在这里打开。</string>
-    <string name="ask_follow_gets">播放任意歌曲，歌词就会在这里同步显示。</string>
+    <string name="ask_follow_gets">播放任意歌曲，歌词就会显示在这里。</string>
     <string name="setup_check_allow">允许在 Crosstune 中打开链接</string>
     <string name="setup_done">已完成</string>
     <string name="setup_not_allowed">尚未允许</string>

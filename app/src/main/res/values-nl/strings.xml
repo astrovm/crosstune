@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">Je luistert in %1$s, dus de links ervan openen daar al. Kies hieronder een andere app om dit aan te zetten.</string>
     <string name="setup_check_app">Links in %1$s uitzetten</string>
     <string name="ask_links_gets">Tik in een app op een muzieklink, en hij opent hier.</string>
-    <string name="ask_follow_gets">Speel iets af, en de songtekst verschijnt hier, in de maat.</string>
+    <string name="ask_follow_gets">Speel iets af, en de songtekst verschijnt hier.</string>
     <string name="setup_check_allow">Links in Crosstune toestaan</string>
     <string name="setup_done">Klaar</string>
     <string name="setup_not_allowed">Nog niet toegestaan</string>

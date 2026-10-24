@@ -56,7 +56,7 @@
     <string name="settings_listening_locked">Słuchasz w %1$s, więc jego linki i tak się tam otwierają. Wybierz poniżej inną aplikację, aby to włączyć.</string>
     <string name="setup_check_app">Wyłącz linki w %1$s</string>
     <string name="ask_links_gets">Kliknij link do muzyki w dowolnej aplikacji, a otworzy się tutaj.</string>
-    <string name="ask_follow_gets">Włącz coś, a tekst pojawi się tutaj, w rytm muzyki.</string>
+    <string name="ask_follow_gets">Włącz coś, a tekst pojawi się tutaj.</string>
     <string name="setup_check_allow">Zezwól na linki w Crosstune</string>
     <string name="setup_done">Gotowe</string>
     <string name="setup_not_allowed">Jeszcze niedozwolone</string>
