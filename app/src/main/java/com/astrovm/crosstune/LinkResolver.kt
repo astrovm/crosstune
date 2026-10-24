@@ -101,6 +101,10 @@ internal class LinkResolver(
         if ((response.code == 401 || response.code == 403) && link.isYouTubeVideo()) {
             youTubeMusicVideo(link.id)?.let { return@guarded Resolution.Resolved(link, it) }
         }
+        // The same goes for a SoundCloud upload whose owner keeps it on SoundCloud: its API still names it.
+        if ((response.code == 401 || response.code == 403) && link.service == MusicService.SOUNDCLOUD && link.type == ItemType.TRACK) {
+            soundCloudTrack(link.url)?.let { return@guarded Resolution.Resolved(link, it) }
+        }
         httpError(response, privateWhenRefused = link.isOEmbed())?.let { return@guarded Resolution.Failed(it, link) }
         // Deezer reports errors, such as a missing item or its rate limit, inside a successful response.
         if (link.service == MusicService.DEEZER) {
@@ -208,6 +212,13 @@ internal class LinkResolver(
     /** The video [id] as YouTube Music names it, or null when it can't. */
     private suspend fun youTubeMusicVideo(id: String): MusicMetadata? =
         youTubeMusic(YOUTUBE_MUSIC_NEXT_URL, "videoId", id)?.let { MetadataParsers.youtubeMusicVideo(it, id) }
+
+    /** The SoundCloud upload at [url] as SoundCloud's own API has it, or null when it can't say. */
+    private suspend fun soundCloudTrack(url: String): MusicMetadata? = try {
+        apis.soundCloudItem(url)?.takeIf { it.optString("kind") == "track" }?.let(ServiceApis::soundCloudTrack)
+    } catch (_: IOException) {
+        null
+    }
 
     /** An album's or artist's page on YouTube Music, as its header names it, with an album's songs. */
     private suspend fun youTubeMusicPage(link: MusicLink): MusicMetadata? =

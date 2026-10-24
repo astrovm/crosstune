@@ -198,6 +198,34 @@ class LinkResolverTest {
     }
 
     @Test
+    fun aSoundCloudUploadKeptFromBeingEmbeddedIsNamedBySoundCloudsApi() {
+        var answer: Pair<Int, String> = 200 to """{"kind":"track","title":"King of My Castle (Edit)","user":{"username":"Luca"},"permalink_url":"https://soundcloud.com/luca/castle"}"""
+        fake.handler = { request ->
+            when {
+                request.url.toString() == ServiceApis.SOUNDCLOUD_URL -> FakeSpotify.html(request, """<script crossorigin src="https://a-v2.sndcdn.com/assets/1.js"></script>""")
+                request.url.host == "a-v2.sndcdn.com" -> FakeSpotify.html(request, """client_id:"${"k".repeat(32)}"""")
+                request.url.host == "api-v2.soundcloud.com" -> FakeSpotify.html(request, answer.second, code = answer.first)
+                // Its owner lets it play only on SoundCloud, so oEmbed turns it away.
+                else -> FakeSpotify.html(request, "Forbidden", code = 403)
+            }
+        }
+        assertEquals(
+            MusicMetadata("King of My Castle (Edit)", "Luca", url = "https://soundcloud.com/luca/castle"),
+            (resolve("https://soundcloud.com/luca/castle") as Resolution.Resolved).metadata
+        )
+        assertTrue(fake.requestedUrls.last().contains("resolve?url=https%3A%2F%2Fsoundcloud.com%2Fluca%2Fcastle"))
+        // Gone, or something other than a song, it's not found, as before.
+        answer = 404 to "{}"
+        assertEquals(AppError.NOT_FOUND, (resolve("https://soundcloud.com/luca/castle") as Resolution.Failed).error)
+        answer = 200 to """{"kind":"playlist","title":"Party"}"""
+        assertEquals(AppError.NOT_FOUND, (resolve("https://soundcloud.com/luca/castle") as Resolution.Failed).error)
+        // A set turned away isn't asked about.
+        fake.requestedUrls.clear()
+        assertEquals(AppError.NOT_FOUND, (resolve("https://soundcloud.com/luca/sets/party") as Resolution.Failed).error)
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
     fun youTubeMusicsAlbumAndArtistPagesAreNamedByTheirHeaders() {
         val song = { title: String -> """{"musicResponsiveListItemRenderer":{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"$title"}]}}}]}}""" }
         respond(
