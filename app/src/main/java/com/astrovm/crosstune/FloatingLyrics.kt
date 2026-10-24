@@ -132,14 +132,21 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                 // Hangul's reading is its Latin letters, shown once.
                 val help = state.learning.helpFor(line).takeIf { line >= 0 }
                 val reading = help?.reading
+                // Shown as written, the readings sit over the kanji they're for, as in the lyrics.
+                val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == first }
                 val helps = listOfNotNull(
-                    reading?.reading?.takeIf { help.readings && it != first },
+                    reading?.reading?.takeIf { help.readings && ruby == null && it != first },
                     help?.latin?.takeIf { help.romanized && it.isNotBlank() && it != first },
                     help?.translation
                 ).distinct()
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     before?.let { Line(it, lit = false, options.scale * learning.wordsScale, ink, outline) }
-                    Line(first, lit = true, options.scale * if (current != null) learning.wordsScale else 1f, ink, outline)
+                    val scale = options.scale * if (current != null) learning.wordsScale else 1f
+                    if (ruby != null) {
+                        RubyLine(ruby, lineStyle(lit = true, scale, outline), help.readingScale, ink, ink.copy(alpha = DIM_ALPHA))
+                    } else {
+                        Line(first, lit = true, scale, ink, outline)
+                    }
                     helps.forEach { text ->
                         val layerScale = when (text) {
                             reading?.reading -> (help?.readingScale ?: READING_SCALE) / READING_SCALE
@@ -157,19 +164,20 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
 
 @Composable
 private fun Line(text: String, lit: Boolean, scale: Float, ink: Color, outline: Shadow?) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontSize = (if (lit) 18 else 14).sp * scale,
-            lineHeight = (if (lit) 22 else 18).sp * scale,
-            fontWeight = if (lit) FontWeight.Bold else FontWeight.Medium,
-            shadow = outline
-        ),
-        color = ink.copy(alpha = if (lit) 1f else 0.7f),
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth()
-    )
+    Text(text, style = lineStyle(lit, scale, outline), color = ink.copy(alpha = if (lit) 1f else DIM_ALPHA), modifier = Modifier.fillMaxWidth())
 }
+
+@Composable
+private fun lineStyle(lit: Boolean, scale: Float, outline: Shadow?) = MaterialTheme.typography.titleMedium.copy(
+    fontSize = (if (lit) 18 else 14).sp * scale,
+    lineHeight = (if (lit) 22 else 18).sp * scale,
+    fontWeight = if (lit) FontWeight.Bold else FontWeight.Medium,
+    shadow = outline,
+    textAlign = TextAlign.Center
+)
+
+/** How bright the lines around the one being sung, and what helps read it, are beside it. */
+private const val DIM_ALPHA = 0.7f
 
 /** What the words floating over other apps can do, besides showing. */
 internal class FloatingActions(

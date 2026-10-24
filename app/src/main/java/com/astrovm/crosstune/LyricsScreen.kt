@@ -1734,8 +1734,14 @@ internal val ReadingsShown = SemanticsPropertyKey<List<String>>("ReadingsShown")
  * room for the readings, only over those that have some.
  */
 @Composable
-internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READING_SCALE) {
-    val over = readingStyle(style, scale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun RubyLine(
+    parts: List<Ruby>,
+    style: TextStyle,
+    scale: Float = READING_SCALE,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    readingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    val over = readingStyle(style, scale).copy(color = readingColor)
     val text = remember(parts, scale) { rubyText(parts, scale) }
     val measurer = rememberTextMeasurer()
     val room = with(LocalDensity.current) { over.lineHeight.toPx() }
@@ -1744,7 +1750,7 @@ internal fun RubyLine(parts: List<Ruby>, style: TextStyle, scale: Float = READIN
     Text(
         text,
         style = style,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = color,
         onTextLayout = { words = it },
         modifier = Modifier
             .fillMaxWidth()

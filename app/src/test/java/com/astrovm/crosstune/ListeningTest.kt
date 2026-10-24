@@ -3692,10 +3692,17 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
         assertTrue(shown("[食べる]"))
 
-        // Floating, the line being sung brings its reading, romaji and translation along.
+        // Floating, the line being sung brings its readings over its kanji, its romaji and its translation along.
         val floating = floatNow()
         composeRule.onNodeWithTag(FLOATING_LYRICS_TAG).assertExists()
-        assertTrue(shown("よぞらにほしが"))
+        val floatingReadings = composeRule.onAllNodes(
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(FLOATING_LYRICS_TAG)) and
+                androidx.compose.ui.test.SemanticsMatcher("has readings") { it.config.getOrElseNullable(ReadingsShown) { null } != null },
+            useUnmergedTree = true
+        ).fetchSemanticsNodes().single().config[ReadingsShown]
+        assertEquals(listOf("よぞら", "ほし"), floatingReadings)
+        // Not again as a line of kana of its own.
+        assertFalse(shown("よぞらにほしが"))
         assertTrue(shown("yozora ni hoshi ga"))
         assertTrue(shown("[夜空に星が]"))
         floating.destroy()
