@@ -46,6 +46,9 @@ internal class LookupCache(
         }
     }
 
+    /** All that's kept, the longest unused first. */
+    suspend fun entries(): List<Pair<String, String>> = loaded().let { entries -> synchronized(entries) { entries.toList() } }
+
     suspend fun put(key: String, value: String) = loaded().let { entries ->
         synchronized(entries) {
             // Moved to the end, so the longest unused are dropped first.
