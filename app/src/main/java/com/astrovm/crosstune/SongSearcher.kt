@@ -61,20 +61,28 @@ internal class SongSearcher(
             .addQueryParameter("limit", "$LIMIT")
             .build()
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
+        val typed = query.split(Regex("\\s+")).map(SongNames::normalize).filter { it.isNotEmpty() }
         return (0 until results.length()).mapNotNull { index ->
             val song = results.optJSONObject(index) ?: return@mapNotNull null
             val title = MetadataParsers.deezerTitle(song).trim()
             val artist = song.optJSONObject("artist")?.text("name").orEmpty()
             // Without both a name and an artist there's no song to look up anywhere else.
             if (title.isEmpty() || artist.isEmpty()) return@mapNotNull null
-            MusicMetadata(
+            val named = SongNames.normalize("$title $artist")
+            val found = MusicMetadata(
                 title = title,
                 artist = artist,
                 // Deezer's own link, so a song picked from here opens as itself in its app.
                 url = song.text("link").ifBlank { null },
                 artworkUrl = song.optJSONObject("album")?.text("cover_big")?.ifBlank { null }
             )
+            Triple(found, typed.count { it in named }, song.optLong("rank"))
         }
+            // Deezer puts the name said word for word first, so a cover named just like the song,
+            // "Quevedo BZRP Music Sessions, Vol. 52", came before it. Of those with as much of
+            // what was typed, the one more people play is first.
+            .sortedWith(compareByDescending<Triple<MusicMetadata, Int, Long>> { it.second }.thenByDescending { it.third })
+            .map { it.first }
     }
 
     /** What Apple's search holds for [query]; empty when it won't answer or has nothing. */

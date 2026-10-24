@@ -78,6 +78,24 @@ class SongSearcherTest {
     }
 
     @Test
+    fun aSongComesBeforeACoverNamedJustLikeIt() {
+        // As Deezer answers: a violin cover named word for word as typed, then the song.
+        respond(
+            """{"data":[
+                {"id":1,"title":"Quevedo BZRP Music Sessions, Vol. 52","rank":39919,"link":"https://www.deezer.com/track/1","artist":{"name":"Carlos Ro Violin"}},
+                {"id":2,"title":"Shakira: Bzrp Music Sessions, Vol. 53","rank":900000,"link":"https://www.deezer.com/track/2","artist":{"name":"Bizarrap"}},
+                {"id":3,"title":"Quevedo: Bzrp Music Sessions, Vol. 52/66","rank":764325,"link":"https://www.deezer.com/track/3","artist":{"name":"Bizarrap"}}
+            ]}"""
+        )
+        // Of those with all that was typed, the one more people play leads; one with less of it,
+        // however played, follows.
+        assertEquals(
+            listOf("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Quevedo BZRP Music Sessions, Vol. 52", "Shakira: Bzrp Music Sessions, Vol. 53"),
+            found("Quevedo Bzrp Music Sessions Vol 52").map { it.title }
+        )
+    }
+
+    @Test
     fun nothingToSearchAndNothingFoundBothFindNothing() {
         respond("""{"data":[]}""")
         assertEquals(emptyList<MusicMetadata>(), found("   "))
