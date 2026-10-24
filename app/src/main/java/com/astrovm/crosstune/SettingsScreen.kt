@@ -440,30 +440,39 @@ private fun ChatGptRow(chatGpt: ChatGptState, actions: ScreenActions) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(start = 16.dp)
             )
-            when {
-                chatGpt.signingIn -> {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                    TextButton(onClick = actions.onCancelChatGptSignIn) { Text(stringResource(R.string.cancel_button)) }
-                }
-                email != null -> TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
-            }
+            if (email != null) TextButton(onClick = actions.onSignOutOfChatGpt) { Text(stringResource(R.string.chatgpt_sign_out)) }
         }
+        if (email == null) ContinueWithChatGpt(chatGpt, actions, modifier = Modifier.align(Alignment.End).padding(end = 8.dp, top = 4.dp))
+    }
+}
+
+/**
+ * OpenAI's own "Continue with ChatGPT", or the browser being waited for, and what went wrong the
+ * last time, for wherever a feature needs it.
+ */
+@Composable
+internal fun ContinueWithChatGpt(chatGpt: ChatGptState, actions: ScreenActions, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.End, modifier = modifier) {
         chatGpt.problem?.let { problem ->
             Text(
                 stringResource(if (problem == ChatGptSignInResult.DECLINED) R.string.chatgpt_declined else R.string.chatgpt_failed),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(start = 40.dp)
+                color = MaterialTheme.colorScheme.error
             )
         }
-        // Black, as OpenAI asks of its sign-in button.
-        if (email == null && !chatGpt.signingIn) {
+        if (chatGpt.signingIn) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                TextButton(onClick = actions.onCancelChatGptSignIn) { Text(stringResource(R.string.cancel_button)) }
+            }
+        } else {
+            // Black, as OpenAI asks of its sign-in button.
             Button(
                 onClick = actions.onSignInWithChatGpt,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White),
                 // Edged, so it shows on a pure black ground too.
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.align(Alignment.End).padding(end = 8.dp, top = 4.dp)
+                modifier = Modifier.padding(top = 4.dp)
             ) { Text(stringResource(R.string.chatgpt_continue)) }
         }
     }

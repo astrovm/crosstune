@@ -3229,11 +3229,27 @@ class ListeningTest {
     }
 
     @Test
-    fun aProblemWithTheWordsIsReportedWithTheSongAndHowTheyFollowedIt() {
+    fun signedOutTheSongsSheetOffersChatGptAndReportsAProblemFromItsCorner() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat")
         waitForText("Sky full of stars")
-        // Signed out, there's nothing more to say about the song, so its mark reports a problem straight away.
-        assertFalse(described(string(R.string.lyrics_about_song)))
+        // The song's mark opens its sheet signed out too, with the way to sign in for what's in it.
+        assertFalse(described(string(R.string.report_problem)))
+        aboutSong()
+        assertTrue(shown(string(R.string.chatgpt_continue)))
+        assertFalse(shown(string(R.string.lyrics_songs_like)))
+        click(string(R.string.song_tab_artist))
+        assertTrue(shown(string(R.string.chatgpt_continue)))
+        click(string(R.string.chatgpt_continue))
+        assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        click(string(R.string.cancel_button))
+
+        // A problem is an icon in the sheet's corner, across from the song's name.
+        val report = composeRule.onNode(hasContentDescription(string(R.string.report_problem))).getBoundsInRoot()
+        val titles = composeRule.onAllNodesWithText("Demo")
+        val title = titles[titles.fetchSemanticsNodes().size - 1].getBoundsInRoot()
+        assertTrue(report.left > title.right)
+        assertTrue(report.top < title.bottom && report.bottom > title.top)
         click(string(R.string.report_problem))
         click(string(R.string.report_by_email))
         val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
@@ -3242,26 +3258,13 @@ class ListeningTest {
     }
 
     @Test
-    fun signedInAProblemWithTheWordsIsReportedFromTheSongsSheet() {
+    fun signedInTheSongsSheetSaysWhatItMeansAndReportsAProblemToo() {
         val openAi = signedInWithChatGpt()
         wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat", openAi = openAi)
         waitForText("Sky full of stars")
-        assertFalse(described(string(R.string.report_problem)))
         aboutSong()
-        // The report action lines up with the song's name in the sheet, the nearest above it, not under its middle.
-        val report = composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction()).getBoundsInRoot()
-        val title = composeRule.onAllNodesWithText("Demo")
-        var titleLeft = -1f
-        var titleGap = Float.MAX_VALUE
-        repeat(title.fetchSemanticsNodes().size) { index ->
-            val bounds = title[index].getBoundsInRoot()
-            val gap = (report.top - bounds.bottom).value
-            if (gap >= -4f && gap < titleGap) {
-                titleGap = gap
-                titleLeft = bounds.left.value
-            }
-        }
-        assertEquals(titleLeft, report.left.value, 2f)
+        assertFalse(shown(string(R.string.chatgpt_continue)))
+        assertTrue(shown(string(R.string.lyrics_songs_like)))
         click(string(R.string.report_problem))
         click(string(R.string.report_by_email))
         val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
