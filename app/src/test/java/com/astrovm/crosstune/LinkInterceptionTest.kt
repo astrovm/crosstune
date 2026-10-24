@@ -182,15 +182,16 @@ class LinkInterceptionTest {
     fun wildcardHostsAreMatchedBySuffix() {
         installApp(MusicService.SPOTIFY)
         FakeDomainVerification.installPerPackage(app) {
-            mapOf("artist.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+            mapOf("*.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
-        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(setOf(MusicService.BANDCAMP)))
-
-        FakeDomainVerification.installPerPackage(app) {
-            mapOf("*.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
-        }
-        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(setOf(MusicService.BANDCAMP)))
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(setOf(MusicService.SPOTIFY)))
         assertEquals(emptySet<LinkApp>(), interception.linkState().blockingApps(setOf(MusicService.DEEZER)))
+
+        // Only what ends in it: the wildcard's own site, spotify.com, isn't one of Crosstune's.
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("*.open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        assertEquals(emptySet<LinkApp>(), interception.linkState().blockingApps(setOf(MusicService.SPOTIFY)))
     }
 
     @Test

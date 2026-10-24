@@ -170,8 +170,8 @@ internal fun UiState.done(need: Need): Boolean? = when (need) {
 /** A link of [service]'s, which opens in whatever app takes its links, Crosstune or another, [TEST_LINK] telling it apart. */
 internal fun testLink(service: MusicService): String = "https://${testHost(service)}/#$TEST_LINK"
 
-/** A site of [service]'s, a real one where Crosstune opens any of many. */
-internal fun testHost(service: MusicService): String = LinkInterception.HOSTS[service].orEmpty().first().replace("*.", "www.")
+/** One of [service]'s sites that Crosstune opens. */
+internal fun testHost(service: MusicService): String = LinkInterception.HOSTS[service].orEmpty().first()
 
 /** The service a test link for [need] is of: the app's own, or the first whose links Crosstune opens. */
 internal fun UiState.testService(need: Need): MusicService? =

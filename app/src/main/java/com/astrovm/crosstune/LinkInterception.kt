@@ -209,15 +209,9 @@ internal class LinkInterception(private val context: Context) {
             MusicService.TIDAL to listOf("tidal.com", "www.tidal.com", "listen.tidal.com")
         )
 
-        /** Whether two hosts, either of which may be a `*.` wildcard, can name the same site. */
-        private fun covers(a: String, b: String): Boolean {
-            fun suffix(host: String) = host.removePrefix("*")
-            return when {
-                a.startsWith("*.") -> b.endsWith(suffix(a))
-                b.startsWith("*.") -> a.endsWith(suffix(b))
-                else -> a == b
-            }
-        }
+        /** Whether an app's [host], which may be a `*.` wildcard, takes links to one of Crosstune's, [wanted]. */
+        private fun covers(wanted: String, host: String): Boolean =
+            if (host.startsWith("*.")) wanted.endsWith(host.removePrefix("*")) else wanted == host
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun unapprovedFrom(hostStates: Map<String, Int>): Map<MusicService, List<String>> =
