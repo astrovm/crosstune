@@ -44,9 +44,7 @@ class LinkInterceptionTest {
             MusicService.YOUTUBE to "https://youtu.be/4NRXx6U8ABQ",
             MusicService.APPLE_MUSIC to "https://music.apple.com/us/album/after-hours/1499385848",
             MusicService.DEEZER to "https://www.deezer.com/en/track/908604612",
-            MusicService.TIDAL to "https://tidal.com/browse/track/134858527",
-            MusicService.SOUNDCLOUD to "https://soundcloud.com/theweeknd/blinding-lights",
-            MusicService.BANDCAMP to "https://artist.bandcamp.com/album/record"
+            MusicService.TIDAL to "https://tidal.com/browse/track/134858527"
         )
         for ((service, link) in sampleLinks) {
             interception.setEnabled(service, true)
@@ -63,8 +61,25 @@ class LinkInterceptionTest {
     }
 
     @Test
+    fun soundCloudBandcampAndAudiomackLinksAreOnlySharedOrPasted() {
+        // Much of what's on them is on no other service (#372), so tapped, their links stay in their own apps.
+        val links = mapOf(
+            MusicService.SOUNDCLOUD to "https://soundcloud.com/theweeknd/blinding-lights",
+            MusicService.BANDCAMP to "https://artist.bandcamp.com/album/record",
+            MusicService.AUDIOMACK to "https://audiomack.com/artist/song/title"
+        )
+        MusicService.entries.filter { it.opensTappedLinks }.forEach { interception.setEnabled(it, true) }
+        for ((service, link) in links) {
+            assertTrue(service.name, service.canBeSource)
+            assertFalse(service.name, service.opensTappedLinks)
+            assertFalse(service.name, interception.isEnabled(service))
+            assertFalse(link, handledByCrosstune(link))
+        }
+    }
+
+    @Test
     fun hostsMatchEachAliasInTheManifest() {
-        MusicService.entries.filter { it.canBeSource }.forEach { service ->
+        MusicService.entries.filter { it.opensTappedLinks }.forEach { service ->
             val component = ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${service.name}")
             val declared = shadowOf(app.packageManager).getIntentFiltersForActivity(component)
                 .flatMap { filter -> (0 until filter.countDataAuthorities()).map { filter.getDataAuthority(it).host } }
@@ -75,15 +90,15 @@ class LinkInterceptionTest {
     @Test
     fun invidiousAndPipedSitesArentLinksToAllow() {
         // Each declared site is a box to tick in Android's settings, so frontends' aren't declared.
-        MusicService.entries.filter { it.canBeSource }.forEach { interception.setEnabled(it, true) }
+        MusicService.entries.filter { it.opensTappedLinks }.forEach { interception.setEnabled(it, true) }
         assertFalse(handledByCrosstune("https://yewtu.be/watch?v=4NRXx6U8ABQ"))
         assertFalse(handledByCrosstune("https://piped.video/shorts/4NRXx6U8ABQ"))
-        val declared = MusicService.entries.filter { it.canBeSource }.flatMap { service ->
+        val declared = MusicService.entries.filter { it.opensTappedLinks }.flatMap { service ->
             shadowOf(app.packageManager).getIntentFiltersForActivity(ComponentName(app, "${LinkInterception.ALIAS_PREFIX}${service.name}"))
                 .flatMap { filter -> (0 until filter.countDataAuthorities()).map { filter.getDataAuthority(it).host } }
         }
         assertEquals(LinkInterception.HOSTS.values.flatten().sorted(), declared.sorted())
-        assertEquals(25, declared.size)
+        assertEquals(18, declared.size)
     }
 
     @Test
@@ -92,14 +107,16 @@ class LinkInterceptionTest {
             "open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED,
             "spotify.link" to DomainVerificationUserState.DOMAIN_STATE_NONE,
             "www.youtube.com" to DomainVerificationUserState.DOMAIN_STATE_NONE,
-            "*.bandcamp.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+            "tidal.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED,
+            "www.tidal.com" to DomainVerificationUserState.DOMAIN_STATE_SELECTED,
+            "listen.tidal.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED
         )
         FakeDomainVerification.install(app) { states }
 
         val unapproved = interception.linkState().unapprovedHosts!!
         assertEquals(listOf("spotify.link", "www.spotify.link"), unapproved[MusicService.SPOTIFY])
         assertEquals(LinkInterception.HOSTS[MusicService.YOUTUBE], unapproved[MusicService.YOUTUBE])
-        assertEquals(emptyList<String>(), unapproved[MusicService.BANDCAMP])
+        assertEquals(emptyList<String>(), unapproved[MusicService.TIDAL])
 
         states = null
         assertNull(interception.linkState().unapprovedHosts)

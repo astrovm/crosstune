@@ -71,6 +71,13 @@ internal enum class MusicService(
     fun searchUrl(query: String): String = searchUrlBuilder(query)
 
     /**
+     * Whether Crosstune can open its links when they're tapped, not just shared or pasted. SoundCloud,
+     * Bandcamp and Audiomack can't: much of what's on them is on no other service (#372), and every
+     * host claimed is one more to tick in Android's "Open by default".
+     */
+    val opensTappedLinks: Boolean get() = this in LinkInterception.HOSTS
+
+    /**
      * The app's own package, then those of builds patched from it, e.g. ReVanced's, which open its
      * links and play as it does: YouTube and YouTube Music by ReVanced, ReVanced Extended, Morphe and
      * Vanced, under names of their own. Patched Spotify keeps Spotify's. Keep in sync with the

@@ -23,7 +23,7 @@ Pasting or sharing a link to Crosstune works with no setup. Crosstune opens on i
 2. **Let lyrics follow your music**, so the words of what's playing show in time.
 3. Tap one to see its steps: Android's page for your phone, a small guide floats over it, and it checks itself off once done. With [Shizuku](https://shizuku.rikka.app) or root on Android 12 or newer, tap **Fix all** instead. It's one tap.
 
-Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube, SoundCloud, Bandcamp or Audiomack in **Settings** → **Open links from**. Invidious and Piped links open here when shared or pasted.
+Links from Spotify, YouTube Music, Apple Music, Deezer and TIDAL open here from the start. Turn on YouTube in **Settings** → **Open links from**. SoundCloud, Bandcamp, Audiomack, Invidious and Piped links open here when shared or pasted.
 
 With one music app on your phone, songs play there. With more, the first one you pick on a song is where they play from then on. Change it in **Settings**.
 
