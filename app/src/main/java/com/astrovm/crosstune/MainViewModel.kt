@@ -1528,7 +1528,7 @@ internal class MainViewModel(
         syncPoints = kept.syncPoints
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
-            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, fromRomaji = kept.learning.fromRomaji),
+            learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
         uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
@@ -2715,6 +2715,12 @@ internal class MainViewModel(
                     )
                 )
                 uiState.lyricsFor?.let(::retranslateSavedLines)
+                // The song's name too, to know what it means, the same way.
+                val song = uiState.lyricsFor ?: return@launch
+                val title = listOf(song.title)
+                val meaning = ((if (usesChatGpt() && learning.chatGptTranslation) tutor?.translate(title, language, song) else null) ?: translator.translate(title, language))
+                    ?.firstOrNull()?.takeUnless { it.equals(song.title.trim(), ignoreCase = true) }
+                if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(titleMeaning = meaning))
             }
         }
     }

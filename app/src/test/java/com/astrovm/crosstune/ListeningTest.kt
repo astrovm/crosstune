@@ -3810,6 +3810,35 @@ class ListeningTest {
     }
 
     @Test
+    fun theSongsNameIsTranslatedAboutTheSongAsTheWordsAre() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京", artist = "星空")
+        learnMenu()
+        click(string(R.string.lyrics_translation))
+        waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        click(string(R.string.lyrics_learn))
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { shown("[東京]") }
+        // Only the title: the artist's is a name.
+        assertFalse(shown("[星空]"))
+    }
+
+    @Test
+    fun theSongsNameIsntTranslatedWithTranslationsOff() {
+        wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "東京")
+        learnMenu()
+        click(string(R.string.lyrics_translation))
+        waitUntil(TIMEOUT_MS) { shown("[夜空に星が]") }
+        // Translated already, switched off, it goes.
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { it.contains(GOOGLE_TRANSLATE_HOST) } >= 2 }
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_translation))
+        click(string(R.string.lyrics_learn))
+        aboutSong()
+        waitUntil(TIMEOUT_MS) { shown("東京") && composeRule.onAllNodes(hasText("東京")).fetchSemanticsNodes().size == 2 }
+        assertFalse(shown("[東京]"))
+    }
+
+    @Test
     fun aNameAsWrittenInLatinLettersSaysItOnce() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる", title = "Tokyo")
         waitUntil(TIMEOUT_MS) { readingShown("よぞら") }

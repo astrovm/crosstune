@@ -414,6 +414,8 @@ internal data class Learning(
     val names: List<LineReading> = emptyList(),
     /** Each line translated, or null where it needs none, once done. */
     val translations: List<String?> = emptyList(),
+    /** The song's title translated, once its lines are, when it reads otherwise translated. */
+    val titleMeaning: String? = null,
     val translating: Boolean = false,
     val translationFailed: Boolean = false,
     /** A line ChatGPT is explaining, or has. */

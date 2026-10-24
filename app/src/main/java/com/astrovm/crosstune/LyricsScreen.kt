@@ -2101,7 +2101,8 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
 
 /**
  * The song's title and its artist, read as its words are: with readings over their kanji, and in
- * Latin letters, as those are switched on, to know how to say them.
+ * Latin letters, as those are switched on, to know how to say them; and what the title means,
+ * translated as the words are.
  */
 @Composable
 private fun SongNames(state: UiState, modifier: Modifier) {
@@ -2109,6 +2110,7 @@ private fun SongNames(state: UiState, modifier: Modifier) {
     val learning = state.learning
     Column(modifier) {
         SongName(song?.title.orEmpty(), learning.names.getOrNull(0), learning, MaterialTheme.typography.titleLarge)
+        learning.titleMeaning?.takeIf { learning.translation }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
         song?.artist?.takeIf { it.isNotBlank() }?.let { SongName(it, learning.names.getOrNull(1), learning, MaterialTheme.typography.bodyLarge) }
     }
 }
