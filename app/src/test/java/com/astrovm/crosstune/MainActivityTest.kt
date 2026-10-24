@@ -5895,7 +5895,9 @@ class MainActivityTest {
         // Lyrics are still there to let hear and follow, which is all Shizuku is asked.
         assertTextShown(string(R.string.follow_help_title))
         click(string(R.string.setup_one_tap))
-        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.single().take(3))
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.first().take(3))
+        assertEquals(listOf("pm", "grant"), shell.ran.last().take(2))
+        assertEquals(2, shell.ran.size)
     }
 
     @Test
@@ -6014,6 +6016,7 @@ class MainActivityTest {
             "false" in command -> unblock()
             "all" in command -> allow()
             "allow_listener" in command -> playback.access = true
+            android.Manifest.permission.RECORD_AUDIO in command -> shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         }
         true
     }
@@ -6033,8 +6036,9 @@ class MainActivityTest {
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", MusicService.SPOTIFY.packageName, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
                 listOf("pm", "set-app-links-user-selection", "--user", user, "--package", app.packageName, "true", "all"),
-                // Not the microphone: it's asked where it's used.
-                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user)
+                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user),
+                // The microphone too: it would be asked where it's used, and this costs no more.
+                listOf("pm", "grant", "--user", user, app.packageName, android.Manifest.permission.RECORD_AUDIO)
             ),
             shell.ran
         )
@@ -6048,11 +6052,12 @@ class MainActivityTest {
     @Test
     fun oneTapSetupLeavesAloneWhatsAlreadyDone() {
         val shell = oneTapSetup { playback, unblock, allow -> playback.access = true; doingShell(playback, unblock, allow) }
+        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.setup_one_tap))
         assertEquals(3, shell.ran.size)
-        assertTrue(shell.ran.none { "allow_listener" in it })
+        assertTrue(shell.ran.none { "allow_listener" in it || "grant" in it })
         assertEquals(3, checkedOff())
     }
 
@@ -6063,6 +6068,7 @@ class MainActivityTest {
                 when {
                     "false" in command -> unblock()
                     "all" in command -> allow()
+                    android.Manifest.permission.RECORD_AUDIO in command -> shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
                 }
                 "allow_listener" !in command
             }
@@ -6070,7 +6076,7 @@ class MainActivityTest {
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.setup_one_tap))
-        assertEquals(4, shell.ran.size)
+        assertEquals(5, shell.ran.size)
         assertTextShown(string(R.string.fix_failed))
         assertTextAbsent(string(R.string.fix_with_shizuku))
         // The links are done; following music apps is left, by hand.
@@ -6099,7 +6105,7 @@ class MainActivityTest {
 
         shell.answer.complete(Unit)
         composeRule.waitForIdle()
-        assertEquals(4, shell.ran.size)
+        assertEquals(5, shell.ran.size)
         assertEquals(3, checkedOff())
     }
 

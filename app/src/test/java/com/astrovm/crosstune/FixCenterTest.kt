@@ -173,6 +173,7 @@ class FixCenterTest {
             "false" in command -> appKeepsLinks = false
             "all" in command -> allowed = true
             "allow_listener" in command -> playback.access = true
+            Manifest.permission.RECORD_AUDIO in command -> allowMicrophone()
         }
         true
     }
@@ -311,8 +312,9 @@ class FixCenterTest {
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", spotify, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
                 listOf("pm", "set-app-links-user-selection", "--user", user, "--package", app.packageName, "true", "all"),
-                // Not the microphone: it's asked where it's used.
-                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user)
+                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user),
+                // The microphone too, though it isn't listed: it costs no more.
+                listOf("pm", "grant", "--user", user, app.packageName, Manifest.permission.RECORD_AUDIO)
             ),
             shell.ran
         )

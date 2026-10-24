@@ -255,7 +255,7 @@ internal class MainViewModel(
         viewModelScope.launch {
             val worked = inOneTap(
                 setup, apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything,
-                follow = !state.canFollowApps
+                follow = !state.canFollowApps, microphone = state.microphone != MicAccess.ALLOWED
             )
             uiState = uiState.copy(settingUpInOneTap = false, oneTapFailed = !worked)
             refreshSystemState()
@@ -288,9 +288,10 @@ internal class MainViewModel(
         apps: List<String> = emptyList(),
         links: Boolean,
         follow: Boolean,
+        microphone: Boolean = false,
         floating: Boolean = false
     ): Boolean {
-        val worked = setup.setUp(apps = apps, links = links, follow = follow, floating = floating)
+        val worked = setup.setUp(apps = apps, links = links, follow = follow, microphone = microphone, floating = floating)
         // Android lets Crosstune follow music apps a moment after it's told to.
         var waits = 0
         while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)
