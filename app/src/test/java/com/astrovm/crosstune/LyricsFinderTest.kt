@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -716,6 +717,25 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aVideoNamedWithATagNoOneKeepsHasTheSongsWords() {
+        val title = "Everybody Wants To Rule The World"
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" && url.queryParameter("track_name") == title ->
+                    FakeSpotify.html(request, """[{"trackName":"$title","artistName":"Tears For Fears","syncedLyrics":"[00:20.00] Welcome to your life"}]""")
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+            }
+        }
+        assertEquals("Welcome to your life", words(MusicMetadata("$title (Loop y Extendido)", "Tears For Fears")))
+        // Under the whole title first, as it's usually right.
+        val asked = fake.requestedUrls.filter { it.startsWith("https://lrclib.net/") }.mapNotNull { it.toHttpUrl().queryParameter("track_name") }
+        assertEquals("$title (Loop y Extendido)", asked.first())
+    }
+
+    @Test
     fun aTitleThatsTwoNamesIsLookedUpUnderEach() {
         fake.handler = { request ->
             val url = request.url
@@ -742,10 +762,10 @@ class LyricsFinderTest {
             }
         }
         assertEquals(Lyrics.None, found(MusicMetadata("A - B", "Band")))
-        // A title with more than one dash is one name.
+        // A title with more than one dash is one name, then, last, the name before its first.
         fake.requestedUrls.clear()
         assertEquals(Lyrics.None, found(MusicMetadata("A - B - C", "Band")))
-        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
+        assertEquals(listOf("A - B - C", "A"), fake.requestedUrls.filter { it.startsWith("https://lrclib.net/") }.mapNotNull { it.toHttpUrl().queryParameter("track_name") })
     }
 
 
