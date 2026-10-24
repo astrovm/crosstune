@@ -4,6 +4,7 @@
   "timezone": "America/Argentina/Buenos_Aires",
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "lockFileMaintenance": { "enabled": true },
   "hostRules": [
     {
       "matchHost": "repo.maven.apache.org",
