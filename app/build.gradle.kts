@@ -263,11 +263,11 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
-    // One test process per core but one, each with that heap, as many as the memory holds beside
-    // Gradle's own: CI's 4 cores and 16 GB run three.
+    // Up to three test processes, one per core but one, each with that heap, as many as the memory
+    // holds beside Gradle's own: CI's 4 cores and 16 GB run three. More would crowd a laptop.
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
     val cores = Runtime.getRuntime().availableProcessors()
-    maxParallelForks = minOf(cores - 1, ((memory - (4L shl 30)) / (3L shl 30)).toInt()).coerceAtLeast(1)
+    maxParallelForks = minOf(3, cores - 1, ((memory - (4L shl 30)) / (3L shl 30)).toInt()).coerceAtLeast(1)
     jvmArgs(robolectricJvmArgs)
     testLogging {
         events("failed")
