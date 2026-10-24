@@ -420,7 +420,5 @@
     <string name="android_allow_while_using">アプリの使用中のみ許可</string>
     <string name="android_ask_every_time">毎回確認する</string>
     <string name="android_dont_allow">許可しない</string>
-    <string name="android_while_using">アプリの使用時のみ</string>
-    <string name="android_only_this_time">今回のみ</string>
     <string name="android_display_over_apps">他のアプリの上に重ねて表示できるようにする</string>
 </resources>

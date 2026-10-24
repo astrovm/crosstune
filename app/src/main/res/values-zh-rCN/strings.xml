@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">仅在使用该应用时允许</string>
     <string name="android_ask_every_time">每次都询问</string>
     <string name="android_dont_allow">不允许</string>
-    <string name="android_while_using">仅在使用该应用时允许</string>
-    <string name="android_only_this_time">仅限这一次</string>
     <string name="android_display_over_apps">允许显示在其他应用的上层</string>
 </resources>

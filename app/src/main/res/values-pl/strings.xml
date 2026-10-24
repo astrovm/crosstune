@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Zezwalaj tylko podczas używania aplikacji</string>
     <string name="android_ask_every_time">Zawsze pytaj</string>
     <string name="android_dont_allow">Nie zezwalaj</string>
-    <string name="android_while_using">Podczas używania aplikacji</string>
-    <string name="android_only_this_time">Tylko tym razem</string>
     <string name="android_display_over_apps">Zezwalaj na wyświetlanie nad innymi aplikacjami</string>
 </resources>

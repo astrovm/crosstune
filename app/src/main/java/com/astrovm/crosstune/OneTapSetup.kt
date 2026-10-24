@@ -46,16 +46,17 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
 
     /**
      * Stops [apps], by package, opening links; lets Crosstune open its [links]; and, when asked to,
-     * lets it [follow] music apps, use the [microphone], and show [floating] lyrics, with their
-     * notification. Each is tried, so one failing leaves the rest done; whether all worked.
+     * lets it [follow] music apps and show [floating] lyrics, with their notification. The microphone
+     * isn't one: it's asked where it's used. Each is tried, so one failing leaves the rest done;
+     * whether all worked.
      */
-    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): Boolean {
+    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, floating: Boolean): Boolean {
         val shell = shell() ?: return false
         if (!shell.allowed()) return false
-        return commands(apps, links, follow, microphone, floating).map { shell.run(it) }.all { it }
+        return commands(apps, links, follow, floating).map { shell.run(it) }.all { it }
     }
 
-    private fun commands(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): List<List<String>> = buildList {
+    private fun commands(apps: List<String>, links: Boolean, follow: Boolean, floating: Boolean): List<List<String>> = buildList {
         val user = (android.os.Process.myUid() / PER_USER_RANGE).toString()
         val own = context.packageName
         // Android won't let Crosstune take links another app verified, so those apps go first.
@@ -68,7 +69,6 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
         if (follow) {
             add(listOf("cmd", "notification", "allow_listener", ComponentName(context, NowPlayingListener::class.java).flattenToString(), user))
         }
-        if (microphone) add(listOf("pm", "grant", "--user", user, own, android.Manifest.permission.RECORD_AUDIO))
         if (floating) {
             add(listOf("appops", "set", "--user", user, own, "SYSTEM_ALERT_WINDOW", "allow"))
             // Locked, floating lyrics unlock from their notification, which Android 13 asks about.

@@ -5621,19 +5621,19 @@ class MainActivityTest {
         click(string(R.string.fix_one_by_one))
 
         // One app at a time, in name order.
-        assertTextShown(string(R.string.setup_step, 1, 5))
+        assertTextShown(string(R.string.setup_step, 1, 4))
         click(string(R.string.open_app_link_settings_button, "YouTube"))
         assertEquals(Uri.parse("package:$youtube"), nextStartedActivity()!!.data)
         youtubeAllowsLinks = false
         controller!!.pause().resume()
-        waitForText(string(R.string.setup_step, 2, 5))
+        waitForText(string(R.string.setup_step, 2, 4))
         click(string(R.string.open_app_link_settings_button, "YouTube Create"))
         assertEquals(Uri.parse("package:$creator"), nextStartedActivity()!!.data)
 
         // Fixed, both stay listed, checked off, so the list doesn't move under the user's finger.
         creatorAllowsLinks = false
         controller!!.pause().resume()
-        waitForText(string(R.string.setup_step, 3, 5))
+        waitForText(string(R.string.setup_step, 3, 4))
         click(string(R.string.back_button))
         assertTextShown(string(R.string.setup_check_app, "YouTube"))
         assertTextShown(string(R.string.setup_check_app, "YouTube Create"))
@@ -5648,13 +5648,12 @@ class MainActivityTest {
             if (packageName != app.packageName) hosts.associateWith { DomainVerificationUserState.DOMAIN_STATE_VERIFIED } else hosts.associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         }
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
-        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         launch()
         // Every link is allowed, but none open in Crosstune while Spotify's app takes them.
         composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("1")).performClick()
         composeRule.waitForIdle()
-        assertEquals(3, checkedOff())
+        assertEquals(2, checkedOff())
         assertTextShown(string(R.string.setup_check_app, "Spotify"))
     }
 
@@ -5816,9 +5815,9 @@ class MainActivityTest {
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
-        // Allowing the links, the microphone, and lyrics following music apps.
+        // Allowing the links, and lyrics following music apps. The microphone is asked where it's used.
         assertTextShown(string(R.string.setup_check_allow))
-        assertTextShown(string(R.string.fix_mic_title))
+        assertTextAbsent(string(R.string.fix_mic_title))
         assertTextShown(string(R.string.follow_help_title))
         assertTextAbsent(string(R.string.setup_check_app, string(R.string.service_spotify)))
         click(string(R.string.back_button))
@@ -5828,7 +5827,6 @@ class MainActivityTest {
     @Test
     fun setupWithNothingLeftToFixChecksItAllOffAndFinishes() {
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
-        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         freshInstall()
         FakeDomainVerification.install(app) { LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED } }
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
@@ -5837,7 +5835,7 @@ class MainActivityTest {
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.next_button))
-        assertEquals(3, checkedOff())
+        assertEquals(2, checkedOff())
         click(string(R.string.setup_finish))
         assertTrue(prefs().getBoolean("setup_complete", false))
     }
@@ -5847,7 +5845,6 @@ class MainActivityTest {
     fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
         MainActivity.shellFactory = { listOf(FakeShell()) }
-        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
@@ -5859,7 +5856,7 @@ class MainActivityTest {
         // Android can't say whether the app still takes the links, so it isn't checked off, nor
         // are the links, just turned on.
         assertTextShown(string(R.string.setup_check_app, string(R.string.service_spotify)))
-        assertEquals(2, checkedOff())
+        assertEquals(1, checkedOff())
         // Nor can Shizuku do them, though it runs.
         assertTextAbsent(string(R.string.setup_one_tap))
     }
@@ -5898,9 +5895,7 @@ class MainActivityTest {
         // Lyrics are still there to let hear and follow, which is all Shizuku is asked.
         assertTextShown(string(R.string.follow_help_title))
         click(string(R.string.setup_one_tap))
-        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.first().take(3))
-        assertEquals(listOf("pm", "grant"), shell.ran.last().take(2))
-        assertEquals(2, shell.ran.size)
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.single().take(3))
     }
 
     @Test
@@ -6019,7 +6014,6 @@ class MainActivityTest {
             "false" in command -> unblock()
             "all" in command -> allow()
             "allow_listener" in command -> playback.access = true
-            android.Manifest.permission.RECORD_AUDIO in command -> shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         }
         true
     }
@@ -6039,13 +6033,13 @@ class MainActivityTest {
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", MusicService.SPOTIFY.packageName, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
                 listOf("pm", "set-app-links-user-selection", "--user", user, "--package", app.packageName, "true", "all"),
-                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user),
-                listOf("pm", "grant", "--user", user, app.packageName, android.Manifest.permission.RECORD_AUDIO)
+                // Not the microphone: it's asked where it's used.
+                listOf("cmd", "notification", "allow_listener", ComponentName(app, NowPlayingListener::class.java).flattenToString(), user)
             ),
             shell.ran
         )
         // All checked off, there's nothing left for it to do, and setup can finish.
-        assertEquals(4, checkedOff())
+        assertEquals(3, checkedOff())
         assertTextAbsent(string(R.string.setup_one_tap))
         click(string(R.string.setup_finish))
         assertTrue(prefs().getBoolean("setup_complete", false))
@@ -6054,13 +6048,12 @@ class MainActivityTest {
     @Test
     fun oneTapSetupLeavesAloneWhatsAlreadyDone() {
         val shell = oneTapSetup { playback, unblock, allow -> playback.access = true; doingShell(playback, unblock, allow) }
-        shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.setup_one_tap))
         assertEquals(3, shell.ran.size)
-        assertTrue(shell.ran.none { "allow_listener" in it || "grant" in it })
-        assertEquals(4, checkedOff())
+        assertTrue(shell.ran.none { "allow_listener" in it })
+        assertEquals(3, checkedOff())
     }
 
     @Test
@@ -6070,7 +6063,6 @@ class MainActivityTest {
                 when {
                     "false" in command -> unblock()
                     "all" in command -> allow()
-                    android.Manifest.permission.RECORD_AUDIO in command -> shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
                 }
                 "allow_listener" !in command
             }
@@ -6078,11 +6070,11 @@ class MainActivityTest {
         launch()
         click(string(R.string.setup_get_started))
         click(string(R.string.setup_one_tap))
-        assertEquals(5, shell.ran.size)
+        assertEquals(4, shell.ran.size)
         assertTextShown(string(R.string.fix_failed))
         assertTextAbsent(string(R.string.fix_with_shizuku))
-        // The links and the microphone are done; following music apps is left, by hand.
-        assertEquals(3, checkedOff())
+        // The links are done; following music apps is left, by hand.
+        assertEquals(2, checkedOff())
     }
 
     @Test
@@ -6107,8 +6099,8 @@ class MainActivityTest {
 
         shell.answer.complete(Unit)
         composeRule.waitForIdle()
-        assertEquals(5, shell.ran.size)
-        assertEquals(4, checkedOff())
+        assertEquals(4, shell.ran.size)
+        assertEquals(3, checkedOff())
     }
 
     @Test
@@ -6561,8 +6553,8 @@ class MainActivityTest {
 
         android.runAll()
         composeRule.waitForIdle()
-        // The app in the way, the links, the microphone and following music apps.
-        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("4"))
+        // The app in the way, the links and following music apps.
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("3"))
         waitUntil(TIMEOUT_MS) { dynamicShortcuts().isNotEmpty() }
     }
 
@@ -6576,27 +6568,27 @@ class MainActivityTest {
         android.runAll()
         composeRule.waitForIdle()
         val bar = composeRule.onNodeWithTag(FIX_BAR_TAG)
-        bar.assert(hasText("4"))
+        bar.assert(hasText("3"))
 
         // The user turns the app's links off in Android's settings and comes back.
         spotifyKeepsLinks = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
         // Until Android answers the count stays, rather than drop and come back.
-        bar.assert(hasText("4"))
+        bar.assert(hasText("3"))
 
         // Coming back again before that answer: the newer look is the one that counts.
         controller!!.pause().resume()
         composeRule.waitForIdle()
         android.runLast()
         composeRule.waitForIdle()
-        bar.assert(hasText("3"))
+        bar.assert(hasText("2"))
 
         // The older look finishing last, with a different answer, changes nothing.
         spotifyKeepsLinks = true
         android.runAll()
         composeRule.waitForIdle()
-        bar.assert(hasText("3"))
+        bar.assert(hasText("2"))
     }
 
     @Test

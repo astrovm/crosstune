@@ -262,23 +262,6 @@ internal object AndroidPictures {
         AndroidRow(stringResource(R.string.android_dont_allow), Control.RADIO_ON)
     }
 
-    /** Android's own question about the microphone, While using the app ringed. */
-    @Composable
-    fun MicrophoneQuestion() = AndroidPage {
-        Ringed(true) {
-            Text(
-                stringResource(R.string.android_while_using),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp)
-            )
-        }
-        AndroidRow(stringResource(R.string.android_only_this_time))
-        AndroidRow(stringResource(R.string.android_dont_allow))
-    }
-
     /** Crosstune in the list of apps that can show over others, which Samsung switches right there. */
     @Composable
     fun OverlayRow(phone: Phone) = AndroidPage {

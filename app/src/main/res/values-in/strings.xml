@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">Izinkan saat aplikasi digunakan</string>
     <string name="android_ask_every_time">Selalu tanya</string>
     <string name="android_dont_allow">Jangan izinkan</string>
-    <string name="android_while_using">Saat aplikasi digunakan</string>
-    <string name="android_only_this_time">Hanya kali ini</string>
     <string name="android_display_over_apps">Izinkan ditampilkan di atas aplikasi lain</string>
 </resources>

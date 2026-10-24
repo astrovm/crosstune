@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">앱 사용 중에만 허용</string>
     <string name="android_ask_every_time">항상 확인</string>
     <string name="android_dont_allow">허용 안함</string>
-    <string name="android_while_using">앱 사용 중에만 허용</string>
-    <string name="android_only_this_time">이번만 허용</string>
     <string name="android_display_over_apps">다른 앱 위에 표시 허용</string>
 </resources>

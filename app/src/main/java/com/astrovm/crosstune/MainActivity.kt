@@ -595,13 +595,8 @@ class MainActivity : ComponentActivity() {
         viewModel.setCanFloatOverApps(Settings.canDrawOverlays(this))
     }
 
-    /**
-     * Opens Android's page where [need] is done, with the guide floating over it; or, for the
-     * microphone while Android still asks, asks.
-     */
+    /** Opens Android's page where [need] is done, with the guide floating over it. */
     private fun openFix(need: Need) {
-        // Android still asks for the microphone itself, so there's no page to open.
-        if (need == Need.Microphone && viewModel.uiState.microphone != MicAccess.DENIED) return withMicrophone(MicrophoneFor.ALLOW)
         // Opened, before Android 12 it's no longer known whether they're allowed, until a test link says.
         if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
         if (need == Need.Float) floatOnceAllowed = true

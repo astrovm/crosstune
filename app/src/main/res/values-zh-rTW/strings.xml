@@ -419,7 +419,5 @@
     <string name="android_allow_while_using">僅在使用該應用程式時允許</string>
     <string name="android_ask_every_time">每次都詢問</string>
     <string name="android_dont_allow">不允許</string>
-    <string name="android_while_using">使用應用程式時</string>
-    <string name="android_only_this_time">僅允許這一次</string>
     <string name="android_display_over_apps">允許重疊顯示於其他應用程式上方</string>
 </resources>
