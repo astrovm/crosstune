@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">इस ऐप्लिकेशन में खोलें</string>
     <string name="android_dont_open_in_this_app">इस ऐप्लिकेशन में न खोलें</string>
     <string name="android_allow_notification_access">सूचनाओं को ऐक्सेस करने की अनुमति दें</string>
+    <string name="android_special_app_access">ऐप्लिकेशन को खास अनुमति दें</string>
+    <string name="android_notification_access">सूचना देखने की मंज़ूरी</string>
     <string name="android_deny">अनुमति न दें</string>
     <string name="android_close">बंद करें</string>
     <string name="android_restricted_setting">इस सेटिंग पर पाबंदी लगाई गई है</string>

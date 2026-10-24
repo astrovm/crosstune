@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">Buka di aplikasi ini</string>
     <string name="android_dont_open_in_this_app">Jangan buka di aplikasi ini</string>
     <string name="android_allow_notification_access">Izinkan akses notifikasi</string>
+    <string name="android_special_app_access">Akses aplikasi khusus</string>
+    <string name="android_notification_access">Akses notifikasi</string>
     <string name="android_deny">Tolak</string>
     <string name="android_close">Tutup</string>
     <string name="android_restricted_setting">Setelan terbatas</string>

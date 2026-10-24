@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">In dieser App öffnen</string>
     <string name="android_dont_open_in_this_app">Nicht in dieser App öffnen</string>
     <string name="android_allow_notification_access">Benachrichtigungszugriff erlauben</string>
+    <string name="android_special_app_access">Spezieller App-Zugriff</string>
+    <string name="android_notification_access">Benachrichtigungszugriff</string>
     <string name="android_deny">Ablehnen</string>
     <string name="android_close">Schließen</string>
     <string name="android_restricted_setting">Eingeschränkte Einstellung</string>

@@ -402,6 +402,8 @@
     <string name="android_open_in_this_app">このアプリで開く</string>
     <string name="android_dont_open_in_this_app">このアプリで開かない</string>
     <string name="android_allow_notification_access">通知へのアクセスを許可</string>
+    <string name="android_special_app_access">特別なアプリアクセス</string>
+    <string name="android_notification_access">通知へのアクセス</string>
     <string name="android_deny">許可しない</string>
     <string name="android_close">閉じる</string>
     <string name="android_restricted_setting">制限付き設定</string>

@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">Openen in deze app</string>
     <string name="android_dont_open_in_this_app">Niet openen in deze app</string>
     <string name="android_allow_notification_access">Toegang tot meldingen toestaan</string>
+    <string name="android_special_app_access">Speciale app-toegang</string>
+    <string name="android_notification_access">Toegang tot meldingen</string>
     <string name="android_deny">Weigeren</string>
     <string name="android_close">Sluiten</string>
     <string name="android_restricted_setting">Beperkte instelling</string>

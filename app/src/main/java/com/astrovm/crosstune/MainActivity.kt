@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                         onStopListeningAlong = viewModel::stopListeningAlong,
                         // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
                         onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
-                        onOpenFollowAccess = { openNotificationAccess() },
+                        onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
                         onOpenAppInfo = { openAppInfo() },
                         onThemeChange = ::selectTheme,
                         onSearchAnyway = viewModel::searchAnyway,
@@ -610,7 +610,7 @@ class MainActivity : ComponentActivity() {
             is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
             Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
             Need.Microphone -> Context::openAppInfo
-            Need.Follow -> Context::openNotificationAccess
+            Need.Follow -> (viewModel.uiState.phone == Phone.TV).let { tv -> fun Context.() = openNotificationAccess(tv) }
             Need.Float -> Context::openOverlaySettings
         }
         // Without picture-in-picture, the steps wait here in Crosstune.

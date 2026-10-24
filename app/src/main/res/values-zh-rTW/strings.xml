@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">在這個應用程式中開啟</string>
     <string name="android_dont_open_in_this_app">不要在這個應用程式中開啟</string>
     <string name="android_allow_notification_access">授予通知存取權</string>
+    <string name="android_special_app_access">特殊應用程式存取權</string>
+    <string name="android_notification_access">通知存取權</string>
     <string name="android_deny">拒絕</string>
     <string name="android_close">關閉</string>
     <string name="android_restricted_setting">受限制的設定</string>

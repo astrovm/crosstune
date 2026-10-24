@@ -422,6 +422,8 @@
     <string name="android_open_in_this_app">Open in this app</string>
     <string name="android_dont_open_in_this_app">Don\'t open in this app</string>
     <string name="android_allow_notification_access">Allow notification access</string>
+    <string name="android_special_app_access">Special app access</string>
+    <string name="android_notification_access">Notification access</string>
     <string name="android_deny">Deny</string>
     <string name="android_close">Close</string>
     <string name="android_restricted_setting">Restricted setting</string>

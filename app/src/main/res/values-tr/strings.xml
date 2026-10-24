@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">Bu uygulamada aç</string>
     <string name="android_dont_open_in_this_app">Bu uygulamada açma</string>
     <string name="android_allow_notification_access">Bildirimlere erişime izin ver</string>
+    <string name="android_special_app_access">Özel uygulama erişimi</string>
+    <string name="android_notification_access">Bildirim erişimi</string>
     <string name="android_deny">Reddet</string>
     <string name="android_close">Kapat</string>
     <string name="android_restricted_setting">Kısıtlanmış ayar</string>

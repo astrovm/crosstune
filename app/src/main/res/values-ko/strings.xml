@@ -401,6 +401,8 @@
     <string name="android_open_in_this_app">이 앱에서 열기</string>
     <string name="android_dont_open_in_this_app">이 앱에서 열지 않기</string>
     <string name="android_allow_notification_access">알림 액세스 허용</string>
+    <string name="android_special_app_access">특수 앱 액세스</string>
+    <string name="android_notification_access">알림 액세스</string>
     <string name="android_deny">거부</string>
     <string name="android_close">닫기</string>
     <string name="android_restricted_setting">제한된 설정</string>

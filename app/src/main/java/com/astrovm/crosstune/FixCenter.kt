@@ -568,8 +568,15 @@ internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<
         val access = stringResource(if (phone == Phone.SAMSUNG || phone == Phone.TV) R.string.app_name else R.string.android_allow_notification_access)
         val allow = stringResource(R.string.allow_button)
         if (!state.followRestricted) {
-            // A TV's switch asks nothing more.
-            if (phone == Phone.TV) return listOf(inWords(turnOn, access))
+            // Google TV's page, opened straight away, can leave the remote stuck outside its list, as on
+            // the Chromecast, so a TV is taken to its list of apps and goes from there. Its switch asks nothing more.
+            if (phone == Phone.TV) {
+                return listOf(
+                    inWords(R.string.fix_step_pick, stringResource(R.string.android_special_app_access)),
+                    inWords(R.string.fix_step_pick, stringResource(R.string.android_notification_access)),
+                    inWords(turnOn, access)
+                )
+            }
             return listOf(phone.step(turnOn, access) { AndroidPictures.AccessSwitch(phone) }, phone.step(tap, allow) { AndroidPictures.AllowDialog() })
         }
         // Android turns the first try down for an app installed from a file, and only then offers
