@@ -121,8 +121,8 @@ class MainActivityTest {
         // What Android says about apps and links is read as the screen asks, so each step sees it.
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
-        // Most tests exercise the main screen with links going straight to the app as searches; the rest have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).commit()
+        // Most tests exercise the main screen with links going straight to an app picked already, as searches; the rest have their own tests.
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -206,8 +206,8 @@ class MainActivityTest {
     /** Links open in Crosstune, on the song's card, without playing right away. */
     private fun linksShowHere() = prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", false).commit()
 
-    /** Before setup, with links opening in an app, a link asks which one. */
-    private fun linksAskBeforeSetup() = prefs().edit().putBoolean("setup_complete", false).putBoolean("links_in_crosstune", false).commit()
+    /** Listening in Spotify, with links opening in it, a Spotify link would only go back there, so it asks where. */
+    private fun linksAskWhere() = prefs().edit().putString("default_target", "SPOTIFY").putBoolean("links_in_crosstune", false).commit()
 
     private fun pickFromDefaultMenu(label: String) {
         composeRule.onNodeWithTag(DEFAULT_MENU_TAG).performClick()
@@ -825,14 +825,12 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupKeepsAnAppThatStillTakesTheLinksToFixThoughTheyreAllowed() {
+    fun theAsksKeepAnAppThatStillTakesTheLinksToFixThoughTheyreAllowed() {
         setupWithSpotifyAppInTheWay()
         launch()
-        click(string(R.string.setup_get_started))
         // Its links are allowed, but they don't open in Crosstune while the app takes them.
         assertEquals(1, checkedOff())
         assertTextShown(string(R.string.setup_check_app, string(R.string.service_spotify)))
-        assertTextShown(string(R.string.setup_skip_for_now))
     }
 
     @Test
@@ -1564,6 +1562,8 @@ class MainActivityTest {
 
     @Test
     fun recentSongsAreOfferedOnTheLauncherIconUntilHistoryIsCleared() {
+        // No app picked, so the share sheet's own entries aren't there, and the song's all there is.
+        prefs().edit().remove("default_target").commit()
         respondWithTrack("Recent Song", "Artist · Song")
         launch()
         resolveTyped("https://open.spotify.com/track/$TRACK_ID")
@@ -1901,14 +1901,13 @@ class MainActivityTest {
     }
 
     @Test
-    fun aLinkCopiedBeforeSetupIsDoneIsLeftAlone() {
-        prefs().edit().putBoolean("setup_complete", false).commit()
+    fun aLinkCopiedBeforeAnAppIsPickedIsFilledInToo() {
+        freshInstall()
         respondWithTrack("Copied Song", "Artist · Song")
         launch()
         copied("https://open.spotify.com/track/$TRACK_ID")
         comeBack()
-        assertTextShown(string(R.string.setup_get_started))
-        assertTrue(fake.requestedUrls.isEmpty())
+        waitForText("Copied Song")
     }
 
     @Test
@@ -1942,7 +1941,7 @@ class MainActivityTest {
     @Test
     fun aShareSheetTargetOpensTheLinkInItsAppWithoutAsking() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
-        linksAskBeforeSetup()
+        linksAskWhere()
         respondWithTrack("Direct", "Artist · Song")
         launch(
             Intent(Intent.ACTION_SEND).apply {
@@ -4344,7 +4343,7 @@ class MainActivityTest {
     @Test
     fun thePickerMatchesOnlyTheChosenDestination() {
         prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
-        linksAskBeforeSetup()
+        linksAskWhere()
         fake.handler = { request ->
             if (request.url.host == "itunes.apple.com") {
                 FakeSpotify.html(request,
@@ -4373,7 +4372,7 @@ class MainActivityTest {
 
     @Test
     fun dismissingTheDestinationPickerKeepsTheResult() {
-        linksAskBeforeSetup()
+        linksAskWhere()
         respondWithTrack("Stay", "Artist · Song")
         val activity = launch(trackLink())
         waitForText(string(R.string.picker_title))
@@ -4386,9 +4385,9 @@ class MainActivityTest {
     }
 
     @Test
-    fun dismissingThePickerPreparesTheDisplayedDestinationWithoutOpeningIt() {
-        prefs().edit().putBoolean("play_right_away", true).putString("default_target", "DEEZER").commit()
-        linksAskBeforeSetup()
+    fun dismissingThePickerLeavesTheSongWhereItsFromWithoutOpeningIt() {
+        prefs().edit().putBoolean("play_right_away", true).commit()
+        linksAskWhere()
         fake.handler = { request ->
             if (request.url.host == "api.deezer.com") {
                 FakeSpotify.html(request,
@@ -4402,10 +4401,11 @@ class MainActivityTest {
         assertEquals(1, fake.requestedUrls.size)
         click(string(R.string.cancel_button))
         waitForDestinationReady()
+        // Shown in Spotify, where it's from, it's its own link, with nothing more to ask.
         click(string(R.string.copy_link_button))
-        assertEquals("https://www.deezer.com/track/1",
+        assertEquals("https://open.spotify.com/track/$TRACK_ID",
             app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
-        assertEquals(2, fake.requestedUrls.size)
+        assertEquals(1, fake.requestedUrls.size)
         assertNull(nextStartedActivity())
         assertFalse(activity.isFinishing)
     }
@@ -5134,23 +5134,20 @@ class MainActivityTest {
     }
 
     @Test
-    fun invidiousAndPipedAreSourcesOfTheirOwnInSetupAndSettings() {
+    fun invidiousAndPipedAreSourcesOfTheirOwnFromTheStartAndInSettings() {
         var states = emptyMap<String, Int>()
         FakeDomainVerification.install(app) { states }
         freshInstall()
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE))
+        // A saved default looks like an older install, so mark it a fresh one explicitly.
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
 
         // Links going straight to YouTube, its own stay there, but its frontends' come here, sources of their own.
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
         assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
         assertTrue(LinkInterception(app).isEnabled(Frontend.PIPED))
-        click(string(R.string.setup_skip_for_now))
-
-        composeRule.onNodeWithTag(FIX_BAR_TAG).assertExists()
+        assertTextShown(string(R.string.setup_check_allow))
         // Settings marks the sources, and each one Android doesn't let Crosstune open yet.
         click(string(R.string.settings_button))
         assertMarked(string(R.string.setup_not_allowed))
@@ -5323,6 +5320,12 @@ class MainActivityTest {
 
     // region first-run setup
 
+    /** Something opened before, so what's left to fix is the bar's rather than asked under the field. */
+    private fun openedBefore() {
+        val url = "https://open.spotify.com/track/$OTHER_TRACK_ID"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+    }
+
     private fun freshInstall() {
         prefs().edit().clear().commit()
     }
@@ -5366,12 +5369,9 @@ class MainActivityTest {
     }
 
     @Test
-    fun listeningInAnAppThatIsntASourceOpensEverySourcesLinks() {
+    fun aFreshInstallOpensEverySourcesLinks() {
         freshInstall()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.service_amazon_music))
-        click(string(R.string.next_button))
         // Videos' too: only music videos go elsewhere.
         assertEquals(
             MusicService.entries.filter { it.canBeSource }.toSet(),
@@ -5381,69 +5381,67 @@ class MainActivityTest {
 
         // Coming back later leaves the user's choices alone.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
-        click(string(R.string.back_button))
-        click(string(R.string.next_button))
+        controller!!.pause().stop().destroy()
+        launch()
         assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
 
     @Test
-    fun firstLaunchWalksThroughSetupAndAppliesTheChoices() {
+    fun firstLaunchOpensOnTheMainScreenAskingWhatAndroidHasToAllow() {
         freshInstall()
         FakeDomainVerification.install(app) {
             LinkInterception.HOSTS.getValue(MusicService.YOUTUBE).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         }
         launch()
-        assertTextShown(string(R.string.setup_welcome_title))
-        assertFalse(prefs().getBoolean("setup_complete", true))
+        // Right under the field, each saying what it gets you; not the bar too.
+        assertTextShown(string(R.string.spotify_link_placeholder))
+        assertTextShown(string(R.string.ask_links_gets))
+        assertTextShown(string(R.string.ask_follow_gets))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assertDoesNotExist()
+        assertTextAbsent(string(R.string.empty_hint))
+        // No app picked yet, so none's links are left out.
+        assertFalse(DestinationStore(prefs()).hasDefault())
+        assertTrue(MusicService.entries.filter { it.canBeSource }.all { LinkInterception(app).isEnabled(it) })
+        assertTrue(prefs().getBoolean("setup_complete", false))
 
-        click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_step, 1, 2))
-        // No built-in default: a destination has to be picked before moving on.
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
-        click(string(R.string.target_deezer))
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
-
-        click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_step, 2, 2))
-        // Every source's links start on, but the app songs play in's, as links go straight to it.
-        assertEquals(
-            MusicService.entries.filter { it.canBeSource && it != MusicService.DEEZER }.toSet(),
-            MusicService.entries.filter { LinkInterception(app).isEnabled(it) }.toSet()
-        )
-        assertTrue(LinkInterception(app).isEnabled(Frontend.INVIDIOUS))
-        // Only some are allowed, so that's what's next, with how.
+        // Only some are allowed, so each shows how.
         assertEquals(0, checkedOff())
-        // No apps are in the way, so allowing is first.
         click(string(R.string.setup_check_allow))
         click(string(R.string.fix_open_settings))
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, nextStartedActivity()!!.action)
         click(string(R.string.back_button))
+        assertTextShown(string(R.string.ask_links_gets))
 
-        // Links are still to allow, so leaving now is skipping that.
-        assertTextAbsent(string(R.string.setup_finish))
-        click(string(R.string.setup_skip_for_now))
-        assertTextShown(string(R.string.spotify_link_placeholder))
-        assertTrue(prefs().getBoolean("setup_complete", false))
-        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
-
+        // Still asked next time, until something's been opened.
         controller!!.pause().stop().destroy()
         launch()
-        assertTextAbsent(string(R.string.setup_welcome_title))
+        assertTextShown(string(R.string.ask_links_gets))
     }
 
     @Test
-    fun setupChecksOffAllowingTheLinksOnceAndroidSaysAllAre() {
+    fun onceSomethingsBeenOpenedWhatsLeftFoldsIntoTheBar() {
+        respondWithTrack("Opened Once", "Artist · Song")
+        launch()
+        assertTextShown(string(R.string.ask_follow_gets))
+        resolveTyped()
+        click(string(R.string.clear_button))
+        // Recent has it now, so what's left is the bar's, out of its way.
+        assertTextShown("Opened Once")
+        assertTextAbsent(string(R.string.ask_follow_gets))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assertExists()
+    }
+
+    @Test
+    fun theAsksCheckOffAllowingTheLinksOnceAndroidSaysAllAre() {
         MainActivity.playbackFactory = { FakePlayback() }
         freshInstall()
         var states = mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_NONE)
         FakeDomainVerification.install(app) { states }
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
-        // A saved default looks like an older install, so mark setup as still pending explicitly.
+        // A saved default looks like an older install, so mark it a fresh one explicitly.
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
         assertEquals(0, checkedOff())
 
         // Some allowed isn't all.
@@ -5452,10 +5450,12 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(0, checkedOff())
 
+        // Done, it's checked off but stays, so the list doesn't move under the user's finger.
         states = LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         controller!!.pause().resume()
         composeRule.waitForIdle()
         assertEquals(1, checkedOff())
+        assertTextShown(string(R.string.ask_links_gets))
     }
 
     @Test
@@ -5465,6 +5465,7 @@ class MainActivityTest {
             LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED }
         }
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        openedBefore()
         launch()
 
         // Every link is allowed, but none reach Crosstune.
@@ -5579,7 +5580,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupFindsAnyAppThatKeepsTheLinksNotJustMusicApps() {
+    fun theAsksFindAnyAppThatKeepsTheLinksNotJustMusicApps() {
         // Like YouTube Create, which verifies YouTube's links though Crosstune doesn't know it.
         val creator = "com.example.youtube.create"
         shadowOf(app.packageManager).installPackage(installedApp(creator, "YouTube Create"))
@@ -5612,8 +5613,6 @@ class MainActivityTest {
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.YOUTUBE_MUSIC))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
 
         // Each app in the way has its own row, in name order: YouTube, then YouTube Create.
         assertTextShown(string(R.string.setup_check_app, "YouTube"))
@@ -5660,6 +5659,7 @@ class MainActivityTest {
             if (packageName == app.packageName) emptyMap() else mapOf("youtube.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
         }
         LinkInterception(app).setEnabled(MusicService.YOUTUBE, true)
+        openedBefore()
         launch()
         composeRule.onNodeWithTag(FIX_BAR_TAG).performClick()
         composeRule.waitForIdle()
@@ -5694,6 +5694,7 @@ class MainActivityTest {
         }
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
+        openedBefore()
         launch()
         // Every link is allowed, but none open in Crosstune while Spotify's app takes them.
         composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("1")).performClick()
@@ -5703,7 +5704,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupSaysToSwitchCrosstunesLinksBackFromTheBrowserAndShowsHeldBackLyricsStepsOnFix() {
+    fun theAsksSayToSwitchCrosstunesLinksBackFromTheBrowserAndShowHeldBackLyricsSteps() {
         // Installed from a file, Android holds the lyrics access back.
         MainActivity.playbackFactory = { FakePlayback().apply { restricted = true } }
         var ownLinksOn = false
@@ -5715,8 +5716,6 @@ class MainActivityTest {
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
 
         // Set to open in the browser, Android hides the links to tick, so switching back is the step.
         assertEquals(0, checkedOff())
@@ -5827,50 +5826,43 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupListsAnInstalledAppTakingTheLinksFirstAndChecksItOffOnceStopped() {
+    fun theAsksListAnInstalledAppTakingTheLinksAndCheckItOffOnceStopped() {
         val setAppAllowsLinks = setupWithSpotifyAppInTheWay()
         MainActivity.playbackFactory = { FakePlayback() }
         launch()
-        click(string(R.string.setup_get_started))
-        // Spotify's the only music app, and where the user listens is already known, so it isn't asked.
-        assertTextAbsent(string(R.string.setup_destination_title))
-        assertTextAbsent(string(R.string.setup_step, 1, 1))
 
-        // Android won't let Crosstune take links the app verified, so stopping it comes first, with how.
+        // Android won't let Crosstune take links the app verified, so it's to stop, with how; not to allow.
         click(string(R.string.setup_check_app, string(R.string.service_spotify)))
         click(string(R.string.open_app_link_settings_button, string(R.string.service_spotify)))
         val started = nextStartedActivity()!!
         assertEquals(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, started.action)
         assertEquals(Uri.parse("package:${MusicService.SPOTIFY.packageName}"), started.data)
 
-        // Fixed in Android's settings, and its links are allowed already: only lyrics are left, which can wait.
+        // Fixed in Android's settings, and its links are allowed already: only lyrics are left.
         setAppAllowsLinks(false)
         controller!!.pause().resume()
         waitUntil(TIMEOUT_MS) { checkedOff() == 2 }
-        click(string(R.string.setup_skip_for_now))
-        assertTrue(prefs().getBoolean("setup_complete", false))
+        assertTextShown(string(R.string.ask_follow_gets))
     }
 
     @Test
-    fun setupListsNoAppsWhenNoneIsInTheWay() {
+    fun theAsksListNoAppsWhenNoneIsInTheWay() {
         freshInstall()
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
         // Allowing the links, and lyrics following music apps. The microphone is asked where it's used.
         assertTextShown(string(R.string.setup_check_allow))
         assertTextAbsent(string(R.string.fix_mic_title))
         assertTextShown(string(R.string.follow_help_title))
         assertTextAbsent(string(R.string.setup_check_app, string(R.string.service_spotify)))
-        click(string(R.string.back_button))
-        assertTextShown(string(R.string.setup_step, 1, 2))
+        // Two to allow, each saying so.
+        assertEquals(2, composeRule.onAllNodesWithText(string(R.string.allow_button)).fetchSemanticsNodes().size)
     }
 
     @Test
-    fun setupWithNothingLeftToFixChecksItAllOffAndFinishes() {
+    fun withNothingToAllowTheMainScreenJustSaysWhatToDo() {
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
         freshInstall()
         FakeDomainVerification.install(app) { LinkInterception.HOSTS.getValue(MusicService.SPOTIFY).associateWith { DomainVerificationUserState.DOMAIN_STATE_SELECTED } }
@@ -5878,16 +5870,14 @@ class MainActivityTest {
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.next_button))
-        assertEquals(2, checkedOff())
-        click(string(R.string.setup_finish))
-        assertTrue(prefs().getBoolean("setup_complete", false))
+        assertTextShown(string(R.string.empty_hint))
+        assertTextAbsent(string(R.string.setup_check_allow))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assertDoesNotExist()
     }
 
     @Test
     @Config(sdk = [30])
-    fun beforeAndroid12SetupListsInstalledAppsWithoutAStatus() {
+    fun beforeAndroid12TheAsksListInstalledAppsWithoutAStatus() {
         MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
         MainActivity.shellFactory = { listOf(FakeShell()) }
         shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
@@ -5896,14 +5886,14 @@ class MainActivityTest {
         DestinationStore(prefs()).setDefault(Destination.Service(MusicService.TIDAL))
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
-        click(string(R.string.setup_get_started))
 
         // Android can't say whether the app still takes the links, so it isn't checked off, nor
         // are the links, just turned on.
         assertTextShown(string(R.string.setup_check_app, string(R.string.service_spotify)))
         assertEquals(1, checkedOff())
         // Nor can Shizuku do them, though it runs.
-        assertTextAbsent(string(R.string.setup_one_tap))
+        assertTextShown(string(R.string.fix_one_by_one))
+        assertTextAbsent(string(R.string.fix_all))
     }
 
     @Test
@@ -5912,125 +5902,98 @@ class MainActivityTest {
         MainActivity.shellFactory = { listOf(FakeShell()) }
         freshInstall()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.target_deezer))
-        click(string(R.string.next_button))
         // Android 11's commands can't allow links, and nothing tells Crosstune Shizuku's there to do lyrics alone.
-        assertTextShown(string(R.string.setup_skip_for_now))
-        assertTextAbsent(string(R.string.setup_one_tap))
+        assertTextShown(string(R.string.fix_one_by_one))
+        assertTextAbsent(string(R.string.fix_all))
     }
 
     @Test
-    fun setupCanGoBackAndSaysWhenNoLinksAreOpened() {
+    fun withNoSourcesOnlyLyricsAreAskedAndAllShizukuDoes() {
         val shell = FakeShell()
         MainActivity.shellFactory = { listOf(shell) }
         freshInstall()
-        // As when every source was turned off in settings before setup was finished.
+        // As when every source was turned off in settings.
         prefs().edit().putBoolean("sources_preselected", true).commit()
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.back_button))
-        assertTextShown(string(R.string.setup_welcome_title))
-
-        click(string(R.string.setup_get_started))
-        click(string(R.string.target_youtube_music))
-        click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_allow_none))
         assertTextAbsent(string(R.string.setup_check_allow))
         // Lyrics are still there to let hear and follow, which is all Shizuku is asked.
         assertTextShown(string(R.string.follow_help_title))
-        click(string(R.string.setup_one_tap))
+        click(string(R.string.fix_all))
         assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.first().take(3))
         assertEquals(listOf("pm", "grant"), shell.ran.last().take(2))
         assertEquals(2, shell.ran.size)
     }
 
     @Test
-    fun setupListsInstalledAppsFirstWhenPickingWhereToListen() {
-        freshInstall()
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.DEEZER.packageName })
-        launch()
-        click(string(R.string.setup_get_started))
-
-        val rows = composeRule.onAllNodes(isSelectable()).fetchSemanticsNodes()
-        val firstLabels = rows.take(2).map { row -> row.config.getOrElse(SemanticsProperties.Text) { emptyList() }.joinToString { it.text } }
-        val installed = string(R.string.setup_installed)
-        assertEquals(setOf("${string(R.string.target_soundcloud)}, $installed", "${string(R.string.target_deezer)}, $installed"), firstLabels.toSet())
-    }
-
-    @Test
-    fun setupPicksTheOnlyInstalledMusicAppWithoutAskingButAsksWithMore() {
+    fun theOnlyInstalledMusicAppIsWhereSongsPlayWithoutAskingButNotWithMore() {
         freshInstall()
         // YouTube comes with most phones, so it doesn't count.
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE.packageName })
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
         launch()
-        click(string(R.string.setup_get_started))
-        // Straight to the list, with no steps to count.
-        assertTextAbsent(string(R.string.setup_destination_title))
-        assertTextShown(string(R.string.setup_links_title))
-        assertTextAbsent(string(R.string.setup_step, 1, 1))
+        waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertEquals(Destination.Service(MusicService.SOUNDCLOUD), DestinationStore(prefs()).defaultDestination())
         // Links going straight to it, its own stay there.
         assertFalse(LinkInterception(app).isEnabled(MusicService.SOUNDCLOUD))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
-        click(string(R.string.back_button))
-        assertTextShown(string(R.string.setup_welcome_title))
-
         controller!!.pause().stop().destroy()
+
+        // An app picked already stays, though another's the only one now.
+        freshInstall()
+        DestinationStore(prefs()).setDefault(Destination.Service(MusicService.DEEZER))
+        prefs().edit().putBoolean("setup_complete", false).commit()
+        launch()
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
+        controller!!.pause().stop().destroy()
+
+        // With two, it's left to the first one picked on a song.
         freshInstall()
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
         launch()
-        click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_destination_title))
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
+        assertFalse(DestinationStore(prefs()).hasDefault())
     }
 
     @Test
-    fun setupKeepsToTheListWhenTheOnlyMusicAppIsInstalledMeanwhile() {
+    fun theFirstAppPickedOnASongIsWhereSongsPlayFromThenOn() {
         freshInstall()
-        launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.target_deezer))
-        click(string(R.string.next_button))
-        assertTextShown(string(R.string.setup_step, 2, 2))
+        prefs().edit().putBoolean("play_right_away", false).commit()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.SPOTIFY.packageName })
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.DEEZER.packageName })
+        respondWithTrack("Picked", "Artist · Song")
+        val activity = launch()
+        resolveTyped()
+        // Nothing picked, the first music app on the phone is offered, but only offered.
+        assertEquals(Destination.Service(MusicService.SPOTIFY), ViewModelProvider(activity)[MainViewModel::class.java].uiState.defaultDestination)
+        assertFalse(DestinationStore(prefs()).hasDefault())
+        chooseDefault(string(R.string.target_deezer))
+        assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
 
-        // One step fewer now, so the list is the first and only one.
-        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = "com.soundcloud.android" })
-        controller!!.pause().resume()
-        composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_links_title))
-        assertTextAbsent(string(R.string.setup_step, 2, 2))
-        // The user's pick stays.
+        // Another picked on the next song is just for it.
+        click(string(R.string.clear_button))
+        resolveTyped()
+        chooseDefault(string(R.string.service_spotify))
         assertEquals(Destination.Service(MusicService.DEEZER), DestinationStore(prefs()).defaultDestination())
     }
 
     @Test
-    fun setupOpensTheLinksOfTheAppSongsPlayInOnlyWhenLinksOpenInCrosstune() {
+    fun theOnlyMusicAppKeepsItsLinksOpeningHereOnlyWhenLinksOpenInCrosstune() {
         freshInstall()
         prefs().edit().putBoolean("links_in_crosstune", true).commit()
-        LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = MusicService.YOUTUBE_MUSIC.packageName })
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.target_youtube_music))
-        click(string(R.string.next_button))
+        waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
         controller!!.pause().stop().destroy()
 
-        // Going straight to the app, as on a new install, Crosstune would only hand YouTube Music its own links back.
+        // Going straight to the app, Crosstune would only hand YouTube Music its own links back.
         freshInstall()
-        LinkInterception(app).setEnabled(MusicService.YOUTUBE_MUSIC, true)
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.target_youtube_music))
-        assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        click(string(R.string.next_button))
+        waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE))
     }
 
-    /** Setup with Spotify's app in the way of links not allowed yet, and lyrics not let follow; returns what Shizuku ran. */
+    /** A fresh install with Spotify's app in the way of links not allowed yet, and lyrics not let follow; returns what Shizuku ran. */
     private fun oneTapSetup(shell: (playback: FakePlayback, unblock: () -> Unit, allow: () -> Unit) -> FakeShell): FakeShell {
         val spotify = MusicService.SPOTIFY.packageName
         shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
@@ -6067,12 +6030,11 @@ class MainActivityTest {
     }
 
     @Test
-    fun withShizukuSetupIsDoneInOneTap() {
+    fun withShizukuAllThatsAskedIsDoneInOneTap() {
         val shell = oneTapSetup(::doingShell)
         launch()
-        click(string(R.string.setup_get_started))
         assertTextShown(string(R.string.fix_with_shizuku))
-        click(string(R.string.setup_one_tap))
+        click(string(R.string.fix_all))
 
         val user = (android.os.Process.myUid() / 100_000).toString()
         assertEquals(
@@ -6087,11 +6049,9 @@ class MainActivityTest {
             ),
             shell.ran
         )
-        // All checked off, there's nothing left for it to do, and setup can finish.
-        assertEquals(3, checkedOff())
-        assertTextAbsent(string(R.string.setup_one_tap))
-        click(string(R.string.setup_finish))
-        assertTrue(prefs().getBoolean("setup_complete", false))
+        // Nothing's left to ask, so the main screen just says what to do.
+        assertTextAbsent(string(R.string.fix_all))
+        assertTextShown(string(R.string.empty_hint))
     }
 
     @Test
@@ -6099,11 +6059,10 @@ class MainActivityTest {
         val shell = oneTapSetup { playback, unblock, allow -> playback.access = true; doingShell(playback, unblock, allow) }
         shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.setup_one_tap))
+        click(string(R.string.fix_all))
         assertEquals(3, shell.ran.size)
         assertTrue(shell.ran.none { "allow_listener" in it || "grant" in it })
-        assertEquals(3, checkedOff())
+        assertTextShown(string(R.string.empty_hint))
     }
 
     @Test
@@ -6119,8 +6078,7 @@ class MainActivityTest {
             }
         }
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.setup_one_tap))
+        click(string(R.string.fix_all))
         assertEquals(5, shell.ran.size)
         assertTextShown(string(R.string.fix_failed))
         assertTextAbsent(string(R.string.fix_with_shizuku))
@@ -6132,8 +6090,7 @@ class MainActivityTest {
     fun oneTapSetupDoesNothingUnlessShizukuIsAllowed() {
         val shell = oneTapSetup { _, _, _ -> FakeShell(allows = false) }
         launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.setup_one_tap))
+        click(string(R.string.fix_all))
         assertTrue(shell.ran.isEmpty())
         assertTextShown(string(R.string.fix_failed))
         assertEquals(0, checkedOff())
@@ -6143,34 +6100,32 @@ class MainActivityTest {
     fun oneTapSetupRunsOnceWhileTheUserAnswersShizuku() {
         val shell = oneTapSetup { playback, unblock, allow -> doingShell(playback, unblock, allow).apply { answer = CompletableDeferred() } }
         val activity = launch()
-        click(string(R.string.setup_get_started))
-        click(string(R.string.setup_one_tap))
-        composeRule.onNodeWithText(string(R.string.setup_one_tap)).assertIsNotEnabled()
+        click(string(R.string.fix_all))
+        composeRule.onNodeWithText(string(R.string.fix_all)).assertIsNotEnabled()
         ViewModelProvider(activity)[MainViewModel::class.java].setUpInOneTap()
 
         shell.answer.complete(Unit)
         composeRule.waitForIdle()
         assertEquals(5, shell.ran.size)
-        assertEquals(3, checkedOff())
+        assertTextShown(string(R.string.empty_hint))
     }
 
     @Test
     fun oneTapSetupIsOfferedWhileShizukuRuns() {
         val shell = oneTapSetup { _, _, _ -> FakeShell(ready = false) }
         launch()
-        click(string(R.string.setup_get_started))
-        assertTextAbsent(string(R.string.setup_one_tap))
+        assertTextAbsent(string(R.string.fix_all))
 
         shell.ready = true
         shell.changed!!()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_one_tap))
+        assertTextShown(string(R.string.fix_all))
 
         // Stopped, it's gone again, and coming back looks again too.
         shell.ready = false
         controller!!.pause().resume()
         composeRule.waitForIdle()
-        assertTextAbsent(string(R.string.setup_one_tap))
+        assertTextAbsent(string(R.string.fix_all))
 
         // Done with, Crosstune stops watching.
         controller!!.pause().stop().destroy()
@@ -6225,9 +6180,9 @@ class MainActivityTest {
     }
 
     @Test
-    fun linkOpenedBeforeSetupShowsOnItsCardWithNoAppToPlayItInThenSetupFollows() {
+    fun aLinkOpenedBeforeAnAppIsPickedShowsOnItsCardWithNoAppToPlayItIn() {
+        // Links set to go straight to the app, but there isn't one yet.
         freshInstall()
-        prefs().edit().putBoolean("links_in_crosstune", true).commit()
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         respondWithTrack("Early", "Artist · Song")
@@ -6235,7 +6190,6 @@ class MainActivityTest {
 
         waitForText("Early")
         assertResultShown()
-        assertTextAbsent(string(R.string.setup_welcome_title))
         assertTextAbsent(string(R.string.picker_title))
         assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].uiState.exactMatch)
         assertTrue(phone.songsAsked.isEmpty())
@@ -6243,19 +6197,20 @@ class MainActivityTest {
         assertFalse(activity.isFinishing)
         controller!!.pause().stop().destroy()
 
-        // History from that link must not be mistaken for an install from before setup existed.
+        // History from that link must not be mistaken for an install from before sources were asked.
+        LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
         launch()
-        assertTextShown(string(R.string.setup_welcome_title))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
 
     @Test
-    fun updatingFromAVersionWithoutSetupKeepsSpotifyLinksAndSkipsSetup() {
+    fun updatingFromAVersionWithoutSetupKeepsSpotifyLinksAndNoMore() {
         freshInstall()
         prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
         launch()
 
-        assertTextAbsent(string(R.string.setup_welcome_title))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
+        assertFalse(LinkInterception(app).isEnabled(MusicService.APPLE_MUSIC))
         assertTrue(prefs().getBoolean("setup_complete", false))
     }
 
@@ -6445,16 +6400,16 @@ class MainActivityTest {
     }
 
     @Test
-    fun systemBackStepsBackThroughSetup() {
+    fun systemBackFromAnAskedStepComesBackToTheAsks() {
         freshInstall()
         val activity = launch()
-        click(string(R.string.setup_get_started))
-        assertTextShown(string(R.string.setup_destination_title))
+        click(string(R.string.setup_check_allow))
+        assertTextShown(string(R.string.fix_open_settings))
 
         activity.onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
 
-        assertTextShown(string(R.string.setup_welcome_title))
+        assertTextShown(string(R.string.ask_links_gets))
         assertFalse(activity.isFinishing)
     }
 
@@ -6551,7 +6506,7 @@ class MainActivityTest {
         val choices = listOf(Destination.Service(MusicService.SPOTIFY), custom, Destination.Service(installed))
         assertEquals(listOf(Destination.Service(installed), Destination.Service(MusicService.SPOTIFY), custom), choices.installedFirst(setOf(installed)))
         respondWithTrack("Picker summary", "Artist · Song")
-        linksAskBeforeSetup()
+        linksAskWhere()
         launch(trackLink())
         waitForText(string(R.string.picker_title))
         assertTextShown("Picker summary")
@@ -6567,7 +6522,6 @@ class MainActivityTest {
         }
         // Sites with no logo get a letter tile.
         assertTrue(composeRule.onAllNodesWithTag("destination-icon:frontend:INVIDIOUS", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-        assertTextAbsent(string(R.string.setup_installed))
         click(string(R.string.cancel_button))
         assertTextAbsent(string(R.string.picker_title))
         chooseDefault("Player")
@@ -6594,6 +6548,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = android
         spotifyAppInTheWay()
         prefs().edit().putString("default_target", "DEEZER").commit()
+        openedBefore()
         launch()
 
         // The screen is up while Android is still to be asked, with nothing flagged yet rather than something wrong.
@@ -6615,6 +6570,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = android
         var spotifyKeepsLinks = true
         spotifyAppInTheWay { spotifyKeepsLinks }
+        openedBefore()
         launch()
         android.runAll()
         composeRule.waitForIdle()
@@ -6667,24 +6623,17 @@ class MainActivityTest {
     }
 
     @Test
-    fun setupWaitsForWhatAndroidSaysBeforeShowingAStep() {
+    fun theAsksWaitForWhatAndroidSays() {
         val android = QueueDispatcher()
         MainActivity.systemDispatcher = android
-        prefs().edit().putBoolean("setup_complete", false).putString("default_target", "DEEZER").commit()
+        freshInstall()
         launch()
-
-        // The welcome page doesn't depend on it.
-        composeRule.onNodeWithText(string(R.string.setup_get_started)).assertIsEnabled().performClick()
-        composeRule.waitForIdle()
-        // Which steps come next, and what they show, does.
-        assertTextAbsent(string(R.string.setup_destination_title))
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsNotEnabled()
-        composeRule.onNodeWithText(string(R.string.back_button)).assertIsNotEnabled()
+        // Nothing's known to need fixing until Android's been asked.
+        assertTextAbsent(string(R.string.setup_check_allow))
 
         android.runAll()
         composeRule.waitForIdle()
-        assertTextShown(string(R.string.setup_destination_title))
-        composeRule.onNodeWithText(string(R.string.next_button)).assertIsEnabled()
+        assertTextShown(string(R.string.setup_check_allow))
     }
 
     @Test
@@ -6876,7 +6825,7 @@ class MainActivityTest {
     fun thePickerWaitsForTheInstalledAppsItListsFirst() {
         val android = QueueDispatcher()
         MainActivity.systemDispatcher = android
-        linksAskBeforeSetup()
+        linksAskWhere()
         HistoryStore(prefs()).add(
             HistoryEntry(
                 MusicLink(MusicService.SPOTIFY, ItemType.TRACK, TRACK_ID, "https://open.spotify.com/track/$TRACK_ID"),

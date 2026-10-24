@@ -145,8 +145,7 @@ internal data class UiState(
     /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
     val playingNow: NowPlaying? = null,
     val history: List<HistoryEntry> = emptyList(),
-    /** False until the user finishes first-run setup; nothing is intercepted or chosen before that. */
-    val setupComplete: Boolean = true,
+    /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
     val installed: Set<MusicService> = emptySet(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
@@ -244,7 +243,18 @@ internal data class UiState(
 
     /** Whether the share sheet's top row offers Crosstune's entries; Android shows them for any shared text. */
     val shareSheetEntries: Boolean
-        get() = setupComplete && hasDefault && shareSheetApps
+        get() = hasDefault && shareSheetApps
+
+    /** Nothing shown, looked up or gone wrong: the main screen with just its field. */
+    val idle: Boolean
+        get() = result == null && error == null && !isLoading
+
+    /**
+     * Whether what Android has to allow is asked under the field: before anything's been opened,
+     * so Recent's empty. Once something has, what's left folds into the bar of things to fix.
+     */
+    val firstAsks: Boolean
+        get() = idle && history.isEmpty() && toFix > 0
 
     /** The app the top row offers to open a shared link in, when the default is one. */
     val shareSheetApp: MusicService?

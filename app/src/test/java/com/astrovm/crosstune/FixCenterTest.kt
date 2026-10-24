@@ -80,7 +80,10 @@ class FixCenterTest {
         MainActivity.shellFactory = { emptyList() }
         MainActivity.phoneFactory = { Phone.PIXEL }
         MainActivity.checksForUpdates = { false }
-        prefs().edit().putBoolean("setup_complete", true).commit()
+        // An app picked already, so Spotify, the only one on the phone, isn't picked in its place.
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").commit()
+        // Something opened before, so what's left is the bar's rather than asked under the field.
+        openedBefore()
         File(app.cacheDir, "lookups.json").delete()
         // Before Android 12 there's nothing to ask.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -138,6 +141,11 @@ class FixCenterTest {
     private fun click(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
+    }
+
+    private fun openedBefore() {
+        val url = "https://open.spotify.com/track/1"
+        HistoryStore(prefs()).add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
     }
 
     private fun barShown() = composeRule.onAllNodesWithTag(FIX_BAR_TAG).fetchSemanticsNodes().isNotEmpty()

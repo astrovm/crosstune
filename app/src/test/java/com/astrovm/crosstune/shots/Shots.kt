@@ -136,9 +136,7 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         settle()
         scrollUp(500f)
         still(File(store, "7.png"))
-        show(setup())
-        tap(string(R.string.setup_get_started))
-        tap(string(R.string.next_button))
+        show(firstRun())
         still(File(store, "8.png"))
     }
 
@@ -249,8 +247,8 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         )
     }
 
-    private fun setup() = base().copy(
-        setupComplete = false,
+    /** A fresh install: nothing opened yet, and what Android has to allow asked under the field. */
+    private fun firstRun() = base().copy(
         intercepted = MusicService.entries.filter { it.canBeSource }.toSet(),
         unapprovedHosts = MusicService.entries.filter { it.canBeSource }.associateWith { listOf("open.spotify.com") },
         canFollowApps = false

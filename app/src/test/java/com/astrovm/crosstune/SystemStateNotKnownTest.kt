@@ -36,7 +36,10 @@ class SystemStateNotKnownTest {
     fun nothingIsCountedToFixUntilAndroidCouldHaveSaid() {
         // Before Android 12 there's nothing to ask, so links just turned on are counted; but not
         // knowing yet isn't the same as Android being unable to say.
-        show(UiState(intercepted = setOf(MusicService.SPOTIFY), showLinkSettingsHelper = true, systemStateKnown = false))
+        // Something opened before, so it's the bar's to count rather than asked under the field.
+        val url = "https://open.spotify.com/track/1"
+        val opened = listOf(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), MusicMetadata("A Song", "Example Band")))
+        show(UiState(intercepted = setOf(MusicService.SPOTIFY), showLinkSettingsHelper = true, systemStateKnown = false, history = opened))
         composeRule.onNodeWithTag(FIX_BAR_TAG).assertDoesNotExist()
 
         state = state.copy(systemStateKnown = true)

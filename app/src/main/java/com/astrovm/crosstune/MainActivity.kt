@@ -524,8 +524,6 @@ class MainActivity : ComponentActivity() {
                         onAddCustom = viewModel::addCustomDestination,
                         onRemoveCustom = viewModel::removeCustomDestination,
                         onFrontendInstanceChange = viewModel::setFrontendInstance,
-                        onCompleteSetup = viewModel::completeSetup,
-                        onPreselectSources = viewModel::preselectSources,
                         onSetUpInOneTap = viewModel::setUpInOneTap,
                         onAllowLinks = { if (!viewModel.fixInOneTap(OneTapFix.LINKS)) viewModel.fixSteps(listOf(Need.Links)) },
                         onOpenFixes = viewModel::openFixes,
