@@ -22,6 +22,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -82,6 +83,7 @@ class TvTest {
         MainActivity.phoneFactory = realPhone
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
+        MainActivity.playbackFactory = ::MediaSessionPlayback
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -131,6 +133,17 @@ class TvTest {
         assertTrue(shown(string(R.string.fix_step_pick, string(R.string.android_notification_access))))
         assertTrue(shown(string(R.string.fix_step_turn_on, string(R.string.app_name))))
         composeRule.onNode(hasText(string(R.string.fix_open_settings))).performClick()
+        composeRule.waitForIdle()
+        assertEquals(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, shadowOf(app).nextStartedActivity.action)
+    }
+
+    @Test
+    fun onATvFollowingMusicIsTurnedOffFromTheListOfAppsToo() {
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true } }
+        launch()
+        composeRule.onNode(hasContentDescription(string(R.string.settings_button))).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo().performClick()
         composeRule.waitForIdle()
         assertEquals(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, shadowOf(app).nextStartedActivity.action)
     }
