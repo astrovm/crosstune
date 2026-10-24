@@ -121,12 +121,15 @@ internal class ServiceApis(
     suspend fun soundCloudSearch(kind: String, query: String): List<JSONObject> =
         (soundCloud("search/$kind", mapOf("q" to query, "limit" to "10")) as? JSONObject)?.optJSONArray("collection").objects()
 
+    /** What the SoundCloud link [url] is, a track, a set or an account, as SoundCloud's API answers. */
+    suspend fun soundCloudItem(url: String): JSONObject? = soundCloud("resolve", mapOf("url" to url)) as? JSONObject
+
     /**
      * A set's songs. Its own answer has the first few in full and only the others' numbers, which
      * are asked for [SOUNDCLOUD_BATCH] at a time; they come back in any order, so they're put back in the set's.
      */
     suspend fun soundCloudTracks(url: String): List<MusicMetadata> {
-        val set = soundCloud("resolve", mapOf("url" to url)) as? JSONObject ?: return emptyList()
+        val set = soundCloudItem(url) ?: return emptyList()
         val listed = set.optJSONArray("tracks").objects().take(MAX_TRACKS)
         val known = listed.filter { it.has("title") }.associateBy { it.optLong("id") }.toMutableMap()
         listed.map { it.optLong("id") }.filterNot(known::containsKey).chunked(SOUNDCLOUD_BATCH).forEach { ids ->
