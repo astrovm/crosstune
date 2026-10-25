@@ -5,9 +5,9 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <b>Funkcje</b>
 <ul>
 <li>Rozpoznaje linki ze Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp i Audiomack oraz otwiera je w dowolnej z tych aplikacji lub w Amazon Music i Qobuz.</li>
-<li>Playlisty i albumy pokazują swoje utwory: otwórz dowolny w swojej aplikacji, skopiuj lub udostępnij listę albo odtwórz wszystko w YouTube Music lub YouTube.</li>
+<li>Playlisty i albumy pokazują swoje utwory: otwórz dowolny w wybranej aplikacji, skopiuj lub udostępnij listę albo odtwórz wszystko w YouTube Music lub YouTube.</li>
 <li>Kieruj każdy serwis gdzie indziej, np. linki z YouTube do YouTube Music, a resztę do Apple Music.</li>
-<li>Najpierw pokazuj w Crosstune: utwór gra w twojej aplikacji, a ty zostajesz tutaj.</li>
+<li>Najpierw pokazuj w Crosstune: utwór gra w wybranej aplikacji, a ty zostajesz tutaj.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud i Audiomack mogą otworzyć sam utwór, album lub wykonawcę zamiast wyszukiwania, Bandcamp i Qobuz utwór lub album, a YouTube utwór.</li>
 <li>Dodawaj inne aplikacje i strony z wyszukiwarką.</li>
 <li>Wklejaj jednym kliknięciem, przeszukuj ostatnie linki i wracaj do nich albo otwieraj skopiowany link z widżetu na ekranie głównym, kafelka w Szybkich ustawieniach lub przytrzymując ikonę aplikacji.</li>

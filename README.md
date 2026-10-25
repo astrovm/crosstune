@@ -32,8 +32,8 @@ Once you've opened something, anything left or broken later shows as **Things to
 ## Features
 
 - **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify.
-- **Choose where.** Pick your music app once. Links go straight to it, or show in Crosstune first, with the song playing in your app. Set one app per service, or add any app or site with a search URL like `https://example.com/search?q={query}`.
-- **Not on your app?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
+- **Choose where.** Pick your music app once. Links go straight to it, or show in Crosstune first, with the song playing in that app. Set one app per service, or add any app or site with a search URL like `https://example.com/search?q={query}`.
+- **Not in the app you picked?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
 - **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
 - **Recent.** Search your recent songs, and swipe one away to remove it. Its play button goes where links do.
 - **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek. Whatever is playing waits in a bar on the home screen. Swipe up for the player, up again for the words, and down to go back.
