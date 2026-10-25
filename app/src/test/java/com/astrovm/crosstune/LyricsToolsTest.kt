@@ -416,6 +416,12 @@ class LyricsToolsTest {
     }
 
     @Test
+    fun onceTheWordsArriveTheRemoteIsOnTheBarsFirstTool() {
+        openLyrics()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(learn) and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
     fun theRemoteStartsOnTheBarWhichStillGoesAndLeavesItOnTheWords() {
         openLyrics()
         waitUntil { onTheBar() }
