@@ -2381,6 +2381,22 @@ class MainActivityTest {
     }
 
     @Test
+    fun aNameBeingSearchedForShowsItsLoadingInTheSongsSheet() {
+        // Held until checked, so the wait shows however fast the answers would come.
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            FakeSpotify.html(request, """{"data":[]}""")
+        }
+        launch()
+        typeUrl("Kingo Hamada")
+        click(string(R.string.search_button))
+        waitForText(string(R.string.song_search_title))
+        assertTextShown(string(R.string.loading_text))
+        release.countDown()
+    }
+
+    @Test
     fun loadingStateIsShownWhileRequestIsInFlight() {
         val release = CountDownLatch(1)
         fake.handler = { request ->

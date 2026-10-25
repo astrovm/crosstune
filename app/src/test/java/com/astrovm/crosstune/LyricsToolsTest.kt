@@ -131,7 +131,7 @@ class LyricsToolsTest {
         val button = hasText(string(R.string.lyrics_button)) or hasContentDescription(string(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(button)[0].performScrollTo().performClick()
-        waitUntil { shown("Demo one") }
+        waitUntil { composeRule.onAllNodes(hasText("Demo one", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true)
         composeRule.waitForIdle()
     }
@@ -187,6 +187,51 @@ class LyricsToolsTest {
         // The song and the way back stay as they were.
         assertTrue(shown("Demo"))
         assertTrue(described(string(R.string.dismiss_button)))
+    }
+
+    @Test
+    fun pausedTheyStayAndPlayingAgainTheyGoFiveSecondsLater() {
+        phone = Phone.OTHER
+        openLyrics()
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube", canSeek = true)
+        composeRule.waitForIdle()
+        passes(SHOWN_MS + FADE_MS)
+        assertTrue(described(about))
+        assertTrue(described(learn))
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true)
+        composeRule.waitForIdle()
+        passes(SHOWN_MS - 500)
+        assertTrue(described(learn))
+        passes(500 + FADE_MS)
+        assertFalse(described(about))
+        assertFalse(described(learn))
+    }
+
+    @Test
+    fun withNoTimeForTheWordsTheyStay() {
+        phone = Phone.OTHER
+        openLyrics()
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true, timingKnown = false)
+        composeRule.waitForIdle()
+        passes(SHOWN_MS + FADE_MS)
+        assertTrue(described(about))
+        assertTrue(described(learn))
+    }
+
+    @Test
+    fun wordsWithNoTimingsKeepThemWhilePlaying() {
+        phone = Phone.OTHER
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Demo one\nDemo two"}]"""
+                else """{"title":"Demo","author_name":"Band"}"""
+            )
+        }
+        openLyrics()
+        passes(SHOWN_MS + FADE_MS)
+        assertTrue(described(about))
+        assertTrue(described(learn))
     }
 
     @Test
@@ -360,28 +405,41 @@ class LyricsToolsTest {
     }
 
     @Test
-    fun theRemoteStartsOnTheBarAndItStaysWhileTheRemoteIsOnIt() {
+    fun theRemoteStartsOnTheBarWhichStillGoesAndLeavesItOnTheWords() {
         openLyrics()
         waitUntil { onTheBar() }
-        passes(SHOWN_MS * 3)
-        assertTrue(described(about))
-        assertTrue(onTheBar())
-    }
-
-    @Test
-    fun theRemoteOnTheInfoKeepsItAndTheBarToo() {
-        openLyrics()
-        val info = composeRule.onAllNodes(hasContentDescription(about))[0]
-        info.requestFocus()
-        passes(SHOWN_MS * 3)
-        assertTrue(described(about))
-        assertTrue(described(learn))
-        info.assertIsFocused()
-        // Once it leaves, they go with no touch to keep them.
-        line("Demo two").requestFocus()
         passes(SHOWN_MS + FADE_MS)
         assertFalse(described(about))
         assertFalse(described(learn))
+        // Any key brings them back, and the words had the remote meanwhile, so it's not lost.
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionUp) }
+        passes(1)
+        assertTrue(described(learn))
+    }
+
+    @Test
+    fun theRemoteOnTheInfoDoesntKeepItEither() {
+        openLyrics()
+        val info = composeRule.onAllNodes(hasContentDescription(about))[0]
+        info.requestFocus()
+        passes(SHOWN_MS + FADE_MS)
+        assertFalse(described(about))
+        assertFalse(described(learn))
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        passes(1)
+        assertTrue(described(about))
+    }
+
+    @Test
+    fun eachKeyOnTheBarKeepsIt() {
+        openLyrics()
+        waitUntil { onTheBar() }
+        repeat(3) {
+            passes(SHOWN_MS - 1_000)
+            composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionLeft) }
+            passes(1)
+        }
+        assertTrue(described(learn))
     }
 
     @Test

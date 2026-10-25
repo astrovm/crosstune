@@ -113,6 +113,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -124,6 +125,7 @@ import android.app.Activity
 import android.util.LruCache
 import android.view.WindowManager
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.animateContentSize
 import androidx.core.view.WindowCompat
@@ -258,7 +260,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // The song's info and the bar get out of the way of the words a few seconds after the screen opens, or after the last touch or remote key.
     var touches by remember { mutableIntStateOf(0) }
     var awake by remember { mutableStateOf(true) }
-    LaunchedEffect(touches) {
+    // Counted from when they start to follow too, so playing doesn't hide them the moment it starts.
+    LaunchedEffect(touches, state.following?.clock?.playing == true) {
         awake = true
         delay(TOOLS_SHOWN_MS)
         awake = false
@@ -271,10 +274,20 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
     var barFocused by remember { mutableStateOf(false) }
-    // They stay while there's something to do with them: a menu open, the words being put in time, the remote on them, or a screen
-    // reader that can't tap to bring them back.
+    // They only go while timed words follow a song that's playing, where the words move on by themselves; paused, or read at
+    // one's own pace, the tools stay. They also stay while there's something to do with them: a menu open, the words being put
+    // in time, or a screen reader that can't tap to bring them back. The remote resting on them doesn't keep them, as on a TV
+    // it starts there; each key it presses does.
+    val following = state.following
+    val gliding = state.lyricLines.isNotEmpty() && following != null && following.timingKnown && following.clock.playing
     val reader = rememberAccessibilityOn()
-    val toolsShown = awake || barMenu != null || syncing || infoFocused || barFocused || reader
+    val toolsShown = awake || !gliding || barMenu != null || syncing || reader
+    // Going, they hand the remote to the words, where any key brings them back.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(toolsShown) {
+        if (!toolsShown && barFocused) focusManager.moveFocus(FocusDirection.Up)
+        if (!toolsShown && infoFocused) focusManager.moveFocus(FocusDirection.Down)
+    }
     // A touch on the words, when the tools were away, only brings them back.
     val toolsAway by rememberUpdatedState(!toolsShown)
     // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
