@@ -1178,7 +1178,8 @@ internal class MainViewModel(
         val song = uiState.result ?: return
         // On a TV the song's words cover the app it plays in, which Android has to let them first.
         if (uiState.phone == Phone.TV && !uiState.canFloatOverApps) {
-            if (!fixInOneTap(OneTapFix.FLOAT, ::playResult)) fixSteps(listOf(Need.Float))
+            // Allowed now, which only the activity looks up again when it resumes, so play goes on knowing it.
+            if (!fixInOneTap(OneTapFix.FLOAT) { setCanFloatOverApps(true); playResult() }) fixSteps(listOf(Need.Float))
             return
         }
         job?.cancel()
