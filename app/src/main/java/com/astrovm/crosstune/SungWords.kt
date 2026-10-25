@@ -5,8 +5,6 @@ import android.os.SystemClock
 import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -74,7 +72,6 @@ internal class SingingListener(
         val startedAt = clock()
         var recorded = 0
         while (recorded < audio.size) {
-            currentCoroutineContext().ensureActive()
             val read = runInterruptible { recording.read(audio, recorded, minOf(CHUNK, audio.size - recorded)) }
             if (read <= 0) return null
             recorded += read
@@ -180,13 +177,14 @@ internal object SungAlignment {
         return shift.takeIf { abs(it) <= MAX_SHIFT_MS }
     }
 
-    /** A line's words, each with when it's sung: every one timed word by word, or else its first, as the line starts with it. */
-    private fun wordsOf(line: LyricLine): List<Pair<String, Long?>> {
-        val words = line.words.ifEmpty { null }?.map { it.text to it.timeMs }
-            ?: line.text.split(' ').mapIndexed { index, word -> word to line.timeMs.takeIf { index == 0 } }
-        return words.flatMap { (text, at) -> text.split(' ').mapIndexed { index, word -> word to at.takeIf { index == 0 } } }
-            .mapNotNull { (word, at) -> plain(word).takeIf { it.isNotEmpty() }?.let { it to at } }
-    }
+    /**
+     * A line's words, each with when it's sung: every one timed word by word, or else its first, as
+     * the line starts with it. Its first that's sung, so a line opening with "♪" or "-" keeps its time.
+     */
+    private fun wordsOf(line: LyricLine): List<Pair<String, Long?>> =
+        line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
+            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { index, text -> text to word.timeMs.takeIf { index == 0 } }
+        }
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =

@@ -53,8 +53,9 @@ class SingingTest {
     /** Six lines, three seconds apart, each sung [SHIFT_MS] later than they're timed. */
     private val lines = listOf("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", "Never let it go")
 
-    /** When the music app's clock started, which is when the singing was heard from too. */
+    /** When the music app's clock started, which is when the singing was heard from too, and where in the song. */
     private var startedAt = 0L
+    private var startedFromMs = 0L
 
     @Before
     fun setUp() {
@@ -106,9 +107,9 @@ class SingingTest {
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
 
-    /** LRCLIB has the six lines, timed for a recording [seconds] long, when it says. */
-    private fun lyricsTimedFor(seconds: Int?) {
-        val synced = lines.mapIndexed { index, line -> "[00:%02d.00] %s".format(index * 3, line) }.joinToString("\n")
+    /** LRCLIB has the six lines, three seconds apart or at [times] seconds, timed for a recording [seconds] long, when it says. */
+    private fun lyricsTimedFor(seconds: Int?, times: List<Int> = lines.indices.map { it * 3 }) {
+        val synced = lines.zip(times) { line, at -> "[00:%02d.00] %s".format(at, line) }.joinToString("\n")
         val duration = seconds?.let { "\"duration\":$it," }.orEmpty()
         fake.handler = { request ->
             FakeSpotify.html(
@@ -131,19 +132,26 @@ class SingingTest {
     }
 
     /** The music app plays the song from [positionMs], or pauses there; each call is news to Crosstune. */
-    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = null) {
+    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = null, speed: Float = 1f) {
         startedAt = SystemClock.elapsedRealtime()
-        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, playing = playing), "YouTube Music", canSeek = true, durationMs = durationMs)
+        startedFromMs = positionMs
+        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, speed, playing), "YouTube Music", canSeek = true, durationMs = durationMs)
         composeRule.waitForIdle()
     }
 
     /**
      * Each line heard sung [shiftMs] later than timed, word by word, as whisper.cpp hears them: a
-     * little late. Heard from the start, so nothing sung before it.
+     * little late. Heard from where the app last played from, so nothing sung before it.
      */
     private fun sung(shiftMs: Long) = Sung(startedAt, lines.flatMapIndexed { index, line ->
-        line.split(' ').mapIndexed { word, text -> HeardWord("$text,", index * 3_000L + shiftMs + SungAlignment.HEARD_LATE_MS + word * 300L) }
+        line.split(' ').mapIndexed { word, text -> HeardWord("$text,", index * 3_000L + shiftMs + SungAlignment.HEARD_LATE_MS + word * 300L - startedFromMs) }
     }.filter { it.atMs >= 0 })
+
+    /** Time passes, [ms] of it. */
+    private fun passes(ms: Long) {
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(ms))
+        composeRule.waitForIdle()
+    }
 
     private fun firstLineMs() = model().uiState.lyricLines.first().timeMs
 
@@ -151,7 +159,7 @@ class SingingTest {
     fun theWordsMoveToTheSingingHeardOnceForTheSong() {
         singing.answer = { sung(SHIFT_MS) }
         openLyrics()
-        plays()
+        plays(positionMs = 1_000)
         waitUntil { model().uiState.lyricsSynced }
         assertEquals(SHIFT_MS, firstLineMs())
         // Heard in the words' language, as whisper.cpp names it.
@@ -181,6 +189,64 @@ class SingingTest {
         // And they're not heard again either.
         plays(positionMs = 100)
         assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun wordsAQuarterOfASecondOffMove() {
+        singing.answer = { sung(250) }
+        openLyrics()
+        plays()
+        waitUntil { model().uiState.lyricsSynced }
+        assertEquals(250L, firstLineMs())
+    }
+
+    @Test
+    fun wherePastTheStartTheyWaitForLinesToBeSung() {
+        // A long break after the third line: at 7 seconds, the next lines sung are 23 seconds on,
+        // which at double speed is 11.5 seconds away.
+        lyricsTimedFor(null, times = listOf(0, 3, 6, 30, 33, 36))
+        openLyrics()
+        plays(positionMs = 7_000, speed = 2f)
+        assertEquals(0, singing.hears)
+        passes(11_400)
+        assertEquals(0, singing.hears)
+        passes(200)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun notWhereTooFewLinesAreLeftToHear() {
+        // After the break only two lines are sung within what's heard, less its last 3 seconds.
+        lyricsTimedFor(null, times = listOf(0, 3, 6, 30, 33, 47))
+        openLyrics()
+        plays(positionMs = 7_000, speed = 2f)
+        passes(15_000)
+        assertEquals(0, singing.hears)
+    }
+
+    @Test
+    fun aSongMovedALittleWhileHeardIsStillPlaced() {
+        val heard = CompletableDeferred<Sung?>()
+        singing.answer = { heard.await() }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 }
+        val words = sung(SHIFT_MS)
+        // 0.3 seconds on from where it was: the app's clock catching up, not the song moved.
+        plays(positionMs = 300 + SystemClock.elapsedRealtime() - startedAt)
+        heard.complete(words)
+        waitUntil { model().uiState.lyricsSynced }
+        assertEquals(SHIFT_MS, firstLineMs())
+    }
+
+    @Test
+    fun closingTheWordsStopsHearingThem() {
+        singing.answer = { CompletableDeferred<Sung?>().await() }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { singing.stopped == 1 }
     }
 
     @Test
@@ -324,9 +390,18 @@ class SingingTest {
 
         val hears get() = languages.size
 
+        /** How many hearings were stopped before they were done. */
+        @Volatile
+        var stopped = 0
+
         override suspend fun hear(language: String?): Sung? {
             languages += language
-            return answer()
+            return try {
+                answer()
+            } catch (stop: kotlinx.coroutines.CancellationException) {
+                stopped++
+                throw stop
+            }
         }
     }
 

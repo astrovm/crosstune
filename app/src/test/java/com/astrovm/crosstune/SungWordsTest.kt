@@ -34,8 +34,8 @@ class SungWordsTest {
 
     @Test
     fun wordsHeardAreReadFromWhatWhisperGives() {
-        val bytes = "320\t Oh,\n820\tshow\n-1\tlost\nnot a time\tskipped\n900\t \n1200\tcorazón\n".toByteArray()
-        assertEquals(listOf(HeardWord("Oh,", 320), HeardWord("show", 820), HeardWord("corazón", 1200)), HeardWords.parse(bytes))
+        val bytes = "0\tFirst\n320\t Oh,\n820\tshow\n-1\tlost\nnot a time\tskipped\n900\t \n1200\tcorazón\n".toByteArray()
+        assertEquals(listOf(HeardWord("First", 0), HeardWord("Oh,", 320), HeardWord("show", 820), HeardWord("corazón", 1200)), HeardWords.parse(bytes))
         assertEquals(emptyList<HeardWord>(), HeardWords.parse(ByteArray(0)))
     }
 
@@ -72,6 +72,20 @@ class SungWordsTest {
     }
 
     @Test
+    fun aLineOpeningWithSomethingNotSungIsTimedByItsFirstWordSung() {
+        val written = song.map { it.copy(text = "♪ - " + it.text) }
+        assertEquals(-400L, SungAlignment.shiftMs(heard(song, -400), fromTheStart, written))
+    }
+
+    @Test
+    fun wordsSungBeyondTheTimedOnesAreLeftOut() {
+        // Ad-libs after the last line, and before the first.
+        val sung = heard(song, 700).words
+        val extra = Sung(0, listOf(HeardWord("yeah", 0)) + sung + listOf(HeardWord("yeah", 19_000), HeardWord("oh", 19_500)))
+        assertEquals(700L, SungAlignment.shiftMs(extra, fromTheStart, song))
+    }
+
+    @Test
     fun linesTimedWordByWordTellByEachWord() {
         // Two lines only, but every word timed: enough words to tell.
         val words = listOf(
@@ -104,6 +118,9 @@ class SungWordsTest {
         val offs = listOf(500L, 500, 500, 500, 500, 2_000, -1_500, 3_500, -3_000, 5_000, -4_500)
         val sung = Sung(0, lines.zip(offs) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertNull(SungAlignment.shiftMs(sung, fromTheStart, lines))
+        // Half of them agreeing is enough.
+        val half = Sung(0, lines.dropLast(1).zip(offs.take(5) + offs.drop(6)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
+        assertEquals(500L, SungAlignment.shiftMs(half, fromTheStart, lines))
         // With one more agreeing, most do.
         val most = Sung(0, lines.zip(offs.take(6).map { 500L } + offs.drop(6)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertEquals(500L, SungAlignment.shiftMs(most, fromTheStart, lines))
@@ -116,6 +133,9 @@ class SungWordsTest {
         val offs = listOf(1_000L, 1_100, 1_200, 1_300, 1_400, 3_000)
         val sung = Sung(0, lines.zip(offs) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertEquals(1_200L, SungAlignment.shiftMs(sung, fromTheStart, lines))
+        // 400 ms apart still agree.
+        val edge = Sung(0, lines.zip(listOf(0L, 400, 400, 400, 400, 5_000)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
+        assertEquals(400L, SungAlignment.shiftMs(edge, fromTheStart, lines))
         // 401 ms apart, none agree with another.
         val apart = Sung(0, lines.zip(listOf(0L, 401, 802, 1_203, 1_604, 2_005)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertNull(SungAlignment.shiftMs(apart, fromTheStart, lines))
@@ -128,6 +148,9 @@ class SungWordsTest {
         val lines = timed(*chorus.toTypedArray()) + timed(*chorus.toTypedArray(), startMs = 60_000)
         assertEquals(-900L, SungAlignment.shiftMs(heard(lines.drop(5), -900), fromTheStart, lines))
         assertEquals(-900L, SungAlignment.shiftMs(heard(lines.take(5), -900), fromTheStart, lines))
+        // Nor is it when something not a word was heard near the first.
+        val withNoise = Sung(0, listOf(HeardWord("♪", 5_000)) + heard(lines.drop(5), -900).words)
+        assertEquals(-900L, SungAlignment.shiftMs(withNoise, fromTheStart, lines))
     }
 
     @Test
@@ -137,6 +160,7 @@ class SungWordsTest {
         assertEquals(9_400L, SungAlignment.shiftMs(heard(lines, 9_400), fromTheStart, lines))
         assertNull(SungAlignment.shiftMs(heard(lines, -10_600), fromTheStart, lines))
         assertEquals(-9_000L, SungAlignment.shiftMs(heard(lines, -9_000), fromTheStart, lines))
+        assertEquals(-10_000L, SungAlignment.shiftMs(heard(lines, -10_000), fromTheStart, lines))
         // Lines more than 10 seconds before or after what was heard aren't looked at at all.
         assertNull(SungAlignment.shiftMs(heard(lines, 10_800), fromTheStart, lines))
     }
@@ -235,6 +259,26 @@ class SungWordsTest {
         assertNull(listener(microphone, hearing = words).hear(null))
         assertTrue(microphone.closed)
         assertNull(words.samples)
+    }
+
+    @Test
+    fun soundGivenInPiecesIsHeardWhole() = runBlocking {
+        // Pieces that don't fill the reads evenly: the last read takes only what's left.
+        val microphone = FakeMicrophone().apply { play(7.0001); play(13.0) }
+        val words = FakeWords(listOf(HeardWord("Oh", 320)))
+        assertEquals(1, listener(microphone, hearing = words).hear(null)!!.words.size)
+        assertEquals(16_000 * SingingListener.SECONDS, words.samples!!.size)
+    }
+
+    @Test
+    fun soundThatStopsComingIsntHeard() = runBlocking {
+        val silent = Microphone {
+            object : Recording {
+                override fun read(buffer: ShortArray, offset: Int, count: Int) = 0
+                override fun close() = Unit
+            }
+        }
+        assertNull(listener(silent).hear(null))
     }
 
     @Test
