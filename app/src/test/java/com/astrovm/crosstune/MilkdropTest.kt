@@ -360,6 +360,7 @@ class MilkdropTest {
         override fun draw() {
             clock += drawMs.getValue(showing)
         }
+        override fun darken(shade: Float) = Unit
         override fun finish() {
             clock += finishMs[showing] ?: 0
         }

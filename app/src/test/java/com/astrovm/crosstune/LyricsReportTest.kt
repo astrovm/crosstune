@@ -353,6 +353,7 @@ class LyricsReportTest {
         override fun show(preset: String, smooth: Boolean) = false
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
+        override fun darken(shade: Float) = Unit
         override fun finish() = Unit
         override fun close() = Unit
     }

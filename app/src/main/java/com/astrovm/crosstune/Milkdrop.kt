@@ -49,7 +49,7 @@ internal interface Milkdrop {
     fun hear(samples: ByteArray, count: Int)
     fun draw()
     /** Darkens what was just drawn by [shade], from 0, as it is, to 1, black. */
-    fun darken(shade: Float) = Unit
+    fun darken(shade: Float)
     /** Waits till what's drawn is on the screen, to time it. */
     fun finish()
     fun close()
