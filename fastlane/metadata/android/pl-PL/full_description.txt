@@ -1,6 +1,6 @@
 Otwórz każdy link. Rozpoznaj każdy utwór. Śledź każde słowo.
 
-Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kliknij link, a ten sam utwór otworzy się w ulubionej aplikacji. Ze Spotify do YouTube Music, z Apple Music do Deezera, z TIDAL do Spotify: łącz je, jak chcesz. Działa z utworami, albumami, wykonawcami i playlistami.
+Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kliknij link, a ten sam utwór otworzy się w ulubionej aplikacji. Ze Spotify do YouTube Music, z Apple Music do Deezera: łącz je, jak chcesz. Działa z utworami, albumami, wykonawcami i playlistami.
 
 <b>Funkcje</b>
 <ul>
@@ -17,9 +17,9 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle. Złe słowa lub tempo? Zgłoś to prosto z tekstu: otworzy się zgłoszenie na GitHubie albo e-mail, wypełnione utworem, danymi o tempie i wersjami aplikacji i Androida, do wysłania.</li>
 <li>Ucz się słów dzięki kanie, pinyinowi, romaji i każdemu innemu pismu łacinką oraz tłumaczeniom na języki, których jeszcze nie czytasz. Wybierz, co ma być widoczne na każdej stronie fiszki. Z jednego wiersza zrobisz kilka rodzajów fiszek, każdy z własnym harmonogramem.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
-<li>Działa też na Android TV, z pilotem.</li>
-<li>Kolory Material You na Androidzie 12 i nowszych.</li>
+<li>Też na Android TV.</li>
+<li>Kolory Material You (Android 12+).</li>
 </ul>
 
 <b>Prywatność</b>
-Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Aby otworzyć sam utwór, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube. Do rozpoznania utworu Crosstune używa mikrofonu tylko podczas słuchania i wysyła do Shazama tylko odcisk dźwięku, nigdy nagranie. Wpisanie nazwy utworu wysyła ją do wyszukiwarki piosenek Deezer i Apple, a prośba o tekst lub akordy wysyła tytuł i wykonawcę do serwisów z tekstami i akordami (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Tłumaczenia trafiają do MyMemory. Po zalogowaniu przez ChatGPT funkcje AI wysyłają do OpenAI tytuł, wykonawcę i tekst utworu oraz Twoje pytania. Jeśli dostęp do mikrofonu jest już dozwolony, tekst może krótko nasłuchiwać, aby poprawić i zapamiętać przesunięcie wstępu tego nagrania.
+Bez kont, analityki i reklam. Historia zostaje na Twoim urządzeniu. Aby pokazać tytuł, wykonawcę i okładkę, Crosstune pyta tylko serwis, z którego pochodzi link. Aby otworzyć sam utwór, tytuł i wykonawca trafiają też do wyszukiwarki Apple, Deezer, YouTube Music, YouTube lub Bandcamp. „Odtwórz wszystko” wysyła tytuły i wykonawców utworów do wyszukiwarki YouTube Music, a znalezione filmy do YouTube. Do rozpoznania utworu Crosstune używa mikrofonu tylko podczas słuchania i wysyła do Shazama tylko odcisk dźwięku, nigdy nagranie. Wpisanie nazwy utworu wysyła ją do wyszukiwarki piosenek Deezer i Apple, a prośba o tekst lub akordy wysyła tytuł i wykonawcę do serwisów z tekstami i akordami (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Tłumaczenia trafiają do MyMemory. Po zalogowaniu przez ChatGPT funkcje AI wysyłają do OpenAI tytuł, wykonawcę i tekst utworu oraz Twoje pytania. Jeśli dostęp do mikrofonu jest już dozwolony, tekst może krótko nasłuchiwać, aby poprawić i zapamiętać przesunięcie wstępu tego nagrania. Dopasowuje się też do śpiewu, słuchanego na telefonie i nigdy niewysyłanego.

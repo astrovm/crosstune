@@ -1850,8 +1850,8 @@ internal class MainViewModel(
             singingTries++
             val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-')) ?: return@launch
             // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
-            val now = uiState.following?.clock
-            if (uiState.lyricsFor != song || foundLines != lines || now == null || !now.playing || abs(now.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
+            val playing = uiState.following?.clock
+            if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
             val shift = SungAlignment.shiftMs(sung, clock::positionAt, lines) ?: return@launch
             sungStore.save(song, lines)
             if (abs(shift) >= SINGING_NUDGE_MS && !uiState.lyricsSynced && handGap == null) nudgeSync(shift)

@@ -1,6 +1,6 @@
 Öffne jeden Link. Erkenne jeden Song. Folge jedem Wort.
 
-Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in deiner Lieblings-App. Von Spotify zu YouTube Music, von Apple Music zu Deezer: Kombiniere frei. Funktioniert mit Songs, Alben, Künstlern und Playlists.
+Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in deiner Lieblings-App. Von Spotify zu YouTube Music, von Apple Music zu Deezer: Kombiniere frei. Für Songs, Alben, Künstler und Playlists.
 
 <b>Funktionen</b>
 <ul>
@@ -17,9 +17,9 @@ Du bekommst einen Link von einem Musikdienst und öffnest denselben Song in dein
 <li>Songtexte im Takt: Sie folgen deiner Musik-App oder hören mit, schweben über anderen Apps und laufen mit MilkDrop-Visuals dahinter. Falsche Wörter oder Timing? Melde es direkt im Songtext: Es öffnet ein GitHub-Issue oder eine E-Mail, ausgefüllt mit Song, Timing-Details sowie Crosstune- und Android-Version, zum Abschicken.</li>
 <li>Lerne die Wörter mit Kana, Pinyin, Romaji, jeder anderen Schrift in lateinischen Buchstaben und Übersetzungen für die Sprachen, die du noch nicht liest. Wähle für jede Seite deiner Lernkarten aus, was angezeigt wird. Mach aus einer Zeile mehrere Kartenarten, jede mit eigenem Zeitplan.</li>
 <li>Melde dich mit deinem bezahlten ChatGPT-Abo an, um ganze Songs zu übersetzen, Zeilen zu erklären, lernenswerte Wörter zu finden und Songs per Beschreibung zu suchen.</li>
-<li>Läuft auch auf Android TV, mit der Fernbedienung.</li>
+<li>Auch auf Android TV.</li>
 <li>Material-You-Farben ab Android 12.</li>
 </ul>
 
 <b>Datenschutz</b>
-Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Um den Song selbst zu öffnen, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp. „Alle abspielen“ schickt Titel und Künstler der Songs an die Suche von YouTube Music und die gefundenen Videos an YouTube. Zum Erkennen eines Songs nutzt Crosstune das Mikrofon nur während des Zuhörens und schickt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme. Die Eingabe eines Songnamens sendet ihn an die Songsuche von Deezer und Apple, und eine Songtext- oder Akkord-Anfrage sendet Titel und Künstler an Songtext- und Akkordseiten (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Übersetzungen gehen an MyMemory. Mit ChatGPT angemeldet, senden die KI-Funktionen Titel, Künstler und Text des Songs und deine Fragen an OpenAI. Wenn der Mikrofonzugriff bereits erlaubt ist, können Liedtexte kurz mithören, um den Vorspann dieser Aufnahme auszugleichen und die Korrektur zu speichern.
+Keine Konten, keine Analysen, keine Werbung. Der Verlauf bleibt auf deinem Gerät. Um Titel, Künstler und Cover eines Links anzuzeigen, fragt Crosstune nur den Dienst, von dem der Link stammt. Um den Song selbst zu öffnen, gehen Titel und Künstler auch an die Suche von Apple, Deezer, YouTube Music, YouTube oder Bandcamp. „Alle abspielen“ schickt Titel und Künstler der Songs an die Suche von YouTube Music und die gefundenen Videos an YouTube. Zum Erkennen eines Songs nutzt Crosstune das Mikrofon nur während des Zuhörens und schickt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme. Die Eingabe eines Songnamens sendet ihn an die Songsuche von Deezer und Apple, und eine Songtext- oder Akkord-Anfrage sendet Titel und Künstler an Songtext- und Akkordseiten (LRCLIB, YouTube Music, NetEase, Letras, Ultimate Guitar, LaCuerda, U-FRET). Übersetzungen gehen an MyMemory. Mit ChatGPT angemeldet, senden die KI-Funktionen Titel, Künstler und Text des Songs und deine Fragen an OpenAI. Wenn der Mikrofonzugriff bereits erlaubt ist, können Liedtexte kurz mithören, um den Vorspann dieser Aufnahme auszugleichen und die Korrektur zu speichern. Sie richten sich auch nach dem Gesang, auf dem Handy gehört und nie gesendet.
