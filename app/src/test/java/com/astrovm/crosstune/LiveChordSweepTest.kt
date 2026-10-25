@@ -367,6 +367,10 @@ class LiveChordSweepTest {
                             answer.words.lines().map(String::trim).filter(String::isNotEmpty)
                         }
                     }
+                    LyricsFinder.Lyrics.Instrumental -> {
+                        lyricsStatus = "instrumental"
+                        emptyList()
+                    }
                     LyricsFinder.Lyrics.None -> {
                         lyricsStatus = "none"
                         emptyList()

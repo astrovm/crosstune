@@ -82,6 +82,13 @@ class LetrasLyricsTest {
     }
 
     @Test
+    fun anInstrumentalsPageSaysSo() {
+        // As Letras writes it, in the page's own language.
+        respond(page = "<div class=\"lyric-content font --lyrics\"><div class=\"instrumental-lyric --mobile\"><i class=\"instrumental-image\"></i><div class=\"instrumental-text\"><h2 class=\"instrumental-title\">Canción Instrumental</h2><p class=\"instrumental-description\">Esta canción no tiene letra</p></div></div></div>")
+        assertEquals(Lyrics.Instrumental, lookup())
+    }
+
+    @Test
     fun aPageWithoutWordsOrWithOnlyWhitespaceHasNone() {
         for (page in listOf("<html>Instrumental</html>", "<div class=\"lyric-content\"><p> </p></div>")) {
             respond(page = page)

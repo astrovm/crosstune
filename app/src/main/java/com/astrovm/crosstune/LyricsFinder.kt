@@ -126,6 +126,9 @@ internal class LyricsFinder(
         /** The service answered, and holds none for this song. */
         data object None : Lyrics
 
+        /** The service says the song has no words: it's an instrumental. */
+        data object Instrumental : Lyrics
+
         /** The service wouldn't answer, or was too slow: worth saying rather than claiming none. */
         data object Unavailable : Lyrics
     }
@@ -288,13 +291,14 @@ internal class LyricsFinder(
     private data class Best(val lyrics: Lyrics, val own: Boolean = false)
 
     /**
-     * Words found over none, the better timed of two, and [first] among equals; with no words,
-     * "none" over one that wouldn't answer.
+     * Words found over none, the better timed of two, and [first] among equals; with no words, an
+     * instrumental over "none", and "none" over one that wouldn't answer.
      */
     private fun better(first: Lyrics, second: Lyrics): Lyrics = when {
         first is Lyrics.Found && second is Lyrics.Found -> if (timing(second) > timing(first)) second else first
         first is Lyrics.Found -> first
         second is Lyrics.Found -> second
+        first is Lyrics.Instrumental || second is Lyrics.Instrumental -> Lyrics.Instrumental
         first is Lyrics.None || second is Lyrics.None -> Lyrics.None
         else -> Lyrics.Unavailable
     }
@@ -352,7 +356,7 @@ internal class LyricsFinder(
                 }
             }
         }
-        return romaji ?: if (Lyrics.None in answers) Lyrics.None else Lyrics.Unavailable
+        return romaji ?: answers.reduce(::better)
     }
 
     /**
@@ -453,7 +457,8 @@ internal class LyricsFinder(
         return Lyrics.Unavailable
     }
 
-    private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
+    /** The song's words among [answers], or that it's an instrumental; null for neither. */
+    private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics? {
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
         val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
@@ -464,10 +469,10 @@ internal class LyricsFinder(
         val takes = lengths.isNotEmpty() && lengths.max() - lengths.min() > SAME_LENGTH_MS
         val lengthMs = metadata.lengthMs ?: if (takes) withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs else null
         val songs = lengthMs?.let { length -> named.sortedBy { copy -> copy.lengthMs()?.let { abs(it - length).takeIf { gap -> gap <= SAME_LENGTH_MS } } ?: Long.MAX_VALUE } } ?: named
-        val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull() ?: return null
+        val song = songs.firstOrNull { it.synced().isNotEmpty() } ?: songs.firstOrNull { it.plain() != null } ?: songs.firstOrNull() ?: return null
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
-        val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return null }
+        val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return Lyrics.Instrumental.takeIf { named.any(Answer::instrumental) } }
         return Lyrics.Found(words, lines, song.lengthMs())
     }
 
@@ -578,6 +583,8 @@ internal class LyricsFinder(
             val answer = fromNetEaseOnce(lyric.toString()) as? JSONObject
             val byWord = answer?.optJSONObject("yrc")?.optString("lyric").orEmpty()
             val lrc = answer?.optJSONObject("lrc")?.optString("lyric").orEmpty()
+            // Its note for an instrumental, "Pure music, please enjoy", takes the words' place.
+            if (lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
             (netEaseWordByWord(byWord) ?: netEaseWords(lrc))?.copy(lengthMs = recordingMs) ?: Lyrics.None
         } catch (_: IOException) {
             Lyrics.Unavailable
@@ -607,7 +614,10 @@ internal class LyricsFinder(
                     doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) }
             } ?: return@withTimeoutOrNull Lyrics.None
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
-            val words = letrasWords.find(letrasPage(page.toString()))?.groupValues?.get(1)
+            val content = letrasWords.find(letrasPage(page.toString()))?.groupValues?.get(1)
+            // An instrumental's page says so where the words would be, in the page's language.
+            if (content?.contains(LETRAS_INSTRUMENTAL) == true) return@withTimeoutOrNull Lyrics.Instrumental
+            val words = content
                 ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.replace(letrasTag, "")
                 ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
             words?.let { Lyrics.Found(it) } ?: Lyrics.None
@@ -658,7 +668,7 @@ internal class LyricsFinder(
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines)
     }
 
-    /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none, or an instrumental. */
+    /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none. */
     private fun netEaseWords(lrc: String): Lyrics.Found? {
         val stamped = SyncedLyrics.parse(lrc)
         val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }.withoutNotes { it.text }
@@ -666,7 +676,7 @@ internal class LyricsFinder(
         // Words with timings are only those; plain words, only when there are no timings at all.
         val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
         else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.withoutClosingCredits { it }.withoutNotes { it }.joinToString("\n").trim()
-        if (words.isEmpty() || words.contains(NETEASE_INSTRUMENTAL)) return null
+        if (words.isEmpty()) return null
         return Lyrics.Found(words, lines)
     }
 
@@ -731,6 +741,9 @@ internal class LyricsFinder(
     private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
         fun plain(): String? = (json.opt("plainLyrics") as? String)?.trim()?.takeIf { it.isNotEmpty() }
 
+        /** Whether it says the song has no words. */
+        fun instrumental(): Boolean = json.optBoolean("instrumental")
+
         /** How long the recording it's for lasts, when it says. */
         fun lengthMs(): Long? = (json.opt("duration") as? Number)?.toDouble()?.takeIf { it > 0 }?.let { (it * 1000).toLong() }
 
@@ -777,6 +790,7 @@ internal class LyricsFinder(
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
         const val LETRAS_URL = "https://www.letras.com/"
         const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
+        const val LETRAS_INSTRUMENTAL = "instrumental-lyric"
         const val LETRAS_SONG = "2"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
