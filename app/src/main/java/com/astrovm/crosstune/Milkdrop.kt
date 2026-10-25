@@ -633,8 +633,8 @@ internal class MilkdropRenderer(
 }
 
 /**
- * Shows what [renderer] draws in among the views, clipped and moved like any other, as in a box of
- * its own in Settings. Drawing stops while it's out of sight.
+ * Shows what [renderer] draws in among the views, clipped and moved like any other, as in Settings
+ * and behind the floating words. Drawing stops while it's out of sight.
  */
 internal class MilkdropView(context: Context, private val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
     private var thread: GlThread? = null
@@ -817,7 +817,8 @@ private class GlThread(private val target: Any, private val renderer: MilkdropRe
  * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
  * [onFps] is told each second, on the main thread, how many frames a second the phone could draw it at.
  * [hears] is whether Android lets them hear what plays, which needs the microphone. [shade] darkens
- * them, so words read over them.
+ * them, so words read over them. [behind] puts them behind the window, filling it, as behind the
+ * words; otherwise they're in among the views, clipped and moved like any other.
  */
 internal data class VisualsPlay(
     val skips: Int = 0,
@@ -826,7 +827,8 @@ internal data class VisualsPlay(
     val only: String? = null,
     val onFps: (Int) -> Unit = {},
     val hears: Boolean = true,
-    val shade: Float = 0f
+    val shade: Float = 0f,
+    val behind: Boolean = false
 )
 
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
@@ -860,8 +862,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
         )
     }
     AndroidView(
-        // Behind the words, filling the screen; just one, as Settings shows it, in a box of its own.
-        factory = { if (play.only == null) MilkdropBehind(it, renderer) else MilkdropView(it, renderer) },
+        factory = { if (play.behind) MilkdropBehind(it, renderer) else MilkdropView(it, renderer) },
         update = {
             renderer.shade = play.shade
             renderer.settings = play.settings

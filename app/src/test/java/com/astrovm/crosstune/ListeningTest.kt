@@ -2078,6 +2078,8 @@ class ListeningTest {
         prefs().edit().remove("visuals").commit()
         demoWords(FakeHearing())
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        // Behind the window, so the words over them don't redraw it with every frame.
+        assertTrue(visualsShown().single() is MilkdropBehind)
         assertTrue(described(string(R.string.visuals_options)))
         assertTrue(lit("Demo one"))
     }
@@ -2182,6 +2184,8 @@ class ListeningTest {
         // Tapped, the heavy one plays though it's off, on its own to swipe from, and is switched on from there.
         composeRule.onNodeWithText(heavy).performScrollTo().performClick()
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        // In a box of its own, clipped like the views around it.
+        assertTrue(visualsShown().single() is MilkdropView)
         assertTrue(shown(string(R.string.visuals_position, inOrder.indexOf(heavy) + 1, names.size)))
         assertTrue(shown(string(R.string.visual_heavy)))
         click(string(R.string.visual_show))
@@ -2218,9 +2222,9 @@ class ListeningTest {
     }
 
     /** The visuals on screen, which draw nothing here, with no GPU. */
-    private fun visualsShown(): List<MilkdropView> {
-        fun find(view: View): List<MilkdropView> = when (view) {
-            is MilkdropView -> listOf(view)
+    private fun visualsShown(): List<View> {
+        fun find(view: View): List<View> = when (view) {
+            is MilkdropBehind, is MilkdropView -> listOf(view)
             is android.view.ViewGroup -> (0 until view.childCount).flatMap { find(view.getChildAt(it)) }
             else -> emptyList()
         }

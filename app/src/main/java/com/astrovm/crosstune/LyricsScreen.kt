@@ -475,7 +475,7 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
             val readingShade = if (menuOpen) 0.75f else 0.5f
             // Darkened as they're drawn, smaller than the screen, rather than under a shade over the whole of it.
             val shade = if (only) 0f else readingShade + (1f - readingShade) * state.visualsShade
-            LocalVisuals.current(state.visualsPlay.copy(shade = shade), Modifier.fillMaxSize())
+            LocalVisuals.current(state.visualsPlay.copy(shade = shade, behind = true), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
