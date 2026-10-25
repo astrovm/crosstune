@@ -1,3 +1,3 @@
 Lyrics line up to the singing: once per song, your phone hears a little of it and moves the words, which Reset undoes. Nothing heard leaves the phone.
-Wrong words or timing? Report them from the lyrics in one tap, with a comment if you like. It goes privately to the developer.
+Wrong words or timing? Report them from the lyrics in one tap, or let Crosstune report problems it finds. Reports go privately to the developer.
 An instrumental shows no lyrics, rather than a site's note saying it has none.

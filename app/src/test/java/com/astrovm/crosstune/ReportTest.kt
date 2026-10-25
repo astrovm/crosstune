@@ -55,6 +55,8 @@ class ReportTest {
         assertFalse(bare.has("comment"))
         assertEquals(listOf("title", "artist", "timed", "synced", "sung"), bare.getJSONObject("song").keys().asSequence().toList())
         assertEquals("""{"version":"2.12.0","android":"16 (36)"}""", Report("2.12.0", android = "16 (36)").json())
+        // One Crosstune sent by itself says what it found.
+        assertEquals("no_chords", JSONObject(Report("2.12.0", MusicMetadata("Demo", "Band"), problem = SongProblem.NO_CHORDS).json()).getString("problem"))
     }
 
     @Test
@@ -62,7 +64,7 @@ class ReportTest {
         val fake = FakeSpotify()
         var code = 204
         fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
-        val sender = ReportSender(fake.client(), Dispatchers.Unconfined)
+        val sender = ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined)
         val report = Report("2.12.0", android = "16 (36)")
         assertTrue(sender.send(report))
         assertEquals(listOf("https://report.crosstune.4st.li/reports"), fake.requestedUrls)

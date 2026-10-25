@@ -279,6 +279,11 @@
     <string name="report_send">Invia</string>
     <string name="report_sent">Inviato. Grazie!</string>
     <string name="report_failed">Invio non riuscito. Controlla la connessione e riprova.</string>
+    <string name="auto_report_offer">Segnalare automaticamente problemi come questo?</string>
+    <string name="auto_report_yes">Sì</string>
+    <string name="auto_report_no">No, grazie</string>
+    <string name="setting_auto_report">Segnala automaticamente i problemi dei brani</string>
+    <string name="setting_auto_report_description">Testi, tempi o accordi mancanti, e i tempi che correggi, arrivano in privato allo sviluppatore di Crosstune.</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_romaji_typed">Romaji come si digita</string>
     <string name="lyrics_translation">Traduzione</string>

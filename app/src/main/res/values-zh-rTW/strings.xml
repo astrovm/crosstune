@@ -278,6 +278,11 @@
     <string name="report_send">傳送</string>
     <string name="report_sent">已傳送，謝謝！</string>
     <string name="report_failed">無法傳送。請檢查網路連線後再試一次。</string>
+    <string name="auto_report_offer">自動回報這類問題？</string>
+    <string name="auto_report_yes">好</string>
+    <string name="auto_report_no">不用了</string>
+    <string name="setting_auto_report">自動回報歌曲問題</string>
+    <string name="setting_auto_report_description">缺少的歌詞、時間或和弦，以及你修正的時間，只會私下傳給 Crosstune 的開發者。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_translation">翻譯</string>

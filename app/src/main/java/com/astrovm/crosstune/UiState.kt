@@ -64,6 +64,10 @@ internal data class UiState(
     val lyricsSynced: Boolean = false,
     /** How sending a report on the words is going, while one is being written. */
     val report: ReportStatus? = null,
+    /** Whether Crosstune reports problems it finds with songs by itself; null while the user hasn't said. */
+    val autoReports: Boolean? = null,
+    /** Whether the words shown have a problem Crosstune offers to report by itself, from now on. */
+    val reportOffer: Boolean = false,
     /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
     val lyricsOffTake: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */

@@ -278,6 +278,11 @@
     <string name="report_send">Отправить</string>
     <string name="report_sent">Отправлено. Спасибо!</string>
     <string name="report_failed">Не удалось отправить. Проверьте подключение и попробуйте снова.</string>
+    <string name="auto_report_offer">Сообщать о таких проблемах автоматически?</string>
+    <string name="auto_report_yes">Да</string>
+    <string name="auto_report_no">Нет, спасибо</string>
+    <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
+    <string name="setting_auto_report_description">Недостающие тексты, тайминг или аккорды и тайминг, который вы исправили, лично получит разработчик Crosstune.</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>

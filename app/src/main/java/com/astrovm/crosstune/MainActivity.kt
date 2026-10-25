@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     singing = singingFactory(applicationContext, client),
-                    reports = ReportSender(client, lookupDispatcher),
+                    reports = ReportSender(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher),
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
@@ -471,6 +471,7 @@ class MainActivity : ComponentActivity() {
         onResetSync = viewModel::resetSync,
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
+        onAllowAutoReports = viewModel::allowAutoReports,
         onReadingsChange = viewModel::setReadings,
         onRomanizedChange = viewModel::setRomanized,
         onRomajiTypedChange = viewModel::setRomajiTyped,

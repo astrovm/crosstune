@@ -192,6 +192,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ButtonDefaults
 
 internal const val LYRIC_LINE_TAG = "lyric-line"
 internal const val LYRICS_SONG_TAG = "lyrics-song"
@@ -443,8 +446,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }) }
     if (reporting) {
-        val version = appVersion()
-        SongReportDialog(state.report, onSend = { actions.onSendReport(version, it) }, onDismiss = {
+        SongReportDialog(state.report, onSend = actions.onSendReport, onDismiss = {
             reporting = false
             actions.onCloseReport()
         })
@@ -691,6 +693,7 @@ private fun LyricsActions(
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
+        if (state.reportOffer) ReportOffer(actions)
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
             shape = CircleShape,
@@ -721,6 +724,28 @@ private fun LyricsActions(
 }
 
 private enum class BarMenu { LEARN, STUDY, VISUALS }
+
+/** Over the bar, a problem the words shown have, offered to be reported by itself from now on, like it. */
+@Composable
+private fun ReportOffer(actions: ScreenActions) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        shape = MaterialTheme.shapes.extraLarge,
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(bottom = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.auto_report_offer), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+            Spacer(Modifier.width(12.dp))
+            Button(onClick = { actions.onAllowAutoReports(true) }) {
+                AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.auto_report_yes))
+            }
+            IconButton(onClick = { actions.onAllowAutoReports(false) }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.auto_report_no)) }
+        }
+    }
+}
 
 /** What the sheet about the whole song shows: what it means, its words to know, or its artist. */
 internal enum class SongTab(@StringRes val label: Int) {

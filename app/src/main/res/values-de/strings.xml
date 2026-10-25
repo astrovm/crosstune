@@ -278,6 +278,11 @@
     <string name="report_send">Senden</string>
     <string name="report_sent">Gesendet. Danke!</string>
     <string name="report_failed">Senden fehlgeschlagen. Prüfe deine Verbindung und versuche es noch mal.</string>
+    <string name="auto_report_offer">Probleme wie dieses automatisch melden?</string>
+    <string name="auto_report_yes">Ja</string>
+    <string name="auto_report_no">Nein danke</string>
+    <string name="setting_auto_report">Song-Probleme automatisch melden</string>
+    <string name="setting_auto_report_description">Fehlende Songtexte, Timings oder Akkorde und Timings, die du korrigierst, gehen privat an den Entwickler von Crosstune.</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_romaji_typed">Romaji wie getippt</string>
     <string name="lyrics_translation">Übersetzung</string>

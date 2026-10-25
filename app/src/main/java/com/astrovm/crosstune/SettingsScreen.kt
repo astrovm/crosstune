@@ -305,6 +305,12 @@ private fun SettingsList(
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
+            SettingSwitch(
+                label = stringResource(R.string.setting_auto_report),
+                description = stringResource(R.string.setting_auto_report_description),
+                checked = state.autoReports == true,
+                onCheckedChange = actions.onAllowAutoReports
+            )
             GroupDivider()
             Row(
                 modifier = Modifier

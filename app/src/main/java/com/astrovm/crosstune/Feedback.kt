@@ -49,7 +49,8 @@ internal data class HandTiming(val line: String, val timedMs: Long, val heardMs:
  * [timed], put in time by hand, [synced], and the [app] they followed. Filled in for a GitHub issue,
  * or an email, for the user to say what's wrong and send; or sent as it is, with the user's
  * [comment], how long the recording the words are timed for is, [lengthMs], whether they were
- * lined up to the singing, [sung], and each line put in time by hand, [timing].
+ * lined up to the singing, [sung], and each line put in time by hand, [timing]. One Crosstune
+ * sends by itself says which [problem] it found.
  */
 internal data class Report(
     val version: String,
@@ -61,7 +62,8 @@ internal data class Report(
     val comment: String = "",
     val sung: Boolean = false,
     val lengthMs: Long? = null,
-    val timing: List<HandTiming> = emptyList()
+    val timing: List<HandTiming> = emptyList(),
+    val problem: SongProblem? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
 
@@ -83,6 +85,7 @@ internal data class Report(
         put("version", version)
         put("android", android)
         comment.trim().takeIf { it.isNotEmpty() }?.let { put("comment", it) }
+        problem?.let { put("problem", it.key) }
         song?.let {
             put("song", JSONObject().apply {
                 put("title", it.title)
@@ -111,6 +114,8 @@ internal data class Report(
  */
 internal class ReportSender(
     private val client: OkHttpClient,
+    /** The app's, which each report says. */
+    val version: String,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val url: String = URL
 ) {

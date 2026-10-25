@@ -260,9 +260,11 @@ internal data class ScreenActions(
     /** The words back in time as they were found. */
     val onResetSync: () -> Unit = {},
     /** A report on the words sent, from this version of the app, with what the user says is wrong. */
-    val onSendReport: (version: String, comment: String) -> Unit = { _, _ -> },
+    val onSendReport: (comment: String) -> Unit = {},
     /** The report written, sent or not. */
     val onCloseReport: () -> Unit = {},
+    /** Problems Crosstune finds with songs reported by itself from now on, or not. */
+    val onAllowAutoReports: (Boolean) -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},

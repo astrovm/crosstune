@@ -43,7 +43,7 @@ test("a report is kept, with only what a report has", async () => {
   assert.equal(e.saved.length, 1);
   assert.deepEqual(e.saved[0].values, [
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937,
-    JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late",
+    JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
   ]);
   // The address only counts against the limit.
   assert.deepEqual(e.keys, ["203.0.113.7"]);
@@ -53,7 +53,7 @@ test("a report is kept, with only what a report has", async () => {
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, "Hi"]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, "Hi", null]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {
@@ -113,4 +113,11 @@ test("every export is one the Workers runtime can start with", () => {
   for (const [name, value] of Object.entries(all)) {
     assert.ok(typeof value === "function" || (name === "default" && typeof value.fetch === "function"), name);
   }
+});
+
+test("a problem the app found by itself says which, and one it doesn't know is none", async () => {
+  const e = env();
+  await worker.fetch(post({ version: "2.12.0", problem: "no_lyrics", song: { title: "Demo", artist: "Band" } }), e);
+  await worker.fetch(post({ version: "2.12.0", problem: "<script>", song: { title: "Demo", artist: "Band" } }), e);
+  assert.deepEqual(e.saved.map((it) => it.values.at(-1)), ["no_lyrics", null]);
 });

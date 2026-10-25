@@ -278,6 +278,11 @@
     <string name="report_send">भेजें</string>
     <string name="report_sent">भेज दिया। धन्यवाद!</string>
     <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
+    <string name="auto_report_offer">ऐसी समस्याओं की रिपोर्ट अपने-आप करें?</string>
+    <string name="auto_report_yes">हाँ</string>
+    <string name="auto_report_no">नहीं, धन्यवाद</string>
+    <string name="setting_auto_report">गानों की समस्याओं की रिपोर्ट अपने-आप करें</string>
+    <string name="setting_auto_report_description">गायब बोल, टाइमिंग या कॉर्ड, और आपकी ठीक की गई टाइमिंग, निजी तौर पर Crosstune के डेवलपर तक जाती है।</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>
