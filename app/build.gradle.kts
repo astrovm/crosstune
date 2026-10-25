@@ -126,7 +126,7 @@ kover {
             excludes {
                 // The MilkDrop visuals' native library and GL thread need a GPU, which unit tests
                 // don't have; they're checked on a phone. What they're told to do is tested.
-                classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*")
+                classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*", "com.astrovm.crosstune.MilkdropBehind*")
                 // Shizuku runs on a phone, where it's checked; what it's told to run is tested.
                 classes("com.astrovm.crosstune.ShizukuShell*")
                 // Root runs su, which only a rooted phone has, and none at hand is; what it's told to run is tested.

@@ -470,7 +470,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
 private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        Box(modifier = Modifier.fillMaxSize()) {
             // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
             val readingShade = if (menuOpen) 0.75f else 0.5f
             // Darkened as they're drawn, smaller than the screen, rather than under a shade over the whole of it.
