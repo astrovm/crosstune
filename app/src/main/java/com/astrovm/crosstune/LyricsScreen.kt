@@ -15,8 +15,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.slideInVertically
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -44,10 +42,10 @@ import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDown
+import android.view.accessibility.AccessibilityManager
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
@@ -257,37 +255,43 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
-    // The bar makes way while the words are scrolled, and comes back once they rest.
-    var scrolledAt by remember { mutableLongStateOf(0L) }
-    var barShown by remember { mutableStateOf(true) }
+    // The song's info and the bar get out of the way of the words a few seconds after the screen opens, or after the last touch or remote key.
+    var touches by remember { mutableIntStateOf(0) }
+    var awake by remember { mutableStateOf(true) }
+    LaunchedEffect(touches) {
+        awake = true
+        delay(TOOLS_SHOWN_MS)
+        awake = false
+    }
     var barMenu by remember(song) { mutableStateOf<BarMenu?>(null) }
     var actionsHeight by remember { mutableStateOf(0.dp) }
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
-    // Again once the words arrive, which put their own tools first on it.
-    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { bar.requestFocus() }
-    LaunchedEffect(scrolledAt) {
-        if (scrolledAt == 0L) return@LaunchedEffect
-        barShown = false
-        delay(BAR_BACK_MS)
-        barShown = true
-    }
-    // Scrolling the words only scrolls them: the screen slides away from a swipe down that starts at the top, not from the words.
-    val scrolling = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
-                return Offset.Zero
-            }
-        }
-    }
+    var focusBar by remember { mutableStateOf(tv) }
+    var infoFocused by remember { mutableStateOf(false) }
+    var barFocused by remember { mutableStateOf(false) }
+    // They stay while there's something to do with them: a menu open, the words being put in time, the remote on them, or a screen
+    // reader that can't tap to bring them back.
+    val reader = rememberAccessibilityOn()
+    val toolsShown = awake || barMenu != null || syncing || infoFocused || barFocused || reader
+    // A touch on the words, when the tools were away, only brings them back.
+    val toolsAway by rememberUpdatedState(!toolsShown)
+    // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
+    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { if (toolsShown) focusBar = true }
     WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(scrolling)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        if (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.changedToDown() }) touches++
+                    }
+                }
+            }
+            .onPreviewKeyEvent { if (tv && it.type == KeyEventType.KeyDown) touches++; false }
             .swipeLayers(downFromTop = true)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
@@ -315,7 +319,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .widthIn(max = ContentMaxWidth)
         ) {
             // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
-            LyricsHeader(song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, onAbout = { openTab(SongTab.MEANING) })
+            LyricsHeader(
+                song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
+                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }
+            )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
@@ -334,7 +341,23 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)
-                    .onPreviewKeyEvent { tv && (barShown || barMenu != null) && it.key == Key.DirectionRight && it.type == KeyEventType.KeyDown && bar.requestFocus() }
+                    // The touch that brings the tools back isn't also a tap on a line.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { if (toolsAway && it.changedToDown()) it.consume() }
+                            }
+                        }
+                    }
+                    .onPreviewKeyEvent {
+                        tv && it.type == KeyEventType.KeyDown && when {
+                            // Nor is the remote's key that does.
+                            toolsAway && it.key in SELECT_KEYS -> true
+                            it.key != Key.DirectionRight -> false
+                            toolsAway -> { focusBar = true; true }
+                            else -> bar.requestFocus()
+                        }
+                    }
             ) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -383,11 +406,18 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             )
         }
         AnimatedVisibility(
-            visible = barShown || barMenu != null,
-            enter = slideInVertically { it * 2 } + fadeIn(),
-            exit = slideOutVertically { it * 2 } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+            visible = toolsShown,
+            enter = fadeIn(tween(TOOLS_FADE_MS)),
+            exit = fadeOut(tween(TOOLS_FADE_MS)),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp).onFocusChanged { barFocused = it.hasFocus }
         ) {
+            // Only while the bar is there to take it.
+            LaunchedEffect(focusBar) {
+                if (focusBar) {
+                    focusBar = false
+                    bar.requestFocus()
+                }
+            }
             LyricsActions(
                 state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
@@ -443,6 +473,19 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
     }
 }
 
+/** Whether a screen reader or another accessibility service is on, which can't tap the screen to bring back what's gone. */
+@Composable
+private fun rememberAccessibilityOn(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var on by remember { mutableStateOf(manager.isEnabled) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.AccessibilityStateChangeListener { on = it }
+        manager.addAccessibilityStateChangeListener(listener)
+        onDispose { manager.removeAccessibilityStateChangeListener(listener) }
+    }
+    return on
+}
+
 /**
  * Holds the screen awake while the words follow a song that's playing. The phone's own timer
  * takes over once the song pauses, nothing says where it is, or these words leave the screen.
@@ -486,7 +529,16 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
  * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: () -> Unit) {
+private fun LyricsHeader(
+    song: MusicMetadata,
+    actions: ScreenActions,
+    canSkipNext: Boolean,
+    canSkipPrevious: Boolean,
+    /** Whether the song's info button shows, rather than leaving the song's name and cover alone. */
+    showAbout: Boolean,
+    onAbout: () -> Unit,
+    onAboutFocus: (Boolean) -> Unit
+) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
     var skippedNext by remember { mutableStateOf<Boolean?>(null) }
@@ -582,7 +634,17 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                 }
             }
         }
-        IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
+        AboutButton(showAbout, about, onAbout, onAboutFocus)
+    }
+}
+
+/** The song's info button. It fades out of its place rather than leave it, so the song doesn't move. */
+@Composable
+private fun AboutButton(shown: Boolean, label: String, onClick: () -> Unit, onFocus: (Boolean) -> Unit) {
+    Box(modifier = Modifier.size(48.dp).onFocusChanged { onFocus(it.hasFocus) }) {
+        AnimatedVisibility(visible = shown, enter = fadeIn(tween(TOOLS_FADE_MS)), exit = fadeOut(tween(TOOLS_FADE_MS))) {
+            IconButton(onClick = onClick) { AppIcon(R.drawable.ic_info, contentDescription = label) }
+        }
     }
 }
 
@@ -676,8 +738,14 @@ private val BAR_SPACE = 80.dp
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
 
-/** How long after the words stop being scrolled the bar comes back. */
-private const val BAR_BACK_MS = 1_200L
+/** How long the song's info and the bar stay after the last touch or remote key. */
+private const val TOOLS_SHOWN_MS = 5_000L
+
+/** How long the song's info and the bar take to fade in and out. */
+private const val TOOLS_FADE_MS = 400
+
+/** The remote's keys that tap what has the focus. */
+private val SELECT_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /** How far across the song is swiped, of its width, to go on to the next song or back. */
 private const val SKIP_SWIPE_FRACTION = 0.25f

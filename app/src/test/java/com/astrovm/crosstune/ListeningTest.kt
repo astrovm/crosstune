@@ -2037,7 +2037,7 @@ class ListeningTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun theVisualsCanBeDarkenedOrSkippedAndTheBarMakesWayWhileScrolling() {
+    fun theVisualsCanBeDarkenedOrSkippedAndTheBarMakesWayAfterAWhile() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
@@ -2056,11 +2056,14 @@ class ListeningTest {
         assertFalse(shown(string(R.string.visuals_drop)))
         assertEquals(1, controllerModel().uiState.visualsDrops)
 
-        // Scrolling the words, the bar makes way, and comes back once they rest.
+        // Scrolling the words is a touch like any other: the bar stays, and makes way a few seconds after the last.
         composeRule.onNode(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(hasText("Demo one")))
             .performTouchInput { swipeUp() }
-        waitUntil(TIMEOUT_MS) { !described(string(R.string.visuals_options)) }
-        waitUntil(TIMEOUT_MS) { described(string(R.string.visuals_options)) }
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.visuals_options)))
+        composeRule.mainClock.advanceTimeBy(5_500)
+        composeRule.waitForIdle()
+        assertFalse(described(string(R.string.visuals_options)))
     }
 
     @Test
