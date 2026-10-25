@@ -1,11 +1,13 @@
 // The Worker that keeps reports from the app. Deploy with `cf deploy` from this folder; the table is in schema.sql.
 {
   "name": "crosstune-report",
+  // The account that holds 4st.li, which the custom domain needs.
+  "account_id": "862d327a982abfbbcd56c2ea3f4060d8",
   "main": "worker.js",
   "compatibility_date": "2026-10-01",
   "routes": [{ "pattern": "report.crosstune.4st.li", "custom_domain": true }],
   "workers_dev": false,
-  "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "73c76fad-9834-4472-a9cf-baab6886d88c" }],
   // A few reports a minute from one address is plenty for people; more is someone flooding it.
   "ratelimits": [{ "name": "LIMIT", "namespace_id": "3921", "simple": { "limit": 5, "period": 60 } }],
   // Clears out reports past the days they're kept.
