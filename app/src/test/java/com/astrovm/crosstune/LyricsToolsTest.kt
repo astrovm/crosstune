@@ -16,7 +16,11 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -232,6 +236,19 @@ class LyricsToolsTest {
         passes(SHOWN_MS + FADE_MS)
         assertTrue(described(about))
         assertTrue(described(learn))
+    }
+
+    @Test
+    fun theBarComesAndGoesOverTheWordsWithoutMovingThem() {
+        phone = Phone.OTHER
+        openLyrics()
+        val words = composeRule.onAllNodes(hasScrollAction())[0]
+        touch()
+        val withBar = words.getUnclippedBoundsInRoot().bottom
+        val barTop = composeRule.onNodeWithContentDescription(learn).getUnclippedBoundsInRoot().top
+        assertTrue("the words end at $withBar, before the bar at $barTop", withBar > barTop)
+        passes(SHOWN_MS + FADE_MS)
+        assertEquals(withBar, words.getUnclippedBoundsInRoot().bottom)
     }
 
     @Test
