@@ -336,12 +336,14 @@ internal class LyricsFinder(
 
     /**
      * Under the title as given, then, for one that's two names joined by a dash, as YouTube Music
-     * gives "ミステリー・ガール - Mystery Girl", under each of them. Words in romaji found under one
-     * give way to the song's own, in Japanese, under another, when they're timed as well.
+     * gives "ミステリー・ガール - Mystery Girl", under each of them, and last under its bare title: a
+     * video named "Song (Loop y Extendido)" has the song's words, though no one keeps them under that.
+     * Words in romaji found under one give way to the song's own, in Japanese, under another, when
+     * they're timed as well.
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         var romaji: Lyrics.Found? = null
-        val answers = SongNames.titleNames(metadata.title).map { title ->
+        val answers = (SongNames.titleNames(metadata.title) + SongNames.bareTitle(metadata.title)).distinct().map { title ->
             underName(metadata.copy(title = title), timeoutMs).also { answer ->
                 val kept = romaji
                 if (answer is Lyrics.Found) {
