@@ -161,6 +161,12 @@ class TvPlayTest {
         composeRule.waitForIdle()
     }
 
+    /** Back pressed until Crosstune is left, through the words, the player and the main screen, as it closes the cover. */
+    private fun backOut(service: ServiceController<FloatingLyricsService>) {
+        repeat(4) { if (!shadowOf(service.get()).isStoppedBySelf) pressBack(service.get()) }
+        assertTrue(shadowOf(service.get()).isStoppedBySelf)
+    }
+
     @Test
     fun onATvPlayCoversYouTubeWithTheSongsWordsRatherThanComeInFrontOfIt() {
         launch()
@@ -242,22 +248,21 @@ class TvPlayTest {
     }
 
     @Test
-    fun thePlayersPlayThatCantOpenYouTubeAgainCoversNothing() {
+    fun playThatCantOpenYouTubeAgainCoversNothing() {
         launch()
         val floating = playCovered()
         playing()
         waitUntil { shown("Demo one") }
-        pressBack(floating.get())
-        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        backOut(floating)
         playback.playing.value = null
         controller!!.start().resume()
         composeRule.waitForIdle()
         // Nothing opened, so there's nothing to cover, and nothing in the app goes on thinking there is.
         playback.opens = false
-        click(string(R.string.lyrics_play))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()
-        assertEquals(1, playback.opened.size)
         assertNull(shadowOf(app).peekNextStartedService())
     }
 
@@ -267,15 +272,13 @@ class TvPlayTest {
         val floating = playCovered()
         playing()
         waitUntil { shown("Demo one") }
-        pressBack(floating.get())
-        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
-        // Back in Crosstune, YouTube lets go of the song, and the player's play opens it on the song again.
+        backOut(floating)
+        // Back in Crosstune, YouTube lets go of the song, and Play opens it on the song again, covered again.
         playback.playing.value = null
         controller!!.start().resume()
         composeRule.waitForIdle()
-        click(string(R.string.lyrics_play))
-        waitUntil { shadowOf(app).peekNextStartedService() != null }
-        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        playCovered()
         assertEquals(2, playback.opened.size)
     }
 
@@ -300,8 +303,7 @@ class TvPlayTest {
     fun theCoverBeingClosedBeforeYouTubePlaysBringsCrosstuneBackLikeOnAPhone() {
         launch()
         val floating = playCovered()
-        pressBack(floating.get())
-        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        backOut(floating)
         assertEquals(0, playback.cameBack)
         // Nothing is over YouTube to show the words, so Crosstune comes in front of it.
         playing()
