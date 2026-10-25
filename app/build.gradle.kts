@@ -133,6 +133,9 @@ kover {
                 classes("com.astrovm.crosstune.RootShell*")
                 // Waking another music app binds to it, which needs a phone, where it's checked.
                 classes("com.astrovm.crosstune.MediaBrowserWaker*")
+                // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
+                // checked on a phone. What it hears is parsed, and lined up, in tested code.
+                classes("com.astrovm.crosstune.NativeWhisper*")
             }
         }
         variant("debug") {

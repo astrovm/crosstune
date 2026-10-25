@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
@@ -17,6 +18,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
 import android.Manifest
 import androidx.glance.appwidget.updateAll
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -117,6 +119,7 @@ class MainActivity : ComponentActivity() {
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
+                    singing = singingFactory(applicationContext, client),
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
@@ -212,6 +215,9 @@ class MainActivity : ComponentActivity() {
     private var pendingClipboardRead = false
 
     companion object {
+        /** Memory a phone needs, at least, to hear the words sung: the model takes about 100 MB while it listens. */
+        const val SINGING_MEMORY = 3L * 1024 * 1024 * 1024
+
         const val ACTION_PASTE_FROM_CLIPBOARD = "com.astrovm.crosstune.action.PASTE_FROM_CLIPBOARD"
 
         /** The unexported alias the tile and launcher shortcut use, so only they can trigger a clipboard read. */
@@ -315,6 +321,21 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         /** What the visuals hear the phone play through. */
         internal var soundTapFactory: () -> SoundTap? = { OutputMixTap.open() }
+
+        /**
+         * What hears the words sung in what the phone plays: whisper.cpp's model, fetched once on an
+         * unmetered network into files kept out of backups. None on a phone with little memory, e.g. a
+         * TV's 2 GB, where it would push the music app out.
+         */
+        @VisibleForTesting
+        internal var singingFactory: (Context, OkHttpClient) -> SingingHearing? = { context, client ->
+            val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }
+            SingingListener(
+                PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)),
+                WhisperModel(client, File(context.noBackupFilesDir, "whisper"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })::file,
+                NativeWhisper::open
+            ).takeIf { memory.totalMem >= SINGING_MEMORY }
+        }
 
         /** What tells which language a song's words are in, when a test stands in for Android. */
         @VisibleForTesting

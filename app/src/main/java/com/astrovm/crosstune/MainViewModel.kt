@@ -105,6 +105,8 @@ internal class MainViewModel(
     private val updates: UpdateChecker? = null,
     /** Calibration may use the microphone only when its permission has already been granted. */
     private val mayCalibrate: () -> Boolean = { false },
+    /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
+    private val singing: SingingHearing? = null,
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
@@ -136,6 +138,7 @@ internal class MainViewModel(
     private val syncStore = LyricsSyncStore(preferences)
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
+    private val sungStore = SungStore(preferences)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -1422,6 +1425,10 @@ internal class MainViewModel(
 
     private var nextJob: Job? = null
 
+    /** Hearing the words sung, to line them up; [singingTries] this time the song's followed. */
+    private var singingJob: Job? = null
+    private var singingTries = 0
+
     /** Set once the song shown was playing while its words were open, so the next song an app plays takes over. */
     private var shownPlayed = false
 
@@ -1820,6 +1827,49 @@ internal class MainViewModel(
         // Put in time by hand, the words keep to the guess they were put in time from.
         appFollowing?.takeIf { it.video && appLeadMs == null && calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted() }?.let { app -> guessLead(app, shown) }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
+        hearSinging()
+    }
+
+    /**
+     * Lines the timed words up to the singing, once for the song and its words: a while of what the
+     * phone plays is heard, and the words move to where they're sung, as a nudge by hand would move
+     * them, which Reset undoes. Only while a music app on the phone plays it, lined up otherwise, with
+     * nothing put in time by hand, and Crosstune in sight with the words.
+     */
+    private fun hearSinging() {
+        val hearing = singing ?: return
+        val song = uiState.lyricsFor ?: return
+        val lines = foundLines
+        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || alongJob?.isActive == true || nextPaused) return
+        if (lines.isEmpty() || uiState.lyricsSynced || handGap != null || !playingLinedUp() || !mayCalibrate() || sungStore.heard(song, lines)) return
+        singingJob = viewModelScope.launch {
+            // Heard where lines are sung, so there are words to hear.
+            delay(untilSung(lines, uiState.following?.clock ?: return@launch) ?: return@launch)
+            val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return@launch
+            singingTries++
+            val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-')) ?: return@launch
+            // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
+            val now = uiState.following?.clock
+            if (uiState.lyricsFor != song || foundLines != lines || now == null || !now.playing || abs(now.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
+            val shift = SungAlignment.shiftMs(sung, clock::positionAt, lines) ?: return@launch
+            sungStore.save(song, lines)
+            if (abs(shift) >= SINGING_NUDGE_MS && !uiState.lyricsSynced && handGap == null) nudgeSync(shift)
+        }
+    }
+
+    /** Whether a music app on the phone plays the song, lined up with its words. */
+    private fun playingLinedUp() = uiState.following?.let { it.app != null && it.clock.playing && it.timingKnown } == true
+
+    /**
+     * How long until what's heard from then on has lines sung in it, by [clock]; null when no stretch
+     * of the song left has enough.
+     */
+    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock): Long? {
+        val at = clock.positionAt(now())
+        val heardMs = SingingListener.SECONDS * 1000L
+        return (listOf(at) + lines.map { it.timeMs }.filter { it > at }).firstOrNull { from ->
+            lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
+        }?.let { ((it - at) / clock.speed).toLong() }
     }
 
     /**
@@ -1922,6 +1972,7 @@ internal class MainViewModel(
                 }
                 // What the app plays tells whether the words are timed for it.
                 uiState = uiState.copy(following = inSong(playing) ?: heardFollowing(song) ?: left?.let { Following(it, app = null, canSeek = false) }, lyricsOffTake = timedForAnother(song))
+                hearSinging()
             }
         }
     }
@@ -1956,12 +2007,15 @@ internal class MainViewModel(
         nextPaused = true
         nextJob?.cancel()
         nextJob = null
+        // Out of sight, the singing isn't heard either, until it's back.
+        singingJob?.cancel()
     }
 
     fun resumeFollowingNext() {
         if (!nextPaused) return
         nextPaused = false
         uiState.lyricsFor?.let(::watchNext)
+        hearSinging()
     }
 
     /** Has the music app the words follow go on to its [next] song, or back to the one before, whose words then show. */
@@ -1975,6 +2029,9 @@ internal class MainViewModel(
     private fun stopFollowing() {
         followJob?.cancel()
         followJob = null
+        singingJob?.cancel()
+        singingJob = null
+        singingTries = 0
         appFollowing = null
         appLeadMs = null
         guessedLeadMs = null
@@ -3368,6 +3425,17 @@ internal class MainViewModel(
         const val HEARD_LATELY_MS = 60_000L
         /** How far Shazam's place in a song may be from where its words are timed. */
         const val MAX_GAP_MS = 60_000L
+
+        /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
+        const val SINGING_TRIES = 3
+        /** Lines sung in what's heard, at least, so enough words to match are heard. */
+        const val SINGING_LINES = 3
+        /** The last moment of what's heard, where a line starting hasn't been sung yet. */
+        const val SINGING_TAIL_MS = 3_000L
+        /** Words heard sung less off than this stay as they are: hearing them is about as exact. */
+        const val SINGING_NUDGE_MS = 250L
+        /** Where the song is may drift this much while it's heard, and still be where it was. */
+        const val STEADY_CLOCK_MS = 300L
 
         /** Long enough not to keep Shazam busy, short enough to catch a skip or the next song soon. */
         const val LISTEN_ALONG_PAUSE_MS = 8_000L
