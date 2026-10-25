@@ -88,9 +88,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.Dp
 import java.text.NumberFormat
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.mutableFloatStateOf
@@ -267,7 +265,6 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         awake = false
     }
     var barMenu by remember(song) { mutableStateOf<BarMenu?>(null) }
-    var actionsHeight by remember { mutableStateOf(0.dp) }
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
@@ -353,8 +350,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    // The bar comes and goes over the words, so they never move for it; only a menu pushes them up, to see what it changes.
-                    .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else 16.dp)
+                    // The bar and its menus come and go over the words, so they never move for them.
+                    .padding(bottom = 16.dp)
                     // The touch that brings the tools back isn't also a tap on a line.
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
@@ -436,7 +433,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
                 onChooseLines = { practise -> choosing = practise },
-                menu = barMenu, onMenuChange = { barMenu = it }, onHeightChange = { actionsHeight = it }, focus = bar,
+                menu = barMenu, onMenuChange = { barMenu = it }, focus = bar,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -680,16 +677,14 @@ private fun LyricsActions(
     onChooseLines: (Boolean) -> Unit,
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
-    onHeightChange: (Dp) -> Unit,
     /** Where a TV remote lands on the bar. */
     focus: FocusRequester,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
     // The readings page handles back first, while it's open, and returns to its card.
     BackHandler(enabled = menu != null) { onMenuChange(null) }
     Box(modifier = modifier.widthIn(max = 392.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.onSizeChanged { onHeightChange(with(density) { it.height.toDp() }) }) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         val close = { onMenuChange(null) }
         LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
