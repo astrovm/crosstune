@@ -1840,7 +1840,8 @@ internal class MainViewModel(
         val hearing = singing ?: return
         val song = uiState.lyricsFor ?: return
         val lines = foundLines
-        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || alongJob?.isActive == true || nextPaused) return
+        // Not while Shazam hears the phone's sound to line it up, which it hears first.
+        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || (lining && alongJob?.isActive == true) || nextPaused) return
         if (lines.isEmpty() || uiState.lyricsSynced || handGap != null || !playingLinedUp() || !mayCalibrate() || sungStore.heard(song, lines)) return
         singingJob = viewModelScope.launch {
             // Heard where lines are sung, so there are words to hear.
@@ -1920,6 +1921,8 @@ internal class MainViewModel(
         pauseListeningAlong()
         // Not lined up by ear after all, the words may be put in time by hand.
         uiState = uiState.copy(listeningAlong = false, lyricsOffTake = uiState.lyricsFor?.let(::timedForAnother) == true)
+        // Shazam done with the phone's sound, the singing in it is heard.
+        hearSinging()
     }
 
     /** Crosstune went out of sight: the microphone stops, and starts again when it's back. */

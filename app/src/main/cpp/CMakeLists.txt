@@ -50,6 +50,10 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     add_subdirectory("${PROJECT_ROOT}/third_party/whisper.cpp" whisper EXCLUDE_FROM_ALL)
+    # Optimized in the dev build too: unoptimized, hearing 20 seconds takes a phone minutes.
+    foreach(library whisper ggml ggml-base ggml-cpu)
+        target_compile_options(${library} PRIVATE -O3)
+    endforeach()
 
     add_library(sungwords SHARED sungwords.cpp)
     target_link_libraries(sungwords PRIVATE whisper)
