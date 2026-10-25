@@ -5,9 +5,9 @@
 <b>功能</b>
 <ul>
 <li>可讀取 Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack 的連結，並在其中任意一個或 Amazon Music 和 Qobuz 中開啟。</li>
-<li>播放清單和專輯會顯示其中的歌曲：可在你的應用程式中開啟任意一首，複製或分享清單，或在 YouTube Music 或 YouTube 中全部播放。</li>
+<li>播放清單和專輯會顯示其中的歌曲：可在你選的應用程式中開啟任意一首，複製或分享清單，或在 YouTube Music 或 YouTube 中全部播放。</li>
 <li>為每個服務指定不同的去向，例如 YouTube 連結用 YouTube Music 開啟，其餘都用 Apple Music 開啟。</li>
-<li>先在 Crosstune 中顯示：你留在這裡，歌曲在你的應用程式中播放。</li>
+<li>先在 Crosstune 中顯示：你留在這裡，歌曲在你選的應用程式中播放。</li>
 <li>Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud 和 Audiomack 可直接開啟歌曲、專輯或藝人本身，而不是搜尋結果，Bandcamp 和 Qobuz 可直接開啟歌曲或專輯，YouTube 可直接開啟歌曲。</li>
 <li>新增其他帶搜尋頁面的應用程式和網站。</li>
 <li>一鍵貼上，搜尋並重新開啟最近的連結，或透過主畫面小工具、快速設定圖塊或長按應用程式圖示來開啟已複製的連結。</li>

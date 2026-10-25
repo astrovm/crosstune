@@ -5,7 +5,7 @@
 <b>기능</b>
 <ul>
 <li>Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, Audiomack의 링크를 읽고, 이 서비스들 또는 Amazon Music, Qobuz에서 열어요.</li>
-<li>플레이리스트와 앨범은 노래 목록을 보여줘요. 원하는 노래를 내 앱에서 열거나, 목록을 복사하거나 공유하거나, YouTube Music 또는 YouTube에서 모두 재생할 수 있어요.</li>
+<li>플레이리스트와 앨범은 노래 목록을 보여줘요. 원하는 노래를 고른 앱에서 열거나, 목록을 복사하거나 공유하거나, YouTube Music 또는 YouTube에서 모두 재생할 수 있어요.</li>
 <li>서비스마다 여는 앱을 다르게 지정할 수 있어요. 예를 들어 YouTube 링크는 YouTube Music, 나머지는 모두 Apple Music에서 열 수 있어요.</li>
 <li>먼저 Crosstune에서 보기: 머무는 동안 노래가 앱에서 재생돼요.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud, Audiomack에서는 검색 결과 대신 노래, 앨범, 아티스트 페이지를 바로 열 수 있고, Bandcamp와 Qobuz에서는 노래와 앨범을, YouTube에서는 노래를 열 수 있어요.</li>
