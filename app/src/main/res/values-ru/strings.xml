@@ -266,6 +266,8 @@
     <string name="lyrics_readings">Чтение над словами</string>
     <string name="lyrics_reading_size">Размер чтения</string>
     <string name="lyrics_words_size">Размер текста</string>
+    <string name="lyrics_align_start">Выровнять текст по началу</string>
+    <string name="lyrics_align_center">Выровнять текст по центру</string>
     <string name="lyrics_translation_size">Размер перевода</string>
     <string name="lyrics_show_as">Показывать как</string>
     <string name="report_problem">Сообщить о проблеме</string>

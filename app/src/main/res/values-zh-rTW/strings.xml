@@ -266,6 +266,8 @@
     <string name="lyrics_readings">在文字上方顯示讀音</string>
     <string name="lyrics_reading_size">讀音大小</string>
     <string name="lyrics_words_size">歌詞大小</string>
+    <string name="lyrics_align_start">歌詞起始對齊</string>
+    <string name="lyrics_align_center">歌詞置中對齊</string>
     <string name="lyrics_translation_size">翻譯大小</string>
     <string name="lyrics_show_as">顯示方式</string>
     <string name="report_problem">回報問題</string>

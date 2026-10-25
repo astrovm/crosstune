@@ -266,6 +266,8 @@
     <string name="lyrics_readings">Leitura sobre as palavras</string>
     <string name="lyrics_reading_size">Tamanho da leitura</string>
     <string name="lyrics_words_size">Tamanho da letra</string>
+    <string name="lyrics_align_start">Alinhar a letra ao início</string>
+    <string name="lyrics_align_center">Centralizar a letra</string>
     <string name="lyrics_translation_size">Tamanho da tradução</string>
     <string name="lyrics_show_as">Mostrar como</string>
     <string name="report_problem">Relatar um problema</string>

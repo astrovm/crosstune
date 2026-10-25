@@ -320,6 +320,8 @@ internal data class ScreenActions(
     /** How big readings are beside the words; kept when [save]d, once let go. */
     val onReadingScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onWordsScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
+    /** Centers the words on the lyrics screen, or sets them at the start of the line. */
+    val onWordsCenteredChange: (Boolean) -> Unit = {},
     val onTranslationScaleChange: (scale: Float, save: Boolean) -> Unit = { _, _ -> },
     val onSignInWithChatGpt: () -> Unit = {},
     val onCancelChatGptSignIn: () -> Unit = {},

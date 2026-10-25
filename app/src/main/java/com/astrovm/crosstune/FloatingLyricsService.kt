@@ -45,8 +45,6 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -79,7 +77,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
     private val savedState = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedState.savedStateRegistry
 
-    // Back goes back in the screen covering another app, as it does in Crosstune, then closes it.
+    // Back goes back in the screen covering another app, as it does in Crosstune, and from its main screen closes it.
     override val onBackPressedDispatcher = OnBackPressedDispatcher { close() }
 
     private val windows get() = getSystemService(WindowManager::class.java)
@@ -110,9 +108,6 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     /** Whether it covers another app, rather than float the words over it. */
     private var covering = false
-
-    /** Closes the screen covering another app once it's done. */
-    private var coverDone: Job? = null
 
     /**
      * Locked, the words let every touch through, so a small button of their own, beside them, still
@@ -280,7 +275,7 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         }
     }
 
-    /** All of Crosstune's screen, covering the app playing, until its words close, or, before they open, its player. */
+    /** All of Crosstune's screen, covering the app playing, until Back leaves Crosstune's main screen, as it would leave Crosstune. */
     private fun cover(host: FloatingHost) {
         if (!Settings.canDrawOverlays(this)) return stopSelf()
         covering = true
@@ -301,18 +296,9 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
         this.view = view
         registry.currentState = Lifecycle.State.RESUMED
         windows.addView(view, coverParams)
-        coverDone = lifecycleScope.launch {
-            var words = false
-            snapshotFlow { (host.state.lyricsFor != null) to (host.state.player != null) }.first { (open, player) ->
-                words = words || open
-                !open && (words || !player)
-            }
-            close()
-        }
     }
 
     private fun uncover() {
-        coverDone?.cancel()
         view?.let(windows::removeView)
         view = null
         covering = false

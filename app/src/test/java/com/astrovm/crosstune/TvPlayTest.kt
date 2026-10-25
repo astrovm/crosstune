@@ -117,6 +117,8 @@ class TvPlayTest {
 
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
+    private fun onPlayer() = shown(string(R.string.lyrics_play)) || shown(string(R.string.lyrics_pause))
+
     private fun click(text: String) {
         // Pressed as the remote does, which reaches what's below the TV's edge too, scrolling to it.
         composeRule.onAllNodes(hasText(text) or hasContentDescription(text))[0].performSemanticsAction(SemanticsActions.OnClick)
@@ -174,7 +176,15 @@ class TvPlayTest {
         waitUntil { shown("Demo one") }
         assertEquals(0, playback.cameBack)
 
-        // Back closes them, and what covered YouTube, which plays on.
+        // Back goes back in Crosstune, from the words to the player and on to the main screen, still over YouTube.
+        pressBack(floating.get())
+        waitUntil { !shown("Demo one") }
+        assertTrue(onPlayer())
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
+        // From there, Back leaves Crosstune, to YouTube, which plays on.
         pressBack(floating.get())
         waitUntil { shadowOf(floating.get()).isStoppedBySelf }
         controller!!.start().resume()
@@ -183,10 +193,13 @@ class TvPlayTest {
     }
 
     @Test
-    fun backBeforeTheWordsOpenLeavesYouTubeToo() {
+    fun backBeforeTheWordsOpenGoesBackInCrosstuneToo() {
         launch()
         val floating = playCovered()
-        // Not playing yet, Back goes back from the player, which is all there is to cover it with.
+        // Not playing yet, Back goes back from the player to the main screen, and from there to YouTube.
+        pressBack(floating.get())
+        waitUntil { !onPlayer() }
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
         pressBack(floating.get())
         waitUntil { shadowOf(floating.get()).isStoppedBySelf }
     }
@@ -261,7 +274,7 @@ class TvPlayTest {
         playing()
         waitUntil { shown("Demo one") }
         pressBack(floating.get())
-        // Back in Crosstune, YouTube stopped, and lets go of the song.
+        // On the player, YouTube stopped, and lets go of the song.
         playback.playing.value = null
         controller!!.start().resume()
         composeRule.waitForIdle()

@@ -15,8 +15,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.slideInVertically
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -44,10 +42,10 @@ import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDown
+import android.view.accessibility.AccessibilityManager
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.SpanStyle
@@ -187,6 +185,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -256,37 +255,43 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         tween(durationMillis = 700),
         label = "lyrics tint"
     )
-    // The bar makes way while the words are scrolled, and comes back once they rest.
-    var scrolledAt by remember { mutableLongStateOf(0L) }
-    var barShown by remember { mutableStateOf(true) }
+    // The song's info and the bar get out of the way of the words a few seconds after the screen opens, or after the last touch or remote key.
+    var touches by remember { mutableIntStateOf(0) }
+    var awake by remember { mutableStateOf(true) }
+    LaunchedEffect(touches) {
+        awake = true
+        delay(TOOLS_SHOWN_MS)
+        awake = false
+    }
     var barMenu by remember(song) { mutableStateOf<BarMenu?>(null) }
     var actionsHeight by remember { mutableStateOf(0.dp) }
     // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
     val tv = state.phone == Phone.TV
     val bar = remember { FocusRequester() }
-    // Again once the words arrive, which put their own tools first on it.
-    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { bar.requestFocus() }
-    LaunchedEffect(scrolledAt) {
-        if (scrolledAt == 0L) return@LaunchedEffect
-        barShown = false
-        delay(BAR_BACK_MS)
-        barShown = true
-    }
-    // Scrolling the words only scrolls them: the screen slides away from a swipe down that starts at the top, not from the words.
-    val scrolling = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y != 0f) scrolledAt = SystemClock.uptimeMillis()
-                return Offset.Zero
-            }
-        }
-    }
+    var focusBar by remember { mutableStateOf(tv) }
+    var infoFocused by remember { mutableStateOf(false) }
+    var barFocused by remember { mutableStateOf(false) }
+    // They stay while there's something to do with them: a menu open, the words being put in time, the remote on them, or a screen
+    // reader that can't tap to bring them back.
+    val reader = rememberAccessibilityOn()
+    val toolsShown = awake || barMenu != null || syncing || infoFocused || barFocused || reader
+    // A touch on the words, when the tools were away, only brings them back.
+    val toolsAway by rememberUpdatedState(!toolsShown)
+    // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
+    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { if (toolsShown) focusBar = true }
     WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(scrolling)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        if (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.changedToDown() }) touches++
+                    }
+                }
+            }
+            .onPreviewKeyEvent { if (tv && it.type == KeyEventType.KeyDown) touches++; false }
             .swipeLayers(downFromTop = true)
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
@@ -314,7 +319,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 .widthIn(max = ContentMaxWidth)
         ) {
             // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
-            LyricsHeader(song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, onAbout = { openTab(SongTab.MEANING) })
+            LyricsHeader(
+                song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
+                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }
+            )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
@@ -333,7 +341,23 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)
-                    .onPreviewKeyEvent { tv && (barShown || barMenu != null) && it.key == Key.DirectionRight && it.type == KeyEventType.KeyDown && bar.requestFocus() }
+                    // The touch that brings the tools back isn't also a tap on a line.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { if (toolsAway && it.changedToDown()) it.consume() }
+                            }
+                        }
+                    }
+                    .onPreviewKeyEvent {
+                        tv && it.type == KeyEventType.KeyDown && when {
+                            // Nor is the remote's key that does.
+                            toolsAway && it.key in SELECT_KEYS -> true
+                            it.key != Key.DirectionRight -> false
+                            toolsAway -> { focusBar = true; true }
+                            else -> bar.requestFocus()
+                        }
+                    }
             ) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
@@ -361,7 +385,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         // Read line by line, each with what helps read it, or its chords.
                         LyricLines(state, onStudy = { studying = it })
                     } else {
-                        PlainLyrics(state.lyrics, state.learning.wordsScale)
+                        PlainLyrics(state.lyrics, state.learning.wordsScale, state.wordsCentered)
                     }
                 }
             }
@@ -382,11 +406,18 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             )
         }
         AnimatedVisibility(
-            visible = barShown || barMenu != null,
-            enter = slideInVertically { it * 2 } + fadeIn(),
-            exit = slideOutVertically { it * 2 } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+            visible = toolsShown,
+            enter = fadeIn(tween(TOOLS_FADE_MS)),
+            exit = fadeOut(tween(TOOLS_FADE_MS)),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp).onFocusChanged { barFocused = it.hasFocus }
         ) {
+            // Only while the bar is there to take it.
+            LaunchedEffect(focusBar) {
+                if (focusBar) {
+                    focusBar = false
+                    bar.requestFocus()
+                }
+            }
             LyricsActions(
                 state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
@@ -442,6 +473,19 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
     }
 }
 
+/** Whether a screen reader or another accessibility service is on, which can't tap the screen to bring back what's gone. */
+@Composable
+private fun rememberAccessibilityOn(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var on by remember { mutableStateOf(manager.isEnabled) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.AccessibilityStateChangeListener { on = it }
+        manager.addAccessibilityStateChangeListener(listener)
+        onDispose { manager.removeAccessibilityStateChangeListener(listener) }
+    }
+    return on
+}
+
 /**
  * Holds the screen awake while the words follow a song that's playing. The phone's own timer
  * takes over once the song pauses, nothing says where it is, or these words leave the screen.
@@ -485,7 +529,16 @@ private fun lyricsShown(state: UiState): LyricsShown = when {
  * app playing it goes on to its next song, or back to the one before, while it can.
  */
 @Composable
-private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNext: Boolean, canSkipPrevious: Boolean, onAbout: () -> Unit) {
+private fun LyricsHeader(
+    song: MusicMetadata,
+    actions: ScreenActions,
+    canSkipNext: Boolean,
+    canSkipPrevious: Boolean,
+    /** Whether the song's info button shows, rather than leaving the song's name and cover alone. */
+    showAbout: Boolean,
+    onAbout: () -> Unit,
+    onAboutFocus: (Boolean) -> Unit
+) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
     var skippedNext by remember { mutableStateOf<Boolean?>(null) }
@@ -581,7 +634,17 @@ private fun LyricsHeader(song: MusicMetadata, actions: ScreenActions, canSkipNex
                 }
             }
         }
-        IconButton(onClick = onAbout) { AppIcon(R.drawable.ic_info, contentDescription = about) }
+        AboutButton(showAbout, about, onAbout, onAboutFocus)
+    }
+}
+
+/** The song's info button. It fades out of its place rather than leave it, so the song doesn't move. */
+@Composable
+private fun AboutButton(shown: Boolean, label: String, onClick: () -> Unit, onFocus: (Boolean) -> Unit) {
+    Box(modifier = Modifier.size(48.dp).onFocusChanged { onFocus(it.hasFocus) }) {
+        AnimatedVisibility(visible = shown, enter = fadeIn(tween(TOOLS_FADE_MS)), exit = fadeOut(tween(TOOLS_FADE_MS))) {
+            IconButton(onClick = onClick) { AppIcon(R.drawable.ic_info, contentDescription = label) }
+        }
     }
 }
 
@@ -611,7 +674,7 @@ private fun LyricsActions(
     Box(modifier = modifier.widthIn(max = 392.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.onSizeChanged { onHeightChange(with(density) { it.height.toDp() }) }) {
         val close = { onMenuChange(null) }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, actions)
+        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
         Surface(
@@ -675,8 +738,14 @@ private val BAR_SPACE = 80.dp
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
 
-/** How long after the words stop being scrolled the bar comes back. */
-private const val BAR_BACK_MS = 1_200L
+/** How long the song's info and the bar stay after the last touch or remote key. */
+private const val TOOLS_SHOWN_MS = 5_000L
+
+/** How long the song's info and the bar take to fade in and out. */
+private const val TOOLS_FADE_MS = 400
+
+/** The remote's keys that tap what has the focus. */
+private val SELECT_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /** How far across the song is swiped, of its width, to go on to the next song or back. */
 private const val SKIP_SWIPE_FRACTION = 0.25f
@@ -702,7 +771,7 @@ private val Learning.shows get() = translation || (script != null && (readings |
  * three; and a translation, for any.
  */
 @Composable
-private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions) {
+private fun LearnMenu(open: Boolean, learning: Learning, centered: Boolean, actions: ScreenActions) {
     if (!open) return
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.55f
     Surface(
@@ -712,14 +781,17 @@ private fun LearnMenu(open: Boolean, learning: Learning, actions: ScreenActions)
         modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth().testTag("lyrics-display-options")
     ) {
         Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
-            WordsOptions(learning, actions)
+            WordsOptions(learning, actions, centered)
         }
     }
 }
 
-/** The same display controls in the lyrics menu and in the floating lyrics' settings. */
+/** Whether the words are centered: as picked, else on a TV, where they read better from the couch. */
+internal val UiState.wordsCentered get() = learning.centered ?: (phone == Phone.TV)
+
+/** The same display controls in the lyrics menu and in the floating lyrics' settings; [centered] is null where words have no alignment to pick. */
 @Composable
-internal fun WordsOptions(learning: Learning, actions: ScreenActions) {
+internal fun WordsOptions(learning: Learning, actions: ScreenActions, centered: Boolean? = null) {
     val script = learning.script
     if (script != null) {
         MenuCaption(R.string.lyrics_show_as)
@@ -747,11 +819,31 @@ internal fun WordsOptions(learning: Learning, actions: ScreenActions) {
         ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
     }
     SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
+    if (centered != null) AlignPicker(centered, actions.onWordsCenteredChange)
     if (readings && learning.readings) {
         SizeSlider(R.string.lyrics_reading_size, learning.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, actions.onReadingScaleChange)
     }
     if (learning.translation) {
         SizeSlider(R.string.lyrics_translation_size, learning.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onTranslationScaleChange)
+    }
+}
+
+/** Whether the words sit at the start of the line or in its middle, an icon each so there's nothing to read. */
+@Composable
+private fun AlignPicker(centered: Boolean, onChange: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        listOf(false to (R.drawable.ic_format_align_left to R.string.lyrics_align_start), true to (R.drawable.ic_format_align_center to R.string.lyrics_align_center))
+            .forEachIndexed { index, (middle, look) ->
+                SegmentedButton(
+                    selected = centered == middle,
+                    onClick = { onChange(middle) },
+                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    icon = {}
+                ) {
+                    AppIcon(look.first, contentDescription = stringResource(look.second), modifier = Modifier.size(20.dp))
+                }
+            }
     }
 }
 
@@ -1339,10 +1431,10 @@ private fun LoadingLines() {
 
 /** Words with no timings, read as a page. */
 @Composable
-private fun PlainLyrics(words: String, scale: Float) {
+private fun PlainLyrics(words: String, scale: Float, centered: Boolean) {
     Text(
         text = words,
-        style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * scale, lineHeight = 34.sp * scale) },
+        style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * scale, lineHeight = 34.sp * scale, textAlign = alignment(centered)) },
         modifier = Modifier
             .fillMaxSize()
             .fadedEdges()
@@ -1415,7 +1507,8 @@ private fun TimedLyrics(
                 seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
                 onStudy = { onStudy(index) },
                 help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale
+                textScale = state.learning.wordsScale,
+                centered = state.wordsCentered
             )
         }
     }
@@ -1434,7 +1527,7 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
         itemsIndexed(lines) { index, line ->
             LyricLineText(
                 line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale
+                textScale = state.learning.wordsScale, centered = state.wordsCentered
             )
         }
     }
@@ -1549,7 +1642,8 @@ private fun LyricLineText(
     help: LineHelp? = null,
     waiting: Boolean = false,
     seekLabel: Int = R.string.lyrics_jump,
-    textScale: Float
+    textScale: Float,
+    centered: Boolean
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1565,9 +1659,12 @@ private fun LyricLineText(
         lineHeight = (if (place == null) 30.sp else 34.sp) * textScale,
         fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
         // Rows of about even length, broken between words, so no word or kana is left alone on the last.
-        lineBreak = LineBreak.Heading
+        lineBreak = LineBreak.Heading,
+        textAlign = alignment(centered)
     ).writing(text)
     Column(
+        // The rows of a line are centered by their style; this centers the line where it's shorter than the screen.
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
         modifier = Modifier
             .fillMaxWidth()
             .testTag(LYRIC_LINE_TAG)
@@ -1576,7 +1673,7 @@ private fun LyricLineText(
                 this.alpha = alpha
                 scaleX = scale
                 scaleY = scale
-                transformOrigin = TransformOrigin(0f, 0.5f)
+                transformOrigin = TransformOrigin(if (centered) 0.5f else 0f, 0.5f)
             }
             // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
             // A gap, e.g. a solo, has no words to study, so it only moves the app there.
@@ -1609,17 +1706,19 @@ private fun LyricLineText(
             // A gap with no words, e.g. a solo, is a note rather than an empty line.
             Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
         }
-        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f)
+        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
         // Shown in them already, they'd say it twice.
         if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let {
-            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale)
+            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale, textAlign = style.textAlign)
             Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
+
+private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
 /** Where the song is while [following] it, checked every frame while it plays; null while not. */
 @Composable
