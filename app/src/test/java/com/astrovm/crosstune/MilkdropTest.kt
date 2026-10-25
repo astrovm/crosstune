@@ -45,6 +45,9 @@ class MilkdropTest {
         override fun draw() {
             calls += "draw"
         }
+        override fun darken(shade: Float) {
+            calls += "darken $shade"
+        }
         override fun finish() = Unit
         override fun close() {
             calls += "close"
@@ -95,6 +98,19 @@ class MilkdropTest {
         clock += 10_000
         renderer.frame()
         assertEquals("show ${order[0]} smoothly", milkdrop.calls.dropLast(1).last())
+    }
+
+    @Test
+    fun wordsOverThemDarkenEachFrameAsItsDrawnAndOnlyThen() {
+        val milkdrop = FakeMilkdrop()
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        renderer.frame()
+        assertEquals("draw", milkdrop.calls.last())
+        renderer.shade = 0.6f
+        clock += 40
+        renderer.frame()
+        assertEquals(listOf("draw", "darken 0.6"), milkdrop.calls.takeLast(2))
     }
 
     @Test
@@ -344,6 +360,7 @@ class MilkdropTest {
         override fun draw() {
             clock += drawMs.getValue(showing)
         }
+        override fun darken(shade: Float) = Unit
         override fun finish() {
             clock += finishMs[showing] ?: 0
         }

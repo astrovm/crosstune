@@ -10,6 +10,7 @@ import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLExt
 import android.opengl.GLES20
+import android.opengl.GLES30
 import android.os.SystemClock
 import android.util.Log
 import android.os.Handler
@@ -23,8 +24,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.edit
+import android.graphics.PixelFormat
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.TextureView
 import java.io.File
 import kotlin.math.sin
@@ -43,6 +48,8 @@ internal interface Milkdrop {
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
     fun draw()
+    /** Darkens what was just drawn by [shade], from 0, as it is, to 1, black. */
+    fun darken(shade: Float)
     /** Waits till what's drawn is on the screen, to time it. */
     fun finish()
     fun close()
@@ -54,15 +61,63 @@ internal class NativeMilkdrop(private val context: Context) : Milkdrop {
 
     override fun open(width: Int, height: Int): Boolean {
         if (!loaded) return false
+        // A new GL context, which has none of the last one's programs.
+        shadeProgram = 0
+        this.width = width
+        this.height = height
         instance = nativeCreate(width, height, milkdropTextures(context)?.path)
         return instance != 0L
     }
 
-    override fun size(width: Int, height: Int) = nativeResize(instance, width, height)
+    override fun size(width: Int, height: Int) {
+        this.width = width
+        this.height = height
+        nativeResize(instance, width, height)
+    }
+
     override fun show(preset: String, smooth: Boolean) = nativeLoad(instance, preset, smooth)
     override fun hear(samples: ByteArray, count: Int) = nativeHear(instance, samples, count)
     override fun draw() = nativeDraw(instance)
     override fun finish() = GLES20.glFinish()
+
+    private var width = 0
+    private var height = 0
+    /** The shade's program and where its darkness goes, made once per GL context; 0 till then. */
+    private var shadeProgram = 0
+    private var shadeDarkness = 0
+
+    /** A black triangle over the whole frame, its darkness blended over what's there. */
+    override fun darken(shade: Float) {
+        if (shadeProgram == 0) shadeProgram = shadeProgram()
+        if (shadeProgram == 0) return
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, width, height)
+        GLES30.glUseProgram(shadeProgram)
+        GLES30.glUniform1f(shadeDarkness, shade)
+        GLES30.glBindVertexArray(0)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        // As projectM found it, so its next frame draws as it expects.
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(0)
+    }
+
+    private fun shadeProgram(): Int {
+        fun shader(type: Int, source: String) = GLES30.glCreateShader(type).also {
+            GLES30.glShaderSource(it, source)
+            GLES30.glCompileShader(it)
+        }
+        val program = GLES30.glCreateProgram()
+        GLES30.glAttachShader(program, shader(GLES30.GL_VERTEX_SHADER, SHADE_VERTICES))
+        GLES30.glAttachShader(program, shader(GLES30.GL_FRAGMENT_SHADER, SHADE_COLOR))
+        GLES30.glLinkProgram(program)
+        val linked = IntArray(1)
+        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, linked, 0)
+        if (linked[0] == 0) return 0
+        shadeDarkness = GLES30.glGetUniformLocation(program, "darkness")
+        return program
+    }
 
     override fun close() {
         nativeDestroy(instance)
@@ -77,6 +132,15 @@ internal class NativeMilkdrop(private val context: Context) : Milkdrop {
     private external fun nativeDestroy(instance: Long)
 
     companion object {
+        /** One triangle bigger than the frame, from nothing but which corner it is, so it needs no buffer. */
+        private const val SHADE_VERTICES = """#version 300 es
+void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0.0, 1.0); }"""
+        private const val SHADE_COLOR = """#version 300 es
+precision mediump float;
+uniform float darkness;
+out vec4 color;
+void main() { color = vec4(0.0, 0.0, 0.0, darkness); }"""
+
         /** Missing, e.g. on a phone whose processor it wasn't built for, there are just no visuals. */
         private val loaded = runCatching { System.loadLibrary("milkdrop") }.isSuccess
     }
@@ -327,6 +391,10 @@ internal class MilkdropRenderer(
     @Volatile
     var settings = settings
 
+    /** How dark they're drawn, from the main thread. */
+    @Volatile
+    var shade = 0f
+
     /** Found too slow, once or twice, or dropped, till [settings] have caught up. */
     private val slowOnce = mutableSetOf<String>()
     private val slow = mutableSetOf<String>()
@@ -383,6 +451,7 @@ internal class MilkdropRenderer(
         }
         listen()
         milkdrop.draw()
+        shade.takeIf { it > 0f }?.let(milkdrop::darken)
         // Waited for, so a frame's time is how long the phone took to draw it, not just to be asked to.
         milkdrop.finish()
     }
@@ -564,10 +633,10 @@ internal class MilkdropRenderer(
 }
 
 /**
- * Shows what [renderer] draws, in the views like any other, so the words can go over it; a
- * SurfaceView would sit behind the window, out of sight. Drawing stops while it's out of sight.
+ * Shows what [renderer] draws in among the views, clipped and moved like any other, as in Settings
+ * and behind the floating words. Drawing stops while it's out of sight.
  */
-internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
+internal class MilkdropView(context: Context, private val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
     private var thread: GlThread? = null
 
     init {
@@ -575,7 +644,8 @@ internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : 
     }
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-        val drawing = GlThread(surface, renderer)
+        // Its surface is the thread's to let go, once nothing draws into it.
+        val drawing = GlThread(surface, renderer, release = surface::release)
         thread = drawing
         resize(surface, width, height)
         drawing.pause(!isShown)
@@ -584,16 +654,11 @@ internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : 
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = resize(surface, width, height)
 
-    /** Drawn at a fraction of the screen's pixels and stretched: behind the words, the detail isn't missed, and it's far lighter. */
     private fun resize(surface: SurfaceTexture, width: Int, height: Int) {
-        val drawnWidth = (width / SCALE).coerceAtLeast(1)
-        val drawnHeight = (height / SCALE).coerceAtLeast(1)
+        val drawnWidth = (width / VISUALS_SCALE).coerceAtLeast(1)
+        val drawnHeight = (height / VISUALS_SCALE).coerceAtLeast(1)
         surface.setDefaultBufferSize(drawnWidth, drawnHeight)
         thread?.resize(drawnWidth, drawnHeight)
-    }
-
-    private companion object {
-        const val SCALE = 2
     }
 
     /** Drawing on, the thread lets the surface go once it's done, so the screen doesn't wait for it. */
@@ -614,8 +679,55 @@ internal class MilkdropView(context: Context, val renderer: MilkdropRenderer) : 
     }
 }
 
-/** The thread [renderer] draws on, into [surface], with an OpenGL ES 3 context of its own. */
-private class GlThread(private val surface: SurfaceTexture, private val renderer: MilkdropRenderer) : Thread("Milkdrop") {
+/**
+ * Shows what [renderer] draws behind the window, the words over it, where Android puts each frame
+ * on the screen by itself: the words are only drawn again when they change, not with every frame
+ * of the visuals, which a TV is too slow for. Drawing stops while it's out of sight.
+ */
+internal class MilkdropBehind(context: Context, private val renderer: MilkdropRenderer) : SurfaceView(context), SurfaceHolder.Callback {
+    private var thread: GlThread? = null
+
+    init {
+        holder.addCallback(this)
+        // Opaque, so nothing under the window, as a TV's video, shows through, even before the first frame.
+        holder.setFormat(PixelFormat.RGBX_8888)
+    }
+
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight)
+        holder.setFixedSize((width / VISUALS_SCALE).coerceAtLeast(1), (height / VISUALS_SCALE).coerceAtLeast(1))
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        val drawing = GlThread(holder.surface, renderer)
+        thread = drawing
+        drawing.pause(!isShown)
+        drawing.start()
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        thread?.resize(width, height)
+    }
+
+    /** The surface goes once this returns, so the thread lets go of it first. */
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        val drawing = thread ?: return
+        thread = null
+        drawing.finish()
+        drawing.join()
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        thread?.pause(!isVisible)
+    }
+}
+
+/** Drawn at a fraction of the screen's pixels and stretched: behind the words, the detail isn't missed, and it's far lighter. */
+private const val VISUALS_SCALE = 2
+
+/** The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it. */
+private class GlThread(private val target: Any, private val renderer: MilkdropRenderer, private val release: () -> Unit = {}) : Thread("Milkdrop") {
     private val lock = Object()
     private var width = 0
     private var height = 0
@@ -644,8 +756,7 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
     override fun run() = try {
         draw()
     } finally {
-        // Its surface is this thread's to let go, once nothing draws into it.
-        surface.release()
+        release()
     }
 
     private fun draw() {
@@ -668,7 +779,7 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
             EGL14.EGL_NO_CONTEXT
         }
         val window = if (context != EGL14.EGL_NO_CONTEXT) {
-            EGL14.eglCreateWindowSurface(display, config, surface, intArrayOf(EGL14.EGL_NONE), 0)
+            EGL14.eglCreateWindowSurface(display, config, target, intArrayOf(EGL14.EGL_NONE), 0)
         } else {
             EGL14.EGL_NO_SURFACE
         }
@@ -705,7 +816,9 @@ private class GlThread(private val surface: SurfaceTexture, private val renderer
  * What the visuals are asked to do: move on each time [skips] goes up, pass over the one showing
  * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
  * [onFps] is told each second, on the main thread, how many frames a second the phone could draw it at.
- * [hears] is whether Android lets them hear what plays, which needs the microphone.
+ * [hears] is whether Android lets them hear what plays, which needs the microphone. [shade] darkens
+ * them, so words read over them. [behind] puts them behind the window, filling it, as behind the
+ * words; otherwise they're in among the views, clipped and moved like any other.
  */
 internal data class VisualsPlay(
     val skips: Int = 0,
@@ -713,7 +826,9 @@ internal data class VisualsPlay(
     val settings: VisualsSettings = VisualsSettings(),
     val only: String? = null,
     val onFps: (Int) -> Unit = {},
-    val hears: Boolean = true
+    val hears: Boolean = true,
+    val shade: Float = 0f,
+    val behind: Boolean = false
 )
 
 /** What draws the visuals behind the words: MilkDrop, or frames drawn ahead, as the screenshots have them. */
@@ -731,26 +846,28 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
     val main = remember { Handler(Looper.getMainLooper()) }
     // They listen from when they start, so once Android lets them hear, they start over.
     key(play.hears) {
+    val context = LocalContext.current
+    val renderer = remember {
+        val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        MilkdropRenderer(
+            MainActivity.milkdropFactory(context), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
+            settings = play.settings, skips = play.skips, drops = play.drops,
+            text = { milkdropPreset(context.assets, it) },
+            onTimed = store::timed,
+            onDrop = { store.turn(it, on = false) },
+            // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
+            bench = systemProperty("debug.crosstune.visuals_bench") == "1",
+            report = { Log.i("CrosstuneVisuals", it) },
+            onFps = { fps -> main.post { onFps(fps) } }
+        )
+    }
     AndroidView(
-        factory = { context ->
-            val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
-            val renderer = MilkdropRenderer(
-                MainActivity.milkdropFactory(context), { play.only?.let(::listOf) ?: milkdropPresets(context.assets) }, MainActivity.soundTapFactory,
-                settings = play.settings, skips = play.skips, drops = play.drops,
-                text = { milkdropPreset(context.assets, it) },
-                onTimed = store::timed,
-                onDrop = { store.turn(it, on = false) },
-                // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
-                bench = systemProperty("debug.crosstune.visuals_bench") == "1",
-                report = { Log.i("CrosstuneVisuals", it) },
-                onFps = { fps -> main.post { onFps(fps) } }
-            )
-            MilkdropView(context, renderer)
-        },
+        factory = { if (play.behind) MilkdropBehind(it, renderer) else MilkdropView(it, renderer) },
         update = {
-            it.renderer.settings = play.settings
-            it.renderer.skipTo(play.skips)
-            it.renderer.dropTo(play.drops)
+            renderer.shade = play.shade
+            renderer.settings = play.settings
+            renderer.skipTo(play.skips)
+            renderer.dropTo(play.drops)
         },
         modifier = modifier
     )

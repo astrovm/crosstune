@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -298,7 +299,7 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             CrosstuneTheme(darkTheme = darkTheme, palette = Palette.VIOLET) {
-                CompositionLocalProvider(LocalVisuals provides { _, modifier -> VisualFrame(modifier) }) {
+                CompositionLocalProvider(LocalVisuals provides { play, modifier -> VisualFrame(play.shade, modifier) }) {
                     Box(Modifier.fillMaxSize()) {
                         // Always reading the bars' room keeps it: once nothing does, Compose forgets it,
                         // and asks Android for it again, which has none to give here.
@@ -334,8 +335,9 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
     }
 
     @Composable
-    private fun VisualFrame(modifier: Modifier) {
-        visualFrame?.let { Image(it, null, modifier, contentScale = ContentScale.Crop) }
+    private fun VisualFrame(shade: Float, modifier: Modifier) {
+        // Darkened as the visuals darken themselves.
+        visualFrame?.let { Image(it, null, modifier.drawWithContent { drawContent(); drawRect(Color.Black.copy(alpha = shade)) }, contentScale = ContentScale.Crop) }
     }
 
     private fun show(state: UiState) = show { state }

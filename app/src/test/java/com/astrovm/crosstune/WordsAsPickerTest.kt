@@ -77,7 +77,7 @@ class WordsAsPickerTest {
     @Test
     fun evenTheBrightestVisualLeavesReadableWordsAndSoftensFurtherBehindAMenu() {
         compose.setContent {
-            CompositionLocalProvider(LocalVisuals provides { _, modifier -> Box(modifier.background(Color.White)) }) {
+            CompositionLocalProvider(LocalVisuals provides { play, modifier -> Box(modifier.background(Color.White).background(Color.Black.copy(alpha = play.shade))) }) {
                 CrosstuneTheme {
                     LyricsScreen(UiState(lyricsFor = MusicMetadata("Demo", "Band"), lyrics = "One", visuals = true,
                         visualsShade = 0f, canFollowApps = true, lyricLines = listOf(LyricLine(0, "One"))), ScreenActions())
