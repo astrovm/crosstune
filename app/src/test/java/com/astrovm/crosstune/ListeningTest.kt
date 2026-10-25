@@ -1671,6 +1671,20 @@ class ListeningTest {
     }
 
     @Test
+    fun aLeadLongerThanAllTheVideoHasMoreIsNoGuess() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // 30 seconds ahead, in a video only 10 longer than the song.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime()))
+            hearing.song("Demo", 2.0)
+        }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
     fun aHearingBeforeAVideosSongMayHaveStartedIsNoGuess() {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
