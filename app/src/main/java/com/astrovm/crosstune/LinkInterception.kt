@@ -84,8 +84,8 @@ internal class LinkInterception(private val context: Context) {
     /** Services whose app is installed, or a build patched from it, so setup can suggest them first. */
     fun installedServices(): Set<MusicService> = MusicService.entries.filter { installedPackage(it) != null }.toSet()
 
-    /** The package [service]'s app is installed under: its own, or a patched build's. */
-    private fun installedPackage(service: MusicService): String? = service.packageNames.firstOrNull { packageName ->
+    /** The package [service]'s app is installed under: its own, a patched build's, or, on a TV, YouTube's for YouTube Music. */
+    private fun installedPackage(service: MusicService): String? = service.appPackages.firstOrNull { packageName ->
         try {
             context.packageManager.getPackageInfo(packageName, 0)
             true

@@ -48,6 +48,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -156,10 +157,12 @@ class MainActivity : ComponentActivity() {
             onReadingScaleChange = viewModel::setReadingScale,
             onTranslationScaleChange = viewModel::setTranslationScale
         )
+        override val actions get() = screenActions()
         override fun playPause() = viewModel.playPause()
         override fun update(options: FloatingOptions, save: Boolean) = viewModel.setFloating(options, save)
         override fun closed() {
             floatingOverApps = false
+            viewModel.uncover()
             viewModel.pauseListeningAlong()
             viewModel.pauseFollowingNext()
         }
@@ -383,6 +386,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Out of sight too: a song's app opens over Crosstune, which then covers it.
+        lifecycleScope.launch {
+            snapshotFlow { viewModel.uiState.coveringApp }.filter { it }.collect { cover() }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 snapshotFlow { viewModel.uiState.lyricsFor != null }.distinctUntilChanged().collect { open -> if (open) askMicrophoneOnce() }
@@ -402,174 +409,177 @@ class MainActivity : ComponentActivity() {
             CrosstuneTheme(darkTheme = dark, palette = viewModel.uiState.palette, pureBlack = viewModel.uiState.pureBlack) {
                 CrosstuneScreen(
                     state = viewModel.uiState,
-                    actions = ScreenActions(
-                        onUrlChange = viewModel::onUrlChange,
-                        onResolve = viewModel::resolveTypedInput,
-                        onPaste = { viewModel.pasteLink(clipboardText()) },
-                        recognizers = recognizers,
-                        recognizer = recognizers.firstOrNull(),
-                        onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
-                        onLyricsNow = { withMicrophone(MicrophoneFor.LISTEN_FOR_LYRICS) },
-                        onStopListening = viewModel::stopListening,
-                        onOpenMicrophoneSettings = { openAppInfo() },
-                        onClear = viewModel::clear,
-                        onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
-                        onOpen = { viewModel.openResult() },
-                        onPlayResult = viewModel::playResult,
-                        onClosePlayer = viewModel::closePlayer,
-                        onPlayerOpenApp = viewModel::openPlayerApp,
-                        onPlayerOpenWith = viewModel::playerOpenWith,
-                        onPlayerPlayPause = viewModel::playerPlayPause,
-                        onPlayerSkip = viewModel::playerSkip,
-                        onPlayerSeek = viewModel::playerSeek,
-                        onPlayerLyrics = viewModel::playerLyrics,
-                        onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },
-                        onOpenOriginal = viewModel::openOriginal,
-                        onDismissPicker = viewModel::dismissDestinationPicker,
-                        onShowLyrics = viewModel::showLyrics,
-                        onSeekLyrics = viewModel::seekLyrics,
-                        onSyncLine = viewModel::syncLine,
-                        onPlayPause = viewModel::playPause,
-                        onSkipSong = viewModel::skipSong,
-                        onNudgeSync = viewModel::nudgeSync,
-                        onResetSync = viewModel::resetSync,
-                        onReadingsChange = viewModel::setReadings,
-                        onRomanizedChange = viewModel::setRomanized,
-                        onRomajiTypedChange = viewModel::setRomajiTyped,
-                        onCardTypesChange = viewModel::setCardTypes,
-                        onTranslationChange = viewModel::setTranslation,
-                        onChordsChange = viewModel::setChords,
-                        onRetryTranslation = viewModel::retryTranslation,
-                        onToggleSavedLine = viewModel::toggleSavedLine,
-                        onLookUpWord = viewModel::lookUpWord,
-                        onExplainLine = viewModel::explainLine,
-                        onStartPractice = { viewModel.startPractice() },
-                        onPractiseSong = viewModel::practiseSong,
-                        onPractiseSongOf = viewModel::startPractice,
-                        onReadCardAs = viewModel::readCardAs,
-                        onTurnPractice = viewModel::turnPractice,
-                        onGradePractice = viewModel::gradePractice,
-                        onStopPractice = viewModel::stopPractice,
-                        onReplayLine = viewModel::replayLine,
-                        onBackToBefore = viewModel::backToBefore,
-                        onChooseLines = viewModel::chooseLines,
-                        onKeepAgain = viewModel::keepAgain,
-                        onAskAboutLine = viewModel::askAboutLine,
-                        onExplainSong = viewModel::explainSong,
-                        onAskAboutSong = viewModel::askAboutSong,
-                        onWordsAsChange = viewModel::setWordsAs,
-                        onFindWordsToKnow = viewModel::findWordsToKnow,
-                        onToggleSavedWord = viewModel::toggleSavedWord,
-                        onAboutArtist = viewModel::aboutArtist,
-                        onSongsLike = viewModel::songsLike,
-                        onFindExamples = viewModel::findExamples,
-                        onOpenNamedSong = viewModel::openNamedSong,
-                        onPlaylistFromSearch = viewModel::playlistFromSearch,
-                        onDismissWord = viewModel::dismissWord,
-                        onRepeatLine = viewModel::repeatLine,
-                        onStopRepeating = viewModel::stopRepeating,
-                        onChatGptTranslationChange = viewModel::setChatGptTranslation,
-                        onChatGptModelChange = viewModel::pickChatGptModel,
-                        onTranslateIntoChange = viewModel::setTranslateInto,
-                        onUntranslatedChange = viewModel::setUntranslated,
-                        onReadingScaleChange = viewModel::setReadingScale,
-                        onWordsScaleChange = viewModel::setWordsScale,
-                        onTranslationScaleChange = viewModel::setTranslationScale,
-                        onSignInWithChatGpt = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                signInNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                signInWithChatGpt()
-                            }
-                        },
-                        onCancelChatGptSignIn = viewModel::cancelChatGptSignIn,
-                        onSignOutOfChatGpt = viewModel::signOutOfChatGpt,
-                        onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
-                        onListenAlong = { withMicrophone(MicrophoneFor.LISTEN_ALONG) },
-                        onStopListeningAlong = viewModel::stopListeningAlong,
-                        // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
-                        onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
-                        onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
-                        onOpenAppInfo = { openAppInfo() },
-                        onThemeChange = ::selectTheme,
-                        onSearchAnyway = viewModel::searchAnyway,
-                        onNotFoundActionChange = viewModel::selectNotFoundAction,
-                        onTakeNotFoundOffer = viewModel::takeNotFoundOffer,
-                        onDismissNotFoundOffer = viewModel::dismissNotFoundOffer,
-                        onPaletteChange = { palette ->
-                            viewModel.selectPalette(palette)
-                            // The widgets wear the app's color too.
-                            lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
-                        },
-                        onPureBlackChange = viewModel::setPureBlack,
-                        onPlayingBarChange = viewModel::setPlayingBar,
-                        onFloat = ::float,
-                        onVisualsShadeChange = viewModel::setVisualsShade,
-                        onNextVisual = viewModel::nextVisual,
-                        onDropVisual = viewModel::dropVisual,
-                        onVisualOnChange = viewModel::setVisualOn,
-                        onSkipHeavyVisualsChange = viewModel::setSkipHeavyVisuals,
-                        onVisualsChangeEveryChange = viewModel::setVisualsChangeEvery,
-                        onVisualsChange = { on -> if (on) withMicrophone(MicrophoneFor.VISUALS) else viewModel.setVisuals(false) },
-                        onDismissLyrics = viewModel::dismissLyrics,
-                        onPickSong = viewModel::chooseSong,
-                        onDismissSongSearch = viewModel::dismissSongSearch,
-                        onTargetChange = viewModel::selectDefault,
-                        onResultTargetChange = viewModel::selectResultDestination,
-                        onMakeDefault = { viewModel.selectDefault(viewModel.uiState.resultDestination) },
-                        onInterceptChange = viewModel::setIntercepted,
-                        onFrontendRuleChange = viewModel::setFrontendRule,
-                        onRuleChange = viewModel::setRule,
-                        onAddCustom = viewModel::addCustomDestination,
-                        onRemoveCustom = viewModel::removeCustomDestination,
-                        onFrontendInstanceChange = viewModel::setFrontendInstance,
-                        onSetUpInOneTap = viewModel::setUpInOneTap,
-                        onAllowLinks = { if (!viewModel.fixInOneTap(OneTapFix.LINKS)) viewModel.fixSteps(listOf(Need.Links)) },
-                        onOpenFixes = viewModel::openFixes,
-                        onFixSteps = viewModel::fixSteps,
-                        onNextFix = viewModel::nextFix,
-                        onFixBack = viewModel::fixBack,
-                        onCloseFixes = viewModel::closeFixes,
-                        onOpenFix = ::openFix,
-                        onTryLink = ::tryLink,
-                        onOpenShizuku = { packageManager.getLaunchIntentForPackage(OneTapSetup.SHIZUKU_PACKAGE)?.let(::tryStartActivity) },
-                        onShowInCrosstuneFirstChange = viewModel::setShowInCrosstuneFirst,
-                        onPlayRightAwayChange = viewModel::setPlayRightAway,
-                        onCleanLinksChange = viewModel::setCleanLinks,
-                        onShareSheetAppsChange = viewModel::setShareSheetApps,
-                        onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
-                        onLanguageChange = { AppLanguage.set(this, it) },
-                        onCopySearch = ::copySearch,
-                        onCopyLink = ::copyLink,
-                        onShareSearch = ::shareSearch,
-                        onHistoryEntryClick = viewModel::showHistoryEntry,
-                        onHistoryOpen = viewModel::openHistoryEntry,
-                        onRemoveHistory = viewModel::removeHistoryEntry,
-                        onOpenTrack = viewModel::openTrack,
-                        onPlayAll = viewModel::playAll,
-                        onCopySongs = { copyToClipboard("Crosstune songs", viewModel.songList(), R.string.songs_copied) },
-                        onShareSongs = { viewModel.songList()?.let { startActivity(shareChooser(it)) } },
-                        onClearHistory = viewModel::clearHistory,
-                        onUndoClearHistory = viewModel::undoClearHistory,
-                        onForgetClearedHistory = viewModel::forgetClearedHistory,
-                        onCancelHandoff = viewModel::cancelHandoff,
-                        onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
-                        onDismissNotices = viewModel::dismissNotices,
-                        onUpdate = viewModel::openUpdate,
-                        onOpenPlayingNow = viewModel::openPlayingNow,
-                        onPeekPlayingNow = viewModel::peekPlayingNow,
-                        onPlayingNowPlayPause = viewModel::playingNowPlayPause,
-                        onPlayingNowSkip = viewModel::playingNowSkip,
-                        onSettingsLeft = viewModel::settingsLeft,
-                        loadArtwork = viewModel.artwork::load,
-                        covers = viewModel.artwork
-                    )
+                    actions = screenActions()
                 )
             }
         }
     }
+
+    /** Everything Crosstune's screens do, whether in sight or covering another app. */
+    private fun screenActions() = ScreenActions(
+        onUrlChange = viewModel::onUrlChange,
+        onResolve = viewModel::resolveTypedInput,
+        onPaste = { viewModel.pasteLink(clipboardText()) },
+        recognizers = recognizers,
+        recognizer = recognizers.firstOrNull(),
+        onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },
+        onLyricsNow = { withMicrophone(MicrophoneFor.LISTEN_FOR_LYRICS) },
+        onStopListening = viewModel::stopListening,
+        onOpenMicrophoneSettings = { openAppInfo() },
+        onClear = viewModel::clear,
+        onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
+        onOpen = { viewModel.openResult() },
+        onPlayResult = viewModel::playResult,
+        onClosePlayer = viewModel::closePlayer,
+        onPlayerOpenApp = viewModel::openPlayerApp,
+        onPlayerOpenWith = viewModel::playerOpenWith,
+        onPlayerPlayPause = viewModel::playerPlayPause,
+        onPlayerSkip = viewModel::playerSkip,
+        onPlayerSeek = viewModel::playerSeek,
+        onPlayerLyrics = viewModel::playerLyrics,
+        onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },
+        onOpenOriginal = viewModel::openOriginal,
+        onDismissPicker = viewModel::dismissDestinationPicker,
+        onShowLyrics = viewModel::showLyrics,
+        onSeekLyrics = viewModel::seekLyrics,
+        onSyncLine = viewModel::syncLine,
+        onPlayPause = viewModel::playPause,
+        onSkipSong = viewModel::skipSong,
+        onNudgeSync = viewModel::nudgeSync,
+        onResetSync = viewModel::resetSync,
+        onReadingsChange = viewModel::setReadings,
+        onRomanizedChange = viewModel::setRomanized,
+        onRomajiTypedChange = viewModel::setRomajiTyped,
+        onCardTypesChange = viewModel::setCardTypes,
+        onTranslationChange = viewModel::setTranslation,
+        onChordsChange = viewModel::setChords,
+        onRetryTranslation = viewModel::retryTranslation,
+        onToggleSavedLine = viewModel::toggleSavedLine,
+        onLookUpWord = viewModel::lookUpWord,
+        onExplainLine = viewModel::explainLine,
+        onStartPractice = { viewModel.startPractice() },
+        onPractiseSong = viewModel::practiseSong,
+        onPractiseSongOf = viewModel::startPractice,
+        onReadCardAs = viewModel::readCardAs,
+        onTurnPractice = viewModel::turnPractice,
+        onGradePractice = viewModel::gradePractice,
+        onStopPractice = viewModel::stopPractice,
+        onReplayLine = viewModel::replayLine,
+        onBackToBefore = viewModel::backToBefore,
+        onChooseLines = viewModel::chooseLines,
+        onKeepAgain = viewModel::keepAgain,
+        onAskAboutLine = viewModel::askAboutLine,
+        onExplainSong = viewModel::explainSong,
+        onAskAboutSong = viewModel::askAboutSong,
+        onWordsAsChange = viewModel::setWordsAs,
+        onFindWordsToKnow = viewModel::findWordsToKnow,
+        onToggleSavedWord = viewModel::toggleSavedWord,
+        onAboutArtist = viewModel::aboutArtist,
+        onSongsLike = viewModel::songsLike,
+        onFindExamples = viewModel::findExamples,
+        onOpenNamedSong = viewModel::openNamedSong,
+        onPlaylistFromSearch = viewModel::playlistFromSearch,
+        onDismissWord = viewModel::dismissWord,
+        onRepeatLine = viewModel::repeatLine,
+        onStopRepeating = viewModel::stopRepeating,
+        onChatGptTranslationChange = viewModel::setChatGptTranslation,
+        onChatGptModelChange = viewModel::pickChatGptModel,
+        onTranslateIntoChange = viewModel::setTranslateInto,
+        onUntranslatedChange = viewModel::setUntranslated,
+        onReadingScaleChange = viewModel::setReadingScale,
+        onWordsScaleChange = viewModel::setWordsScale,
+        onTranslationScaleChange = viewModel::setTranslationScale,
+        onSignInWithChatGpt = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                signInNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                signInWithChatGpt()
+            }
+        },
+        onCancelChatGptSignIn = viewModel::cancelChatGptSignIn,
+        onSignOutOfChatGpt = viewModel::signOutOfChatGpt,
+        onDismissChatGptWelcome = viewModel::dismissChatGptWelcome,
+        onListenAlong = { withMicrophone(MicrophoneFor.LISTEN_ALONG) },
+        onStopListeningAlong = viewModel::stopListeningAlong,
+        // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
+        onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
+        onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
+        onOpenAppInfo = { openAppInfo() },
+        onThemeChange = ::selectTheme,
+        onSearchAnyway = viewModel::searchAnyway,
+        onNotFoundActionChange = viewModel::selectNotFoundAction,
+        onTakeNotFoundOffer = viewModel::takeNotFoundOffer,
+        onDismissNotFoundOffer = viewModel::dismissNotFoundOffer,
+        onPaletteChange = { palette ->
+            viewModel.selectPalette(palette)
+            // The widgets wear the app's color too.
+            lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
+        },
+        onPureBlackChange = viewModel::setPureBlack,
+        onPlayingBarChange = viewModel::setPlayingBar,
+        onFloat = ::float,
+        onVisualsShadeChange = viewModel::setVisualsShade,
+        onNextVisual = viewModel::nextVisual,
+        onDropVisual = viewModel::dropVisual,
+        onVisualOnChange = viewModel::setVisualOn,
+        onSkipHeavyVisualsChange = viewModel::setSkipHeavyVisuals,
+        onVisualsChangeEveryChange = viewModel::setVisualsChangeEvery,
+        onVisualsChange = { on -> if (on) withMicrophone(MicrophoneFor.VISUALS) else viewModel.setVisuals(false) },
+        onDismissLyrics = viewModel::dismissLyrics,
+        onPickSong = viewModel::chooseSong,
+        onDismissSongSearch = viewModel::dismissSongSearch,
+        onTargetChange = viewModel::selectDefault,
+        onResultTargetChange = viewModel::selectResultDestination,
+        onMakeDefault = { viewModel.selectDefault(viewModel.uiState.resultDestination) },
+        onInterceptChange = viewModel::setIntercepted,
+        onFrontendRuleChange = viewModel::setFrontendRule,
+        onRuleChange = viewModel::setRule,
+        onAddCustom = viewModel::addCustomDestination,
+        onRemoveCustom = viewModel::removeCustomDestination,
+        onFrontendInstanceChange = viewModel::setFrontendInstance,
+        onSetUpInOneTap = viewModel::setUpInOneTap,
+        onAllowLinks = { if (!viewModel.fixInOneTap(OneTapFix.LINKS)) viewModel.fixSteps(listOf(Need.Links)) },
+        onOpenFixes = viewModel::openFixes,
+        onFixSteps = viewModel::fixSteps,
+        onNextFix = viewModel::nextFix,
+        onFixBack = viewModel::fixBack,
+        onCloseFixes = viewModel::closeFixes,
+        onOpenFix = ::openFix,
+        onTryLink = ::tryLink,
+        onOpenShizuku = { packageManager.getLaunchIntentForPackage(OneTapSetup.SHIZUKU_PACKAGE)?.let(::tryStartActivity) },
+        onShowInCrosstuneFirstChange = viewModel::setShowInCrosstuneFirst,
+        onPlayRightAwayChange = viewModel::setPlayRightAway,
+        onCleanLinksChange = viewModel::setCleanLinks,
+        onShareSheetAppsChange = viewModel::setShareSheetApps,
+        onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
+        onLanguageChange = { AppLanguage.set(this, it) },
+        onCopySearch = ::copySearch,
+        onCopyLink = ::copyLink,
+        onShareSearch = ::shareSearch,
+        onHistoryEntryClick = viewModel::showHistoryEntry,
+        onHistoryOpen = viewModel::openHistoryEntry,
+        onRemoveHistory = viewModel::removeHistoryEntry,
+        onOpenTrack = viewModel::openTrack,
+        onPlayAll = viewModel::playAll,
+        onCopySongs = { copyToClipboard("Crosstune songs", viewModel.songList(), R.string.songs_copied) },
+        onShareSongs = { viewModel.songList()?.let { startActivity(shareChooser(it)) } },
+        onClearHistory = viewModel::clearHistory,
+        onUndoClearHistory = viewModel::undoClearHistory,
+        onForgetClearedHistory = viewModel::forgetClearedHistory,
+        onCancelHandoff = viewModel::cancelHandoff,
+        onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
+        onDismissNotices = viewModel::dismissNotices,
+        onUpdate = viewModel::openUpdate,
+        onOpenPlayingNow = viewModel::openPlayingNow,
+        onPeekPlayingNow = viewModel::peekPlayingNow,
+        onPlayingNowPlayPause = viewModel::playingNowPlayPause,
+        onPlayingNowSkip = viewModel::playingNowSkip,
+        onSettingsLeft = viewModel::settingsLeft,
+        loadArtwork = viewModel.artwork::load,
+        covers = viewModel.artwork
+    )
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
@@ -668,8 +678,24 @@ class MainActivity : ComponentActivity() {
     private fun floatNow() {
         if (viewModel.uiState.lyricsFor == null) return
         floatingOverApps = true
+        viewModel.uncover()
         FloatingLyricsService.start(this, floatingHost)
         moveTaskToBack(true)
+    }
+
+    /** On a TV, the whole screen covers the app a song plays in, which goes on playing under it. */
+    private fun cover() {
+        floatingOverApps = true
+        FloatingLyricsService.start(this, floatingHost, whole = true)
+    }
+
+    /** Opened from the screen covering another app, an app would show under it, so it goes first. */
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        if (viewModel.uiState.coveringApp) {
+            FloatingLyricsService.stop(this)
+            floatingHost.closed()
+        }
+        super.startActivityForResult(intent, requestCode, options)
     }
 
     /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */
@@ -680,6 +706,7 @@ class MainActivity : ComponentActivity() {
         // Even from a screen made again since, in a new look or language.
         if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
         floatingOverApps = false
+        viewModel.uncover()
         viewModel.resumeListeningAlong()
         viewModel.resumeFollowingNext()
         if (listenAlongWhenBack) {

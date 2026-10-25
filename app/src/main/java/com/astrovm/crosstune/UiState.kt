@@ -118,6 +118,11 @@ internal data class UiState(
     val floating: FloatingOptions = FloatingOptions(),
     /** Whether Android lets Crosstune show over other apps, which see-through floating words need. */
     val canFloatOverApps: Boolean = false,
+    /**
+     * On a TV, Crosstune covers the app it opened a song in, in a window over it: brought in front of
+     * it instead, YouTube stops playing.
+     */
+    val coveringApp: Boolean = false,
     /** What happens when the app a song goes to doesn't have it. */
     val notFoundAction: NotFoundAction = NotFoundAction.ASK,
     /** A song not found where it was going, from Recent or a playlist, with what can be done instead. */

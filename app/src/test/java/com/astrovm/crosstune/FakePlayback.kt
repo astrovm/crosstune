@@ -62,7 +62,11 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
+    /** Whether an app can be opened on a song; false as if it couldn't, e.g. gone since. */
+    var opens = true
+
     override fun openSong(app: String, link: String): Boolean {
+        if (!opens) return false
         opened += app to link
         return true
     }

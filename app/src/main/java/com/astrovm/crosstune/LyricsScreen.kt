@@ -114,6 +114,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import android.app.Activity
 import android.util.LruCache
 import android.view.WindowManager
@@ -253,6 +261,11 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var barShown by remember { mutableStateOf(true) }
     var barMenu by remember(song) { mutableStateOf<BarMenu?>(null) }
     var actionsHeight by remember { mutableStateOf(0.dp) }
+    // On a TV the remote starts on the bar, rather than walk every line to reach it, and Right from a line goes back there.
+    val tv = state.phone == Phone.TV
+    val bar = remember { FocusRequester() }
+    // Again once the words arrive, which put their own tools first on it.
+    if (tv) LaunchedEffect(state.lyrics.isEmpty()) { bar.requestFocus() }
     LaunchedEffect(scrolledAt) {
         if (scrolledAt == 0L) return@LaunchedEffect
         barShown = false
@@ -315,7 +328,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             AnimatedVisibility(visible = syncing) {
                 SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)
+                    .onPreviewKeyEvent { tv && (barShown || barMenu != null) && it.key == Key.DirectionRight && it.type == KeyEventType.KeyDown && bar.requestFocus() }
+            ) {
                 // Each state swaps in for the last, so the words arrive rather than appear.
                 AnimatedContent(targetState = lyricsShown(state), transitionSpec = { fade() }, label = "lyrics") { shown ->
                     if (shown == LyricsShown.LOADING) {
@@ -372,7 +391,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
                 onSync = { syncingAsked = !syncing },
                 onChooseLines = { practise -> choosing = practise },
-                menu = barMenu, onMenuChange = { barMenu = it }, onHeightChange = { actionsHeight = it },
+                menu = barMenu, onMenuChange = { barMenu = it }, onHeightChange = { actionsHeight = it }, focus = bar,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
@@ -582,6 +601,8 @@ private fun LyricsActions(
     menu: BarMenu?,
     onMenuChange: (BarMenu?) -> Unit,
     onHeightChange: (Dp) -> Unit,
+    /** Where a TV remote lands on the bar. */
+    focus: FocusRequester,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -598,7 +619,7 @@ private fun LyricsActions(
             shape = CircleShape,
             shadowElevation = 6.dp
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
                 if (state.lyrics.isNotEmpty()) {
                     BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
                 }
@@ -1059,7 +1080,14 @@ private fun MicrophoneStatus(denied: Boolean, actions: ScreenActions) {
 @Composable
 private fun SyncSource(state: UiState, actions: ScreenActions) {
     val app = state.following?.takeIf { it.app != null }
-    // Not playing anywhere yet, the song's app starts it from here, as Play on its card does, and the words then follow it.
+    AnimatedContent(targetState = app?.app to app?.appPackage, transitionSpec = { swap() }, label = "sync source") { (name, packageName) ->
+        if (name != null) {
+            AppSource(stringResource(R.string.lyrics_following_app, name), packageName, playing = state.following?.clock?.playing == true, onClick = actions.onPlayPause)
+        } else {
+            ListenAlongButton(state.listeningAlong, state.microphone == MicAccess.ALLOWED, actions)
+        }
+    }
+    // Not playing anywhere yet, the song's app starts it from here, last, as Play on its card does, and the words then follow it.
     val start = (state.resultDestination as? Destination.Service)?.takeIf { state.canPlayFromLyrics }
     if (start != null) {
         AppSource(
@@ -1069,13 +1097,6 @@ private fun SyncSource(state: UiState, actions: ScreenActions) {
             enabled = !state.playingResult,
             onClick = actions.onPlayResult
         )
-    }
-    AnimatedContent(targetState = app?.app to app?.appPackage, transitionSpec = { swap() }, label = "sync source") { (name, packageName) ->
-        if (name != null) {
-            AppSource(stringResource(R.string.lyrics_following_app, name), packageName, playing = state.following?.clock?.playing == true, onClick = actions.onPlayPause)
-        } else {
-            ListenAlongButton(state.listeningAlong, state.microphone == MicAccess.ALLOWED, actions)
-        }
     }
 }
 
