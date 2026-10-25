@@ -1518,7 +1518,7 @@ internal class MainViewModel(
                             // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
                             if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                         }
-                        LyricsFinder.Lyrics.None -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                        LyricsFinder.Lyrics.None, LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {

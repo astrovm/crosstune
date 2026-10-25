@@ -46,6 +46,19 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongLrclibSaysIsInstrumentalHasNoWordsUnlessACopyDoes() {
+        val instrumental = """{"trackName":"Song","artistName":"Band","instrumental":true,"plainLyrics":null,"syncedLyrics":null}"""
+        respond("[$instrumental]")
+        assertEquals(Lyrics.Instrumental, found(song))
+        // A copy with words is the song sung, so its words are taken.
+        respond("[$instrumental,${answer("Song", "Band", "Sung after all")}]")
+        assertEquals("Sung after all", words(song))
+        // Another song's being instrumental says nothing of this one.
+        respond("""[{"trackName":"Other","artistName":"Band","instrumental":true}]""")
+        assertEquals(Lyrics.None, found(song))
+    }
+
+    @Test
     fun timestampsAfterTheRecordingEndsAreNotTaken() {
         respond("[${lasting(answer("Song", "Band", "Readable words", synced = "[01:10.00]Too late"), 50.0)}]")
         val words = found(song) as Lyrics.Found
@@ -523,10 +536,10 @@ class LyricsFinderTest {
     }
 
     @Test
-    fun anInstrumentalOrAnotherSongOnNetEaseIsNone() {
+    fun anInstrumentalOnNetEaseSaysSoAndAnotherSongIsNone() {
         val ownSong = """{"result":{"songs":[{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}"""
         japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 纯音乐，请欣赏")
-        assertEquals(Lyrics.None, found(hatsukoi))
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
         japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 作词 : Someone")
         assertEquals(Lyrics.None, found(hatsukoi))
         japaneseSong(netEase = { """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"三田寛子"}]}]}}""" })
