@@ -75,6 +75,7 @@ class LyricsReportTest {
         prefs().edit().clear().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
         fake.handler = { request ->
             when (request.url.host) {
                 "report.crosstune.4st.li" -> {
@@ -256,6 +257,7 @@ class LyricsReportTest {
         // Another song with a problem, words with no timing this time.
         controller!!.pause().stop().destroy()
         File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
         openLyrics { shown("Plain one") }
         composeRule.waitForIdle()
@@ -274,6 +276,7 @@ class LyricsReportTest {
         // Once a song: shown again, it doesn't go again.
         controller!!.pause().stop().destroy()
         File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
         openLyrics { shown("Plain one") }
         composeRule.waitForIdle()
         assertEquals(listOf("no_timing"), problems())
@@ -292,6 +295,35 @@ class LyricsReportTest {
         waitUntil { problems() == listOf("timed_by_hand") }
         val timing = sentReports().single().getJSONObject("song").getJSONArray("timing").getJSONObject(0)
         assertEquals(1_000L, timing.getLong("heardMs") - timing.getLong("timedMs"))
+    }
+
+    @Test
+    fun anAutomaticReportThatDidntGetThereGoesTheNextTimeOnly() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
+        openLyrics { shown("Plain one") }
+        waitUntil { problems() == listOf("no_timing") }
+        reportsDown = false
+        repeat(2) {
+            controller!!.pause().stop().destroy()
+            File(app.cacheDir, "lyrics.json").delete()
+            File(app.cacheDir, "kept_words.json").delete()
+            openLyrics { shown("Plain one") }
+            composeRule.waitForIdle()
+        }
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aLineTappedIntoTimeOffersTooAndLeftUnansweredNothingGoes() {
+        openLyrics()
+        composeRule.runOnIdle { model().syncLine(1) }
+        waitUntil { shown(offer) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(false, model().uiState.reportOffer)
     }
 
     @Test

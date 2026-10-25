@@ -185,7 +185,8 @@ class SingingTest {
     @Test
     fun wordsHeardOffAreReportedWhenProblemsAreButNeverAskedAbout() {
         prefs().edit().putBoolean("auto_reports", true).commit()
-        singing.answer = { sung(SHIFT_MS) }
+        // A second off is already off.
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
         openLyrics()
         plays(positionMs = 1_000)
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }

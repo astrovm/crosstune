@@ -1521,12 +1521,10 @@ internal class MainViewModel(
                             // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
                             if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                         }
-                        LyricsFinder.Lyrics.None -> {
-                            uiState = uiState.copy(lyrics = "", lyricsFailed = false)
-                            problemFound(SongProblem.NO_LYRICS)
-                        }
+                        // No words were shown while looking, so there's none to clear.
+                        LyricsFinder.Lyrics.None -> problemFound(SongProblem.NO_LYRICS)
                         // Having no words is what an instrumental is, not a problem.
-                        LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                        LyricsFinder.Lyrics.Instrumental -> Unit
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
