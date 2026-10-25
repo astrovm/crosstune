@@ -1399,6 +1399,11 @@ internal class MainViewModel(
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var appLeadMs: Long? = null
     private var appLeadVerified = false
+    /**
+     * How far the video is ahead by the last hearing alone, while hearings don't agree on it yet: the
+     * words follow from there meanwhile, rather than stand still, but it's never kept.
+     */
+    private var guessedLeadMs: Long? = null
     /** The recording Shazam matched the hearings [appLeadMs] was learnt from to, this time. */
     private var leadMatch: String? = null
 
@@ -1812,6 +1817,8 @@ internal class MainViewModel(
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
         appFollowing?.takeIf { it.video && !appLeadVerified && !calibrationAttempted && syncPoints.isEmpty() }?.let { app -> leadOf(app, shown)?.let { appLeadMs = it } }
+        // Put in time by hand, the words keep to the guess they were put in time from.
+        appFollowing?.takeIf { it.video && appLeadMs == null && calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted() }?.let { app -> guessLead(app, shown) }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
     }
 
@@ -1826,6 +1833,12 @@ internal class MainViewModel(
         foundLines.isNotEmpty() && syncPoints.isEmpty() && handGap == null && appLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false &&
             !(lining && alongJob?.isActive == true)
 
+    /** Takes how far [app]'s video is ahead of [song] from its last hearing, when that's a lead a video could have. */
+    private fun guessLead(app: Following, song: MusicMetadata) {
+        val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
+        leadOf(app, song)?.takeIf { it in LeadTiming.possible(extra) }?.let { guessedLeadMs = it }
+    }
+
     /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
     private fun leadOf(app: Following, song: MusicMetadata): Long? {
         val heard = heardClock?.takeIf { it.playing && app.clock.playing && now() - heardAtMs <= HEARD_LATELY_MS } ?: return null
@@ -1836,17 +1849,21 @@ internal class MainViewModel(
 
     /**
      * Where the song is in what [app] plays: its place less how far it was heard to be ahead of the
-     * words. A video not yet heard, so not lined up, gives way to where the song was heard, if it was.
+     * words. A video not yet heard, so not lined up, gives way to where the song was heard, if it was;
+     * while it's being lined up, it goes by the last hearing.
      */
     private fun inSong(app: Following?): Following? {
         if (app == null || (!app.video && appLeadMs == null)) return app
-        val lead = appLeadMs ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
+        val lead = leadNow ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
         return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
     }
 
     /** [positionMs] in the song, where the app playing it has it: later, in a video ahead of it. */
-    private fun inApp(positionMs: Long) = positionMs + (appLeadMs?.takeIf { appFollowing != null } ?: 0L)
+    private fun inApp(positionMs: Long) = positionMs + (leadNow?.takeIf { appFollowing != null } ?: 0L)
+
+    /** How far the video is ahead: as lined up, or else as last heard. */
+    private val leadNow get() = appLeadMs ?: guessedLeadMs
 
     fun stopListeningAlong() {
         autoCalibrating = false
@@ -1960,6 +1977,7 @@ internal class MainViewModel(
         followJob = null
         appFollowing = null
         appLeadMs = null
+        guessedLeadMs = null
         appLeadVerified = false
         leadMatch = null
         uiState = uiState.copy(following = null)
