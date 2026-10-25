@@ -165,7 +165,7 @@ class SingingTest {
         // Heard in the words' language, as whisper.cpp names it.
         assertEquals(listOf<String?>("es"), singing.languages)
         // A report on them says they were lined up to the singing.
-        composeRule.runOnIdle { model().sendReport("2.12.0", "") }
+        composeRule.runOnIdle { model().sendReport("") }
         val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOfLast { it == ReportSender.URL }])
         assertTrue(sent.getJSONObject("song").getBoolean("sung"))
         // As a nudge by hand would: Reset puts them back, and they aren't heard again.
@@ -180,6 +180,31 @@ class SingingTest {
         plays(positionMs = 200)
         composeRule.waitForIdle()
         assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun wordsHeardOffAreReportedWhenProblemsAreButNeverAskedAbout() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
+        assertEquals("sung_off", sent.getString("problem"))
+        // Moved by the singing, not by hand, so leaving them sends nothing more.
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun wordsHeardALittleOffArentReported() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        singing.answer = { sung(-600) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.lyricsSynced }
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
     }
 
     @Test

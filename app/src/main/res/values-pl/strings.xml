@@ -278,6 +278,11 @@
     <string name="report_send">Wyślij</string>
     <string name="report_sent">Wysłano. Dziękujemy!</string>
     <string name="report_failed">Nie udało się wysłać. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="auto_report_offer">Zgłaszać takie problemy automatycznie?</string>
+    <string name="auto_report_yes">Tak</string>
+    <string name="auto_report_no">Nie, dziękuję</string>
+    <string name="setting_auto_report">Automatycznie zgłaszaj problemy z utworami</string>
+    <string name="setting_auto_report_description">Brakujące teksty, tempo lub akordy oraz tempo, które poprawisz, trafiają prywatnie do dewelopera Crosstune.</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_translation">Tłumaczenie</string>

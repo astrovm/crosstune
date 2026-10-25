@@ -299,6 +299,11 @@
     <string name="report_send">Send</string>
     <string name="report_sent">Sent. Thanks!</string>
     <string name="report_failed">Couldn\'t send it. Check your connection and try again.</string>
+    <string name="auto_report_offer">Report problems like this one automatically?</string>
+    <string name="auto_report_yes">Yes</string>
+    <string name="auto_report_no">No thanks</string>
+    <string name="setting_auto_report">Report song problems automatically</string>
+    <string name="setting_auto_report_description">Missing lyrics, timing or chords, and timing you fix, go privately to Crosstune\'s developer.</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_translation">Translation</string>

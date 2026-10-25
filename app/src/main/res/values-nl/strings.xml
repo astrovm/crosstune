@@ -278,6 +278,11 @@
     <string name="report_send">Versturen</string>
     <string name="report_sent">Verstuurd. Bedankt!</string>
     <string name="report_failed">Versturen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="auto_report_offer">Problemen zoals dit automatisch melden?</string>
+    <string name="auto_report_yes">Ja</string>
+    <string name="auto_report_no">Nee, bedankt</string>
+    <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
+    <string name="setting_auto_report_description">Ontbrekende teksten, timing of akkoorden, en timing die je verbetert, gaan privé naar de ontwikkelaar van Crosstune.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>

@@ -1327,7 +1327,7 @@ class ListeningTest {
         click(string(R.string.lyrics_sync_earlier))
         assertEquals(listOf(SyncPoint(0, 0), SyncPoint(10_000, 4_500)), kept())
         // A report on them says how they were put in time.
-        composeRule.runOnIdle { controllerModel().sendReport("2.12.0", "Comes in late") }
+        composeRule.runOnIdle { controllerModel().sendReport("Comes in late") }
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.report == ReportStatus.SENT }
         assertEquals("Comes in late", sentReport().getString("comment"))
         val song = sentReport().getJSONObject("song")
@@ -1630,7 +1630,7 @@ class ListeningTest {
         click(string(R.string.lyrics_sync_later))
         waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
-        composeRule.runOnIdle { controllerModel().sendReport("2.12.0", "") }
+        composeRule.runOnIdle { controllerModel().sendReport("") }
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.report == ReportStatus.SENT }
         val moved = sentReport().getJSONObject("song").getJSONArray("timing").getJSONObject(0)
         assertEquals("Ten", moved.getString("line"))

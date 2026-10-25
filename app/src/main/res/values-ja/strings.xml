@@ -279,6 +279,11 @@
     <string name="report_send">送信</string>
     <string name="report_sent">送信しました。ありがとうございます！</string>
     <string name="report_failed">送信できませんでした。接続を確認して、もう一度お試しください。</string>
+    <string name="auto_report_offer">このような問題を自動で報告しますか？</string>
+    <string name="auto_report_yes">はい</string>
+    <string name="auto_report_no">いいえ</string>
+    <string name="setting_auto_report">曲の問題を自動で報告</string>
+    <string name="setting_auto_report_description">見つからない歌詞、タイミング、コード、そして手動で直したタイミングが、Crosstune の開発者だけに非公開で届きます。</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>

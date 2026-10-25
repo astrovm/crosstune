@@ -278,6 +278,11 @@
     <string name="report_send">보내기</string>
     <string name="report_sent">보냈어요. 감사합니다!</string>
     <string name="report_failed">보내지 못했어요. 연결을 확인하고 다시 시도하세요.</string>
+    <string name="auto_report_offer">이런 문제를 자동으로 신고할까요?</string>
+    <string name="auto_report_yes">예</string>
+    <string name="auto_report_no">괜찮아요</string>
+    <string name="setting_auto_report">노래 문제 자동 신고</string>
+    <string name="setting_auto_report_description">없는 가사, 타이밍, 코드, 그리고 직접 고친 타이밍이 Crosstune 개발자에게만 비공개로 전해져요.</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>

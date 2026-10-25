@@ -2540,6 +2540,21 @@ class MainActivityTest {
     }
 
     @Test
+    fun songProblemsAreReportedAutomaticallyOnlyWhenSwitchedOn() {
+        launch()
+        click(string(R.string.settings_button))
+        val switch = composeRule.onNodeWithText(string(R.string.setting_auto_report)).performScrollTo()
+        // Off until the user says.
+        assertFalse(prefs().contains("auto_reports"))
+        switch.performClick()
+        composeRule.waitForIdle()
+        assertTrue(prefs().getBoolean("auto_reports", false))
+        switch.performClick()
+        composeRule.waitForIdle()
+        assertFalse(prefs().getBoolean("auto_reports", true))
+    }
+
+    @Test
     fun privacyPolicyOpensPublicPage() {
         launch()
         click(string(R.string.settings_button))

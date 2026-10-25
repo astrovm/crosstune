@@ -141,6 +141,7 @@ internal class MainViewModel(
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
     private val sungStore = SungStore(preferences)
+    private val autoReports = AutoReports(preferences)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -193,6 +194,7 @@ internal class MainViewModel(
             followRestricted = playback?.restricted() == true,
             notFoundAction = NotFoundAction.entries.firstOrNull { it.name == preferences.getString(KEY_NOT_FOUND, null) } ?: NotFoundAction.ASK,
             chords = ChordsState(on = preferences.getBoolean(KEY_CHORDS, false)),
+            autoReports = autoReports.allowed,
             cardTypes = loadCardTypes(preferences),
             learning = Learning(
                 readings = preferences.getBoolean(KEY_READINGS, true),
@@ -1479,6 +1481,7 @@ internal class MainViewModel(
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
+        leaveWords()
         keep()
         lyricsJob?.cancel()
         stopLearning()
@@ -1518,7 +1521,12 @@ internal class MainViewModel(
                             // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
                             if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
                         }
-                        LyricsFinder.Lyrics.None, LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                        LyricsFinder.Lyrics.None -> {
+                            uiState = uiState.copy(lyrics = "", lyricsFailed = false)
+                            problemFound(SongProblem.NO_LYRICS)
+                        }
+                        // Having no words is what an instrumental is, not a problem.
+                        LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyrics = "", lyricsFailed = false)
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
@@ -1526,6 +1534,8 @@ internal class MainViewModel(
                 }
                 follow(song)
                 first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
+                // Not timed even after looking further.
+                if (found?.lines?.isEmpty() == true) problemFound(SongProblem.NO_TIMING)
             }
         }
         watchNext(song)
@@ -1856,7 +1866,8 @@ internal class MainViewModel(
             if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
             val shift = SungAlignment.shiftMs(sung, clock::positionAt, lines) ?: return@launch
             sungStore.save(song, lines)
-            if (abs(shift) >= SINGING_NUDGE_MS && !uiState.lyricsSynced && handGap == null) nudgeSync(shift)
+            if (abs(shift) >= SINGING_NUDGE_MS && !uiState.lyricsSynced && handGap == null) nudge(shift)
+            if (abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         }
     }
 
@@ -2180,6 +2191,7 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val line = foundLines.getOrNull(index) ?: return
         val position = uiState.following?.clock?.positionAt(now()) ?: return
+        handTimed()
         val point = SyncPoint(line.timeMs, position.coerceAtLeast(0L))
         val hand = handGap
         if (syncPoints.isEmpty() && (hand == null || hand.lineMs == line.timeMs) && moveGap(song, point.songMs - point.lineMs, line.timeMs)) return
@@ -2196,23 +2208,33 @@ internal class MainViewModel(
 
     /** All the words [deltaMs] later in the song (earlier, when it's negative), for a song heard a little off. */
     fun nudgeSync(deltaMs: Long) {
+        if (uiState.lyricsFor != null && foundLines.isNotEmpty()) handTimed()
+        nudge(deltaMs)
+    }
+
+    /** The words being put in time by hand: offered to be reported by itself now, while they're seen, but sent once they're left. */
+    private fun handTimed() {
+        timedByHand = true
+        if (autoReports.allowed == null) problemFound(SongProblem.TIMED_BY_HAND)
+    }
+
+    private fun nudge(deltaMs: Long) {
         val song = uiState.lyricsFor ?: return
         val first = foundLines.firstOrNull() ?: return
         if (syncPoints.isEmpty() && moveGap(song, deltaMs, handGap?.lineMs ?: first.timeMs)) return
         setSync(song, if (syncPoints.isEmpty()) listOf(SyncPoint(first.timeMs, first.timeMs + deltaMs)) else syncPoints.map { it.copy(songMs = it.songMs + deltaMs) })
     }
 
-    /**
-     * Sends a report on the words shown, from app [version], with what the user says is wrong:
-     * how they're timed, and each line put in time by hand. [UiState.report] says how it goes.
-     */
-    fun sendReport(version: String, comment: String) {
+    /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
+    private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null) = Report(
+        sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = uiState.following?.app, comment = comment,
+        sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming(), problem = problem
+    )
+
+    /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
+    fun sendReport(comment: String) {
         val sender = reports ?: return
-        val song = uiState.lyricsFor
-        val report = Report(
-            version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = uiState.following?.app, comment = comment,
-            sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming()
-        )
+        val report = reportOn(sender, uiState.lyricsFor, comment)
         uiState = uiState.copy(report = ReportStatus.SENDING)
         viewModelScope.launch {
             val sent = sender.send(report)
@@ -2222,6 +2244,57 @@ internal class MainViewModel(
 
     fun closeReport() {
         uiState = uiState.copy(report = null)
+    }
+
+    /** What the offer to report problems by itself was made for, to be sent if it's taken. */
+    private var offeredFor: SongProblem? = null
+
+    /** Whether the words shown were put in time by hand, rather than moved to the singing heard. */
+    private var timedByHand = false
+
+    /**
+     * [problem] found with the words shown: reported by itself, once a song, when the user lets it;
+     * offered to be from now on, while they haven't said.
+     */
+    private fun problemFound(problem: SongProblem) {
+        val song = uiState.lyricsFor ?: return
+        when (autoReports.allowed) {
+            true -> reportProblem(song, problem)
+            null -> if (problem.offered) {
+                offeredFor = problem
+                uiState = uiState.copy(reportOffer = true)
+            }
+            false -> Unit
+        }
+    }
+
+    private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
+        val sender = reports ?: return
+        if (autoReports.reported(song, problem)) return
+        val report = reportOn(sender, song, problem = problem)
+        // One that didn't get there goes the next time it's found.
+        viewModelScope.launch { if (sender.send(report)) autoReports.remember(song, problem) }
+    }
+
+    /**
+     * The words shown are left: put in time by hand, they're reported, so with the timing settled;
+     * an offer made for them goes.
+     */
+    private fun leaveWords() {
+        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        timedByHand = false
+        offeredFor = null
+        uiState = uiState.copy(reportOffer = false)
+    }
+
+    /** Problems found from now on are reported by itself, or never, and the one offered for goes too. */
+    fun allowAutoReports(allowed: Boolean) {
+        autoReports.allowed = allowed
+        uiState = uiState.copy(autoReports = allowed, reportOffer = false)
+        val offered = offeredFor
+        offeredFor = null
+        // The words put in time by hand go once they're left.
+        if (allowed && offered != null && offered != SongProblem.TIMED_BY_HAND) problemFound(offered)
     }
 
     /**
@@ -2240,6 +2313,7 @@ internal class MainViewModel(
     /** The words back in time as they were found, and Shazam's gap as it was before they were moved by hand. */
     fun resetSync() {
         val song = uiState.lyricsFor ?: return
+        timedByHand = false
         handGap?.let { hand ->
             handGap = null
             wordsMs?.let { words -> hand.gapMs?.let { gapStore.save(song, words, hand.match, it) } ?: gapStore.forget(words, hand.match) }
@@ -2327,6 +2401,7 @@ internal class MainViewModel(
      */
     fun dismissLyrics() {
         heardSong = null
+        leaveWords()
         keep()
         lyricsJob?.cancel()
         lyricsJob = null
@@ -2884,6 +2959,7 @@ internal class MainViewModel(
             uiState = uiState.copy(chords = uiState.chords.copy(loading = true))
             val answer = finder.chordsOf(song, lines)
             uiState = uiState.copy(chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet))
+            if (answer == ChordFinder.Chords.None) problemFound(SongProblem.NO_CHORDS)
         }
     }
 
@@ -3474,6 +3550,9 @@ internal class MainViewModel(
         const val SINGING_TAIL_MS = 3_000L
         /** Words heard sung less off than this stay as they are: hearing them is about as exact. */
         const val SINGING_NUDGE_MS = 250L
+
+        /** How far off the singing heard has to be from the words for them to be reported as off. */
+        const val SUNG_OFF_MS = 1_000L
         /** Where the song is may drift this much while it's heard, and still be where it was. */
         const val STEADY_CLOCK_MS = 300L
 

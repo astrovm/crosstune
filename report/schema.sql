@@ -13,5 +13,8 @@ CREATE TABLE IF NOT EXISTS reports (
   length_ms INTEGER,
   -- JSON: each line put in time by hand, where the words had it and where it's heard.
   timing TEXT,
-  comment TEXT
+  comment TEXT,
+  -- What the app found wrong by itself, when it sent the report rather than the user.
+  -- Added after the first deploy: ALTER TABLE reports ADD COLUMN problem TEXT;
+  problem TEXT
 );

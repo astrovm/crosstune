@@ -278,6 +278,11 @@
     <string name="report_send">Gönder</string>
     <string name="report_sent">Gönderildi. Teşekkürler!</string>
     <string name="report_failed">Gönderilemedi. Bağlantını kontrol edip tekrar dene.</string>
+    <string name="auto_report_offer">Bunun gibi sorunlar otomatik bildirilsin mi?</string>
+    <string name="auto_report_yes">Evet</string>
+    <string name="auto_report_no">Hayır, teşekkürler</string>
+    <string name="setting_auto_report">Şarkı sorunlarını otomatik bildir</string>
+    <string name="setting_auto_report_description">Eksik sözler, zamanlama ya da akorlar ve düzelttiğiniz zamanlama, yalnızca Crosstune\'un geliştiricisine gider.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>
