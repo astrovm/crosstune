@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -217,6 +218,36 @@ class LyricsToolsTest {
         line("Demo two").performClick()
         passes(1)
         assertEquals(listOf(10_000L), playback.seeks)
+    }
+
+    @Test
+    fun aLineHeldWhileTheyWereAwayIsNotOpenedToStudyEither() {
+        phone = Phone.OTHER
+        openLyrics()
+        awayFromTheTools()
+        line("Demo two").performTouchInput { longClick() }
+        passes(1)
+        assertFalse(shown(string(R.string.lyrics_repeat_line)))
+        assertTrue(described(learn))
+        // Once they're back, held, a line opens to study as ever.
+        line("Demo two").performTouchInput { longClick() }
+        passes(1)
+        assertTrue(shown(string(R.string.lyrics_repeat_line)))
+    }
+
+    @Test
+    fun aKeyOnATvBringsThemBackAsItGoesDownNotAsItComesUp() {
+        openLyrics()
+        line("Demo two").requestFocus()
+        awayFromTheTools()
+        line("Demo two").performKeyInput { keyDown(Key.DirectionDown) }
+        passes(1)
+        assertTrue(described(learn))
+        // Letting go isn't another key to wait for.
+        passes(SHOWN_MS - 1_000)
+        line("Demo two").performKeyInput { keyUp(Key.DirectionDown) }
+        passes(1_000 + FADE_MS)
+        assertFalse(described(learn))
     }
 
     @Test
