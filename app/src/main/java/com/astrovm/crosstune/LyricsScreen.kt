@@ -6,6 +6,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
@@ -728,8 +729,8 @@ internal enum class SongTab(@StringRes val label: Int) {
 }
 
 /**
- * The words fade out at the top and bottom, rather than being cut off mid-line under the song or
- * where they end above the bar.
+ * Words with no lines of their own fade out at the top and bottom as a whole, rather than being cut
+ * off mid-line under the song or at the bottom.
  */
 private fun Modifier.fadedEdges(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
     drawContent()
@@ -743,6 +744,23 @@ private val HEADER_SHADE = 72.dp
 
 /** The last words fade out over this much, at the bottom of where they end. */
 private val BAR_FADE = 32.dp
+
+/**
+ * Each line of [list] fades out as it nears the top or bottom, by where it sits, rather than being
+ * cut off mid-line under the song or at the bottom. Line by line, as fading the whole list at once
+ * redraws all of it into a layer every frame, which a TV can't keep up with.
+ */
+private fun Modifier.fadedAtEdges(list: LazyListState, index: Int): Modifier = graphicsLayer {
+    val info = list.layoutInfo
+    val item = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return@graphicsLayer
+    val middle = item.offset + item.size / 2f
+    alpha = (minOf(middle - info.viewportStartOffset, info.viewportEndOffset - middle) / EDGE_FADE.toPx()).coerceIn(0f, 1f)
+    // Faded line by line, with no layer of its own to fade.
+    compositingStrategy = CompositingStrategy.ModulateAlpha
+}
+
+/** How far from the top or bottom a line's middle is when it starts to fade. */
+private val EDGE_FADE = 40.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
@@ -1494,31 +1512,33 @@ private fun TimedLyrics(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 160.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize().fadedEdges()
+        modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(lines) { index, line ->
-            LyricLineText(
-                line.text,
-                words = line.words,
-                timeMs = line.timeMs,
-                nextMs = lines.getOrNull(index + 1)?.timeMs,
-                chords = chords.getOrNull(index),
-                following = following,
-                place = following?.let { index.compareTo(active) },
-                // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
-                waiting = active < 0,
-                // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
-                onSeek = when {
-                    syncing -> ({ actions.onSyncLine(index) })
-                    following?.canSeek == true && following.timingKnown -> ({ actions.onSeekLyrics(line.timeMs) })
-                    else -> null
-                },
-                seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
-                onStudy = { onStudy(index) },
-                help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale,
-                centered = state.wordsCentered
-            )
+            Box(Modifier.fadedAtEdges(list, index)) {
+                LyricLineText(
+                    line.text,
+                    words = line.words,
+                    timeMs = line.timeMs,
+                    nextMs = lines.getOrNull(index + 1)?.timeMs,
+                    chords = chords.getOrNull(index),
+                    following = following,
+                    place = following?.let { index.compareTo(active) },
+                    // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
+                    waiting = active < 0,
+                    // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
+                    onSeek = when {
+                        syncing -> ({ actions.onSyncLine(index) })
+                        following?.canSeek == true && following.timingKnown -> ({ actions.onSeekLyrics(line.timeMs) })
+                        else -> null
+                    },
+                    seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
+                    onStudy = { onStudy(index) },
+                    help = state.learning.helpFor(index),
+                    textScale = state.learning.wordsScale,
+                    centered = state.wordsCentered
+                )
+            }
         }
     }
 }
@@ -1528,16 +1548,20 @@ private fun TimedLyrics(
 private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     val lines = state.lyrics.lines()
     val chords = rememberChords(state.chords, lines)
+    val list = rememberLazyListState()
     LazyColumn(
+        state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize().fadedEdges()
+        modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(lines) { index, line ->
-            LyricLineText(
-                line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
-                textScale = state.learning.wordsScale, centered = state.wordsCentered
-            )
+            Box(Modifier.fadedAtEdges(list, index)) {
+                LyricLineText(
+                    line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
+                    textScale = state.learning.wordsScale, centered = state.wordsCentered
+                )
+            }
         }
     }
 }
