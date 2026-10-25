@@ -252,6 +252,18 @@ class LyricsToolsTest {
     }
 
     @Test
+    fun aMenuOpensOverTheWordsWithoutMovingThem() {
+        phone = Phone.OTHER
+        openLyrics()
+        val words = composeRule.onAllNodes(hasScrollAction())[0]
+        touch()
+        val before = words.getUnclippedBoundsInRoot()
+        composeRule.onNodeWithContentDescription(learn).performClick()
+        composeRule.waitForIdle()
+        assertEquals(before, words.getUnclippedBoundsInRoot())
+    }
+
+    @Test
     fun aTouchBringsThemBackForFiveSecondsAndEachTouchStartsThemAgain() {
         phone = Phone.OTHER
         openLyrics()
