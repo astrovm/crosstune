@@ -69,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 22 Oktober 2026",
+  "updated": "Terakhir diperbarui: 25 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "Lirik juga bisa ikut mendengarkan: tepat setelah Crosstune mengenali lagu, atau saat kamu mengetuk mikrofon di lirik. Selama lirik ada di layar, Crosstune terus mendengarkan dengan cara yang sama dan mengirim sidik suara baru ke Shazam setiap beberapa detik, tidak pernah audionya, agar tetap seirama dengan lagu dan menangkap lagu berikutnya. Mendengarkan berhenti begitu kamu menutup lirik, mematikannya, atau keluar dari aplikasi. Selama lirik melayang di atas aplikasi lain, aplikasi terus mendengarkan sampai kamu menutupnya. Jika akses mikrofon sudah diizinkan, lirik dapat mendengarkan sebentar untuk memperbaiki dan mengingat jeda intro rekaman itu. Lirik mendengarkan suara yang diputar ponselmu, juga lewat headphone, dan hanya memakai mikrofon jika ponselmu tidak membagikannya."
+      "Lirik juga bisa ikut mendengarkan: tepat setelah Crosstune mengenali lagu, atau saat kamu mengetuk mikrofon di lirik. Selama lirik ada di layar, Crosstune terus mendengarkan dengan cara yang sama dan mengirim sidik suara baru ke Shazam setiap beberapa detik, tidak pernah audionya, agar tetap seirama dengan lagu dan menangkap lagu berikutnya. Mendengarkan berhenti begitu kamu menutup lirik, mematikannya, atau keluar dari aplikasi. Selama lirik melayang di atas aplikasi lain, aplikasi terus mendengarkan sampai kamu menutupnya. Jika akses mikrofon sudah diizinkan, lirik dapat mendengarkan sebentar untuk memperbaiki dan mengingat jeda intro rekaman itu. Lirik mendengarkan suara yang diputar ponselmu, juga lewat headphone, dan hanya memakai mikrofon jika ponselmu tidak membagikannya. Di ponsel dengan memori 3 GB atau lebih, lirik juga mendengarkan 20 detik dari suara yang diputar ponselmu, sekali per lagu, untuk menemukan kapan kata-katanya dinyanyikan dan memindahkannya ke sana. Itu terjadi di ponselmu, dan suaranya tidak disimpan atau dikirim. Model suara yang dipakai, milik whisper.cpp, diunduh sekali dari Hugging Face, hanya lewat Wi-Fi atau jaringan lain yang tidak berkuota, yang seperti permintaan lain memperlihatkan alamat IP-mu ke Hugging Face."
     ],
     [
       "h2",

@@ -36,3 +36,25 @@ add_subdirectory("${PROJECT_ROOT}/third_party/projectm" projectm EXCLUDE_FROM_AL
 
 add_library(milkdrop SHARED milkdrop.cpp)
 target_link_libraries(milkdrop PRIVATE libprojectM::projectM)
+
+# whisper.cpp, to hear a song's words on the phone and line its timed words up to them. A checkout
+# without it still builds, with the words lined up as before.
+if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
+    set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    set(WHISPER_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+    # Built for every phone of an ABI, not the machine building it; ggml's own threads, not OpenMP's.
+    set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+    set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+    set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${PROJECT_ROOT}/third_party/whisper.cpp" whisper EXCLUDE_FROM_ALL)
+    # Optimized in the dev build too: unoptimized, hearing 20 seconds takes a phone minutes.
+    foreach(library whisper ggml ggml-base ggml-cpu)
+        target_compile_options(${library} PRIVATE -O3)
+    endforeach()
+
+    add_library(sungwords SHARED sungwords.cpp)
+    target_link_libraries(sungwords PRIVATE whisper)
+endif()

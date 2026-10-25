@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2110100
-        versionName = "2.11.1"
+        versionCode = 2120000
+        versionName = "2.12.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -133,6 +133,9 @@ kover {
                 classes("com.astrovm.crosstune.RootShell*")
                 // Waking another music app binds to it, which needs a phone, where it's checked.
                 classes("com.astrovm.crosstune.MediaBrowserWaker*")
+                // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
+                // checked on a phone. What it hears is parsed, and lined up, in tested code.
+                classes("com.astrovm.crosstune.NativeWhisper*")
             }
         }
         variant("debug") {

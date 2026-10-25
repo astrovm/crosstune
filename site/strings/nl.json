@@ -69,7 +69,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 22 oktober 2026",
+  "updated": "Laatst bijgewerkt: 25 oktober 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -139,7 +139,7 @@
     ],
     [
       "p",
-      "De songtekst kan ook meeluisteren: direct nadat Crosstune een nummer herkent, of wanneer je in de tekst op de microfoon tikt. Zolang de tekst in beeld is, blijft Crosstune op dezelfde manier luisteren en stuurt het Shazam om de paar seconden een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat. Zolang de tekst over je andere apps zweeft, blijft hij luisteren tot je hem sluit. Als microfoontoegang al is toegestaan, kunnen songteksten kort meeluisteren om de vertraging door de intro van die opname te corrigeren en te onthouden. Ze luisteren naar het geluid dat je telefoon afspeelt, ook via een koptelefoon, en gebruiken de microfoon alleen als je telefoon dat geluid niet deelt."
+      "De songtekst kan ook meeluisteren: direct nadat Crosstune een nummer herkent, of wanneer je in de tekst op de microfoon tikt. Zolang de tekst in beeld is, blijft Crosstune op dezelfde manier luisteren en stuurt het Shazam om de paar seconden een nieuwe vingerafdruk, nooit audio, om in de maat te blijven met het nummer en het volgende op te pikken. Het luisteren stopt zodra je de tekst sluit, het uitzet of de app verlaat. Zolang de tekst over je andere apps zweeft, blijft hij luisteren tot je hem sluit. Als microfoontoegang al is toegestaan, kunnen songteksten kort meeluisteren om de vertraging door de intro van die opname te corrigeren en te onthouden. Ze luisteren naar het geluid dat je telefoon afspeelt, ook via een koptelefoon, en gebruiken de microfoon alleen als je telefoon dat geluid niet deelt. Op telefoons met 3 GB geheugen of meer luisteren songteksten ook één keer per nummer 20 seconden naar wat je telefoon afspeelt, om te vinden wanneer de woorden gezongen worden en ze daarheen te verschuiven. Dat gebeurt op je telefoon, en het geluid wordt niet opgeslagen of verstuurd. Het spraakmodel dat daarvoor wordt gebruikt, dat van whisper.cpp, wordt één keer gedownload van Hugging Face, alleen via wifi of een ander netwerk zonder datalimiet. Zoals bij elk verzoek ziet Hugging Face daarbij je IP-adres."
     ],
     [
       "h2",
