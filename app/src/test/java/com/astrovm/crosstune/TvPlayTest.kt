@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings
@@ -176,6 +177,8 @@ class TvPlayTest {
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).width)
         assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).height)
         assertEquals(0, params(floating.get()).flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        // Nothing of YouTube's video shows through it, as it would through the visuals on a TV.
+        assertEquals(PixelFormat.OPAQUE, params(floating.get()).format)
 
         // Once it plays there, its words show over it, and Crosstune stays behind.
         playing()

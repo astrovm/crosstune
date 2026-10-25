@@ -96,14 +96,16 @@ class FloatingLyricsService : Service(), LifecycleOwner, SavedStateRegistryOwner
 
     /**
      * On a TV, the whole screen, over the app a song plays in, which stops once anything's in front of
-     * it, though not under a window. It takes the remote's keys, so it can be moved around in.
+     * it, though not under a window. It takes the remote's keys, so it can be moved around in. Opaque, as
+     * a TV shows the video on a plane of its own under the window, which any see-through pixel, as the
+     * visuals have, would let through.
      */
     private val coverParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-        PixelFormat.TRANSLUCENT
+        PixelFormat.OPAQUE
     )
 
     /** Whether it covers another app, rather than float the words over it. */
