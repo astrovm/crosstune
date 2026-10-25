@@ -1,6 +1,10 @@
 Runs on Android TV and Google TV, with the remote.
+On a TV, Play opens the song in YouTube with its lyrics over it.
 A song cast to a TV shows as what's playing.
 Japanese readings float over the kanji.
 How a song's name and artist read, about the song.
 The words stay in time after a pause.
 Tapped SoundCloud, Bandcamp and Audiomack links stay in their apps.
+The lyrics' tools fade while the words play.
+Words can be centered, as on a TV.
+The lyrics button sits by Settings.
