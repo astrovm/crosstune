@@ -73,7 +73,7 @@
   "short_h2": "Em resumo",
   "short_items": [
     "Sem conta, anúncios ou análises.",
-    "Não existe servidor do Crosstune. Seu histórico fica no seu celular.",
+    "Seu histórico fica no seu celular. O único servidor do Crosstune recebe só os problemas que você relata.",
     "Os links que você converte vão só para os serviços de música envolvidos.",
     "Para reconhecer uma música, o Shazam recebe só uma impressão digital do som, nunca o áudio.",
     "Limpe o histórico quando quiser no app.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "O Crosstune não exige conta e não inclui publicidade, análises nem serviço de relatório de falhas. O desenvolvedor não opera um servidor que receba seus links de música ou seu histórico de reprodução. O Crosstune não vende suas informações."
+      "O Crosstune não exige conta e não inclui publicidade, análises nem serviço de relatório de falhas. O desenvolvedor não opera um servidor que receba seus links de música ou seu histórico de reprodução. O Crosstune não vende suas informações. O único servidor do desenvolvedor recebe os problemas que você escolhe relatar, como descrito abaixo."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Você pode limpar o histórico recente no app. Limpar o armazenamento do Crosstune nas Configurações do Android remove as configurações e o histórico locais dele. O desenvolvedor não mantém em servidor nenhuma conta nem registro de histórico de reprodução para excluir. As solicitações já recebidas por serviços de música de terceiros estão sujeitas às políticas de retenção e exclusão desses serviços."
+      "Você pode limpar o histórico recente no app. Limpar o armazenamento do Crosstune nas Configurações do Android remove as configurações e o histórico locais dele. O desenvolvedor não mantém em servidor nenhuma conta nem registro de histórico de reprodução para excluir. As solicitações já recebidas por serviços de música de terceiros estão sujeitas às políticas de retenção e exclusão desses serviços. Um relato não traz nada que diga quem o enviou, então não dá para encontrá-lo para apagar a pedido. Cada um é apagado após 180 dias."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Relatar um problema, pela letra ou pelas Configurações, abre uma issue no GitHub ou um e-mail já preenchido com as versões do Crosstune e do Android e, no caso de uma música, o título e o artista, se a letra tem tempo ou foi ajustada à mão, e o app que o Crosstune acompanha. Você pode mudar antes. Nada é enviado se você mesmo não enviar, e o GitHub ou o seu serviço de e-mail processa conforme a própria política de privacidade."
+      "Relatar um problema, na letra, envia ao servidor do desenvolvedor, quando você toca em Enviar, o que você escrever, as versões do Crosstune e do Android e, da música, o título, o artista e a duração, como a letra está no tempo, as linhas que você ajustou no tempo à mão e o app que o Crosstune acompanha. O servidor roda na Cloudflare, que trata a conexão, incluindo seu endereço IP, segundo a própria política de privacidade. O servidor não guarda seu endereço IP. Só o desenvolvedor lê os relatos, e eles nunca são publicados. Nas Configurações, Relatar um problema abre em vez disso uma issue no GitHub ou um e-mail, preenchido com as versões do Crosstune e do Android, que você pode mudar e enviar você mesmo, e o GitHub ou seu serviço de e-mail o trata segundo a própria política de privacidade."
     ],
     [
       "p",

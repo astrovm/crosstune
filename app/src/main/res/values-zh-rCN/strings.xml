@@ -273,6 +273,11 @@
     <string name="report_problem">报告问题</string>
     <string name="report_problem_text">歌词错误、时间不准或其他问题。写下问题后发送。</string>
     <string name="report_by_email">电子邮件</string>
+    <string name="report_comment">哪里有问题？（可选）</string>
+    <string name="report_what_goes">会发送这首歌、歌词的时间轴和应用版本。只有 Crosstune 的开发者会看到。</string>
+    <string name="report_send">发送</string>
+    <string name="report_sent">已发送，谢谢！</string>
+    <string name="report_failed">无法发送。请检查网络连接后重试。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按输入法拼写罗马字</string>
     <string name="lyrics_translation">翻译</string>

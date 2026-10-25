@@ -73,7 +73,7 @@
   "short_h2": "Kısaca",
   "short_items": [
     "Hesap, reklam veya analiz yok.",
-    "Crosstune'un sunucusu yok. Geçmişiniz telefonunuzda kalır.",
+    "Geçmişiniz telefonunuzda kalır. Crosstune'un tek sunucusu yalnızca bildirdiğiniz sorunları alır.",
     "Dönüştürdüğünüz bağlantılar yalnızca ilgili müzik servislerine gider.",
     "Şarkı tanırken Shazam'a sesin yalnızca bir parmak izi gider, ses kaydı asla gitmez.",
     "Geçmişi istediğiniz zaman uygulamadan temizleyebilirsiniz.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune hesap gerektirmez; reklam, analiz veya çökme raporlama servisi içermez. Geliştirici, müzik bağlantılarınızı veya dinleme geçmişinizi alan bir sunucu işletmez. Crosstune bilgilerinizi satmaz."
+      "Crosstune hesap gerektirmez; reklam, analiz veya çökme raporlama servisi içermez. Geliştirici, müzik bağlantılarınızı veya dinleme geçmişinizi alan bir sunucu işletmez. Crosstune bilgilerinizi satmaz. Geliştiricinin tek sunucusu, aşağıda anlatıldığı gibi, yalnızca göndermeyi seçtiğiniz sorun bildirimlerini alır."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Son geçmişi uygulamadan temizleyebilirsiniz. Android Ayarları'nda Crosstune'un uygulama depolama alanını temizlemek, yerel ayarlarını ve geçmişini siler. Geliştiricinin silinecek bir sunucu tarafı hesabı veya dinleme geçmişi kaydı yoktur. Üçüncü taraf müzik servislerinin zaten aldığı istekler, bu servislerin saklama ve silme politikalarına tabidir."
+      "Son geçmişi uygulamadan temizleyebilirsiniz. Android Ayarları'nda Crosstune'un uygulama depolama alanını temizlemek, yerel ayarlarını ve geçmişini siler. Geliştiricinin silinecek bir sunucu tarafı hesabı veya dinleme geçmişi kaydı yoktur. Üçüncü taraf müzik servislerinin zaten aldığı istekler, bu servislerin saklama ve silme politikalarına tabidir. Bildirimlerde kimin gönderdiğini gösteren hiçbir şey yoktur, bu yüzden bir bildirim istek üzerine bulunup silinemez. Her biri 180 gün sonra silinir."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Sözlerden ya da Ayarlar'dan Sorun bildir'e dokunmak, Crosstune ve Android sürümleriyle, bir şarkı için de adı ve sanatçısıyla, sözlerinin zamanlı olup olmadığı ya da elle zamanlandığı bilgisiyle ve Crosstune'un izlediği uygulamayla önceden doldurulmuş bir GitHub sorunu ya da e-posta açar. Göndermeden önce değiştirebilirsiniz. Siz kendiniz göndermedikçe hiçbir şey gönderilmez; GitHub ya da e-posta servisiniz bunu kendi gizlilik politikasına göre işler."
+      "Sözlerdeki Sorun bildir, Gönder'e dokunduğunuzda geliştiricinin sunucusuna yazdıklarınızı, Crosstune ve Android sürümlerini ve şarkının adını, sanatçısını ve süresini, sözlerinin nasıl zamanlandığını, elle zamanladığınız satırları ve Crosstune'un izlediği uygulamayı gönderir. Sunucu Cloudflare üzerinde çalışır; Cloudflare bağlantıyı, IP adresiniz dahil, kendi gizlilik politikasına göre işler. Sunucu IP adresinizi saklamaz. Bildirimleri yalnızca geliştirici okur ve hiçbir zaman herkese açılmaz. Ayarlar'daki Sorun bildir ise Crosstune ve Android sürümleriyle doldurulmuş bir GitHub sorunu ya da e-posta açar; bunu değiştirip kendiniz gönderebilirsiniz ve GitHub ya da e-posta servisiniz bunu kendi gizlilik politikasına göre işler."
     ],
     [
       "p",

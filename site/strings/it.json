@@ -73,7 +73,7 @@
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
-    "Non esiste un server di Crosstune. La cronologia resta sul tuo telefono.",
+    "La cronologia resta sul tuo telefono. L'unico server di Crosstune riceve solo i problemi che segnali.",
     "I link che converti vanno solo ai servizi musicali coinvolti.",
     "Per riconoscere un brano, Shazam riceve solo un'impronta del suono, mai l'audio.",
     "Cancella la cronologia quando vuoi nell'app.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune non richiede un account e non include pubblicità, analisi o servizi di segnalazione degli arresti anomali. Lo sviluppatore non gestisce alcun server che riceva i tuoi link musicali o la tua cronologia di ascolto. Crosstune non vende le tue informazioni."
+      "Crosstune non richiede un account e non include pubblicità, analisi o servizi di segnalazione degli arresti anomali. Lo sviluppatore non gestisce alcun server che riceva i tuoi link musicali o la tua cronologia di ascolto. Crosstune non vende le tue informazioni. L'unico server dello sviluppatore riceve i problemi che scegli di segnalare, come descritto più avanti."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Puoi cancellare la cronologia recente nell'app. Cancellare lo spazio di archiviazione di Crosstune nelle Impostazioni di Android rimuove le sue impostazioni e la cronologia locali. Lo sviluppatore non ha su alcun server un account o un registro della cronologia di ascolto da eliminare. Le richieste già ricevute da servizi musicali di terze parti sono soggette alle politiche di conservazione ed eliminazione di quei servizi."
+      "Puoi cancellare la cronologia recente nell'app. Cancellare lo spazio di archiviazione di Crosstune nelle Impostazioni di Android rimuove le sue impostazioni e la cronologia locali. Lo sviluppatore non ha su alcun server un account o un registro della cronologia di ascolto da eliminare. Le richieste già ricevute da servizi musicali di terze parti sono soggette alle politiche di conservazione ed eliminazione di quei servizi. Una segnalazione non contiene nulla che dica chi l'ha inviata, quindi non si può ritrovare per cancellarla su richiesta. Ognuna viene cancellata dopo 180 giorni."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Segnala un problema, dal testo o dalle Impostazioni, apre una issue di GitHub o un'email già compilata con le versioni di Crosstune e di Android e, per un brano, il suo titolo e artista, se il testo è a tempo o messo a tempo a mano, e l'app che Crosstune segue. Puoi modificarla prima. Non viene inviato nulla se non lo invii tu, e GitHub o il tuo servizio email la tratta secondo la propria informativa sulla privacy."
+      "Segnala un problema, nel testo, invia al server dello sviluppatore, quando tocchi Invia, quello che scrivi, le versioni di Crosstune e di Android e, per il brano, titolo, artista e durata, come è messo a tempo il testo, le righe che hai messo a tempo a mano e l'app che Crosstune segue. Il server funziona su Cloudflare, che tratta la connessione, il tuo indirizzo IP compreso, secondo la propria informativa sulla privacy. Il server non conserva il tuo indirizzo IP. Solo lo sviluppatore legge le segnalazioni, e non vengono mai rese pubbliche. Nelle Impostazioni, Segnala un problema apre invece una issue di GitHub o un'email, compilata con le versioni di Crosstune e di Android, che puoi modificare e inviare tu, e GitHub o il tuo servizio email la tratta secondo la propria informativa sulla privacy."
     ],
     [
       "p",

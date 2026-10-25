@@ -273,6 +273,11 @@
     <string name="report_problem">문제 신고</string>
     <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
     <string name="report_by_email">이메일</string>
+    <string name="report_comment">무엇이 문제인가요? (선택)</string>
+    <string name="report_what_goes">곡, 가사 타이밍, 앱 버전을 보내요. Crosstune 개발자만 읽어요.</string>
+    <string name="report_send">보내기</string>
+    <string name="report_sent">보냈어요. 감사합니다!</string>
+    <string name="report_failed">보내지 못했어요. 연결을 확인하고 다시 시도하세요.</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>

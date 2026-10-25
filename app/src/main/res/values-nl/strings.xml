@@ -273,6 +273,11 @@
     <string name="report_problem">Probleem melden</string>
     <string name="report_problem_text">Verkeerde tekst, slechte timing of iets anders. Zeg wat er mis is en stuur het.</string>
     <string name="report_by_email">E-mail</string>
+    <string name="report_comment">Wat is er mis? (optioneel)</string>
+    <string name="report_what_goes">Stuurt het nummer, de timing van de tekst en de appversie. Alleen de ontwikkelaar van Crosstune leest het.</string>
+    <string name="report_send">Versturen</string>
+    <string name="report_sent">Verstuurd. Bedankt!</string>
+    <string name="report_failed">Versturen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>

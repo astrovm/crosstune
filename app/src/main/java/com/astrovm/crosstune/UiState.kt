@@ -62,6 +62,8 @@ internal data class UiState(
     val lyricLines: List<LyricLine> = emptyList(),
     /** Whether the user put any of [lyricLines] in time by hand. */
     val lyricsSynced: Boolean = false,
+    /** How sending a report on the words is going, while one is being written. */
+    val report: ReportStatus? = null,
     /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
     val lyricsOffTake: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
@@ -493,3 +495,6 @@ internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** What's fixed in one tap after setup, from where it's needed: the links, following music apps, or floating lyrics. */
 internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }
+
+/** A report on the words: on its way, there, or not sent. */
+internal enum class ReportStatus { SENDING, SENT, FAILED }

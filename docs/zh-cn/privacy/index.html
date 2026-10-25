@@ -44,7 +44,7 @@
 <h2>简要说明</h2>
 <ul>
 <li>没有账号、广告或数据分析。</li>
-<li>Crosstune 没有服务器。你的历史记录只保存在你的手机上。</li>
+<li>你的历史记录只保存在你的手机上。Crosstune 唯一的服务器只接收你发送的问题报告。</li>
 <li>你转换的链接只会发送到相关的音乐服务。</li>
 <li>识别歌曲时，Shazam 只会收到声音的指纹，绝不会收到音频。</li>
 <li>随时可以在应用中清除历史记录。</li>
@@ -54,7 +54,7 @@
 <h2>详细说明</h2>
 <p>Crosstune 是由 astrovm 开发的 Android 应用，可以在你选择的音乐应用或网站中打开音乐链接。本政策说明应用会使用哪些信息，以及这些信息会发送到哪里。</p>
 <h2>没有账号、广告或数据分析</h2>
-<p>Crosstune 不需要账号，也不包含广告、数据分析或崩溃报告服务。开发者没有运营任何接收你的音乐链接或收听记录的服务器。Crosstune 不会出售你的信息。</p>
+<p>Crosstune 不需要账号，也不包含广告、数据分析或崩溃报告服务。开发者没有运营任何接收你的音乐链接或收听记录的服务器。Crosstune 不会出售你的信息。开发者唯一的服务器只接收你选择发送的问题报告，详见下文。</p>
 <h2>你设备上的信息</h2>
 <p>应用会在你的设备上保存你的设置和最近解析的链接。最近的条目可能包括来源链接、标题、艺人、封面网址以及准备好的目标链接。这些偏好设置和历史记录不在应用的 Android 云备份和设备迁移规则范围内。</p>
 <p>Crosstune 会读取你粘贴的链接、分享给它的链接，或通过 Android 链接处理打开的链接。它的剪贴板快捷方式会在你使用时读取剪贴板中的文字。它会检查设备上安装了哪些支持的音乐应用，以便将它们作为目标提供给你。这些信息只保留在你的设备上。</p>
@@ -73,12 +73,12 @@
 <h2>权限与安全</h2>
 <p>Crosstune 使用 Android 的网络权限来获取音乐信息和封面图片。第一次识别歌曲或打开歌词时，它会请求麦克风权限，并且只在聆听期间使用麦克风。如果你让歌词悬浮在其他应用上方，应用会请求显示在其他应用上层的权限，并请求一次显示通知的权限。通知会让歌词保持显示，并可用来解锁或关闭。它不会请求位置、相机、通讯录或广告 ID 权限。内置的音乐服务请求均使用 HTTPS。如果你自行添加应用或网站，请选择可信的 HTTPS 地址。MilkDrop 视觉效果同样使用麦克风权限，通过 Android 读取手机正在播放的声音；这些声音不会被录制，也不会发送到任何地方。如果你使用 Shizuku 或 root，点按“一键设置”或“全部修复”会请求其权限，Crosstune 仅用它来替你更改 Android 的链接设置、麦克风权限、歌词的访问权限，以及显示在其他应用上层的权限。</p>
 <h2>保留与删除</h2>
-<p>你可以在应用中清除最近的历史记录。在 Android 设置中清除 Crosstune 的应用存储空间，会删除其本地设置和历史记录。开发者没有任何需要删除的服务器端账号或收听记录。第三方音乐服务已经收到的请求，适用这些服务各自的保留和删除政策。</p>
+<p>你可以在应用中清除最近的历史记录。在 Android 设置中清除 Crosstune 的应用存储空间，会删除其本地设置和历史记录。开发者没有任何需要删除的服务器端账号或收听记录。第三方音乐服务已经收到的请求，适用这些服务各自的保留和删除政策。报告里没有任何能看出是谁发送的信息，所以无法按请求找到某份报告来删除。每份报告会在 180 天后删除。</p>
 <h2>儿童</h2>
 <p>Crosstune 不会询问用户的年龄或个人资料信息，也不会在开发者运营的服务器上有意收集儿童的个人信息。所链接的音乐服务有各自的年龄要求和隐私政策。父母和监护人应在孩子使用这些服务前先查看相关内容。</p>
 <h2>联系方式与变更</h2>
 <p>如有隐私方面的问题，请联系 <a href="mailto:crosstune@4st.li">crosstune@4st.li</a>。如果你给开发者发送电子邮件，电子邮件服务会处理你的地址和邮件内容，以便开发者回复。请不要包含无需分享的敏感信息。</p>
-<p>在歌词或设置中点“报告问题”，会打开一个 GitHub issue 或一封邮件，已预先填好 Crosstune 和 Android 的版本，如果是关于某首歌，还有歌名和歌手、歌词是否带时间或由你手动对时，以及 Crosstune 正在跟随的应用。发送前你可以修改。除非你自己发送，否则不会发送任何内容，GitHub 或你的邮件服务会按各自的隐私政策处理。</p>
+<p>在歌词里点“报告问题”，再点“发送”，会把你写的内容、Crosstune 和 Android 的版本，以及这首歌的歌名、歌手和时长、歌词的对时方式、你手动对时的行和 Crosstune 正在跟随的应用发送到开发者的服务器。服务器运行在 Cloudflare 上，Cloudflare 按自己的隐私政策处理这次连接，包括你的 IP 地址。服务器不保存你的 IP 地址。只有开发者会看报告，报告绝不会公开。在设置中，“报告问题”则会打开一个已填好 Crosstune 和 Android 版本的 GitHub issue 或邮件，你可以修改后自己发送，GitHub 或你的邮件服务会按各自的隐私政策处理。</p>
 <p>当应用的行为发生变化时，本政策可能会更新。更新内容将发布在此页面上，并注明新的日期。</p>
 </main>
 <footer> <select class="language" aria-label="语言" onchange="pickLanguage(this.value)"><option value="en">English</option><option value="es">Español</option><option value="pt-br">Português (Brasil)</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="it">Italiano</option><option value="nl">Nederlands</option><option value="pl">Polski</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="id">Bahasa Indonesia</option><option value="hi">हिन्दी</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="zh-cn" selected>简体中文</option><option value="zh-tw">繁體中文</option></select></footer>

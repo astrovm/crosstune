@@ -274,6 +274,11 @@
     <string name="report_problem">Segnala un problema</string>
     <string name="report_problem_text">Testo sbagliato, tempi sballati o altro. Scrivi cosa non va e invialo.</string>
     <string name="report_by_email">Email</string>
+    <string name="report_comment">Cosa non va? (facoltativo)</string>
+    <string name="report_what_goes">Invia il brano, la sincronizzazione del testo e la versione dell\'app. Lo legge solo lo sviluppatore di Crosstune.</string>
+    <string name="report_send">Invia</string>
+    <string name="report_sent">Inviato. Grazie!</string>
+    <string name="report_failed">Invio non riuscito. Controlla la connessione e riprova.</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_romaji_typed">Romaji come si digita</string>
     <string name="lyrics_translation">Traduzione</string>

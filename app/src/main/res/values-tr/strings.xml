@@ -273,6 +273,11 @@
     <string name="report_problem">Sorun bildir</string>
     <string name="report_problem_text">Yanlış sözler, kötü zamanlama ya da başka bir şey. Sorunu yaz ve gönder.</string>
     <string name="report_by_email">E-posta</string>
+    <string name="report_comment">Sorun ne? (isteğe bağlı)</string>
+    <string name="report_what_goes">Şarkıyı, sözlerinin zamanlamasını ve uygulama sürümünü gönderir. Yalnızca Crosstune\'un geliştiricisi okur.</string>
+    <string name="report_send">Gönder</string>
+    <string name="report_sent">Gönderildi. Teşekkürler!</string>
+    <string name="report_failed">Gönderilemedi. Bağlantını kontrol edip tekrar dene.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>

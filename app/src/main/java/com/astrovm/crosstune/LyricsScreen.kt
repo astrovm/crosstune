@@ -443,10 +443,11 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }) }
     if (reporting) {
-        ReportDialog(
-            Report(appVersion(), state.lyricsFor, timed = state.lyricLines.isNotEmpty(), synced = state.lyricsSynced, app = state.following?.app),
-            onDismiss = { reporting = false }
-        )
+        val version = appVersion()
+        SongReportDialog(state.report, onSend = { actions.onSendReport(version, it) }, onDismiss = {
+            reporting = false
+            actions.onCloseReport()
+        })
     }
     choosing?.let { practise -> ChooseLinesSheet(state, actions, practise, onDismiss = { choosing = null }) }
     studying?.let { line ->

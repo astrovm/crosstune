@@ -1,0 +1,14 @@
+// The Worker that keeps reports from the app. Deploy with `cf deploy` from this folder; the table is in schema.sql.
+{
+  "name": "crosstune-report",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "report.crosstune.4st.li", "custom_domain": true }],
+  "workers_dev": false,
+  "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "00000000-0000-0000-0000-000000000000" }],
+  // A few reports a minute from one address is plenty for people; more is someone flooding it.
+  "ratelimits": [{ "name": "LIMIT", "namespace_id": "3921", "simple": { "limit": 5, "period": 60 } }],
+  // Clears out reports past the days they're kept.
+  "triggers": { "crons": ["17 4 * * *"] },
+  "observability": { "enabled": false }
+}

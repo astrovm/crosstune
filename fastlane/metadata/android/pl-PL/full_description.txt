@@ -14,7 +14,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Rozpoznaje utwór grający w pobliżu: Crosstune słucha sam albo otwiera Shazama lub wyszukiwanie utworów Google. Otwiera też linki z Shazama i utwory udostępnione z Now Playing na Pixelu.</li>
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Znajdź utwór, wpisując jego nazwę zamiast linku. Odtwarzanie zostawia Cię w Crosstune: pasek na dole pokazuje, co gra, odtwarzacz ma menu z opcjami Kopiuj, Udostępnij i Otwórz w, a między odtwarzaczem i tekstem przesuwasz palcem. Czytaj tekst dowolnego utworu, który otworzysz.</li>
-<li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle. Złe słowa lub tempo? Zgłoś to prosto z tekstu: otworzy się zgłoszenie na GitHubie albo e-mail, wypełnione utworem, danymi o tempie i wersjami aplikacji i Androida, do wysłania.</li>
+<li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle. Złe słowa lub tempo? Zgłoś to jednym dotknięciem z tekstu: utwór i jego tempo trafią prywatnie do dewelopera.</li>
 <li>Ucz się słów dzięki kanie, pinyinowi, romaji i każdemu innemu pismu łacinką oraz tłumaczeniom na języki, których jeszcze nie czytasz. Wybierz, co ma być widoczne na każdej stronie fiszki. Z jednego wiersza zrobisz kilka rodzajów fiszek, każdy z własnym harmonogramem.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
 <li>Też na Android TV.</li>

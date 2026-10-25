@@ -73,7 +73,7 @@
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
-    "Nie ma serwera Crosstune. Historia zostaje na Twoim telefonie.",
+    "Historia zostaje na Twoim telefonie. Jedyny serwer Crosstune dostaje tylko problemy, które zgłosisz.",
     "Linki, które konwertujesz, trafiają tylko do serwisów muzycznych, których dotyczą.",
     "Do rozpoznania utworu Shazam dostaje tylko odcisk dźwięku, nigdy nagranie.",
     "Historię możesz wyczyścić w aplikacji w każdej chwili.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune nie wymaga konta i nie zawiera reklam, analityki ani usługi raportowania awarii. Deweloper nie prowadzi serwera, który odbierałby Twoje linki muzyczne lub historię słuchania. Crosstune nie sprzedaje Twoich informacji."
+      "Crosstune nie wymaga konta i nie zawiera reklam, analityki ani usługi raportowania awarii. Deweloper nie prowadzi serwera, który odbierałby Twoje linki muzyczne lub historię słuchania. Crosstune nie sprzedaje Twoich informacji. Jedyny serwer dewelopera odbiera zgłoszenia problemów, które sam zdecydujesz się wysłać, opisane niżej."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Ostatnią historię możesz wyczyścić w aplikacji. Wyczyszczenie pamięci aplikacji Crosstune w Ustawieniach Androida usuwa jej lokalne ustawienia i historię. Deweloper nie przechowuje na serwerze żadnego konta ani zapisu historii słuchania, który można by usunąć. Zapytania, które zewnętrzne serwisy muzyczne już otrzymały, podlegają ich zasadom przechowywania i usuwania danych."
+      "Ostatnią historię możesz wyczyścić w aplikacji. Wyczyszczenie pamięci aplikacji Crosstune w Ustawieniach Androida usuwa jej lokalne ustawienia i historię. Deweloper nie przechowuje na serwerze żadnego konta ani zapisu historii słuchania, który można by usunąć. Zapytania, które zewnętrzne serwisy muzyczne już otrzymały, podlegają ich zasadom przechowywania i usuwania danych. Zgłoszenie nie zawiera niczego, co mówi, kto je wysłał, więc nie da się go odnaleźć, żeby usunąć je na prośbę. Każde jest usuwane po 180 dniach."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Zgłoś problem, z poziomu tekstu lub ustawień, otwiera zgłoszenie na GitHubie albo e-mail, już wypełniony wersjami Crosstune i Androida oraz, dla utworu, jego tytułem i wykonawcą, informacją, czy tekst ma synchronizację, czy ustawiono ją ręcznie, i aplikacją, za którą podąża Crosstune. Możesz to najpierw zmienić. Nic nie jest wysyłane, dopóki sam tego nie wyślesz, a GitHub lub Twoja poczta przetwarza to zgodnie z własną polityką prywatności."
+      "Zgłoś problem, w tekście, wysyła na serwer dewelopera, gdy dotkniesz Wyślij, to, co napiszesz, wersje Crosstune i Androida oraz, dla utworu, jego tytuł, wykonawcę i długość, sposób synchronizacji tekstu, wiersze, które ustawiłeś w czasie ręcznie, i aplikację, za którą podąża Crosstune. Serwer działa na Cloudflare, które obsługuje połączenie, w tym Twój adres IP, zgodnie z własną polityką prywatności. Serwer nie zachowuje Twojego adresu IP. Zgłoszenia czyta tylko deweloper i nigdy nie są publikowane. W ustawieniach Zgłoś problem otwiera zamiast tego zgłoszenie na GitHubie albo e-mail, wypełniony wersjami Crosstune i Androida, które możesz zmienić i wysłać sam, a GitHub lub Twoja poczta przetwarza to zgodnie z własną polityką prywatności."
     ],
     [
       "p",

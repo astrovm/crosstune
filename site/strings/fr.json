@@ -73,7 +73,7 @@
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
-    "Il n'y a pas de serveur Crosstune. Votre historique reste sur votre téléphone.",
+    "Votre historique reste sur votre téléphone. Le seul serveur de Crosstune reçoit les problèmes que vous signalez.",
     "Les liens que vous convertissez ne vont qu'aux services de musique concernés.",
     "Pour reconnaître un titre, Shazam reçoit seulement une empreinte du son, jamais l'audio.",
     "Effacez l'historique à tout moment dans l'application.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune ne nécessite pas de compte et n'inclut ni publicité, ni statistiques d'utilisation, ni service de rapport de plantage. Le développeur n'exploite aucun serveur qui reçoit vos liens musicaux ou votre historique d'écoute. Crosstune ne vend pas vos informations."
+      "Crosstune ne nécessite pas de compte et n'inclut ni publicité, ni statistiques d'utilisation, ni service de rapport de plantage. Le développeur n'exploite aucun serveur qui reçoit vos liens musicaux ou votre historique d'écoute. Crosstune ne vend pas vos informations. Le seul serveur du développeur reçoit les problèmes que vous choisissez de signaler, comme décrit plus bas."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Vous pouvez effacer l'historique récent dans l'application. Effacer le stockage de Crosstune dans les Paramètres d'Android supprime ses paramètres et son historique locaux. Le développeur ne détient sur aucun serveur de compte ni d'historique d'écoute à supprimer. Les requêtes déjà reçues par des services de musique tiers sont soumises aux politiques de conservation et de suppression de ces services."
+      "Vous pouvez effacer l'historique récent dans l'application. Effacer le stockage de Crosstune dans les Paramètres d'Android supprime ses paramètres et son historique locaux. Le développeur ne détient sur aucun serveur de compte ni d'historique d'écoute à supprimer. Les requêtes déjà reçues par des services de musique tiers sont soumises aux politiques de conservation et de suppression de ces services. Un signalement ne contient rien qui indique qui l'a envoyé : on ne peut donc pas le retrouver pour le supprimer sur demande. Chacun est supprimé au bout de 180 jours."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Signaler un problème, depuis les paroles ou les Réglages, ouvre un ticket GitHub ou un e-mail déjà rempli avec les versions de Crosstune et d'Android et, pour un morceau, son titre et son artiste, si ses paroles sont synchronisées ou calées à la main, et l'app que Crosstune suit. Vous pouvez le modifier avant. Rien n'est envoyé si vous ne l'envoyez pas vous-même, et GitHub ou votre service de messagerie le traite selon sa propre politique de confidentialité."
+      "Signaler un problème, dans les paroles, envoie au serveur du développeur, quand vous touchez Envoyer, ce que vous écrivez, les versions de Crosstune et d'Android et, pour le morceau, son titre, son artiste et sa durée, la façon dont ses paroles sont synchronisées, les lignes que vous avez calées à la main et l'app que Crosstune suit. Le serveur tourne sur Cloudflare, qui traite la connexion, votre adresse IP comprise, selon sa propre politique de confidentialité. Le serveur ne garde pas votre adresse IP. Seul le développeur lit les signalements, et ils ne sont jamais rendus publics. Dans les Réglages, Signaler un problème ouvre plutôt un ticket GitHub ou un e-mail, rempli avec les versions de Crosstune et d'Android, que vous pouvez modifier et envoyer vous-même, et GitHub ou votre service de messagerie le traite selon sa propre politique de confidentialité."
     ],
     [
       "p",

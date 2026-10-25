@@ -273,6 +273,11 @@
     <string name="report_problem">समस्या की रिपोर्ट करें</string>
     <string name="report_problem_text">गलत बोल, गलत टाइमिंग या कुछ और। बताएं क्या गलत है और भेजें।</string>
     <string name="report_by_email">ईमेल</string>
+    <string name="report_comment">क्या गलत है? (वैकल्पिक)</string>
+    <string name="report_what_goes">गाना, उसके बोलों की टाइमिंग और ऐप का वर्ज़न भेजता है। इसे सिर्फ़ Crosstune का डेवलपर पढ़ता है।</string>
+    <string name="report_send">भेजें</string>
+    <string name="report_sent">भेज दिया। धन्यवाद!</string>
+    <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>
