@@ -1,6 +1,7 @@
 // Run with: node --test "report/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as all from "./worker.js";
 import worker, { readReport } from "./worker.js";
 
 /** D1 and the rate limit, as a test needs them: what was saved, and whether the limit lets one through. */
@@ -105,4 +106,11 @@ test("reports older than the policy allows are deleted", async () => {
   const keeping = env();
   await worker.scheduled({}, keeping);
   assert.deepEqual(keeping.saved, [{ sql: "DELETE FROM reports WHERE at < datetime('now', ?)", values: ["-180 days"] }]);
+});
+
+test("every export is one the Workers runtime can start with", () => {
+  // It takes each export for an entrypoint, and won't start at all on a constant.
+  for (const [name, value] of Object.entries(all)) {
+    assert.ok(typeof value === "function" || (name === "default" && typeof value.fetch === "function"), name);
+  }
 });
