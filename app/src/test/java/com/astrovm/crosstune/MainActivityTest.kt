@@ -1890,10 +1890,12 @@ class MainActivityTest {
         click(string(R.string.copy_link_button))
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertNotNull(MusicLinks.parse(clipboard.primaryClip!!.getItemAt(0).text.toString()))
-        // Marked by Android as copied a moment before Crosstune noted it.
+        // Crosstune notes it copied it, which Android marks a moment before, however long the test takes since.
+        val noted = prefs().getLong("clip_seen_at", 0L)
+        assertTrue(System.currentTimeMillis() - noted in 0..60_000)
         val description = clipboard.primaryClipDescription!!
         ClipDescription::class.java.getDeclaredMethod("setTimestamp", Long::class.javaPrimitiveType)
-            .invoke(description, System.currentTimeMillis() - 1_000)
+            .invoke(description, noted - 1_000)
         click(string(R.string.clear_button))
         val asked = fake.requestedUrls.size
         comeBack()
