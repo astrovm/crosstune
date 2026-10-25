@@ -107,6 +107,8 @@ internal class MainViewModel(
     private val mayCalibrate: () -> Boolean = { false },
     /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
     private val singing: SingingHearing? = null,
+    /** Where reports on the words go, kept private; nullable so tests need none. */
+    private val reports: ReportSender? = null,
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
@@ -2198,6 +2200,41 @@ internal class MainViewModel(
         val first = foundLines.firstOrNull() ?: return
         if (syncPoints.isEmpty() && moveGap(song, deltaMs, handGap?.lineMs ?: first.timeMs)) return
         setSync(song, if (syncPoints.isEmpty()) listOf(SyncPoint(first.timeMs, first.timeMs + deltaMs)) else syncPoints.map { it.copy(songMs = it.songMs + deltaMs) })
+    }
+
+    /**
+     * Sends a report on the words shown, from app [version], with what the user says is wrong:
+     * how they're timed, and each line put in time by hand. [UiState.report] says how it goes.
+     */
+    fun sendReport(version: String, comment: String) {
+        val sender = reports ?: return
+        val song = uiState.lyricsFor
+        val report = Report(
+            version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = uiState.following?.app, comment = comment,
+            sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming()
+        )
+        uiState = uiState.copy(report = ReportStatus.SENDING)
+        viewModelScope.launch {
+            val sent = sender.send(report)
+            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        }
+    }
+
+    fun closeReport() {
+        uiState = uiState.copy(report = null)
+    }
+
+    /**
+     * Each line put in time by hand, and where it's heard: those the words moved from, and the one
+     * that moved Shazam's gap, by as much as it moved.
+     */
+    private fun handTiming(): List<HandTiming> {
+        fun line(ms: Long) = foundLines.firstOrNull { it.timeMs == ms }?.text.orEmpty()
+        val gap = handGap?.let { hand ->
+            val now = wordsMs?.let { gapStore.load(it, hand.match) } ?: return@let null
+            HandTiming(line(hand.lineMs), hand.lineMs, hand.lineMs + (hand.gapMs ?: 0L) - now)
+        }
+        return syncPoints.map { HandTiming(line(it.lineMs), it.lineMs, it.songMs) } + listOfNotNull(gap)
     }
 
     /** The words back in time as they were found, and Shazam's gap as it was before they were moved by hand. */

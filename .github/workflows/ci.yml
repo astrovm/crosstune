@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A pull request that only changes the site, docs, store listing or their scripts skips the app's jobs.
+  # A pull request that only changes the site, docs, store listing, the reports' Worker or their scripts skips the app's jobs.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -37,7 +37,7 @@ jobs:
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -84,6 +84,7 @@ jobs:
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
+          node --test "report/*.test.mjs"
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
   test:

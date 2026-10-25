@@ -73,7 +73,7 @@
   "short_h2": "Kurz gesagt",
   "short_items": [
     "Kein Konto, keine Werbung, keine Analysen.",
-    "Es gibt keinen Crosstune-Server. Dein Verlauf bleibt auf deinem Handy.",
+    "Dein Verlauf bleibt auf deinem Handy. Der einzige Server von Crosstune bekommt nur die Problemmeldungen, die du schickst.",
     "Links, die du umwandelst, gehen nur an die beteiligten Musikdienste.",
     "Zum Erkennen eines Songs bekommt Shazam nur einen Fingerabdruck des Klangs, nie die Aufnahme.",
     "Lösche den Verlauf jederzeit in der App.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune braucht kein Konto und enthält weder Werbung noch Analysen oder einen Dienst für Absturzberichte. Der Entwickler betreibt keinen Server, der deine Musik-Links oder deinen Hörverlauf empfängt. Crosstune verkauft deine Daten nicht."
+      "Crosstune braucht kein Konto und enthält weder Werbung noch Analysen oder einen Dienst für Absturzberichte. Der Entwickler betreibt keinen Server, der deine Musik-Links oder deinen Hörverlauf empfängt. Crosstune verkauft deine Daten nicht. Der einzige Server des Entwicklers empfängt die Problemmeldungen, die du selbst schickst, wie unten beschrieben."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "Du kannst den Verlauf in der App löschen. Wenn du den App-Speicher von Crosstune in den Android-Einstellungen löschst, werden die lokalen Einstellungen und der Verlauf entfernt. Der Entwickler hat kein serverseitiges Konto und keine Aufzeichnung deines Hörverlaufs, die gelöscht werden könnte. Für Anfragen, die Musikdienste von Drittanbietern bereits erhalten haben, gelten deren Richtlinien zur Aufbewahrung und Löschung."
+      "Du kannst den Verlauf in der App löschen. Wenn du den App-Speicher von Crosstune in den Android-Einstellungen löschst, werden die lokalen Einstellungen und der Verlauf entfernt. Der Entwickler hat kein serverseitiges Konto und keine Aufzeichnung deines Hörverlaufs, die gelöscht werden könnte. Für Anfragen, die Musikdienste von Drittanbietern bereits erhalten haben, gelten deren Richtlinien zur Aufbewahrung und Löschung. Meldungen enthalten nichts, was verrät, wer sie geschickt hat, daher lässt sich eine Meldung nicht auf Anfrage finden und löschen. Jede wird nach 180 Tagen gelöscht."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Problem melden, im Songtext oder in den Einstellungen, öffnet ein GitHub-Issue oder eine E-Mail, schon ausgefüllt mit den Versionen von Crosstune und Android und, bei einem Song, mit Titel und Interpret, ob der Songtext zeitlich synchronisiert oder von Hand abgestimmt ist, und der App, der Crosstune folgt. Du kannst alles vorher ändern. Es wird nichts gesendet, solange du es nicht selbst abschickst, und GitHub oder dein E-Mail-Dienst verarbeitet es nach seiner eigenen Datenschutzerklärung."
+      "Problem melden im Songtext schickt dem Server des Entwicklers, wenn du auf Senden tippst, was du schreibst, die Versionen von Crosstune und Android und zum Song Titel, Interpret und Länge, wie der Songtext zeitlich gesetzt ist, die Zeilen, die du von Hand gesetzt hast, und die App, der Crosstune folgt. Der Server läuft bei Cloudflare, das die Verbindung, deine IP-Adresse eingeschlossen, nach seiner eigenen Datenschutzerklärung verarbeitet. Der Server speichert deine IP-Adresse nicht. Nur der Entwickler liest die Meldungen, und sie werden nie veröffentlicht. In den Einstellungen öffnet Problem melden stattdessen ein GitHub-Issue oder eine E-Mail, ausgefüllt mit den Versionen von Crosstune und Android, die du ändern und selbst abschicken kannst, und GitHub oder dein E-Mail-Dienst verarbeitet sie nach seiner eigenen Datenschutzerklärung."
     ],
     [
       "p",

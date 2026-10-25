@@ -164,6 +164,10 @@ class SingingTest {
         assertEquals(SHIFT_MS, firstLineMs())
         // Heard in the words' language, as whisper.cpp names it.
         assertEquals(listOf<String?>("es"), singing.languages)
+        // A report on them says they were lined up to the singing.
+        composeRule.runOnIdle { model().sendReport("2.12.0", "") }
+        val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOfLast { it == ReportSender.URL }])
+        assertTrue(sent.getJSONObject("song").getBoolean("sung"))
         // As a nudge by hand would: Reset puts them back, and they aren't heard again.
         composeRule.runOnIdle { model().resetSync() }
         plays(positionMs = 100)

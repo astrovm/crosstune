@@ -273,6 +273,11 @@
     <string name="report_problem">Сообщить о проблеме</string>
     <string name="report_problem_text">Неверный текст, плохая синхронизация или что-то ещё. Опишите проблему и отправьте.</string>
     <string name="report_by_email">Почта</string>
+    <string name="report_comment">Что не так? (необязательно)</string>
+    <string name="report_what_goes">Отправляет песню, тайминг текста и версию приложения. Читает только разработчик Crosstune.</string>
+    <string name="report_send">Отправить</string>
+    <string name="report_sent">Отправлено. Спасибо!</string>
+    <string name="report_failed">Не удалось отправить. Проверьте подключение и попробуйте снова.</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>

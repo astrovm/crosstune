@@ -259,6 +259,10 @@ internal data class ScreenActions(
     val onNudgeSync: (Long) -> Unit = {},
     /** The words back in time as they were found. */
     val onResetSync: () -> Unit = {},
+    /** A report on the words sent, from this version of the app, with what the user says is wrong. */
+    val onSendReport: (version: String, comment: String) -> Unit = { _, _ -> },
+    /** The report written, sent or not. */
+    val onCloseReport: () -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},

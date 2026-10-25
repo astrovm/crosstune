@@ -73,7 +73,7 @@
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
-    "There's no Crosstune server. Your history stays on your phone.",
+    "Your history stays on your phone. Crosstune's only server gets the problem reports you send.",
     "Links you convert go only to the music services involved.",
     "Recognizing a song sends Shazam only a fingerprint of the sound, never the audio.",
     "Clear history anytime in the app.",
@@ -91,7 +91,7 @@
     ],
     [
       "p",
-      "Crosstune does not require an account and does not include advertising, analytics, or a crash-reporting service. The developer does not operate a server that receives your music links or listening history. Crosstune does not sell your information."
+      "Crosstune does not require an account and does not include advertising, analytics, or a crash-reporting service. The developer does not operate a server that receives your music links or listening history. Crosstune does not sell your information. The developer's only server receives the problem reports you choose to send, described below."
     ],
     [
       "h2",
@@ -167,7 +167,7 @@
     ],
     [
       "p",
-      "You can clear recent history in the app. Clearing Crosstune's app storage in Android Settings removes its local settings and history. The developer holds no server-side account or listening-history record to delete. Requests already received by third-party music services are subject to those services' retention and deletion policies."
+      "You can clear recent history in the app. Clearing Crosstune's app storage in Android Settings removes its local settings and history. The developer holds no server-side account or listening-history record to delete. Requests already received by third-party music services are subject to those services' retention and deletion policies. Reports carry nothing that tells who sent them, so one can't be found to delete it on request. Each is deleted after 180 days."
     ],
     [
       "h2",
@@ -187,7 +187,7 @@
     ],
     [
       "p",
-      "Report a problem, from the lyrics or from Settings, opens a GitHub issue or an email already filled in with the Crosstune and Android versions and, for a song, its title and artist, whether its lyrics are timed or put in time by hand, and the app Crosstune follows. You can change it first. Nothing is sent unless you send it yourself, and GitHub or your email service handles it under its own privacy policy."
+      "Report a problem, in the lyrics, sends the developer's server, when you tap Send, what you write, the Crosstune and Android versions and, for the song, its title, artist and length, how its lyrics are timed, the lines you put in time by hand, and the app Crosstune follows. The server runs on Cloudflare, which handles the connection, your IP address included, under its own privacy policy. The server doesn't keep your IP address. Only the developer reads reports, and they're never made public. In Settings, Report a problem opens a GitHub issue or an email instead, filled in with the Crosstune and Android versions, which you can change and send yourself, and GitHub or your email service handles it under its own privacy policy."
     ],
     [
       "p",

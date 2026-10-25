@@ -273,6 +273,11 @@
     <string name="report_problem">Laporkan masalah</string>
     <string name="report_problem_text">Lirik salah, waktu tidak pas, atau hal lain. Jelaskan masalahnya, lalu kirim.</string>
     <string name="report_by_email">Email</string>
+    <string name="report_comment">Apa yang salah? (opsional)</string>
+    <string name="report_what_goes">Mengirim lagu, waktu liriknya, dan versi aplikasi. Hanya developer Crosstune yang membacanya.</string>
+    <string name="report_send">Kirim</string>
+    <string name="report_sent">Terkirim. Terima kasih!</string>
+    <string name="report_failed">Gagal mengirim. Periksa koneksimu dan coba lagi.</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_translation">Terjemahan</string>

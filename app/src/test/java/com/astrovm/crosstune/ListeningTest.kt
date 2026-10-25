@@ -1326,6 +1326,17 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { lit("Demo two") }
         click(string(R.string.lyrics_sync_earlier))
         assertEquals(listOf(SyncPoint(0, 0), SyncPoint(10_000, 4_500)), kept())
+        // A report on them says how they were put in time.
+        composeRule.runOnIdle { controllerModel().sendReport("2.12.0", "Comes in late") }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.report == ReportStatus.SENT }
+        assertEquals("Comes in late", sentReport().getString("comment"))
+        val song = sentReport().getJSONObject("song")
+        assertTrue(song.getBoolean("synced"))
+        assertEquals(308_000L, song.getLong("lengthMs"))
+        assertEquals(
+            """[{"line":"Demo one","timedMs":0,"heardMs":0},{"line":"Demo two","timedMs":10000,"heardMs":4500}]""",
+            song.getJSONArray("timing").toString()
+        )
     }
 
     @Test
@@ -1619,6 +1630,13 @@ class ListeningTest {
         click(string(R.string.lyrics_sync_later))
         waitUntil(TIMEOUT_MS) { gap() == tapped - 500 }
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+        composeRule.runOnIdle { controllerModel().sendReport("2.12.0", "") }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.report == ReportStatus.SENT }
+        val moved = sentReport().getJSONObject("song").getJSONArray("timing").getJSONObject(0)
+        assertEquals("Ten", moved.getString("line"))
+        // Moved as far as the gap moved from what was learnt before.
+        assertEquals(10_000L, moved.getLong("timedMs"))
+        assertEquals(-10_000L - gap()!!, moved.getLong("heardMs") - moved.getLong("timedMs"))
         // Reset puts back the gap learnt before, and the words with it, at once.
         click(string(R.string.lyrics_sync_reset))
         composeRule.runOnIdle { assertTrue(controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()) < 6_000) }
@@ -2898,6 +2916,10 @@ class ListeningTest {
         click(string(R.string.lyrics_button))
     }
 
+    /** What the last report sent said. */
+    private fun sentReport(): org.json.JSONObject =
+        org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOfLast { it == ReportSender.URL }])
+
     /** Opens the readings palette. Tapping its button again closes it, so a second call stays put. */
     private fun learnMenu() {
         if (composeRule.onAllNodesWithTag("lyrics-display-options").fetchSemanticsNodes().isEmpty()) {
@@ -3338,25 +3360,18 @@ class ListeningTest {
         val title = titles[titles.fetchSemanticsNodes().size - 1].getBoundsInRoot()
         assertTrue(report.left > title.right)
         assertTrue(report.top < title.bottom && report.bottom > title.top)
-        click(string(R.string.report_problem))
-        click(string(R.string.report_by_email))
-        val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
-        assertTrue(email, email.contains("subject=Lyrics of Demo by "))
-        assertTrue(email, email.contains("Song: Demo\n") && email.contains("Lyrics: timed\n"))
+        // Sending it is in LyricsReportTest, whose screen is a phone's.
     }
 
     @Test
-    fun signedInTheSongsSheetSaysWhatItMeansAndReportsAProblemToo() {
+    fun signedInTheSongsSheetSaysWhatItMeansAndOffersAReportToo() {
         val openAi = signedInWithChatGpt()
         wordsOf("[00:00.00] Sky full of stars\\n[00:30.00] Eat", "Sky full of stars\\nEat", openAi = openAi)
         waitForText("Sky full of stars")
         aboutSong()
         assertFalse(shown(string(R.string.chatgpt_continue)))
         assertTrue(shown(string(R.string.lyrics_songs_like)))
-        click(string(R.string.report_problem))
-        click(string(R.string.report_by_email))
-        val email = Uri.decode(shadowOf(app).nextStartedActivity.dataString)
-        assertTrue(email, email.contains("Song: Demo\n") && email.contains("Lyrics: timed\n"))
+        assertTrue(described(string(R.string.report_problem)))
     }
 
     @Test

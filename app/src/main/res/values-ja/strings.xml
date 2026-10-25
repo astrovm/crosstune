@@ -274,6 +274,11 @@
     <string name="report_problem">問題を報告</string>
     <string name="report_problem_text">歌詞の間違い、タイミングのずれなど。問題を書いて送信してください。</string>
     <string name="report_by_email">メール</string>
+    <string name="report_comment">何が問題ですか？（任意）</string>
+    <string name="report_what_goes">曲、歌詞のタイミング、アプリのバージョンを送信します。読むのは Crosstune の開発者だけです。</string>
+    <string name="report_send">送信</string>
+    <string name="report_sent">送信しました。ありがとうございます！</string>
+    <string name="report_failed">送信できませんでした。接続を確認して、もう一度お試しください。</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>
