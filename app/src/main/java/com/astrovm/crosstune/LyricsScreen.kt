@@ -258,7 +258,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // The song's info and the bar get out of the way of the words a few seconds after the screen opens, or after the last touch or remote key.
     var touches by remember { mutableIntStateOf(0) }
     var awake by remember { mutableStateOf(true) }
-    LaunchedEffect(touches) {
+    // Counted from when they start to follow too, so playing doesn't hide them the moment it starts.
+    LaunchedEffect(touches, state.following?.clock?.playing == true) {
         awake = true
         delay(TOOLS_SHOWN_MS)
         awake = false
@@ -271,10 +272,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
     var barFocused by remember { mutableStateOf(false) }
-    // They stay while there's something to do with them: a menu open, the words being put in time, the remote on them, or a screen
-    // reader that can't tap to bring them back.
+    // They only go while timed words follow a song that's playing, where the words move on by themselves; paused, or read at
+    // one's own pace, the tools stay. They also stay while there's something to do with them: a menu open, the words being put
+    // in time, the remote on them, or a screen reader that can't tap to bring them back.
+    val following = state.following
+    val gliding = state.lyricLines.isNotEmpty() && following != null && following.timingKnown && following.clock.playing
     val reader = rememberAccessibilityOn()
-    val toolsShown = awake || barMenu != null || syncing || infoFocused || barFocused || reader
+    val toolsShown = awake || !gliding || barMenu != null || syncing || infoFocused || barFocused || reader
     // A touch on the words, when the tools were away, only brings them back.
     val toolsAway by rememberUpdatedState(!toolsShown)
     // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
