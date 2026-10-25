@@ -2226,7 +2226,7 @@ internal class MainViewModel(
     /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null) = Report(
         sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = uiState.following?.app, comment = comment,
-        sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming(), problem = problem
+        sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming(), problem = problem, source = found?.source
     )
 
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */

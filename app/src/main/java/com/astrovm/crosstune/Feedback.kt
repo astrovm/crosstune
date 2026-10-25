@@ -63,7 +63,9 @@ internal data class Report(
     val sung: Boolean = false,
     val lengthMs: Long? = null,
     val timing: List<HandTiming> = emptyList(),
-    val problem: SongProblem? = null
+    val problem: SongProblem? = null,
+    /** Where the words came from, and their timing when it was borrowed. */
+    val source: String? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
 
@@ -95,6 +97,7 @@ internal data class Report(
                 put("synced", synced)
                 put("sung", sung)
                 lengthMs?.let { ms -> put("lengthMs", ms) }
+                source?.let { put("source", it) }
                 if (timing.isNotEmpty()) put("timing", JSONArray(timing.map { line -> JSONObject().put("line", line.line).put("timedMs", line.timedMs).put("heardMs", line.heardMs) }))
             })
         }

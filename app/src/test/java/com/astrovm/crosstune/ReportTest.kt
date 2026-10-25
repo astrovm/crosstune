@@ -43,11 +43,12 @@ class ReportTest {
     fun aReportSentSaysOnlyWhatsInIt() {
         val report = Report(
             "2.12.0", MusicMetadata("Demo", "Band"), timed = true, synced = true, app = "YouTube Music", android = "16 (36)",
-            comment = "  The chorus comes late \n", sung = true, lengthMs = 220_937, timing = listOf(HandTiming("Take me", 34_210, 32_900))
+            comment = "  The chorus comes late \n", sung = true, lengthMs = 220_937, timing = listOf(HandTiming("Take me", 34_210, 32_900)),
+            source = "letras, timed by lrclib"
         )
         assertEquals(
             """{"version":"2.12.0","android":"16 (36)","comment":"The chorus comes late","song":{"title":"Demo","artist":"Band","app":"YouTube Music",""" +
-                """"timed":true,"synced":true,"sung":true,"lengthMs":220937,"timing":[{"line":"Take me","timedMs":34210,"heardMs":32900}]}}""",
+                """"timed":true,"synced":true,"sung":true,"lengthMs":220937,"source":"letras, timed by lrclib","timing":[{"line":"Take me","timedMs":34210,"heardMs":32900}]}}""",
             report.json()
         )
         // With no comment, app, length or timing by hand, they're left out; with no song, all about it is.

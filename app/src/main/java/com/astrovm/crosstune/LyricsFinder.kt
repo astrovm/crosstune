@@ -115,7 +115,8 @@ internal class LyricsFinder(
          * The words themselves, and their [lines] with when each is sung, when the service has them
          * timed. [lengthMs] is how long the recording they're timed for lasts, when the service says.
          */
-        data class Found(val words: String, val lines: List<LyricLine> = emptyList(), val lengthMs: Long? = null) : Lyrics {
+        /** [source] is where the words came from, and their timing when it was borrowed, so a report can say. */
+        data class Found(val words: String, val lines: List<LyricLine> = emptyList(), val lengthMs: Long? = null, val source: String? = null) : Lyrics {
             /** Whether they're timed for a recording as long as [playingMs], or there's no telling they aren't. */
             fun timedFor(playingMs: Long?): Boolean {
                 val timedFor = lengthMs ?: return true
@@ -193,7 +194,8 @@ internal class LyricsFinder(
                 if (last >= 0) words[last] = words[last].copy(text = Readings.asJapanWrites(words[last].text))
                 line.copy(text = Readings.asJapanWrites(line.text), words = words)
             },
-            found.lengthMs
+            found.lengthMs,
+            found.source
         )
     }
 
@@ -227,7 +229,7 @@ internal class LyricsFinder(
             return BorrowedTimings.retime(lines, sounds, other, soundsOf(other.map { it.text }))
         }
         if (!wellTimed) {
-            copiesNamed(metadata, metadata.title, timeoutMs).firstNotNullOfOrNull { timedAs(it) }?.let { return Lyrics.Found(found.words, it) }
+            copiesNamed(metadata, metadata.title, timeoutMs).firstNotNullOfOrNull { timedAs(it) }?.let { return borrowing(found, it) }
         }
         if (bare == null || rough.isEmpty()) return found
         val lengthMs = withTimeoutOrNull(timeoutMs) { inStore(metadata) }?.lengthMs
@@ -235,11 +237,14 @@ internal class LyricsFinder(
             .filter { copy -> lengthMs == null || copy.lengthMs()?.let { abs(it - lengthMs) <= SAME_TAKE_LENGTH_MS } != false }
             .distinctBy { copy -> copy.synced().filter { it.text.isNotBlank() }.map { it.timeMs } }
             .mapNotNull { timedAs(it) })
-        if (!wellTimed) return timings.firstOrNull { BorrowedTimings.agrees(rough, it) }?.let { Lyrics.Found(found.words, it) } ?: found
+        if (!wellTimed) return timings.firstOrNull { BorrowedTimings.agrees(rough, it) }?.let { borrowing(found, it) } ?: found
         // Well timed, the words are kept unless two copies agree with each other, and neither with them.
         val agreed = timings.firstOrNull { one -> timings.count { BorrowedTimings.agrees(one, it, CLOSE_MS) } >= 2 } ?: return found
-        return if (BorrowedTimings.agrees(rough, agreed, CLOSE_MS * 2)) found else Lyrics.Found(found.words, agreed)
+        return if (BorrowedTimings.agrees(rough, agreed, CLOSE_MS * 2)) found else borrowing(found, agreed)
     }
+
+    /** [found]'s words with [lines], LRCLIB's timing for them. */
+    private fun borrowing(found: Lyrics.Found, lines: List<LyricLine>) = Lyrics.Found(found.words, lines, source = "${found.source}, timed by $LRCLIB")
 
     /** LRCLIB's copies of [metadata]'s song under [title]; none when it won't answer. */
     private suspend fun copiesNamed(metadata: MusicMetadata, title: String, timeoutMs: Long): List<Answer> {
@@ -309,6 +314,7 @@ internal class LyricsFinder(
             .put("words", found.words)
             .apply { if (provisional) put("provisional", true) }
             .apply { found.lengthMs?.let { put("length", it) } }
+            .apply { found.source?.let { put("source", it) } }
             .put("lines", JSONArray().apply { found.lines.forEach { put(lineToCache(it)) } })
             .toString()
     }
@@ -332,7 +338,7 @@ internal class LyricsFinder(
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> lineFromCache(list.getJSONArray(index)) }
             }
-            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }) to json.optBoolean("provisional")
+            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }, json.optString("source").ifEmpty { null }) to json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }
@@ -473,7 +479,7 @@ internal class LyricsFinder(
         val lines = song.synced()
         // Timed words are the words too, once their timings are taken off.
         val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return Lyrics.Instrumental.takeIf { named.any(Answer::instrumental) } }
-        return Lyrics.Found(words, lines, song.lengthMs())
+        return Lyrics.Found(words, lines, song.lengthMs(), LRCLIB)
     }
 
     /**
@@ -620,7 +626,7 @@ internal class LyricsFinder(
             val words = content
                 ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.replace(letrasTag, "")
                 ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
-            words?.let { Lyrics.Found(it) } ?: Lyrics.None
+            words?.let { Lyrics.Found(it, source = LETRAS) } ?: Lyrics.None
         } catch (_: IOException) {
             Lyrics.Unavailable
         } catch (_: JSONException) {
@@ -657,15 +663,15 @@ internal class LyricsFinder(
         val texts = all.map { line -> line.optString("lyricLine").trim().takeUnless { it == "♪" }.orEmpty() }
         val words = texts.filter { it.isNotEmpty() }.joinToString("\n").ifEmpty { return null }
         val starts = all.map { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds")?.toLongOrNull() }
-        if (starts.any { it == null }) return Lyrics.Found(words)
-        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }))
+        if (starts.any { it == null }) return Lyrics.Found(words, source = YOUTUBE_MUSIC)
+        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }), source = YOUTUBE_MUSIC)
     }
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String): Lyrics.Found? {
         val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutClosingCredits { it.text }.withoutNotes { it.text }
         if (lines.isEmpty()) return null
-        return Lyrics.Found(lines.joinToString("\n") { it.text }, lines)
+        return Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = NETEASE)
     }
 
     /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none. */
@@ -677,7 +683,7 @@ internal class LyricsFinder(
         val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
         else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.withoutClosingCredits { it }.withoutNotes { it }.joinToString("\n").trim()
         if (words.isEmpty()) return null
-        return Lyrics.Found(words, lines)
+        return Lyrics.Found(words, lines, source = NETEASE)
     }
 
     /** What the service said, or null when it said something that isn't a list of answers. */
@@ -792,6 +798,12 @@ internal class LyricsFinder(
         const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
         const val LETRAS_INSTRUMENTAL = "instrumental-lyric"
         const val LETRAS_SONG = "2"
+
+        // Where words came from, as reports name them.
+        const val LRCLIB = "lrclib"
+        const val YOUTUBE_MUSIC = "youtube_music"
+        const val NETEASE = "netease"
+        const val LETRAS = "letras"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
         val letrasStanza = Regex("""</p>\s*<p>""")

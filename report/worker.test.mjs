@@ -32,6 +32,7 @@ const song = {
   comment: "  The chorus comes late  ",
   song: {
     title: "Demo", artist: "Band", app: "YouTube Music", timed: true, synced: true, sung: false, lengthMs: 220937,
+    source: "letras, timed by lrclib",
     timing: [{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }],
   },
 };
@@ -42,7 +43,7 @@ test("a report is kept, with only what a report has", async () => {
   assert.equal(response.status, 204);
   assert.equal(e.saved.length, 1);
   assert.deepEqual(e.saved[0].values, [
-    "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937,
+    "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
   ]);
   // The address only counts against the limit.
@@ -53,7 +54,7 @@ test("a report is kept, with only what a report has", async () => {
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, "Hi", null]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", null]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {

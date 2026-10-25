@@ -6,7 +6,7 @@
 const MAX_BYTES = 32 * 1024;
 
 /** The longest each text may be, in characters. */
-const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, comment: 2000, line: 300 };
+const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300 };
 
 /** The problems the app finds with a song by itself, and reports when the user lets it. */
 const PROBLEMS = new Set(["no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords"]);
@@ -30,10 +30,10 @@ export default {
     const report = readReport(text);
     if (!report) return status(400);
     await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, timing, comment, problem) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       report.version, report.android, report.title, report.artist, report.app,
-      report.timed, report.synced, report.sung, report.lengthMs, report.timing, report.comment, report.problem
+      report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem
     ).run();
     return status(204);
   },
@@ -67,7 +67,7 @@ export function readReport(text) {
     comment: textOf(json.comment, LIMITS.comment),
     // A problem it doesn't know is one the user sent, as far as it can tell.
     problem: PROBLEMS.has(json.problem) ? json.problem : null,
-    title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, timing: null,
+    title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
   };
   if (song) {
     report.title = textOf(song.title, LIMITS.title);
@@ -78,6 +78,7 @@ export function readReport(text) {
     report.synced = flag(song.synced);
     report.sung = flag(song.sung);
     report.lengthMs = wholeMs(song.lengthMs);
+    report.source = textOf(song.source, LIMITS.source);
     const timing = timingOf(song.timing);
     if (timing === undefined) return null;
     report.timing = timing;

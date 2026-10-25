@@ -172,6 +172,7 @@ class LyricsReportTest {
         assertTrue(song.getBoolean("timed"))
         assertFalse(song.getBoolean("synced"))
         assertEquals(60_000L, song.getLong("lengthMs"))
+        assertEquals("lrclib", song.getString("source"))
         assertFalse(song.getBoolean("sung"))
         assertFalse(song.has("timing"))
         // Nothing else opened: no email app or GitHub.
