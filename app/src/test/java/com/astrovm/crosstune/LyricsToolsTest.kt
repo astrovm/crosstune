@@ -405,28 +405,41 @@ class LyricsToolsTest {
     }
 
     @Test
-    fun theRemoteStartsOnTheBarAndItStaysWhileTheRemoteIsOnIt() {
+    fun theRemoteStartsOnTheBarWhichStillGoesAndLeavesItOnTheWords() {
         openLyrics()
         waitUntil { onTheBar() }
-        passes(SHOWN_MS * 3)
-        assertTrue(described(about))
-        assertTrue(onTheBar())
-    }
-
-    @Test
-    fun theRemoteOnTheInfoKeepsItAndTheBarToo() {
-        openLyrics()
-        val info = composeRule.onAllNodes(hasContentDescription(about))[0]
-        info.requestFocus()
-        passes(SHOWN_MS * 3)
-        assertTrue(described(about))
-        assertTrue(described(learn))
-        info.assertIsFocused()
-        // Once it leaves, they go with no touch to keep them.
-        line("Demo two").requestFocus()
         passes(SHOWN_MS + FADE_MS)
         assertFalse(described(about))
         assertFalse(described(learn))
+        // Any key brings them back, and the words had the remote meanwhile, so it's not lost.
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionUp) }
+        passes(1)
+        assertTrue(described(learn))
+    }
+
+    @Test
+    fun theRemoteOnTheInfoDoesntKeepItEither() {
+        openLyrics()
+        val info = composeRule.onAllNodes(hasContentDescription(about))[0]
+        info.requestFocus()
+        passes(SHOWN_MS + FADE_MS)
+        assertFalse(described(about))
+        assertFalse(described(learn))
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        passes(1)
+        assertTrue(described(about))
+    }
+
+    @Test
+    fun eachKeyOnTheBarKeepsIt() {
+        openLyrics()
+        waitUntil { onTheBar() }
+        repeat(3) {
+            passes(SHOWN_MS - 1_000)
+            composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionLeft) }
+            passes(1)
+        }
+        assertTrue(described(learn))
     }
 
     @Test
