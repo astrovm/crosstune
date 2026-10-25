@@ -95,7 +95,7 @@ class LyricsToolsTest {
     @After
     fun tearDown() {
         runCatching { controller?.pause()?.stop()?.destroy() }
-        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setEnabled(false)
+        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(false)
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -380,7 +380,7 @@ class LyricsToolsTest {
         openLyrics()
         awayFromTheTools()
         // Turned on while the words show, they come back, and go again once it's off.
-        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setEnabled(true)
+        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(true)
         passes(1)
         assertTrue(described(about))
         assertTrue(described(learn))
@@ -390,14 +390,25 @@ class LyricsToolsTest {
         line("Demo two").performClick()
         passes(1)
         assertEquals(listOf(10_000L), playback.seeks)
-        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setEnabled(false)
+        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(false)
         passes(SHOWN_MS + FADE_MS)
         assertFalse(described(learn))
     }
 
     @Test
-    fun withAScreenReaderAlreadyOnTheyNeverGo() {
+    fun anotherAccessibilityServiceStillLetsThemGo() {
+        // E.g. a password manager's, which leaves taps as they are.
         shadowOf(app.getSystemService(AccessibilityManager::class.java)).setEnabled(true)
+        phone = Phone.OTHER
+        openLyrics()
+        passes(SHOWN_MS + FADE_MS)
+        assertFalse(described(about))
+        assertFalse(described(learn))
+    }
+
+    @Test
+    fun withAScreenReaderAlreadyOnTheyNeverGo() {
+        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(true)
         openLyrics()
         passes(SHOWN_MS * 3)
         assertTrue(described(about))

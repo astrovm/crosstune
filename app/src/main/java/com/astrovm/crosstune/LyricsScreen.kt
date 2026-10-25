@@ -280,7 +280,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // it starts there; each key it presses does.
     val following = state.following
     val gliding = state.lyricLines.isNotEmpty() && following != null && following.timingKnown && following.clock.playing
-    val reader = rememberAccessibilityOn()
+    val reader = rememberScreenReaderOn()
     val toolsShown = awake || !gliding || barMenu != null || syncing || reader
     // Going, they hand the remote to the words, where any key brings them back.
     val focusManager = LocalFocusManager.current
@@ -486,15 +486,18 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
     }
 }
 
-/** Whether a screen reader or another accessibility service is on, which can't tap the screen to bring back what's gone. */
+/**
+ * Whether a screen reader is on, which takes a tap to read what's under it rather than bring back what's gone. Any other
+ * accessibility service, e.g. a password manager's, leaves taps as they are, so it doesn't count.
+ */
 @Composable
-private fun rememberAccessibilityOn(): Boolean {
+private fun rememberScreenReaderOn(): Boolean {
     val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
-    var on by remember { mutableStateOf(manager.isEnabled) }
+    var on by remember { mutableStateOf(manager.isTouchExplorationEnabled) }
     DisposableEffect(manager) {
-        val listener = AccessibilityManager.AccessibilityStateChangeListener { on = it }
-        manager.addAccessibilityStateChangeListener(listener)
-        onDispose { manager.removeAccessibilityStateChangeListener(listener) }
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { on = it }
+        manager.addTouchExplorationStateChangeListener(listener)
+        onDispose { manager.removeTouchExplorationStateChangeListener(listener) }
     }
     return on
 }
