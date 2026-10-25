@@ -353,7 +353,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else BAR_SPACE)
+                    // The bar comes and goes over the words, so they never move for it; only a menu pushes them up, to see what it changes.
+                    .padding(bottom = if (barMenu != null) actionsHeight + 32.dp else 16.dp)
                     // The touch that brings the tools back isn't also a tap on a line.
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
@@ -748,9 +749,6 @@ private val HEADER_SHADE = 72.dp
 /** The last words fade out over this much, at the bottom of where they end. */
 private val BAR_FADE = 32.dp
 
-/** The bar's height and the 16dp under it, plus a gap: where the words end, so the bar never covers them. */
-private val BAR_SPACE = 80.dp
-
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
 
@@ -774,8 +772,8 @@ private const val SKIP_OUT_MS = 180
 /** How long a song swiped away waits for the next one before it comes back. */
 private const val SKIP_WAIT_MS = 1_500L
 
-/** Room under the words, so the last of them can be scrolled clear of their edge. */
-private val BAR_ROOM = 24.dp
+/** Room under the words, so the last of them can be scrolled clear of the bar over them. */
+private val BAR_ROOM = 88.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
 private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN))
