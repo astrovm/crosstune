@@ -225,6 +225,103 @@ class TvPlayTest {
     }
 
     @Test
+    fun anAppThatCantBeOpenedLeavesNothingCoveringSoPlayCoversOnceItCan() {
+        playback.opens = false
+        launch()
+        click(play)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(shadowOf(app).peekNextStartedService())
+
+        // Nothing is left thinking it's covering, which would let the next cover go unnoticed.
+        playback.opens = true
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        playCovered()
+        assertEquals(youTubeMusic to link, playback.opened.single())
+    }
+
+    @Test
+    fun playAgainAfterTheCoverWasClosedCoversYouTubeAgain() {
+        launch()
+        val floating = playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        pressBack(floating.get())
+        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        // Back in Crosstune, YouTube lets go of the song, and the player's play opens it on the song again.
+        playback.playing.value = null
+        controller!!.start().resume()
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_play))
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+        assertEquals(2, playback.opened.size)
+    }
+
+    @Test
+    fun playAgainAfterAnAppWasOpenedFromTheCoverCoversYouTubeAgain() {
+        launch()
+        playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        controller!!.get().startActivity(Intent(Settings.ACTION_SETTINGS))
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        // Robolectric doesn't stop the activity as Android would, so only the cover being closed lets it cover again.
+        playback.playing.value = null
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_play))
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+        assertEquals(2, playback.opened.size)
+    }
+
+    @Test
+    fun theCoverBeingClosedBeforeYouTubePlaysBringsCrosstuneBackLikeOnAPhone() {
+        launch()
+        val floating = playCovered()
+        pressBack(floating.get())
+        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        assertEquals(0, playback.cameBack)
+        // Nothing is over YouTube to show the words, so Crosstune comes in front of it.
+        playing()
+        waitUntil { playback.cameBack == 1 }
+    }
+
+    @Test
+    fun withTheWordsAlreadyOpenTheCoverShowsThemAndCrosstuneStaysBehind() {
+        launch()
+        click(string(R.string.lyrics_button))
+        waitUntil { shown("Demo one") }
+        playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        // Given time to have come back, which it doesn't.
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun onATvWithoutShowingOverOtherAppsOneTapAllowsItAndPlayGoesOn() {
+        ShadowSettings.setCanDrawOverlays(false)
+        val shell = FakeShell { command ->
+            if ("SYSTEM_ALERT_WINDOW" in command) ShadowSettings.setCanDrawOverlays(true)
+            true
+        }
+        MainActivity.shellFactory = { listOf(shell) }
+        launch()
+        click(play)
+        waitUntil { playback.opened.isNotEmpty() }
+        assertEquals(youTubeMusic to link, playback.opened.single())
+        assertTrue(shell.ran.any { "SYSTEM_ALERT_WINDOW" in it })
+        // Allowed once, not over and over.
+        assertEquals(1, shell.ran.count { "SYSTEM_ALERT_WINDOW" in it })
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+    }
+
+    @Test
     fun floatedFromTheCoverTheWordsFloatOverYouTube() {
         launch()
         val floating = playCovered()
