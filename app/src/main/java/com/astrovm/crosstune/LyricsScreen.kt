@@ -462,7 +462,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
 
 /**
  * The words over MilkDrop visuals when they're on, always in the dark so they read over them, on
- * a ground that lets the visuals through; otherwise on the usual one. With [only], the visuals
+ * no ground of their own, the visuals darkened instead; otherwise on the usual one. With [only], the visuals
  * alone fill the screen, the phone's bars too, until a tap [onShowWords]. The visuals stay as they
  * are either way, so the words coming and going don't start them over.
  */
@@ -471,7 +471,11 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            LocalVisuals.current(state.visualsPlay, Modifier.fillMaxSize())
+            // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
+            val readingShade = if (menuOpen) 0.75f else 0.5f
+            // Darkened as they're drawn, smaller than the screen, rather than under a shade over the whole of it.
+            val shade = if (only) 0f else readingShade + (1f - readingShade) * state.visualsShade
+            LocalVisuals.current(state.visualsPlay.copy(shade = shade), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 Box(
@@ -480,9 +484,7 @@ private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShow
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {
-                // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
-                val readingShade = if (menuOpen) 0.75f else 0.5f
-                content(Color.Black.copy(alpha = readingShade + (1f - readingShade) * state.visualsShade))
+                content(Color.Transparent)
             }
         }
     }
@@ -1733,6 +1735,8 @@ private fun LyricLineText(
                 scaleX = scale
                 scaleY = scale
                 transformOrigin = TransformOrigin(if (centered) 0.5f else 0f, 0.5f)
+                // Dimmed as each word is drawn, rather than drawing the line aside first to dim it, which a TV is too slow for line after line.
+                compositingStrategy = CompositingStrategy.ModulateAlpha
             }
             // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
             // A gap, e.g. a solo, has no words to study, so it only moves the app there.
@@ -1779,22 +1783,32 @@ private fun LyricLineText(
 
 private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
-/** Where the song is while [following] it, checked every frame while it plays; null while not. */
+/**
+ * What [at] makes of where the song is while [following] it, checked every frame while it plays,
+ * but only told, and drawn again, when it changes; null while not following.
+ */
 @Composable
-internal fun rememberPosition(following: Following?): Long? {
+internal fun <T> rememberWhilePlaying(following: Following?, at: (Long) -> T): T? {
     if (following == null) return null
-    fun now() = following.clock.positionAt(SystemClock.elapsedRealtime())
-    val position by produceState(now(), following) {
+    val latest by rememberUpdatedState(at)
+    fun now() = latest(following.clock.positionAt(SystemClock.elapsedRealtime()))
+    val value by produceState(now(), following) {
         value = now()
         while (following.clock.playing) value = withInfiniteAnimationFrameMillis { now() }
     }
-    return position
+    return value
 }
 
-/** [words], those sung by [positionMs] lit and the rest dim. */
+/** Where the song is while [following] it, to the [POSITION_STEP_MS], which is as fine as a bar or clock shows; null while not. */
 @Composable
-private fun sungText(words: List<TimedWord>, positionMs: Long): AnnotatedString {
-    val sung = SyncedLyrics.wordsSungBy(words, positionMs)
+internal fun rememberPosition(following: Following?): Long? = rememberWhilePlaying(following) { it - it % POSITION_STEP_MS }
+
+/** How often a song's place moves on screen: more often would only draw the screen again for nothing. */
+internal const val POSITION_STEP_MS = 100L
+
+/** [words], the first [sung] lit and the rest dim. */
+@Composable
+private fun sungText(words: List<TimedWord>, sung: Int): AnnotatedString {
     val color = MaterialTheme.colorScheme.onSurface
     return buildAnnotatedString {
         words.forEachIndexed { index, word -> withStyle(SpanStyle(color = if (index < sung) color else color.copy(alpha = UNSUNG_ALPHA))) { append(word.text) } }
@@ -1804,7 +1818,7 @@ private fun sungText(words: List<TimedWord>, positionMs: Long): AnnotatedString 
 /** The line being sung, timed word by word: each word lights as it's sung. */
 @Composable
 private fun SungWords(words: List<TimedWord>, following: Following, style: TextStyle) {
-    Text(sungText(words, rememberPosition(following) ?: 0), style = style)
+    Text(sungText(words, rememberWhilePlaying(following) { SyncedLyrics.wordsSungBy(words, it) } ?: 0), style = style)
 }
 
 /** How bright the words of the line being sung are before they're sung. */
@@ -1828,18 +1842,19 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
-    val position = rememberPosition(following.takeIf { line.words.isNotEmpty() })
+    val now = rememberWhilePlaying(following.takeIf { line.words.isNotEmpty() }) {
+        ChordSheets.playing(line, chords.over, nextMs, it) to SyncedLyrics.wordsSungBy(line.words, it)
+    }
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
-    playing.intValue = position?.let { ChordSheets.playing(line, chords.over, nextMs, it) } ?: -1
+    playing.intValue = now?.first ?: -1
     val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
     val shown = when {
-        position == null -> written
+        now == null -> written
         // Words lit as sung, with the readings' spacing kept when the words are the same letters.
         ruby != null && line.words.joinToString("") { it.text } == text -> {
-            val sung = SyncedLyrics.wordsSungBy(line.words, position)
-            val litTo = line.words.take(sung).sumOf { it.text.length }
+            val litTo = line.words.take(now.second).sumOf { it.text.length }
             buildAnnotatedString {
                 append(written)
                 addStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = UNSUNG_ALPHA)), litTo, written.length)
@@ -1847,7 +1862,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
         }
         // Words that don't spell the line's own letters would put the chords and readings over the wrong ones.
         ruby != null -> written
-        else -> sungText(line.words, position)
+        else -> sungText(line.words, now.second)
     }
     val measurer = rememberTextMeasurer()
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
