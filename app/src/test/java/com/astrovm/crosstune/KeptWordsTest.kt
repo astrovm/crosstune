@@ -19,7 +19,7 @@ class KeptWordsTest {
         lyrics = "晴れた日に\nWalking down the river road",
         lines = lines,
         synced = true,
-        found = LyricsFinder.Lyrics.Found("晴れた日に\nWalking down the river road", lines, lengthMs = 200_000),
+        found = LyricsFinder.Lyrics.Found("晴れた日に\nWalking down the river road", lines, lengthMs = 200_000, source = "netease, timed by lrclib"),
         foundLines = lines.take(1),
         japanese = listOf("晴れた日に"),
         syncPoints = listOf(SyncPoint(1_000, 1_250)),

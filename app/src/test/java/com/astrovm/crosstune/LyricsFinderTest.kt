@@ -83,7 +83,7 @@ class LyricsFinderTest {
     @Test
     fun aSongGetsItsOwnWords() {
         respond("""[${answer("Dakare Ni Kita Onna", "Kingo Hamada", "夜が灯りを\n投げるBedで")}]""")
-        assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで"), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
+        assertEquals(Lyrics.Found("夜が灯りを\n投げるBedで", source = LyricsFinder.LRCLIB), found(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada")))
         // LRCLIB is asked by title and artist; NetEase, asked at the same time, may come first.
         val asked = fake.requestedUrls.first { it.startsWith("https://lrclib.net/") }
         assertEquals("https://lrclib.net/api/search?track_name=Dakare%20Ni%20Kita%20Onna&artist_name=Kingo%20Hamada", asked)
@@ -152,13 +152,13 @@ class LyricsFinderTest {
         val timed = answer("Song", "Band", "First\nSecond", synced = "[00:01.00] First\n[00:02.50] \n[00:03.00] Second")
         respond("""[$plainOnly,$timed]""")
         assertEquals(
-            Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(3_000, "Second"))),
+            Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(3_000, "Second")), source = LyricsFinder.LRCLIB),
             found(MusicMetadata("Song", "Band"))
         )
 
         // Timed words alone are the words too, once their timings are taken off.
         respond("""[{"trackName":"Song","artistName":"Band","syncedLyrics":"[00:01.00] Only timed"}]""")
-        assertEquals(Lyrics.Found("Only timed", listOf(LyricLine(1_000, "Only timed"))), found(MusicMetadata("Song", "Band")))
+        assertEquals(Lyrics.Found("Only timed", listOf(LyricLine(1_000, "Only timed")), source = LyricsFinder.LRCLIB), found(MusicMetadata("Song", "Band")))
     }
 
     @Test
@@ -307,7 +307,7 @@ class LyricsFinderTest {
             if (calls == 1) throw IOException("offline")
             FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
         }
-        assertEquals(Lyrics.Found("Words"), found(MusicMetadata("Song", "Band")))
+        assertEquals(Lyrics.Found("Words", source = LyricsFinder.LRCLIB), found(MusicMetadata("Song", "Band")))
         // The second try, then once more for a timed copy of the words to time them by.
         assertEquals(3, calls)
     }
@@ -337,7 +337,7 @@ class LyricsFinderTest {
     @Test
     fun aSongLrclibHasUnderItsOwnNamesIsFoundUnderThem() {
         japaneseSong(lrclib = { title -> if (title == "初恋") """[${answer("初恋", "三田 寛子", "五月雨は緑色")}]""" else "[]" })
-        assertEquals(Lyrics.Found("五月雨は緑色"), found(hatsukoi))
+        assertEquals(Lyrics.Found("五月雨は緑色", source = LyricsFinder.LRCLIB), found(hatsukoi))
         // The store that names it as music apps do, then the one in its own country, for that same recording.
         assertEquals(true, fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") && "country=us" in it })
         assertEquals(true, fake.requestedUrls.any { it == "https://itunes.apple.com/lookup?id=42&country=jp" })
@@ -351,7 +351,7 @@ class LyricsFinderTest {
             lyric = lrc
         )
         assertEquals(
-            Lyrics.Found("五月雨は緑色\n悲しくさせたよ", listOf(LyricLine(16_000, "五月雨は緑色"), LyricLine(23_080, "悲しくさせたよ"))),
+            Lyrics.Found("五月雨は緑色\n悲しくさせたよ", listOf(LyricLine(16_000, "五月雨は緑色"), LyricLine(23_080, "悲しくさせたよ")), source = LyricsFinder.NETEASE),
             found(hatsukoi)
         )
         // The words of its own singer's recording, not the namesake's.
@@ -368,20 +368,20 @@ class LyricsFinderTest {
         val lrc = (sung + "" + credits).mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n")
         japaneseSong(netEase = netEase, lyric = lrc)
         assertEquals(
-            Lyrics.Found(sung.joinToString("\n"), sung.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }),
+            Lyrics.Found(sung.joinToString("\n"), sung.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE),
             found(hatsukoi)
         )
 
         japaneseSong(netEase = netEase, lyric = (sung + credits).joinToString("\n"))
-        assertEquals(Lyrics.Found(sung.joinToString("\n")), found(hatsukoi))
+        assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
 
         // A duet's last lines, each with who sings it, are words.
         val duet = sung + listOf("Male : Stay with me", "Female : Never leave", "Both 2 : Together")
         japaneseSong(netEase = netEase, lyric = (duet + credits).joinToString("\n"))
-        assertEquals(Lyrics.Found(duet.joinToString("\n")), found(hatsukoi))
+        assertEquals(Lyrics.Found(duet.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
         // One alone could be sung.
         japaneseSong(netEase = netEase, lyric = (sung + "Mastering : Someone").joinToString("\n"))
-        assertEquals(Lyrics.Found((sung + "Mastering : Someone").joinToString("\n")), found(hatsukoi))
+        assertEquals(Lyrics.Found((sung + "Mastering : Someone").joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
 
         val byWord = (sung + credits).filter { it.isNotEmpty() }.mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
         fake.handler = { request ->
@@ -403,7 +403,7 @@ class LyricsFinderTest {
         japaneseSong(netEase = netEase, lyric = filler.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n"))
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
         japaneseSong(netEase = netEase, lyric = filler.joinToString("\n"))
-        assertEquals(Lyrics.Found(sung.joinToString("\n")), found(hatsukoi))
+        assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
         val byWord = filler.mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
         fake.handler = { request ->
             when (request.url.encodedPath) {
@@ -415,7 +415,7 @@ class LyricsFinderTest {
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
         // A note never closed may be words after all, so it's left be.
         japaneseSong(netEase = netEase, lyric = listOf("五月雨は緑色", "【open", "悲しくさせたよ").joinToString("\n"))
-        assertEquals(Lyrics.Found("五月雨は緑色\n【open\n悲しくさせたよ"), found(hatsukoi))
+        assertEquals(Lyrics.Found("五月雨は緑色\n【open\n悲しくさせたよ", source = LyricsFinder.NETEASE), found(hatsukoi))
     }
 
     @Test
@@ -478,7 +478,7 @@ class LyricsFinderTest {
             netEase = { query -> if (query == "Hatsukoi Hiroko Mita") """{"result":{"songs":[{"id":3,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{"songs":[]}}""" },
             lyric = "Plain words, no timings"
         )
-        assertEquals(Lyrics.Found("Plain words, no timings"), found(hatsukoi))
+        assertEquals(Lyrics.Found("Plain words, no timings", source = LyricsFinder.NETEASE), found(hatsukoi))
     }
 
     @Test
@@ -532,7 +532,7 @@ class LyricsFinderTest {
             netEase = { query -> if (query == "Hatsukoi Hiroko Mita") """{"result":{"songs":[{"id":3,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{}}""" },
             lyric = "Plain words, no timings"
         )
-        assertEquals(Lyrics.Found("Plain words, no timings"), found(hatsukoi))
+        assertEquals(Lyrics.Found("Plain words, no timings", source = LyricsFinder.NETEASE), found(hatsukoi))
     }
 
     @Test
@@ -826,10 +826,10 @@ class LyricsFinderTest {
     @Test
     fun untimedWordsGiveWayToTimedOnes() {
         betterElsewhere(answer("Song", "Band", "First line"), "[00:02.00]First line")
-        assertEquals(Lyrics.Found("First line", listOf(LyricLine(2_000, "First line"))), found(MusicMetadata("Song", "Band")))
+        assertEquals(Lyrics.Found("First line", listOf(LyricLine(2_000, "First line")), source = LyricsFinder.NETEASE), found(MusicMetadata("Song", "Band")))
         // Untimed elsewhere too: LRCLIB's stays.
         betterElsewhere(answer("Song", "Band", "First line"), "Other words")
-        assertEquals(Lyrics.Found("First line"), found(MusicMetadata("Song", "Band")))
+        assertEquals(Lyrics.Found("First line", source = LyricsFinder.LRCLIB), found(MusicMetadata("Song", "Band")))
         // Timed words that aren't romaji are taken straight away, with nothing else asked.
         fake.requestedUrls.clear()
         betterElsewhere(answer("Song", "Band", "First line", "[00:01.00] First line"), "[00:02.00]Other")
@@ -913,7 +913,7 @@ class LyricsFinderTest {
         everywhere("[$timedOnLrclib]", youTubeMusicPage("♪" to 0, "Erste" to 12_000, "Zweite" to 15_500))
         assertEquals(
             // The note at the start is a pause, as it's long enough.
-            Lyrics.Found("Erste\nZweite", listOf(LyricLine(0, ""), LyricLine(12_000, "Erste"), LyricLine(15_500, "Zweite"))),
+            Lyrics.Found("Erste\nZweite", listOf(LyricLine(0, ""), LyricLine(12_000, "Erste"), LyricLine(15_500, "Zweite")), source = LyricsFinder.YOUTUBE_MUSIC),
             runBlocking { withYouTubeMusic().lyricsOf(song) }
         )
         // The song's page is asked for by its video, and the words as YouTube Music's app, which gets them timed.
@@ -926,10 +926,10 @@ class LyricsFinderTest {
     @Test
     fun youTubeMusicsUntimedWordsGiveWayToTimedOnes() {
         everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to null, "Zweite" to null))
-        assertEquals(Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second"))), runBlocking { withYouTubeMusic().lyricsOf(song) })
+        assertEquals(Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")), source = LyricsFinder.LRCLIB), runBlocking { withYouTubeMusic().lyricsOf(song) })
         // With none elsewhere, they're the words.
         everywhere("[]", youTubeMusicPage("Erste" to null, "♪" to null, "Zweite" to null))
-        assertEquals(Lyrics.Found("Erste\nZweite"), runBlocking { withYouTubeMusic().lyricsOf(song) })
+        assertEquals(Lyrics.Found("Erste\nZweite", source = LyricsFinder.YOUTUBE_MUSIC), runBlocking { withYouTubeMusic().lyricsOf(song) })
     }
 
     @Test
@@ -952,7 +952,7 @@ class LyricsFinderTest {
 
     @Test
     fun withoutYouTubeMusicsWordsTheOthersStillCount() {
-        val lrclibWords = Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")))
+        val lrclibWords = Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")), source = LyricsFinder.LRCLIB)
         // Not on YouTube Music.
         everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to 1))
         assertEquals(lrclibWords, runBlocking { withYouTubeMusic(videoId = null).lyricsOf(song) })
@@ -1119,7 +1119,7 @@ class LyricsFinderTest {
         val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
         // First as found, to show at once.
         val first = runBlocking { finder.firstLook(remix) }
-        assertEquals(LyricsFinder.FirstLook(Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early)), final = false), first)
+        assertEquals(LyricsFinder.FirstLook(Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early), source = LyricsFinder.LRCLIB), final = false), first)
         // Kept at once as they are, so they show again with no lookup, still to be timed.
         val asked = fake.requestedUrls.size
         assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) })
@@ -1127,6 +1127,8 @@ class LyricsFinderTest {
         // Then timed as the copies agree, and kept that way.
         val better = runBlocking { finder.retimed(remix, first.lyrics) } as Lyrics.Found
         better.lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
+        // A report on them says whose timing they took.
+        assertEquals("lrclib, timed by lrclib", better.source)
         val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
         assertEquals(LyricsFinder.FirstLook(better, final = true), again)
         file.delete()

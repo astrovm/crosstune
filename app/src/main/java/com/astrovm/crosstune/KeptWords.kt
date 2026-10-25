@@ -26,7 +26,7 @@ internal data class KeptWords(
         .put("lyrics", lyrics)
         .put("lines", lines.json(::lineJson))
         .put("synced", synced)
-        .put("found", found?.let { JSONObject().put("words", it.words).put("lines", it.lines.json(::lineJson)).put("lengthMs", it.lengthMs) })
+        .put("found", found?.let { JSONObject().put("words", it.words).put("lines", it.lines.json(::lineJson)).put("lengthMs", it.lengthMs).put("source", it.source) })
         .put("foundLines", foundLines.json(::lineJson))
         .put("japanese", japanese?.json { it })
         .put("syncPoints", syncPoints.json { JSONArray().put(it.lineMs).put(it.songMs) })
@@ -48,7 +48,7 @@ internal data class KeptWords(
                 kept.getJSONArray("lines").list(::line),
                 kept.getBoolean("synced"),
                 kept.optJSONObject("found")?.let {
-                    LyricsFinder.Lyrics.Found(it.getString("words"), it.getJSONArray("lines").list(::line), if (it.has("lengthMs")) it.getLong("lengthMs") else null)
+                    LyricsFinder.Lyrics.Found(it.getString("words"), it.getJSONArray("lines").list(::line), if (it.has("lengthMs")) it.getLong("lengthMs") else null, it.optString("source").ifEmpty { null })
                 },
                 kept.getJSONArray("foundLines").list(::line),
                 kept.optJSONArray("japanese")?.list { array, index -> array.getString(index) },

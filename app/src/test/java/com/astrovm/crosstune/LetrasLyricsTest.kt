@@ -48,7 +48,7 @@ class LetrasLyricsTest {
             search(doc(type = "1"), doc(title = "Different Road"), doc(artist = "Someone Else"), doc()),
             "<div class=\"lyric-content other-class\"><p>Walking &amp; singing<br/>On the r&iacute;ver<br />&#x1F3B5; &lt;home&gt;</p> <p>Second verse &#99999999999;</p></div>"
         )
-        assertEquals(Lyrics.Found("Walking & singing\nOn the ríver\n🎵 <home>\n\nSecond verse &#99999999999;"), lookup())
+        assertEquals(Lyrics.Found("Walking & singing\nOn the ríver\n🎵 <home>\n\nSecond verse &#99999999999;", source = LyricsFinder.LETRAS), lookup())
         assertEquals(listOf(pageUrl), fake.requestedUrls.filter { it.startsWith("https://www.letras.com/") })
         val asked = fake.requestedUrls.first { it.startsWith("https://solr.sscdn.co/") }.toHttpUrl()
         assertEquals("River Road The Walkers", asked.queryParameter("q"))
@@ -77,7 +77,7 @@ class LetrasLyricsTest {
             val lines = List(3) { List(20) { alphabet[random.nextInt(alphabet.length)] }.joinToString("").trim() }
             val encoded = lines.map { line -> line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;") }
             respond(page = "<div class=\"lyric-content\"><p>${encoded[0]}<br/>${encoded[1]}</p><p>${encoded[2]}</p></div>")
-            assertEquals(Lyrics.Found("${lines[0]}\n${lines[1]}\n\n${lines[2]}"), lookup())
+            assertEquals(Lyrics.Found("${lines[0]}\n${lines[1]}\n\n${lines[2]}", source = LyricsFinder.LETRAS), lookup())
         }
     }
 
@@ -126,7 +126,7 @@ class LetrasLyricsTest {
                 .put("trackName", song.title).put("artistName", song.artist).put("plainLyrics", "Words already found").put("syncedLyrics", timed)).toString())
             else answer(request)
         }
-        assertEquals(Lyrics.Found("Words already found"), lookup())
+        assertEquals(Lyrics.Found("Words already found", source = LyricsFinder.LRCLIB), lookup())
         // Untimed words from Letras couldn't better them, so it isn't asked.
         assertTrue(fake.requestedUrls.none { it.startsWith("https://solr.sscdn.co/") })
         fake.requestedUrls.clear()
