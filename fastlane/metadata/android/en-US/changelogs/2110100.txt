@@ -1,0 +1,5 @@
+The lyrics run to the bottom, with their tools and menus over them.
+A video's lyrics follow it within seconds, not once its intro is lined up.
+Lyrics move smoother on a TV.
+The lyrics' tools fade with any accessibility service on, unless it's a screen reader.
+On a TV, Play keeps going once Shizuku lets the lyrics show over YouTube.
