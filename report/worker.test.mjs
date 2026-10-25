@@ -1,7 +1,7 @@
 // Run with: node --test "report/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { KEEP_DAYS, readReport } from "./worker.js";
+import worker, { readReport } from "./worker.js";
 
 /** D1 and the rate limit, as a test needs them: what was saved, and whether the limit lets one through. */
 function env({ allowed = true } = {}) {
@@ -105,5 +105,4 @@ test("reports older than the policy allows are deleted", async () => {
   const keeping = env();
   await worker.scheduled({}, keeping);
   assert.deepEqual(keeping.saved, [{ sql: "DELETE FROM reports WHERE at < datetime('now', ?)", values: ["-180 days"] }]);
-  assert.equal(KEEP_DAYS, 180);
 });

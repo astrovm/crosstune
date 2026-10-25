@@ -11,8 +11,8 @@ const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, co
 /** The most lines put in time by hand a report carries. */
 const MAX_POINTS = 300;
 
-/** How long a report is kept, as the privacy policy promises. */
-export const KEEP_DAYS = 180;
+/** How long a report is kept, as the privacy policy promises. Not exported: Workers take every export for an entrypoint. */
+const KEEP_DAYS = 180;
 
 export default {
   async fetch(request, env) {
