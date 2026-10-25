@@ -242,6 +242,26 @@ class TvPlayTest {
     }
 
     @Test
+    fun thePlayersPlayThatCantOpenYouTubeAgainCoversNothing() {
+        launch()
+        val floating = playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        pressBack(floating.get())
+        waitUntil { shadowOf(floating.get()).isStoppedBySelf }
+        playback.playing.value = null
+        controller!!.start().resume()
+        composeRule.waitForIdle()
+        // Nothing opened, so there's nothing to cover, and nothing in the app goes on thinking there is.
+        playback.opens = false
+        click(string(R.string.lyrics_play))
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(1, playback.opened.size)
+        assertNull(shadowOf(app).peekNextStartedService())
+    }
+
+    @Test
     fun playAgainAfterTheCoverWasClosedCoversYouTubeAgain() {
         launch()
         val floating = playCovered()
