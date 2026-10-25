@@ -49,6 +49,11 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
     set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # ggml bakes its commit into the library, as short as the clone allows: 7 letters in a shallow
+    # clone, 8 in a full one. Always 12, so any clone builds the same APK, as F-Droid checks.
+    set(ENV{GIT_CONFIG_COUNT} 1)
+    set(ENV{GIT_CONFIG_KEY_0} core.abbrev)
+    set(ENV{GIT_CONFIG_VALUE_0} 12)
     add_subdirectory("${PROJECT_ROOT}/third_party/whisper.cpp" whisper EXCLUDE_FROM_ALL)
     # Optimized in the dev build too: unoptimized, hearing 20 seconds takes a phone minutes.
     foreach(library whisper ggml ggml-base ggml-cpu)
