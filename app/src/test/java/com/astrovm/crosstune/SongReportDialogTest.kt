@@ -37,6 +37,8 @@ class SongReportDialogTest {
         var closed = 0
         rule.setContent { SongReportDialog(status, onSend = { sent += it }, onDismiss = { closed++ }) }
         val send = rule.onNode(hasText(string(R.string.report_send)))
+        // The field says what it's for.
+        rule.onNode(hasSetTextAction() and hasText(string(R.string.report_comment))).assertExists()
         rule.onNode(hasSetTextAction()).performTextInput("The chorus comes late")
         send.performClick()
         assertEquals(listOf("The chorus comes late"), sent)

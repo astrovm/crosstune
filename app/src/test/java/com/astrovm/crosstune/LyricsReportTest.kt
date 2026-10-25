@@ -5,7 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -29,6 +33,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowToast
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Reporting a problem with a song's words, in one tap, to Crosstune's own box for reports. At
@@ -50,6 +56,10 @@ class LyricsReportTest {
     @Volatile
     private var reportsDown = false
 
+    /** Holds a report on its way until it's let through. */
+    @Volatile
+    private var reportsHeld: CountDownLatch? = null
+
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
@@ -67,7 +77,10 @@ class LyricsReportTest {
         File(app.cacheDir, "lyrics.json").delete()
         fake.handler = { request ->
             when (request.url.host) {
-                "report.crosstune.4st.li" -> FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
+                "report.crosstune.4st.li" -> {
+                    reportsHeld?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
+                }
                 "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""")
                 else -> FakeSpotify.html(request, """{"title":"Demo","author_name":"Band"}""")
             }
@@ -140,6 +153,7 @@ class LyricsReportTest {
         assertTrue(song.getBoolean("timed"))
         assertFalse(song.getBoolean("synced"))
         assertEquals(60_000L, song.getLong("lengthMs"))
+        assertFalse(song.getBoolean("sung"))
         assertFalse(song.has("timing"))
         // Nothing else opened: no email app or GitHub.
         val opened = generateSequence { shadowOf(app).nextStartedActivity }.map { it.action }.toList()
@@ -163,6 +177,21 @@ class LyricsReportTest {
         click(string(R.string.cancel_button))
         assertFalse(shown(string(R.string.report_what_goes)))
         assertEquals(2, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun aReportOnItsWayShowsItAndCantBeSentTwice() {
+        // Off the main thread, as on a phone, so it can be caught on its way.
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        reportsHeld = CountDownLatch(1)
+        report()
+        click(string(R.string.report_send))
+        val send = composeRule.onNode(hasText(string(R.string.report_send)) and hasClickAction())
+        send.assertIsNotEnabled()
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        reportsHeld!!.countDown()
+        waitUntil { !shown(string(R.string.report_what_goes)) }
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
     }
 
     /** projectM, when it can't start. */
