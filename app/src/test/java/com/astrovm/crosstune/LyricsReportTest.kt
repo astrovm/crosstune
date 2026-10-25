@@ -230,6 +230,21 @@ class LyricsReportTest {
     }
 
     @Test
+    fun anInstrumentalHasNoWordsToReport() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","instrumental":true}]""")
+        openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        // Nor is it offered, while the user hasn't said.
+        controller!!.pause().stop().destroy()
+        prefs().edit().remove("auto_reports").commit()
+        openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitForIdle()
+        assertFalse(shown(offer))
+    }
+
+    @Test
     fun saidNoItNeverAsksAgainNorSends() {
         lyricsAre("[]")
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
