@@ -4,6 +4,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.alpha
 import androidx.activity.compose.BackHandler
@@ -596,6 +597,10 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
         actions = {
+            // The words of what's playing, which open over everything rather than look a link up, so they're not in the field.
+            IconButton(onClick = actions.onLyricsNow, enabled = !state.isLoading && !state.isMatching) {
+                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.tile_lyrics_label))
+            }
             // Saved lines, a tap from what there is to practise, with how many are due.
             if (state.savedLines.any { it.practisable }) {
                 PracticeButton(state.savedLines.cardsDueCount(System.currentTimeMillis(), state.cardTypes), onOpenPractice)
@@ -832,8 +837,13 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     var typing by remember { mutableStateOf(!tv) }
     LaunchedEffect(typing) { if (tv && typing) keyboard?.show() }
     val field = remember { MutableInteractionSource() }
+    // Its buttons are inside it, where looking right of it for the next thing never finds them, so the remote is sent there and back.
+    val fieldFocus = remember { FocusRequester() }
+    val buttons = remember { FocusRequester() }
+    // Keys reach it on their way to its buttons too, which it leaves to them.
+    val onField = field.collectIsFocusedAsState().value
     // With no cursor in it, a ring says the remote is on it.
-    val ringed = tv && !typing && field.collectIsFocusedAsState().value
+    val ringed = tv && !typing && onField
     TextField(
         value = state.linkText,
         onValueChange = actions.onUrlChange,
@@ -845,10 +855,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
             val bare = state.linkText.isEmpty() && state.result == null
             AnimatedContent(targetState = bare, transitionSpec = { swap() }, label = "trailing") { empty ->
                 if (empty) {
-                    Row {
-                        IconButton(onClick = actions.onLyricsNow, enabled = !busy) {
-                            AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.tile_lyrics_label))
-                        }
+                    Row(Modifier.focusRequester(buttons).focusGroup()) {
                         // Crosstune listens itself, or opens another app, which shares the song back here.
                         actions.recognizer?.let { recognizer ->
                             IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {
@@ -860,7 +867,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                         }
                     }
                 } else {
-                    IconButton(onClick = actions.onClear, enabled = !busy) {
+                    IconButton(onClick = actions.onClear, enabled = !busy, modifier = Modifier.focusRequester(buttons)) {
                         AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.clear_button))
                     }
                 }
@@ -888,6 +895,7 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .focusRequester(fieldFocus)
             .then(if (ringed) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.large) else Modifier)
             .onFocusChanged { if (tv && !it.hasFocus) typing = false }
             .onPreviewKeyEvent { event ->
@@ -896,6 +904,22 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                     // Up and down leave it, typing or not, as a single line has nowhere to go that way.
                     event.key == Key.DirectionDown || event.key == Key.DirectionUp -> {
                         if (event.type == KeyEventType.KeyDown) focus.moveFocus(if (event.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
+                        true
+                    }
+                    // On its buttons too it would take left and right as moving a cursor, so the remote goes from one to the next here,
+                    // and from the first back to it.
+                    !onField && event.key == Key.DirectionLeft -> {
+                        if (event.type == KeyEventType.KeyDown && !focus.moveFocus(FocusDirection.Left)) fieldFocus.requestFocus()
+                        true
+                    }
+                    !onField && event.key == Key.DirectionRight -> {
+                        if (event.type == KeyEventType.KeyDown) focus.moveFocus(FocusDirection.Right)
+                        true
+                    }
+                    !onField -> false
+                    // Not typing, right goes to its buttons, rather than move a cursor that isn't there.
+                    !typing && event.key == Key.DirectionRight -> {
+                        if (event.type == KeyEventType.KeyDown) buttons.requestFocus()
                         true
                     }
                     !typing && event.key in setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter) -> {
