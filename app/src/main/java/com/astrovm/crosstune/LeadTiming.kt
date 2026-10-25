@@ -24,7 +24,7 @@ internal class LeadTiming {
      * song's first moment.
      */
     fun heard(app: PlaybackClock, song: PlaybackClock, extraMs: Long? = null): Long? =
-        heard(app, song, extraMs?.let { min(0L, it) - SLACK_MS..max(0L, it) + SLACK_MS } ?: -WOBBLE_MS..MAX_LEAD_MS)
+        heard(app, song, possible(extraMs))
 
     /** The same, for a lead that can only be [possible]. */
     fun heard(app: PlaybackClock, song: PlaybackClock, possible: LongRange): Long? {
@@ -37,6 +37,9 @@ internal class LeadTiming {
     }
 
     companion object {
+        /** The leads a video [extraMs] longer than the words' take could have, as above. */
+        fun possible(extraMs: Long?): LongRange = extraMs?.let { min(0L, it) - SLACK_MS..max(0L, it) + SLACK_MS } ?: -WOBBLE_MS..MAX_LEAD_MS
+
         /** How far off lengths, and hearings, may be. */
         private const val SLACK_MS = 8_000L
         private const val WOBBLE_MS = 2_000L

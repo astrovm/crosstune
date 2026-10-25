@@ -1643,16 +1643,79 @@ class ListeningTest {
     }
 
     @Test
-    fun oneHearingDoesNotLineAVideoUpBeforeItsIntroIsConfirmed() {
+    fun oneHearingFollowsAVideoMeanwhileButIsntKept() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        // Heard 2 seconds into the song, 12 into the video: the words go by that until hearings agree, rather than stand still.
+        hearIntro(phone, hearing, 0..0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(23_000, SystemClock.elapsedRealtime())) }
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        assertFalse(lit("Demo one"))
+        composeRule.onNodeWithText("Demo three").performClick()
+        assertTrue(phone.seeks.toString(), phone.seeks.last() in 49_000..51_000)
+        assertNull(LeadStore(prefs()).load(song))
+    }
+
+    @Test
+    fun aHearingNoVideoCouldBeAheadByIsNoGuess() {
+        val hearing = FakeHearing()
+        videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // 30 seconds into the song, but only 12 into the video, which can't be behind its song.
+        hearing.song("Demo", 30.0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun aLeadLongerThanAllTheVideoHasMoreIsNoGuess() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // 30 seconds ahead, in a video only 10 longer than the song.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime()))
+            hearing.song("Demo", 2.0)
+        }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun aHearingBeforeAVideosSongMayHaveStartedIsNoGuess() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // 5 seconds into a video 10 longer than the song, what's heard may be a bit of it played before it starts.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(5_000, SystemClock.elapsedRealtime()))
+            hearing.song("Demo", 0.0)
+        }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun wordsPutInTimeByHandFromAGuessKeepToIt() {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         hearIntro(phone, hearing, 0..0)
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
-        // The video says where it is again, as it does as it plays: one hearing still isn't enough to go by.
-        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(13_000, SystemClock.elapsedRealtime())) }
-        composeRule.waitForIdle()
-        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        // Heard again, 16 seconds ahead this time: the words stay where they were put.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime()))
+            hearing.song("Demo", 4.0)
+        }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        composeRule.runOnIdle {
+            val at = controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime())
+            assertTrue(at.toString(), at in 9_000..11_500)
+        }
     }
 
     @Test
