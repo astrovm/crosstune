@@ -170,7 +170,46 @@ class TvTest {
         field().requestFocus()
         field().assert(!hasSetTextAction())
         press(Key.DirectionUp)
-        settings().assertIsFocused()
+        composeRule.onNode(hasContentDescription(string(R.string.tile_lyrics_label))).assertIsFocused()
+    }
+
+    @Test
+    fun onATvLeftAndRightReachTheLinkFieldsButtons() {
+        launch()
+        field().requestFocus()
+        press(Key.DirectionRight)
+        val recognize = composeRule.onNode(hasContentDescription(string(R.string.recognize_button)))
+        recognize.assertIsFocused()
+        // On from one button to the next, which are pressed rather than typed in.
+        recognize.performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        val paste = composeRule.onNode(hasContentDescription(string(R.string.paste_button)))
+        paste.assertIsFocused()
+        field().assert(!hasSetTextAction())
+        paste.performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.waitForIdle()
+        recognize.assertIsFocused()
+        recognize.performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+        // With a link in it, its one button is clear, there and back too.
+        press(Key.DirectionCenter)
+        field().performTextInput("ab")
+        press(Key.DirectionDown)
+        field().requestFocus()
+        press(Key.DirectionRight)
+        val clear = composeRule.onNode(hasContentDescription(string(R.string.clear_button)))
+        clear.assertIsFocused()
+        clear.performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.waitForIdle()
+        field().assertIsFocused()
+
+        // Typing, they move its cursor instead.
+        press(Key.DirectionCenter)
+        press(Key.DirectionLeft)
+        field().assertIsFocused()
+        press(Key.DirectionRight)
+        field().assertIsFocused()
     }
 
     @Test
