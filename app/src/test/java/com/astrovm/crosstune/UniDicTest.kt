@@ -67,6 +67,9 @@ class UniDicTest {
         assertNull(uniDic(serving(), sha256 = "0".repeat(64)).tokenizer(fetch = true))
         assertNull(uniDic(serving(code = 404)).tokenizer(fetch = true))
         assertNull(uniDic(FakeSpotify().apply { handler = { FakeSpotify.brokenBody(it) } }).tokenizer(fetch = true))
+        // As tried, but no jar at all.
+        val notAJar = "not a jar".toByteArray()
+        assertNull(uniDic(serving(notAJar), sha256 = sha256(notAJar)).tokenizer(fetch = true))
         assertEquals(emptyList<String>(), dir.list()!!.toList())
     }
 
