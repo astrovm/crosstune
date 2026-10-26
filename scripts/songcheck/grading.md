@@ -2,7 +2,9 @@
 
 Each song in a `batch-NN.json` has the lyrics Crosstune found, and some of what it made of them: a
 translation, readings for words not in Latin letters, chords. Grade each part from what's there and
-what you know of the song. Leave a part out when the song doesn't have it.
+what you know of the song. Leave a part out when the song doesn't have it. The translation, readings
+and chords only hold the song's first 40 lines, to keep batches short: judge those lines, and never
+flag the rest as missing.
 
 - **lyrics**: they're this song's words, all of them, in the song's own language. Nothing else in
   them: no credits ("Written by", "作词"), notes ("[Chorus]" is fine), ads, or lines from another song.
@@ -11,7 +13,10 @@ what you know of the song. Leave a part out when the song doesn't have it.
 - **readings**: each kana reading or romanization is how the line is sung. Flag wrong readings of
   kanji (行く read こう), wrong romaji, and Chinese read as Japanese or the other way round.
 - **chords**: the sheet is of this song (its words match the lyrics), and the chords look like a
-  real song's, not text read as chords.
+  real song's, not text read as chords. A site's own notes or other text that isn't the song in the
+  sheet is not ok too: start `why` with "site text:" and quote it.
+
+Grade the whole batch and write the file without stopping to ask: when in doubt, it's ok.
 
 Write `grades-NN.json` next to the batch, a list with one entry per song:
 

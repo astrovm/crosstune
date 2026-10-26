@@ -238,7 +238,7 @@ val songCheck = tasks.register<Test>("songCheck") {
     val unitTests = tasks.named<Test>("testDebugUnitTest").get()
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
-    filter.includeTestsMatching("com.astrovm.crosstune.songcheck.*")
+    filter.includeTestsMatching(providers.gradleProperty("songcheckTest").getOrElse("com.astrovm.crosstune.songcheck.SongCheck"))
     systemProperty("songcheck.dir", providers.gradleProperty("songcheckDir").getOrElse(rootProject.file("build/songcheck").path))
     testLogging.showStandardStreams = true
     outputs.upToDateWhen { false }

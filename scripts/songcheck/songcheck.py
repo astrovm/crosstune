@@ -36,7 +36,8 @@ ON_TIME_MS = 500
 SEARCH_MS = 8000
 # Whisper's times for sung words wander, so a song is only off when its lines agree on how far.
 AGREE_MS = 500
-BATCH = 20
+# Small enough for a small model to read a batch of Japanese songs, readings and all, at once.
+BATCH = 10
 
 
 def get(url, tries=8):
@@ -198,18 +199,21 @@ def grade(_):
     """Batches of what a model grades: the words found, a translation, readings, chords."""
     folder = OUT / "grade"
     folder.mkdir(parents=True, exist_ok=True)
+    # Songs already in a batch stay there, so grading can start before the run ends.
+    batched = {song["id"] for path in folder.glob("batch-*.json") for song in json.loads(path.read_text())}
+    first = len(list(folder.glob("batch-*.json"))) + 1
     reports = [json.loads(path.read_text()) for path in sorted((OUT / "reports").glob("*.json"))]
-    found = [report for report in reports if report.get("lyrics", {}).get("kind") == "found"]
-    for number, start in enumerate(range(0, len(found), BATCH), 1):
+    found = [report for report in reports if report.get("lyrics", {}).get("kind") == "found" and report["id"] not in batched]
+    for number, start in enumerate(range(0, len(found), BATCH), first):
         batch = []
         for report in found[start:start + BATCH]:
             batch.append({
                 "id": report["id"], "title": report["title"], "artist": report["artist"], "lengthMs": report.get("lengthMs"),
-                "lyrics": report["lyrics"]["words"][:4000], "lyricsSource": report["lyrics"].get("source"),
+                "lyrics": report["lyrics"]["words"], "lyricsSource": report["lyrics"].get("source"),
                 "translation": report.get("translation"), "readings": report.get("readings"), "chords": report.get("chords"),
             })
         (folder / f"batch-{number:02}.json").write_text(json.dumps(batch, ensure_ascii=False, indent=1))
-    print(f"{len(found)} songs with lyrics in {(len(found) + BATCH - 1) // BATCH} batches; grades go in {folder}/grades-NN.json")
+    print(f"{len(found)} more songs with lyrics in {(len(found) + BATCH - 1) // BATCH} batches; grades go in {folder}/grades-NN.json")
 
 
 def summary(_):
