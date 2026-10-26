@@ -27,6 +27,16 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun theGuestsATitleCreditsAreTheSongsArtistsToo() {
+        assertEquals("The Walkers feat. A Singer", SongNames.withGuests("The Walkers", "River Road (feat. A Singer)"))
+        assertEquals("The Walkers feat. A Singer & Another feat. Third", SongNames.withGuests("The Walkers", "River Road [ft A Singer & Another] (Featuring Third)"))
+        assertTrue(SongNames.artistInside("A Singer", SongNames.withGuests("The Walkers", "River Road (feat. A Singer)")))
+        // No guests, or a word that only starts like one.
+        assertEquals("The Walkers", SongNames.withGuests("The Walkers", "River Road (Live)"))
+        assertEquals("The Walkers", SongNames.withGuests("The Walkers", "River Road (Feathers)"))
+    }
+
+    @Test
     fun aNameWithSomeKanjiAsChinaWritesThemIsTheSameButForThem() {
         assertTrue(SongNames.sameButKanji("終わらない歌", "终わらない歌"))
         assertTrue(SongNames.sameButKanji("僕の右手", "仆の右手 (Remastered 2018)"))

@@ -27,6 +27,7 @@ internal object SongNames {
 
     /** A guest credited in the title, as "(feat. Emel)", which some services leave out. */
     private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
+    private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**
      * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in
@@ -295,6 +296,13 @@ internal object SongNames {
         return ours.size == theirs.size && ours.count { it !in smallWords } >= 2 &&
             ours.zip(theirs).all { (our, their) -> our == their || (our in smallWords && their in smallWords) }
     }
+
+    /**
+     * [artist] with the guests [title] credits, "Matheus & Kauan feat. Gusttavo Lima" for
+     * "Paraquedas (feat. Gusttavo Lima)": some sites have a song under a guest's name only.
+     */
+    fun withGuests(artist: String, title: String): String =
+        (listOf(artist) + guestCredit.findAll(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
 
     /** [name] is one of [credit]'s artists, or is written inside one of them. */
     fun artistInside(name: String, credit: String): Boolean {

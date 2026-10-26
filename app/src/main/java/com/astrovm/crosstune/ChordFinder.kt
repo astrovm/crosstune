@@ -34,10 +34,16 @@ private val laCuerdaSheet = Regex("""<div id=t_body><pre>(.*?)</pre>""", setOf(R
 private val laCuerdaChord = Regex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
 private val markup = Regex("<[^>]*>")
 
+/** Cifra Club's sheet of words and chords, its tabs written apart, its chords in bold, and the fret its capo is on. */
+private val cifraClubSheet = Regex("""<pre[^>]*data-chord-content="true"[^>]*>(.*?)</pre>""", RegexOption.DOT_MATCHES_ALL)
+private val cifraClubTabs = Regex("""<div class="tabs">.*?</div>""", RegexOption.DOT_MATCHES_ALL)
+private val cifraClubChord = Regex("""<b[^>]*>([^<]*)</b>""")
+private val cifraClubCapo = Regex("""\\"capo\\":(\d+)""")
+
 /**
  * A song's chords, from the sites guitarists share them on: U-FRET, which has most Japanese songs,
- * Ultimate Guitar, which has most others, and LaCuerda, which has the Spanish ones it hasn't. A
- * sheet only counts when its words are the song's.
+ * Ultimate Guitar, which has most others, Cifra Club, which has the Portuguese ones, and LaCuerda,
+ * which has the Spanish ones. A sheet only counts when its words are the song's.
  */
 internal class ChordFinder(
     private val client: OkHttpClient,
@@ -64,7 +70,7 @@ internal class ChordFinder(
         val sites = if (texts.any(::japanese)) {
             listOf(::fromUFret, ::fromUltimateGuitar)
         } else {
-            listOf(::fromUltimateGuitar, ::fromLaCuerda, ::fromUFret)
+            listOf(::fromUltimateGuitar, ::fromCifraClub, ::fromLaCuerda, ::fromUFret)
         }
         var unavailable = false
         for (site in sites) {
@@ -161,12 +167,16 @@ internal class ChordFinder(
     }
 
     /**
-     * Ultimate Guitar's first chord sheet for the song that [fits]; a title in two, "プラスティック・ラブ
-     * - Plastic Love", is also looked up by its name in Latin letters.
+     * The names a site may have [song] by: its own, then without what it adds in brackets, "Dreams"
+     * for "Dreams (Take 2)", as the sites' searches find nothing by that, and a title in two,
+     * "プラスティック・ラブ - Plastic Love", by its name in Latin letters.
      */
+    private fun searchTitles(song: MusicMetadata): List<String> =
+        (listOf(song.title) + (listOf(SongNames.bareTitle(song.title)) + titleParts(song.title)).filterNot(::japanese)).distinct()
+
+    /** Ultimate Guitar's first chord sheet for the song that [fits], by any of its [searchTitles]. */
     private suspend fun fromUltimateGuitar(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
-        searchUltimateGuitar(song, song.title, fits)?.let { return it }
-        for (name in titleParts(song.title).filterNot(::japanese)) searchUltimateGuitar(song, name, fits)?.let { return it }
+        for (title in searchTitles(song)) searchUltimateGuitar(song, title, fits)?.let { return it }
         return null
     }
 
@@ -231,21 +241,27 @@ internal class ChordFinder(
             .map { it.optString("tab_url") }
     }
 
+    /** LaCuerda's first sheet of words and chords for the song that [fits], by any of its [searchTitles]. */
+    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        for (title in searchTitles(song)) searchLaCuerda(song, title, fits)?.let { return it }
+        return null
+    }
+
     /**
-     * LaCuerda's first sheet of words and chords for the song that [fits], by the artist first. It
+     * LaCuerda's first sheet of words and chords for [title] that [fits], by the artist first. It
      * may name the artist otherwise, "Dos Minutos" for 2 Minutos, and a search with the artist can
      * fail even when the title alone finds the song, so then by the title alone.
      */
-    private suspend fun fromLaCuerda(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
-        firstSheet(listOf("${song.title} ${song.artist}".trim(), song.title), { key -> laCuerdaSheets(song, key) }, fits) { url ->
+    private suspend fun searchLaCuerda(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> laCuerdaSheets(song, title, key) }, fits) { url ->
             val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on.
             val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
             ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
         }
 
-    /** The pages of LaCuerda's sheets of words and chords for [song], searched for by [key]: by the artist first, those best liked first. */
-    private suspend fun laCuerdaSheets(song: MusicMetadata, key: String): List<String> {
+    /** The pages of LaCuerda's sheets of words and chords for [title] by [song]'s artist, searched for by [key]: by the artist first, those best liked first. */
+    private suspend fun laCuerdaSheets(song: MusicMetadata, title: String, key: String): List<String> {
         val search = LA_CUERDA_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("exp", key).addQueryParameter("canc", "1").build()
         // A search that finds nothing is answered with a 500 and no page at all.
         val page = fetch(search.toString()) { code, body -> code == 500 && body.isBlank() }
@@ -255,20 +271,47 @@ internal class ChordFinder(
         var artist: Pair<String, String>? = null
         val found = mutableListOf<Pair<Boolean, String>>()
         laCuerdaResult.findAll(page).forEach { match ->
-            val (folder, name, row, kinds, takes, title) = match.destructured
+            val (folder, artistName, row, kinds, takes, listed) = match.destructured
             if (folder.isNotEmpty()) {
-                artist = folder to name
+                artist = folder to artistName
                 return@forEach
             }
             val (by, byName) = artist ?: return@forEach
             val file = files.getOrNull(last - row.toInt()) ?: return@forEach
-            if (!named(unescape(title), song.title, byArtist(byName, song))) return@forEach
+            if (!named(unescape(listed), title, byArtist(byName, song))) return@forEach
             // Words and chords, not a tab or a bass part.
             takes.filter(Char::isDigit).map { it.digitToInt() }.filter { kinds.getOrNull(it - 1) == 'R' }.forEach { take ->
                 found += !SongNames.sameArtist(byName, song.artist) to "$LA_CUERDA_URL$by/$file${if (take == 1) "" else "-$take"}.shtml"
             }
         }
         return found.sortedBy { it.first }.map { it.second }
+    }
+
+    /** Cifra Club's first sheet of words and chords for the song that [fits], by any of its [searchTitles]. */
+    private suspend fun fromCifraClub(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        for (title in searchTitles(song)) searchCifraClub(song, title, fits)?.let { return it }
+        return null
+    }
+
+    /** Cifra Club's first sheet for [title] that [fits]: by the artist first, then by the title alone, as the site may name the artist otherwise. */
+    private suspend fun searchCifraClub(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> cifraClubSheets(song, title, key) }, fits) { url ->
+            val page = fetch(url, asPhone = true)
+            val sheet = cifraClubSheet.find(page)?.groupValues?.get(1) ?: return@firstSheet null
+            // Its chords as Ultimate Guitar marks them, over the words they're played on, without its tabs.
+            val content = unescape(sheet.replace(cifraClubTabs, "").replace(cifraClubChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, "").replace("\u200B", ""))
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = cifraClubCapo.find(page)?.groupValues?.get(1)?.toInt() ?: 0, site = ChordSite.CIFRA_CLUB, url = url)
+        }
+
+    /** The pages of Cifra Club's sheets for [title] by [song]'s artist, searched for by [key]: by the artist first, as its search puts them. */
+    private suspend fun cifraClubSheets(song: MusicMetadata, title: String, key: String): List<String> {
+        val search = CIFRA_CLUB_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", key).build()
+        // Answered as a call to a function, which is taken off.
+        val docs = JSONObject(fetch(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs") ?: return emptyList()
+        return (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }
+            .filter { it.optString("t") == CIFRA_CLUB_SONG && named(it.optString("m"), title, byArtist(it.optString("a"), song)) }
+            .sortedBy { !SongNames.sameArtist(it.optString("a"), song.artist) }
+            .map { "$CIFRA_CLUB_URL${it.optString("d")}/${it.optString("u")}/" }
     }
 
     /**
@@ -330,9 +373,12 @@ internal class ChordFinder(
         ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
 
     /** [found] tells a failed answer that's still the site's own, e.g. a search that found nothing, from a site that wouldn't answer. */
-    private suspend fun fetch(url: String, referer: String? = null, found: (Int, String) -> Boolean = { _, _ -> false }): String {
-        // Ultimate Guitar shows its search results only to a computer's browser.
-        val request = Request.Builder().url(url).header("User-Agent", BROWSER).apply { referer?.let { header("Referer", it) } }.get().build()
+    private suspend fun fetch(url: String, referer: String? = null, asPhone: Boolean = false, found: (Int, String) -> Boolean = { _, _ -> false }): String {
+        // Ultimate Guitar shows its search results only to a computer's browser, and Cifra Club its pages only to a phone's.
+        val request = Request.Builder().url(url).apply {
+            if (asPhone) asPhoneBrowser() else header("User-Agent", BROWSER)
+            referer?.let { header("Referer", it) }
+        }.get().build()
         return client.newCall(request).executeAsync().use { response ->
             val body = response.body.stringAtMost()
             if (!response.isSuccessful && !found(response.code, body)) throw IOException("Chord site returned ${response.code}")
@@ -391,6 +437,11 @@ internal class ChordFinder(
         const val UG_SEARCH_URL = "https://www.ultimate-guitar.com/search.php"
         const val LA_CUERDA_URL = "https://acordes.lacuerda.net/"
         const val LA_CUERDA_SEARCH_URL = "${LA_CUERDA_URL}busca.php"
+        const val CIFRA_CLUB_URL = "https://www.cifraclub.com.br/"
+        const val CIFRA_CLUB_SEARCH_URL = "https://solr.sscdn.co/cc/h2/"
+
+        /** What Cifra Club's search calls a song, among artists and other things. */
+        const val CIFRA_CLUB_SONG = "2"
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
         private val titleWords = Regex("""[\p{L}\p{N}]+""")
