@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -201,6 +202,42 @@ class ChordSheetsTest {
         // The song's own lines are placed, a word left out or put differently.
         val own = sheet(SheetLine("Told my mama that I made it out the trench", listOf(Chord(0, "Am"))), SheetLine("Now we pull up in foreign cars and benches", listOf(Chord(0, "F"))))
         assertEquals(listOf(Chord(0, "Am")), ChordSheets.place(own, words)!![2].over)
+    }
+
+    @Test
+    fun aSheetWithTheSongTwiceOrMoreThanTheWordsShownIsStillTheSongs() {
+        val words = listOf("Walking down the river road", "Singing to the morning light")
+        val once = listOf(SheetLine("Walking down the river road", listOf(Chord(0, "G"))), SheetLine("Singing to the morning light", listOf(Chord(0, "D"))))
+        // Once in standard tuning, once half a step down, with a note on each.
+        val twice = sheet(
+            *(listOf(SheetLine("Tuned to standard, as was asked for in the comments", emptyList())) + once +
+                SheetLine("Below, the same tuned half a step down, as the record is", emptyList()) + once).toTypedArray()
+        )
+        assertEquals(listOf(Chord(0, "G")), ChordSheets.place(twice, words)!![0].over)
+        // The words shown are only the first lines of a longer song.
+        val longer = sheet(*(once + SheetLine("Carry me home by the water tonight", listOf(Chord(0, "C"))) + SheetLine("Under the stars where the lanterns are bright", listOf(Chord(0, "Am")))).toTypedArray())
+        assertEquals(listOf(Chord(0, "D")), ChordSheets.place(longer, words)!![1].over)
+    }
+
+    @Test
+    fun aSheetWithJustEnoughOfItsLettersTheSongsIsPlaced() {
+        // Six letters of ten line up: just the share that's enough.
+        assertNotNull(ChordSheets.place(sheet(SheetLine("Walker roam", listOf(Chord(0, "Em")))), listOf("Walker sing")))
+    }
+
+    @Test
+    fun aLongSheetOfAnotherSongIsntPlacedOverAFewLinesWhoseLettersHideInIt() {
+        val rap = listOf(
+            "Rolling through the city with the windows down", "Money on my mind and my team all around",
+            "Told my mama that I made it out the trenches", "Now we pulling up in foreign cars and benches",
+            "Every night we in the studio cooking", "Haters on the side but they only looking",
+            "I been grinding since the sun came up today", "Nothing gonna stop me get out of my way",
+            "Diamonds on my neck and my wrist so cold", "Started from the bottom now the story told",
+            "Pull up to the party with the gang in tow", "Everybody know that we running the show",
+            "Late night thinking bout the days gone by", "Keep it real with me and never tell a lie"
+        )
+        val sheet = sheet(*rap.map { SheetLine(it, listOf(Chord(0, "Em"))) }.toTypedArray())
+        assertNull(ChordSheets.place(sheet, listOf("Carry me home by the river tonight", "Sing to me softly till the morning light")))
     }
 
     @Test

@@ -70,6 +70,34 @@ class LetrasLyricsTest {
     }
 
     @Test
+    fun aSongFiledUnderTheGuestItsTitleCreditsMatches() {
+        respond(search(doc(artist = "A Singer")))
+        assertTrue(runBlocking { LyricsFinder(fake.client(), "test", busyPauseMs = 0).firstLook(MusicMetadata("River Road (feat. A Singer)", "The Walkers"), 20_000).lyrics } is Lyrics.Found)
+    }
+
+    @Test
+    fun theAdsBetweenVersesAreLeftOutAndAllTheWordsKept() {
+        val ad = """<div id="pub_22" data-refresh="20" class="--betweenLyrics"><div id="pub_22_ad_refresh" class="an-cnt-r"><div id="pub_22_ad" class="an-cnt-f"></div></div></div>"""
+        respond(page = """<div class="lyric-content font --lyrics"><p>Walking down the river road<br/>Singing</p>$ad<p>To the morning light<br/>And home</p></div><div class="lyric-info">Written by someone</div>""")
+        assertEquals(Lyrics.Found("Walking down the river road\nSinging\n\nTo the morning light\nAnd home", source = LyricsFinder.LETRAS), lookup())
+        // One that never ends leaves the page as it is.
+        respond(page = """<div class="lyric-content"><p>Walking down the river road</p></div><div id="pub_9">""")
+        assertEquals(Lyrics.Found("Walking down the river road", source = LyricsFinder.LETRAS), lookup())
+    }
+
+    @Test
+    fun aSongShownWithLetrassTranslationBesideItHasItsOwnWordsOnly() {
+        val ad = """<div id="pub_22" class="--betweenLyrics"><div id="pub_22_ad"></div></div>"""
+        respond(
+            page = """<div class="lyric-content font --lyrics"><p class="lyric-disclaimer" data-auto-translation="true">Traducción automática</p>""" +
+                """<div class="lyric-translation"><div class="lyric-translation-left"><strong>River Road</strong> <p><span>Walking down the river road</span><br/><span>Singing</span><br/></p>""" +
+                """$ad<p><span>To the morning light</span><br/></p></div>""" +
+                """<div class="lyric-translation-right"><h3 class="lyric-songTranslationName">Camino del río</h3><p><span>Caminando por el camino del río</span></p></div></div></div>"""
+        )
+        assertEquals(Lyrics.Found("Walking down the river road\nSinging\n\nTo the morning light", source = LyricsFinder.LETRAS), lookup())
+    }
+
+    @Test
     fun encodedWordsRoundTripAcrossLineAndVerseBreaks() {
         val random = Random(207)
         val alphabet = "abc ñé日本&<>\"'"

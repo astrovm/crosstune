@@ -10,7 +10,7 @@ internal data class Chord(val at: Int, val name: String)
 internal data class SheetLine(val text: String, val chords: List<Chord>)
 
 /** Where a song's chords were found. */
-internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA }
+internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB }
 
 /** A song's chords as a sheet has them, with the fret a capo goes on to play them, and where it's from. */
 internal data class ChordSheet(val lines: List<SheetLine>, val capo: Int = 0, val site: ChordSite, val url: String)
@@ -25,7 +25,11 @@ internal data class LineChords(val before: List<String> = emptyList(), val over:
  * letter by letter, so each chord lands on the letter it's played on, wherever the lines break.
  */
 internal object ChordSheets {
-    /** The sheet counts once this much of its words line up with the song's. */
+    /**
+     * The sheet counts once this much of its words line up with the song's, or of the song's with
+     * its, whichever are fewer: a sheet may have the song twice, in another tuning, and the words
+     * shown may be only part of it.
+     */
     private const val GOOD_LETTERS = 0.6
 
     /**
@@ -152,8 +156,9 @@ internal object ChordSheets {
         val theirs = Letters(lines.map { it.text })
         if (theirs.size < MIN_LETTERS || ours.size == 0) return null
         val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return null
-        if (matchedAt.count { it >= 0 } < theirs.size * GOOD_LETTERS) return null
-        if ((1 until matchedAt.size).count { matchedAt[it - 1] >= 0 && matchedAt[it] == matchedAt[it - 1] + 1 } < theirs.size * GOOD_RUNS) return null
+        val fewer = minOf(theirs.size, ours.size)
+        if (matchedAt.count { it >= 0 } < fewer * GOOD_LETTERS) return null
+        if ((1 until matchedAt.size).count { matchedAt[it - 1] >= 0 && matchedAt[it] == matchedAt[it - 1] + 1 } < fewer * GOOD_RUNS) return null
 
         val before = Array(texts.size) { mutableListOf<String>() }
         val over = Array(texts.size) { mutableListOf<Chord>() }

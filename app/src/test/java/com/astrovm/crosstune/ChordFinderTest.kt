@@ -93,6 +93,22 @@ var NMAX=${files.size - 1};
 
     private val laCuerdaWalking = "<div></div><A>G</A>       <A>C</A>\nWalking down the river road\n<div></div><A>D</A>\nSinging to the morning light"
 
+    /** A song or artist in Cifra Club's search: what kind it is, its name, its artist's, and its page's address, the artist's and its own. */
+    private fun cifraClubDoc(kind: String, name: String, artist: String, folder: String, page: String) =
+        JSONObject().put("t", kind).put("m", name).put("a", artist).put("d", folder).put("u", page)
+
+    /** Cifra Club's search's answer, as a call to a function. */
+    private fun cifraClubSearch(vararg docs: JSONObject) = "(${JSONObject().put("response", JSONObject().put("numFound", docs.size).put("docs", JSONArray(docs.toList())))})"
+
+    /** A Cifra Club song page: its sheet, then what its app shows, escaped into a script, with the fret its capo is on. */
+    private fun cifraClubPage(sheet: String, capo: Int = 0) =
+        """<pre class="_crVx" data-chord-content="true" data-song-part="true">$sheet</pre><script>self.push("{\"config\":{\"capo\":$capo,\"tuning\":\"E A D G B E\"}}")</script>"""
+
+    private val cifraClubWalking = """<div class="kvMV"><b data-chord-name="G">G</b>       <b>C</b>
+Walking down the river road
+<b>D</b>
+Singing to the morning light</div>"""
+
     /** NetEase's results for a search: songs by their names, with their artists'. */
     private fun netEase(vararg songs: Pair<String, List<String>>) = JSONObject().put(
         "result",
@@ -112,7 +128,8 @@ var NMAX=${files.size - 1};
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
-            ?: FakeSpotify.html(request, "", code = 404)
+            // Cifra Club's search, where a test doesn't say, finds nothing.
+            ?: if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, cifraClubSearch()) else FakeSpotify.html(request, "", code = 404)
 
     @Test
     fun aSongsChordsComeFromUltimateGuitarsMostVotedSheetByTheArtistWhoseWordsAreTheSongs() {
@@ -329,6 +346,19 @@ var NMAX=${files.size - 1};
     }
 
     @Test
+    fun aUFretSearchThatWontAnswerIsUnavailableNotNoChords() {
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, "", code = 500)
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> answer(request, mapOf("https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese))
+    }
+
+    @Test
     fun eachSitesWayOfSayingItFoundNothingIsOnlyTakenFromThatSite() {
         // A bare 500 from Ultimate Guitar, or a 404 from LaCuerda, is a site that wouldn't answer.
         fake.handler = { request ->
@@ -451,6 +481,131 @@ var NMAX=${files.size - 1};
         fake.requestedUrls.clear()
         assertEquals(ChordFinder.Chords.Unavailable, chords(MusicMetadata("Vahos del Ayer", ""), words))
         assertTrue(fake.requestedUrls.none { ".shtml" in it || "/tab/" in it })
+    }
+
+    @Test
+    fun aSongUltimateGuitarHasNoChordsForComesFromCifraClubsSheetByTheArtistWithoutItsTabs() {
+        val searches = mutableListOf<String?>()
+        fake.handler = { request ->
+            if (request.url.host == "solr.sscdn.co") {
+                searches += request.url.queryParameter("q")
+                FakeSpotify.html(
+                    request,
+                    cifraClubSearch(
+                        // The artist, and another's song of the same name, which come first.
+                        cifraClubDoc("1", "The Walkers", "The Walkers", "the-walkers", ""),
+                        cifraClubDoc("2", "River Road", "Someone Else", "someone-else", "river-road"),
+                        cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")
+                    )
+                )
+            } else {
+                answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        "https://www.cifraclub.com.br/the-walkers/river-road/" to cifraClubPage(
+                            "<div class=\"kvMV\">\u200B[Intro] <b>Em</b>\n\n</div>" +
+                                "<div class=\"kvMV\"><div class=\"tabs\"><span class=\"tab\">[Tab - Intro]\n<b>Em</b>\nE|-3---0---|\nB|-3---0---|\n</span></div>\n</div>" +
+                                cifraClubWalking.replace("light", "light &amp; more"),
+                            capo = 3
+                        )
+                    )
+                )
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.CIFRA_CLUB, found.sheet.site)
+        assertEquals("https://www.cifraclub.com.br/the-walkers/river-road/", found.sheet.url)
+        assertEquals(3, found.sheet.capo)
+        assertEquals(
+            listOf(
+                // Chords on their own line, words and all, are played on their own.
+                SheetLine("", listOf(Chord(8, "Em"))),
+                SheetLine("Walking down the river road", listOf(Chord(0, "G"), Chord(8, "C"))),
+                SheetLine("Singing to the morning light & more", listOf(Chord(0, "D")))
+            ),
+            found.sheet.lines
+        )
+        // Found by the artist, the artist's own first, and before LaCuerda and U-FRET.
+        assertEquals(listOf("River Road The Walkers"), searches)
+        assertEquals(listOf("https://www.cifraclub.com.br/the-walkers/river-road/"), fake.requestedUrls.filter { "cifraclub" in it })
+        assertTrue(fake.requestedUrls.none { "lacuerda" in it || "ufret" in it })
+        // Its pages only answer a phone's browser.
+        assertTrue(fake.requestHeaders.contains("User-Agent" to LyricsFinder.LETRAS_BROWSER))
+        assertTrue(fake.requestHeaders.contains("Sec-Fetch-Mode" to "navigate"))
+    }
+
+    @Test
+    fun aSheetASearchListsThatsGoneIsNoChordsNotASiteThatWontAnswer() {
+        // Each site lists a sheet whose page answers with a 404, as LaCuerda's search keeps ones it took down.
+        fake.handler = { request ->
+            when {
+                request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")))
+                request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+                request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
+                request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
+                request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertTrue(fake.requestedUrls.containsAll(listOf(
+            "https://tabs.ultimate-guitar.com/tab/gone-1",
+            "https://www.cifraclub.com.br/the-walkers/river-road/",
+            "https://acordes.lacuerda.net/walkers/river_road.shtml"
+        )))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertTrue("https://www.ufret.jp/song.php?data=2" in fake.requestedUrls)
+    }
+
+    @Test
+    fun aCifraClubSearchThatFindsNoSheetOfTheSongsWordsLeavesItToLaCuerda() {
+        fake.handler = { request ->
+            when {
+                request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")))
+                request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+                else -> answer(
+                    request,
+                    mapOf(
+                        "https://www.ultimate-guitar.com/search.php" to ugSearch(),
+                        // Another song's words, and a page with no sheet at all.
+                        "https://www.cifraclub.com.br/the-walkers/river-road/" to cifraClubPage("<b>Am</b>\nNothing like the song at all, really"),
+                        "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(laCuerdaWalking)
+                    )
+                )
+            }
+        }
+        assertEquals(ChordSite.LA_CUERDA, (chords(river, english) as ChordFinder.Chords.Found).sheet.site)
+        fake.handler = { request ->
+            if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")))
+            else if (request.url.encodedPath == "/busca.php") FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+            else answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://www.cifraclub.com.br/" to "<html></html>", "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(laCuerdaWalking)))
+        }
+        assertEquals(ChordSite.LA_CUERDA, (chords(river, english) as ChordFinder.Chords.Found).sheet.site)
+        // A search with nothing in it at all.
+        fake.handler = { request ->
+            if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, "({})")
+            else if (request.url.encodedPath == "/busca.php") FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+            else answer(request, mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch(), "https://acordes.lacuerda.net/walkers/river_road.shtml" to laCuerdaSheet(laCuerdaWalking)))
+        }
+        assertEquals(ChordSite.LA_CUERDA, (chords(river, english) as ChordFinder.Chords.Found).sheet.site)
+    }
+
+    @Test
+    fun aTitleWithWhatItAddsInBracketsIsLookedUpWithoutThemWhenNothingIsFoundByIt() {
+        val searches = mutableListOf<String?>()
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com") {
+                searches += request.url.queryParameter("value")
+                val bare = request.url.queryParameter("value")?.startsWith("River Road (") == false
+                FakeSpotify.html(request, if (bare) ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/the-walkers/river-road-chords-1", "River Road", "The Walkers", 10)) else ugSearch())
+            } else {
+                answer(request, mapOf("https://tabs.ultimate-guitar.com/tab/the-walkers/river-road-chords-1" to ugTab(ugWalking)))
+            }
+        }
+        val found = chords(MusicMetadata("River Road (Take 2)", "The Walkers"), english) as ChordFinder.Chords.Found
+        assertEquals("https://tabs.ultimate-guitar.com/tab/the-walkers/river-road-chords-1", found.sheet.url)
+        assertEquals(listOf("River Road (Take 2) The Walkers", "River Road (Take 2)", "River Road The Walkers"), searches)
     }
 
     @Test

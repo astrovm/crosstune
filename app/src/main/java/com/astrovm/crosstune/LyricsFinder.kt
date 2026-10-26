@@ -596,7 +596,7 @@ internal class LyricsFinder(
                     SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
-                        listOf(metadata.artist, alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
+                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
                     }
             }
             // Of the same song, the recording as long as the one playing is the one timed for it.
@@ -642,10 +642,12 @@ internal class LyricsFinder(
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val song = (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }.firstOrNull { doc ->
                 doc.optString("t") == LETRAS_SONG && SongNames.sameVersion(metadata.title, doc.optString("txt")) &&
-                    doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, metadata.artist) }
+                    doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, SongNames.withGuests(metadata.artist, metadata.title)) }
             } ?: return@withTimeoutOrNull Lyrics.None
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
-            val content = letrasWords.find(letrasPage(page.toString()))?.groupValues?.get(1)
+            val shown = withoutAds(letrasPage(page.toString()))
+            // A song in another language has Letras's own translation beside it: its words are the ones on the left.
+            val content = (letrasOriginal.find(shown) ?: letrasWords.find(shown))?.groupValues?.get(1)
             // An instrumental's page says so where the words would be, in the page's language.
             if (content?.contains(LETRAS_INSTRUMENTAL) == true) return@withTimeoutOrNull Lyrics.Instrumental
             val words = content
@@ -659,17 +661,22 @@ internal class LyricsFinder(
         }
     } ?: Lyrics.Unavailable
 
+    /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
+    private fun withoutAds(page: String): String {
+        var text = page
+        while (true) {
+            val start = text.indexOf("<div id=\"pub_").takeIf { it >= 0 } ?: return text
+            var depth = 0
+            val end = letrasBox.findAll(text, start).firstOrNull { tag ->
+                depth += if (tag.value == "</div>") -1 else 1
+                depth == 0
+            } ?: return text
+            text = text.removeRange(start, end.range.last + 1)
+        }
+    }
+
     private suspend fun letrasPage(url: String): String {
-        val request = Request.Builder().url(url)
-            .header("User-Agent", LETRAS_BROWSER)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-            .header("Accept-Language", "es-AR,es;q=0.9,en;q=0.8")
-            .header("Upgrade-Insecure-Requests", "1")
-            .header("Sec-Fetch-Mode", "navigate")
-            .header("Sec-Fetch-Dest", "document")
-            .header("Sec-Fetch-Site", "none")
-            .get()
-            .build()
+        val request = Request.Builder().url(url).asPhoneBrowser().get().build()
         return client.newCall(request).executeAsync().use { response ->
             if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
             withContext(ioDispatcher) { response.body.stringAtMost() }
@@ -797,7 +804,7 @@ internal class LyricsFinder(
          */
         fun belongsTo(metadata: MusicMetadata) =
             (SongNames.wordsMatch(title, metadata.title) || SongNames.sameVersion(metadata.title, title, json.optString("albumName"))) &&
-                SongNames.artistInside(artist, metadata.artist)
+                SongNames.artistInside(artist, SongNames.withGuests(metadata.artist, metadata.title))
 
         companion object {
             fun of(json: JSONObject?): Answer? {
@@ -831,7 +838,11 @@ internal class LyricsFinder(
         const val LETRAS = "letras"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        val letrasStanza = Regex("""</p>\s*<p>""")
+
+        /** On a page with Letras's own translation beside the song, the song's words, after its name. */
+        val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        private val letrasBox = Regex("""<div\b|</div>""")
+        val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
         val letrasBreak = Regex("""<br\s*/?>""")
         val letrasTag = Regex("""<[^>]+>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
@@ -913,3 +924,15 @@ internal fun isRomaji(words: String): Boolean {
     val japanese = all.count { romajiWord.matches(it) }
     return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
 }
+
+/**
+ * As a phone's browser asks for a page, which Letras and Cifra Club, sites of the same company,
+ * answer only that way: they turn away a request with any less.
+ */
+internal fun Request.Builder.asPhoneBrowser(): Request.Builder = header("User-Agent", LyricsFinder.LETRAS_BROWSER)
+    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+    .header("Accept-Language", "es-AR,es;q=0.9,en;q=0.8")
+    .header("Upgrade-Insecure-Requests", "1")
+    .header("Sec-Fetch-Mode", "navigate")
+    .header("Sec-Fetch-Dest", "document")
+    .header("Sec-Fetch-Site", "none")
