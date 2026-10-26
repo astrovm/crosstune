@@ -369,6 +369,9 @@ class LyricsFinderTest {
         val opening = listOf("Producers: Someone", "Writers：A, B & C", "母帯工程師：Someone Else", "Rap作词 : 怜", "Vocal Directing Engineer: Them", "", "Hatsukoi", "", "Hiroko Mita")
         japaneseSong(netEase = netEase, lyric = lrc(opening + sung))
         assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(19_000L + index * 1_000, line) }), found(hatsukoi))
+        // Untimed, with the blank lines between them.
+        japaneseSong(netEase = netEase, lyric = (opening + sung).joinToString("\n"))
+        assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
         // A song that opens with its own name sings it.
         val named = listOf("Hatsukoi") + sung
         japaneseSong(netEase = netEase, lyric = lrc(named))
