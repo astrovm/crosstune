@@ -325,11 +325,12 @@ class TvTest {
         val retry = composeRule.onNode(hasContentDescription(string(R.string.retry_button)))
         composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasContentDescription(string(R.string.retry_button))).fetchSemanticsNodes().isNotEmpty() }
         down.set(false)
-        retry.requestFocus()
+        // The remote on something that stays, rather than Try again, which goes, and with it the remote, anywhere.
+        settings().requestFocus()
         retry.performClick()
         composeRule.waitUntil(5_000) { shown("Kingo Hamada") }
         composeRule.waitForIdle()
-        field().assertIsNotFocused()
+        settings().assertIsFocused()
     }
 
     @Test
