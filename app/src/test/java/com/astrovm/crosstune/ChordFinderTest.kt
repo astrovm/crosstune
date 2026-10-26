@@ -523,6 +523,29 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aSheetASearchListsThatsGoneIsNoChordsNotASiteThatWontAnswer() {
+        // Each site lists a sheet whose page answers with a 404, as LaCuerda's search keeps ones it took down.
+        fake.handler = { request ->
+            when {
+                request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")))
+                request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
+                request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
+                request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
+                request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        assertTrue(fake.requestedUrls.containsAll(listOf(
+            "https://tabs.ultimate-guitar.com/tab/gone-1",
+            "https://www.cifraclub.com.br/the-walkers/river-road/",
+            "https://acordes.lacuerda.net/walkers/river_road.shtml"
+        )))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertTrue("https://www.ufret.jp/song.php?data=2" in fake.requestedUrls)
+    }
+
+    @Test
     fun aCifraClubSearchThatFindsNoSheetOfTheSongsWordsLeavesItToLaCuerda() {
         fake.handler = { request ->
             when {

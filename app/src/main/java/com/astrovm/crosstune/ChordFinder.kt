@@ -142,7 +142,7 @@ internal class ChordFinder(
     /** U-FRET's sheet [id], if it [fits]. */
     private suspend fun sheetOnUFret(id: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val url = "$U_FRET_SONG_URL$id"
-        val lines = uFretSheet.find(fetch(url))?.groupValues?.get(1) ?: return null
+        val lines = uFretSheet.find(sheetPage(url))?.groupValues?.get(1) ?: return null
         return ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)
     }
 
@@ -187,7 +187,7 @@ internal class ChordFinder(
      */
     private suspend fun searchUltimateGuitar(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> ultimateGuitarSheets(song, title, key) }, fits) { url ->
-            val view = ugStore(fetch(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: return@firstSheet null
+            val view = ugStore(sheetPage(url))?.optJSONObject("data")?.optJSONObject("tab_view") ?: return@firstSheet null
             val content = view.optJSONObject("wiki_tab")?.optString("content").orEmpty()
             ChordSheet(ChordSheets.fromUltimateGuitar(unescape(content)), capo = view.optJSONObject("meta")?.optInt("capo") ?: 0, site = ChordSite.ULTIMATE_GUITAR, url = url)
         }
@@ -254,7 +254,7 @@ internal class ChordFinder(
      */
     private suspend fun searchLaCuerda(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> laCuerdaSheets(song, title, key) }, fits) { url ->
-            val sheet = laCuerdaSheet.find(fetch(url))?.groupValues?.get(1) ?: return@firstSheet null
+            val sheet = laCuerdaSheet.find(sheetPage(url))?.groupValues?.get(1) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on.
             val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
             ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
@@ -296,7 +296,7 @@ internal class ChordFinder(
     /** Cifra Club's first sheet for [title] that [fits]: by the artist first, then by the title alone, as the site may name the artist otherwise. */
     private suspend fun searchCifraClub(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> cifraClubSheets(song, title, key) }, fits) { url ->
-            val page = fetch(url, asPhone = true)
+            val page = sheetPage(url, asPhone = true)
             val sheet = cifraClubSheet.find(page)?.groupValues?.get(1) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on, without its tabs.
             val content = unescape(sheet.replace(cifraClubTabs, "").replace(cifraClubChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, "").replace("\u200B", ""))
@@ -371,6 +371,9 @@ internal class ChordFinder(
     /** What Ultimate Guitar's page has for its app to show, written into the page. */
     private fun ugStore(page: String): JSONObject? =
         ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
+
+    /** A sheet's page. One that's gone, though the site's search still lists it, has no sheet in it: that sheet isn't there, it's not a site that won't answer. */
+    private suspend fun sheetPage(url: String, asPhone: Boolean = false) = fetch(url, asPhone = asPhone) { code, _ -> code == 404 }
 
     /** [found] tells a failed answer that's still the site's own, e.g. a search that found nothing, from a site that wouldn't answer. */
     private suspend fun fetch(url: String, referer: String? = null, asPhone: Boolean = false, found: (Int, String) -> Boolean = { _, _ -> false }): String {
