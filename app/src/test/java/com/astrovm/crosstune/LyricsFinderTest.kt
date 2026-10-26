@@ -366,17 +366,18 @@ class LyricsFinderTest {
         fun lrc(lines: List<String>) = lines.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n")
         fun words(lines: List<String>) = Lyrics.Found(lines.joinToString("\n"), lines.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE)
         // Credits in English, in Chinese for a Japanese song, a rap's own lyricist, then the song's name and its artist's.
-        val opening = listOf("Producers: Someone", "Writers：A, B & C", "母帯工程師：Someone Else", "Rap作词 : 怜", "", "Hatsukoi", "Hiroko Mita")
+        val opening = listOf("Producers: Someone", "Writers：A, B & C", "母帯工程師：Someone Else", "Rap作词 : 怜", "Vocal Directing Engineer: Them", "", "Hatsukoi", "", "Hiroko Mita")
         japaneseSong(netEase = netEase, lyric = lrc(opening + sung))
-        assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(17_000L + index * 1_000, line) }), found(hatsukoi))
+        assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(19_000L + index * 1_000, line) }), found(hatsukoi))
         // A song that opens with its own name sings it.
         val named = listOf("Hatsukoi") + sung
         japaneseSong(netEase = netEase, lyric = lrc(named))
         assertEquals(words(named), found(hatsukoi))
-        // Nor is a time, or who sings a line, a credit.
-        val timed = listOf("7:30 in the night", "Chorus : 五月雨は緑色")
-        japaneseSong(netEase = netEase, lyric = lrc(timed))
-        assertEquals(words(timed), found(hatsukoi))
+        // Nor is a time, who sings a line, or a sentence before a colon, a credit.
+        for (first in listOf("7:30 in the night", "Chorus : 五月雨は緑色", "I see the light: oh")) {
+            japaneseSong(netEase = netEase, lyric = lrc(listOf(first) + sung))
+            assertEquals(words(listOf(first) + sung), found(hatsukoi))
+        }
     }
 
     @Test
