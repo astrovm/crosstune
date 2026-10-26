@@ -97,10 +97,11 @@ internal object Readings {
     private val tokenizer by lazy { Tokenizer() }
 
     private fun japanese(line: String): LineReading {
-        val pieces = together(pieces(line))
+        val given = givenReadings(line)
+        val pieces = readAsGiven(together(pieces(withoutGiven(line))), given)
         val parts = pieces.flatMap { if (it.surface.any(::isHan) && it.kana != it.surface) furigana(it.surface, it.kana) else listOf(Ruby(it.surface)) }
         return LineReading(
-            joined(parts),
+            joined(withGiven(parts, given)),
             pieces.joinToString("") { it.kana },
             romajiWords(pieces) { it.said }.joinToString(" ") { romaji(it) },
             romajiWords(pieces) { it.typed }.joinToString(" ") { romaji(it, typed = true) }
@@ -191,6 +192,78 @@ internal object Readings {
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
             val better = a.any { it.unknown } || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
             out += if (better && b.none { it.unknown }) b else a
+        }
+        return out
+    }
+
+    /**
+     * A reading the lyrics give in brackets after the kanji it's for, as in 歌（うた） or
+     * 悲（かな）しい: it's how they're sung, so it's theirs, and the line is read without it.
+     */
+    private val givenReading = Regex("""([\p{IsHan}々]+)([（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])""")
+
+    /** A reading the lyrics give: from [start] to [end] in the line without them, the kanji read [kana]; [brackets] as written. */
+    private class Given(val start: Int, val end: Int, val kana: String, val brackets: String)
+
+    private fun givenReadings(line: String): List<Given> {
+        var cut = 0
+        return givenReading.findAll(line).map { match ->
+            val start = match.range.first - cut
+            cut += match.groupValues[2].length
+            Given(start, start + match.groupValues[1].length, hiragana(match.groupValues[3]), match.groupValues[2])
+        }.toList()
+    }
+
+    private fun withoutGiven(line: String) = line.replace(givenReading, "$1")
+
+    /**
+     * [pieces] of the line without its given readings, with those kanji read as [given]: with the
+     * kana written after them, 悲しい as かな and しい, or apart from more kanji after them.
+     */
+    private fun readAsGiven(pieces: List<Piece>, given: List<Given>): List<Piece> {
+        if (given.isEmpty()) return pieces
+        val out = mutableListOf<Piece>()
+        var at = 0
+        var i = 0
+        while (i < pieces.size) {
+            val reading = given.firstOrNull { it.start == at }
+            if (reading == null) {
+                at += pieces[i].surface.length
+                out += pieces[i++]
+                continue
+            }
+            val first = pieces[i]
+            var surface = ""
+            var kana = ""
+            while (at + surface.length < reading.end) pieces[i++].let { surface += it.surface; kana += it.kana }
+            val after = surface.drop(reading.end - at)
+            if (after.any(::isHan)) {
+                // The rest as the dictionary read the word, ごえ of 歌声, when it read the kanji so too.
+                out += Piece(surface.take(reading.end - at), reading.kana, first.kind, first.subkind)
+                out += Piece(after, if (kana.startsWith(reading.kana)) kana.drop(reading.kana.length) else together(pieces(after)).joinToString("") { it.kana }, first.kind, first.subkind)
+            } else {
+                out += Piece(surface, reading.kana + hiragana(after), first.kind, first.subkind, first.base)
+            }
+            at += surface.length
+        }
+        return out
+    }
+
+    /** [parts] of the line without its given readings, with their brackets back where they're written. */
+    private fun withGiven(parts: List<Ruby>, given: List<Given>): List<Ruby> {
+        if (given.isEmpty()) return parts
+        val out = mutableListOf<Ruby>()
+        var at = 0
+        for (part in parts) {
+            var rest = part
+            for (reading in given.filter { it.end > at && it.end <= at + part.text.length }) {
+                val cut = reading.end - at - (part.text.length - rest.text.length)
+                out += Ruby(rest.text.take(cut), rest.reading)
+                out += Ruby(reading.brackets)
+                rest = Ruby(rest.text.drop(cut))
+            }
+            if (rest.text.isNotEmpty()) out += rest
+            at += part.text.length
         }
         return out
     }
@@ -377,7 +450,7 @@ internal object Readings {
     // Words are only ever Chinese from Android 10 on, see scriptOf.
     @SuppressLint("NewApi")
     fun words(line: String, script: Script?): List<Word> = when (script) {
-        Script.JAPANESE -> grouped(together(pieces(line))).mapNotNull { word ->
+        Script.JAPANESE -> grouped(readAsGiven(together(pieces(withoutGiven(line))), givenReadings(line))).mapNotNull { word ->
             val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
             if (text.none(Char::isLetter)) return@mapNotNull null
             val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }

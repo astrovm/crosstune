@@ -391,4 +391,28 @@ class ReadingsTest {
             assertEquals("sonomama mitsuzukeyoo", reading("そのまま見続けよう").romanized)
         }
     }
+
+    @Test
+    fun readingsTheLyricsGiveInBracketsAreTheKanjisAndArentReadAgain() {
+        val line = reading("新（あたら）しい歌（うた） 歌（うた）えるまで")
+        assertEquals("あたらしいうた うたえるまで", line.reading)
+        assertEquals("atarashii uta utaeru made", line.romanized)
+        // Shown as written, with the reading over the kanji too.
+        assertEquals("新（あたら）しい歌（うた） 歌（うた）えるまで", line.parts.joinToString("") { it.text })
+        assertEquals(listOf(Ruby("新", "あたら"), Ruby("歌", "うた"), Ruby("歌", "うた")), line.parts.filter { it.reading != null })
+        // In round brackets, for kanji the dictionary can't read, and in katakana too.
+        assertEquals("もがいている", reading("足搔(もが)いている").reading)
+        assertEquals("にがくて", reading("苦（ニガ）くて").reading)
+        // Before more kanji, those are read as in the word: 声 of 歌声, ごえ; or on their own, when it's read otherwise.
+        val voice = reading("歌（うた）声")
+        assertEquals("うたごえ", voice.reading)
+        assertEquals(listOf(Ruby("歌", "うた"), Ruby("（うた）"), Ruby("声", "ごえ")), voice.parts)
+        assertEquals("かこえ", reading("歌（か）声").reading)
+        // After kana the dictionary reads with them, the reading still goes over its kanji.
+        assertEquals(listOf(Ruby("お"), Ruby("茶", "ちゃ"), Ruby("（ちゃ）")), reading("お茶（ちゃ）").parts)
+        // Looked up as the word it is.
+        assertEquals("悲しい", Readings.words("悲（かな）しい", Script.JAPANESE).single().text)
+        // Brackets of anything else are words.
+        assertEquals("きみ (きみ)", reading("君 (きみ)").reading)
+    }
 }
