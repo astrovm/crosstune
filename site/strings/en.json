@@ -69,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: October 25, 2026",
+  "updated": "Last updated: October 26, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics or chords, the app sends the song's title and artist to services that need no account or key: LRCLIB, YouTube Music, NetEase Cloud Music and Letras for lyrics, Ultimate Guitar, LaCuerda and U-FRET for chords, and Apple's song search to find the song's original name. When you turn on Translation in the lyrics, the app sends their lines to Google Translate, or to MyMemory when Google Translate can't translate them, translation services that need no account, unless ChatGPT translates them, as described below. Android tells which language a song is in on your phone, and lyrics already in the language you translate into, or in one you chose not to translate, aren't sent. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics or chords, the app sends the song's title and artist to services that need no account or key: LRCLIB, YouTube Music, NetEase Cloud Music and Letras for lyrics, Ultimate Guitar, LaCuerda and U-FRET for chords, and Apple's song search to find the song's original name. When you turn on Translation in the lyrics, the app sends their lines to Google Translate, or to MyMemory when Google Translate can't translate them, translation services that need no account, unless ChatGPT translates them, as described below. Android tells which language a song is in on your phone, and lyrics already in the language you translate into, or in one you chose not to translate, aren't sent. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from Maven Central, only on Wi-Fi or another network that isn't metered, which, like any request, exposes your IP address to Maven Central."
     ],
     [
       "p",

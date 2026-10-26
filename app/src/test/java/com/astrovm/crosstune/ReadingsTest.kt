@@ -290,6 +290,9 @@ class ReadingsTest {
         assertEquals("ぎ", fixed[1].parts.first { it.text == "着" }.reading)
         // ごし for 越 is only 越's ご, with the し written after it: nothing to put right.
         assertEquals(read[2], fixed[2])
+        // いま for 今 is all 今's, though ま comes after it too.
+        val now = listOf(LineReading(listOf(Ruby("今", "こん"), Ruby("まで")), "こんまで", "konmade"))
+        assertEquals(LineReading(listOf(Ruby("今", "いま"), Ruby("まで")), "いままで", "imamade"), Readings.corrected(now, listOf(ReadingFix(0, "今", "いま")))[0])
         // In katakana it's the same; a kanji the line hasn't, or a reading that isn't kana, is left out.
         assertEquals("きみ", Readings.corrected(read, listOf(ReadingFix(0, "君", "キミ")))[0].parts.first { it.text == "君" }.reading)
         assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "愛", "あい"), ReadingFix(1, "着", "gi"), ReadingFix(9, "君", "きみ"), ReadingFix(0, "君", ""))))
@@ -329,5 +332,95 @@ class ReadingsTest {
             assertTrue("$china", china == '仆' || !japan.canEncode(china))
             assertTrue("$japans", japan.canEncode(japans) && Readings.isHan(japans))
         }
+    }
+
+    private fun reading(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
+
+    @Test
+    fun withUniDicKanjiTheShippedDictionaryCantReadAreRead() {
+        // 溢 isn't in it: alone, it stays as written.
+        assertEquals("うつむいてきみが溢した", reading("うつむいて君が溢した").reading)
+        TestUniDic.reading {
+            val line = reading("うつむいて君が溢した")
+            assertEquals("うつむいてきみがこぼした", line.reading)
+            assertTrue(Ruby("溢", "こぼ") in line.parts)
+            assertEquals("utsumuite kimi ga koboshita", line.romanized)
+            // As are its words, with the form each is listed under.
+            assertEquals(Word("溢した", "こぼした", "koboshita", lookup = "溢す"), Readings.words("君が溢した", Script.JAPANESE).last())
+            // Said ほー, it's spelled ほお as listed, not ほう as a long o most often is.
+            assertEquals("ほおをつたう", reading("頰を伝う").reading)
+        }
+    }
+
+    @Test
+    fun withUniDicAWordTheShippedDictionaryBreaksUpReadsAsOne() {
+        assertEquals("びえみをくれたのはだれ？", reading("微笑みをくれたのは誰？").reading)
+        TestUniDic.reading {
+            assertEquals("ほほえみをくれたのはだれ？", reading("微笑みをくれたのは誰？").reading)
+            // Its long vowels as the word's spelled, and as it's said, or typed.
+            val line = reading("ザッツ！超常")
+            assertEquals("ザッツ！ちょうじょう", line.reading)
+            assertEquals("zattsu！ choojoo", line.romanized)
+            assertEquals("zattsu！ choujou", line.typed)
+        }
+    }
+
+    @Test
+    fun withUniDicAWordTakenForAPrefixOrASuffixToNothingIsAWord() {
+        assertEquals("くんにあいたい", reading(" 君に会いたい").reading.trim())
+        assertEquals("ああこんとなりで", reading("ああ今となりで").reading)
+        TestUniDic.reading {
+            assertEquals("きみにあいたい", reading(" 君に会いたい").reading.trim())
+            assertEquals("ああいまとなりで", reading("ああ今となりで").reading)
+            // A suffix to a word is one: 通り after 予想.
+            assertEquals("それはよそうどおり", reading("それは予想通り").reading)
+        }
+    }
+
+    @Test
+    fun withUniDicTheShippedDictionaryStillReadsLyricsWhereItKnowsThem() {
+        TestUniDic.reading {
+            // UniDic has 私 as わたくし, and splits 不器用.
+            assertEquals("わたしはぶきようだけど", reading("私は不器用だけど").reading)
+            // What neither knows stays as written.
+            assertEquals("龘", reading("龘").reading)
+        }
+    }
+
+    @Test
+    fun withUniDicAVerbFollowingAnotherIsOneWordWithIt() {
+        TestUniDic.reading {
+            assertEquals("sonomama mitsuzukeyoo", reading("そのまま見続けよう").romanized)
+        }
+    }
+
+    @Test
+    fun readingsTheLyricsGiveInBracketsAreTheKanjisAndArentReadAgain() {
+        val line = reading("新（あたら）しい歌（うた） 歌（うた）えるまで")
+        assertEquals("あたらしいうた うたえるまで", line.reading)
+        assertEquals("atarashii uta utaeru made", line.romanized)
+        // Shown as written, with the reading over the kanji too.
+        assertEquals("新（あたら）しい歌（うた） 歌（うた）えるまで", line.parts.joinToString("") { it.text })
+        assertEquals(listOf(Ruby("新", "あたら"), Ruby("歌", "うた"), Ruby("歌", "うた")), line.parts.filter { it.reading != null })
+        // In round brackets, for kanji the dictionary can't read, and in katakana too.
+        assertEquals("もがいている", reading("足搔(もが)いている").reading)
+        assertEquals("にがくて", reading("苦（ニガ）くて").reading)
+        // Before more kanji, those are read as in the word: 声 of 歌声, ごえ; or on their own, when it's read otherwise.
+        val voice = reading("歌（うた）声")
+        assertEquals("うたごえ", voice.reading)
+        assertEquals(listOf(Ruby("歌", "うた"), Ruby("（うた）"), Ruby("声", "ごえ")), voice.parts)
+        assertEquals("かこえ", reading("歌（か）声").reading)
+        // After kana the dictionary reads with them, the reading still goes over its kanji.
+        assertEquals(listOf(Ruby("お"), Ruby("茶", "ちゃ"), Ruby("（ちゃ）")), reading("お茶（ちゃ）").parts)
+        // Further into the line, and with a reading for the kanji after too.
+        assertEquals(listOf(Ruby("君", "きみ"), Ruby("の"), Ruby("新", "あたら"), Ruby("（あたら）しい")), reading("君の新（あたら）しい").parts)
+        reading("あの頃の歌（うた）声（こえ）").let {
+            assertEquals("あのころのうたこえ", it.reading)
+            assertEquals(listOf(Ruby("歌", "うた"), Ruby("（うた）"), Ruby("声", "こえ"), Ruby("（こえ）")), it.parts.takeLast(4))
+        }
+        // Looked up as the word it is.
+        assertEquals("悲しい", Readings.words("悲（かな）しい", Script.JAPANESE).single().text)
+        // Brackets of anything else are words.
+        assertEquals("きみ (きみ)", reading("君 (きみ)").reading)
     }
 }

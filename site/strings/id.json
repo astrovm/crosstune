@@ -69,7 +69,7 @@
   "privacy_link": "Kebijakan privasi",
   "language_label": "Bahasa",
   "privacy_title": "Kebijakan Privasi Crosstune",
-  "updated": "Terakhir diperbarui: 25 Oktober 2026",
+  "updated": "Terakhir diperbarui: 26 Oktober 2026",
   "short_h2": "Singkatnya",
   "short_items": [
     "Tanpa akun, iklan, atau analitik.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik atau chord lagu, aplikasi mengirim judul dan artis lagu ke layanan yang tidak butuh akun atau kunci: LRCLIB, YouTube Music, NetEase Cloud Music, dan Letras untuk lirik, Ultimate Guitar, LaCuerda, dan U-FRET untuk chord, serta pencarian lagu Apple untuk menemukan nama asli lagu. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke Google Translate, atau ke MyMemory saat Google Translate tidak bisa menerjemahkannya, layanan terjemahan tanpa akun, kecuali ChatGPT yang menerjemahkannya, seperti dijelaskan di bawah. Android mengenali bahasa lagu di ponselmu, dan lirik yang sudah dalam bahasa terjemahanmu, atau dalam bahasa yang kamu pilih untuk tidak diterjemahkan, tidak dikirim. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu."
+      "Jika kamu mengetik nama lagu alih-alih link, Crosstune mengirim nama itu ke pencarian lagu publik Deezer dan Apple dan menampilkan lagu yang ditemukan, sehingga kamu bisa membuka lagu yang kamu maksud tanpa link-nya. Saat kamu meminta lirik atau chord lagu, aplikasi mengirim judul dan artis lagu ke layanan yang tidak butuh akun atau kunci: LRCLIB, YouTube Music, NetEase Cloud Music, dan Letras untuk lirik, Ultimate Guitar, LaCuerda, dan U-FRET untuk chord, serta pencarian lagu Apple untuk menemukan nama asli lagu. Saat kamu menyalakan Terjemahan di lirik, aplikasi mengirim baris-barisnya ke Google Translate, atau ke MyMemory saat Google Translate tidak bisa menerjemahkannya, layanan terjemahan tanpa akun, kecuali ChatGPT yang menerjemahkannya, seperti dijelaskan di bawah. Android mengenali bahasa lagu di ponselmu, dan lirik yang sudah dalam bahasa terjemahanmu, atau dalam bahasa yang kamu pilih untuk tidak diterjemahkan, tidak dikirim. Bacaan, seperti kana di atas kanji, dihitung di ponselmu dan tidak dikirim ke mana pun. Kata yang kamu ketuk untuk melihat artinya dikirim dengan cara yang sama. Jika aplikasi berbahasa Inggris, kata bahasa Inggris dicari di kamus Wiktionary. Baris yang kamu simpan tetap di ponselmu. Untuk bahasa Jepang, kamus yang lebih besar, UniDic, diunduh sekali dari Maven Central, hanya lewat Wi-Fi atau jaringan lain yang tidak berkuota, yang, seperti permintaan lainnya, memperlihatkan alamat IP-mu ke Maven Central."
     ],
     [
       "p",

@@ -85,6 +85,8 @@ android {
         resources {
             // Kuromoji's core and dictionary jars each carry the same notes; one copy is enough.
             pickFirsts += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+            // UniDic's dictionary is fetched, see UniDic.kt, rather than making the app 46 MB bigger.
+            excludes += "com/atilika/kuromoji/unidic/*.bin"
         }
     }
 
@@ -171,6 +173,9 @@ dependencies {
 
     // Reads Japanese lyrics' kanji, for the kana over them; its dictionary is in the jar, so it works offline.
     implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+    // UniDic, which knows far more kanji. Its dictionary, 150 MB, is left out of the app and fetched
+    // when it's first needed; tests read it from the jar.
+    implementation("com.atilika.kuromoji:kuromoji-unidic:0.9.0")
 
     // Sets everything up in one tap for people who run Shizuku, which can do what otherwise only the user can.
     implementation("dev.rikka.shizuku:api:13.1.5")
@@ -230,6 +235,20 @@ val shots = tasks.register<Test>("shots") {
     outputs.upToDateWhen { false }
 }
 
+// The app's lookups on the songs people play most, against the real services, a report per song.
+// scripts/songcheck/songcheck.py runs it, with the songs and their previews fetched ahead.
+val songCheck = tasks.register<Test>("songCheck") {
+    group = "verification"
+    description = "Checks lyrics, timing, chords, readings and translations on the top songs. Run scripts/songcheck/songcheck.py instead."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching(providers.gradleProperty("songcheckTest").getOrElse("com.astrovm.crosstune.songcheck.SongCheck"))
+    systemProperty("songcheck.dir", providers.gradleProperty("songcheckDir").getOrElse(rootProject.file("build/songcheck").path))
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
+}
+
 // Robolectric's Android runtimes, one for each SDK level the tests run on, fetched by Gradle and kept
 // with its caches, rather than by Robolectric as the tests run: on CI, a test process once read one
 // before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
@@ -262,6 +281,7 @@ val robolectricJvmArgs = listOf(
 
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
+    if (name != "songCheck") filter.excludeTestsMatching("com.astrovm.crosstune.songcheck.*")
     dependsOn(robolectricDeps)
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
@@ -282,8 +302,8 @@ pitest {
     targetClasses.set(providers.gradleProperty("mutateClasses").map { it.split(",") }.orElse(listOf("com.astrovm.crosstune.*")))
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
-    // The store's screenshots aren't tests of what the app does, and take long to draw.
-    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*"))
+    // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services.
+    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*"))
     threads.set(2)
     // A fresh test process takes some seconds to start Robolectric, more than PIT allows a test by default.
     timeoutConstInMillis.set(30_000)

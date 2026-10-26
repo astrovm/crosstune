@@ -101,6 +101,8 @@ internal class MainViewModel(
     private val oneTap: OneTapSetup? = null,
     /** How a Japanese song's kanji are sung, which a dictionary can't say; nullable so tests need none. */
     private val sungReadings: SungReadings? = null,
+    /** UniDic, the Japanese dictionary fetched once to read kanji better; nullable so tests need none. */
+    private val uniDic: UniDic? = null,
     /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
     private val updates: UpdateChecker? = null,
     /** Calibration may use the microphone only when its permission has already been granted. */
@@ -1382,6 +1384,10 @@ internal class MainViewModel(
     }
 
     private var lyricsJob: Job? = null
+
+    @VisibleForTesting
+    internal val findingWords get() = lyricsJob?.isActive == true
+
     private var followJob: Job? = null
 
     /** The last song Crosstune heard, so its words can follow on from where it was heard. */
@@ -2897,6 +2903,27 @@ internal class MainViewModel(
     /** The words shown, line by line: the timed ones, or else the plain ones. */
     private fun wordLines(): List<String> = uiState.lyricLines.map { it.text }.ifEmpty { uiState.lyrics.lines() }
 
+    private var uniDicJob: Job? = null
+
+    /**
+     * Japanese is read with UniDic too, once it's on the phone. Until then it's fetched, whatever
+     * song shows, and the words shown are read again with it once it's here.
+     */
+    private suspend fun readWithUniDic() {
+        val dictionary = uniDic ?: return
+        if (Readings.uniDic != null || uniDicJob?.isActive == true) return
+        Readings.uniDic = dictionary.tokenizer(fetch = false)
+        if (Readings.uniDic != null) return
+        uniDicJob = viewModelScope.launch {
+            Readings.uniDic = dictionary.tokenizer(fetch = true) ?: return@launch
+            if (uiState.learning.script == Script.JAPANESE && uiState.learning.lines.isNotEmpty()) {
+                readingsJob?.cancel()
+                uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
+                learn()
+            }
+        }
+    }
+
     /** Works out what's switched on for the words shown, and isn't worked out yet. */
     private fun learn() {
         val learning = uiState.learning
@@ -2904,6 +2931,7 @@ internal class MainViewModel(
         val script = learning.script
         if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
+                if (script == Script.JAPANESE) readWithUniDic()
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
                 val song = uiState.lyricsFor
                 var read = withContext(systemDispatcher) { Readings.of(lines, script) }
