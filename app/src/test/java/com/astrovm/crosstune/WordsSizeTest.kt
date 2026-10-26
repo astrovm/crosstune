@@ -17,9 +17,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /** The words as big, as far apart and as wide as reads well on each screen: a phone, one on its side, a TV. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
 class WordsSizeTest {
 
@@ -67,7 +69,7 @@ class WordsSizeTest {
 
     private fun width() = lineNodes().first().boundsInRoot.width / density
 
-    /** How far down one row of the long line is from the row above it, in sp. */
+    /** How far down one row of the long line is from the row above it, in sp, give or take a pixel the text rounds to. */
     private fun rowStep(): Float {
         val layout = layoutOf(long)
         assertTrue(layout.lineCount > 1)
@@ -78,7 +80,7 @@ class WordsSizeTest {
     fun onAPhoneALineThatWrapsSitsCloserThanTheNextLine() {
         show()
         assertEquals(26f, sp("Walking down"), 0.01f)
-        assertEquals(26f * 1.2f, rowStep(), 0.5f)
+        assertEquals(26f * 1.2f, rowStep(), 1f)
         assertEquals(16f, gap(), 1f)
         assertTrue(rowStep() - 26f < gap())
         assertEquals(411f - 48f, width(), 1f)
@@ -99,7 +101,7 @@ class WordsSizeTest {
     fun onATvTheWordsAreBiggerToReadFromAcrossTheRoom() {
         show(Phone.TV, translated = true)
         assertEquals(34f, sp("Walking down"), 0.01f)
-        assertEquals(34f * 1.2f, rowStep(), 0.5f)
+        assertEquals(34f * 1.2f, rowStep(), 1f)
         assertEquals(14f * 1.3f, sp("Caminando"), 0.01f)
         assertEquals(700f, width(), 1f)
     }
