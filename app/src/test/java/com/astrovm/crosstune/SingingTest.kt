@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import android.Manifest
 import android.app.Application
 import android.content.Context
@@ -197,10 +200,17 @@ class SingingTest {
         plays(positionMs = 1_000)
         waitUntil { shown(R.string.singing_model_offer) }
         assertFalse(model().uiState.lyricsSynced)
+        // Missed on every try there is, it's still heard once the model's here.
+        repeat(MainViewModel.SINGING_TRIES - 1) {
+            val heard = singing.hears
+            plays(positionMs = 100)
+            waitUntil { singing.hears > heard }
+        }
         composeRule.onNodeWithText(app.getString(R.string.singing_model_download)).performClick()
-        // While it comes, it can't be asked for again.
+        // While it comes, it spins and can't be asked for again.
         waitUntil { !shown(R.string.singing_model_download) }
         assertTrue(shown(R.string.singing_model_offer))
+        composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate)).assertExists()
         gate.complete(true)
         // Here now, the singing is heard with it and the words move.
         waitUntil { model().uiState.lyricsSynced }
