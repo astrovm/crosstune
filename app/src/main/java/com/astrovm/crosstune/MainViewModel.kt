@@ -106,7 +106,7 @@ internal class MainViewModel(
     /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
     private val updates: UpdateChecker? = null,
     /** Whether Google Play installed Crosstune. */
-    fromPlay: Boolean = false,
+    fromPlay: Boolean,
     /** Calibration may use the microphone only when its permission has already been granted. */
     private val mayCalibrate: () -> Boolean = { false },
     /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
