@@ -22,4 +22,4 @@
 </ul>
 
 <b>隱私</b>
-沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。為了直接開啟歌曲，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞或和弦時，歌曲的標題和藝人會傳送到歌詞和和弦網站（LRCLIB、YouTube Music、網易雲音樂、Letras、Ultimate Guitar、LaCuerda、U-FRET）。翻譯會傳送到 MyMemory。用 ChatGPT 登入後，AI 功能會把歌曲的標題、藝人、歌詞以及你的提問傳送給 OpenAI。 如果已允許使用麥克風，歌詞可短暫聆聽，以校正並記住該錄音片頭造成的時間偏移。歌詞還會對齊演唱，演唱只在手機上辨識，從不傳送。
+沒有帳號、資料分析或廣告。歷史記錄只儲存在你的裝置上。為了顯示連結的標題、藝人和封面，Crosstune 只會向連結所屬的服務發出請求。為了直接開啟歌曲，標題和藝人還會傳送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜尋。「全部播放」會將歌曲的標題和藝人傳送到 YouTube Music 的搜尋，並將找到的影片傳送到 YouTube。 辨識歌曲時，Crosstune 只在聆聽期間使用麥克風，並且只向 Shazam 傳送聲音的指紋，絕不傳送音訊。 輸入歌名會將其傳送到 Deezer 和 Apple 的歌曲搜尋；請求歌詞或和弦時，歌曲的標題和藝人會傳送到歌詞和和弦網站（LRCLIB、YouTube Music、網易雲音樂、Letras、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET）。翻譯會傳送到 MyMemory。用 ChatGPT 登入後，AI 功能會把歌曲的標題、藝人、歌詞以及你的提問傳送給 OpenAI。 如果已允許使用麥克風，歌詞可短暫聆聽，以校正並記住該錄音片頭造成的時間偏移。歌詞還會對齊演唱，演唱只在手機上辨識，從不傳送。
