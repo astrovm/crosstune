@@ -17,6 +17,9 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -45,6 +48,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Crosstune on a TV: nowhere to allow links in, and a remote rather than a finger. */
 @RunWith(RobolectricTestRunner::class)
@@ -267,5 +273,80 @@ class TvTest {
         field().assertIsFocused()
         assertEquals("never gonna", fieldText())
         field().assert(hasText("never gonna"))
+    }
+
+    @Test
+    fun onATvTheSongsANameTurnsUpOpenOnTheFirstSoOkPicksIt() {
+        // They come in after the picker opens, as they do over a real network, with Dismiss all there is meanwhile.
+        val found = CountDownLatch(1)
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/search") -> {
+                    found.await(5, TimeUnit.SECONDS)
+                    FakeSpotify.html(
+                        request,
+                        """{"data":[{"id":1,"title":"Machi No Dorufin","link":"https://www.deezer.com/track/1","artist":{"name":"Kingo Hamada"}},""" +
+                            """{"id":2,"title":"Machi No Dorufin (Live)","link":"https://www.deezer.com/track/2","artist":{"name":"Kingo Hamada"}}]}"""
+                    )
+                }
+                request.url.encodedPath.startsWith("/track/") ->
+                    FakeSpotify.html(request, """{"id":1,"title":"Machi No Dorufin","link":"https://www.deezer.com/track/1","artist":{"name":"Kingo Hamada"}}""")
+                else -> FakeSpotify.html(request, """{"data":[],"contents":[]}""")
+            }
+        }
+        launch()
+        field().requestFocus()
+        press(Key.DirectionCenter)
+        field().performTextInput("Kingo Hamada")
+        field().performImeAction()
+        composeRule.waitUntil(5_000) { shown(string(R.string.song_search_title)) }
+        assertTrue(!shown("Machi No Dorufin (Live)"))
+        found.countDown()
+        composeRule.waitUntil(5_000) { shown("Machi No Dorufin (Live)") }
+        composeRule.waitForIdle()
+        val first = composeRule.onNode(hasText("Machi No Dorufin") and hasClickAction() and hasAnyAncestor(isDialog()))
+        first.assertIsFocused()
+        first.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitUntil(5_000) { !shown("Machi No Dorufin (Live)") }
+        composeRule.waitForIdle()
+        assertTrue(fake.requestedUrls.any { it.contains("/track/1") })
+        // Back on the field, as after a link typed.
+        field().assertIsFocused()
+
+        // Only the once: a song looked up later from elsewhere leaves the remote where it is.
+        val down = AtomicBoolean(true)
+        val searched = fake.handler
+        fake.handler = { request -> if (down.get()) FakeSpotify.html(request, "", code = 503) else searched(request) }
+        composeRule.onNode(hasContentDescription(string(R.string.clear_button))).performClick()
+        field().requestFocus()
+        press(Key.DirectionCenter)
+        field().performTextInput("https://www.deezer.com/track/3")
+        field().performImeAction()
+        val retry = composeRule.onNode(hasContentDescription(string(R.string.retry_button)))
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(hasContentDescription(string(R.string.retry_button))).fetchSemanticsNodes().isNotEmpty() }
+        down.set(false)
+        retry.requestFocus()
+        retry.performClick()
+        composeRule.waitUntil(5_000) { shown("Kingo Hamada") }
+        composeRule.waitForIdle()
+        field().assertIsNotFocused()
+    }
+
+    @Test
+    fun onATvTheAppsToOpenASongInOpenOnTheFirst() {
+        // There as the picker opens, unlike songs still being looked up, so the first is where the remote starts.
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        fake.handler = { request -> FakeSpotify.html(request, FakeSpotify.trackPage("Mine", "Artist · Song")) }
+        controller = Robolectric.buildActivity(
+            MainActivity::class.java,
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl")
+            }
+        ).setup()
+        composeRule.waitUntil(5_000) { shown(string(R.string.picker_title)) }
+        composeRule.waitForIdle()
+        val choices = composeRule.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
+        assertEquals(true, choices.first().config.getOrElseNullable(SemanticsProperties.Focused) { null })
     }
 }

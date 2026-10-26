@@ -849,6 +849,17 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     val field = remember { MutableInteractionSource() }
     // Its buttons are inside it, where looking right of it for the next thing never finds them, so the remote is sent there and back.
     val fieldFocus = remember { FocusRequester() }
+    // A song picked from the ones a name turned up, or none, the remote's back on the field, as after a link,
+    // rather than wherever's next once the picker's gone.
+    val picking = state.isSearchingSongs || state.songSearch.isNotEmpty() || state.songSearchQuery.isNotBlank()
+    var picked by remember { mutableStateOf(false) }
+    LaunchedEffect(picking, busy) {
+        if (picking) picked = true
+        else if (picked && !busy && tv) {
+            picked = false
+            runCatching { fieldFocus.requestFocus() }
+        }
+    }
     val buttons = remember { FocusRequester() }
     // Keys reach it on their way to its buttons too, which it leaves to them.
     val onField = field.collectIsFocusedAsState().value
@@ -1046,10 +1057,15 @@ private fun SongSearchSheet(
                             Text(stringResource(R.string.song_search_playlist), modifier = Modifier.padding(start = 8.dp))
                         }
                     }
+                    // With a remote, the first song rather than Dismiss, which was all there was to focus while they were looked up, so OK picks it.
+                    val first = remember { FocusRequester() }
+                    val firstSong = state.songSearch.firstOrNull()
+                    LaunchedEffect(firstSong) { if (firstSong != null) first.requestFocus() }
                     state.songSearch.forEachIndexed { index, song ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
                                 .clickable { onPick(song) }
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
