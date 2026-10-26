@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -216,6 +217,12 @@ class ChordSheetsTest {
         // The words shown are only the first lines of a longer song.
         val longer = sheet(*(once + SheetLine("Carry me home by the water tonight", listOf(Chord(0, "C"))) + SheetLine("Under the stars where the lanterns are bright", listOf(Chord(0, "Am")))).toTypedArray())
         assertEquals(listOf(Chord(0, "D")), ChordSheets.place(longer, words)!![1].over)
+    }
+
+    @Test
+    fun aSheetWithJustEnoughOfItsLettersTheSongsIsPlaced() {
+        // Six letters of ten line up: just the share that's enough.
+        assertNotNull(ChordSheets.place(sheet(SheetLine("Walker roam", listOf(Chord(0, "Em")))), listOf("Walker sing")))
     }
 
     @Test

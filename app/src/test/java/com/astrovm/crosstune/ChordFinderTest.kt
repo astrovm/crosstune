@@ -346,6 +346,19 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aUFretSearchThatWontAnswerIsUnavailableNotNoChords() {
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, "", code = 500)
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> answer(request, mapOf("https://music.163.com/api/search/get" to "{}"))
+            }
+        }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese))
+    }
+
+    @Test
     fun eachSitesWayOfSayingItFoundNothingIsOnlyTakenFromThatSite() {
         // A bare 500 from Ultimate Guitar, or a 404 from LaCuerda, is a site that wouldn't answer.
         fake.handler = { request ->
